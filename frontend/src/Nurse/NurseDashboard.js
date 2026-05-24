@@ -60,6 +60,9 @@ import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import ConfirmModal from '../components/ConfirmModal';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
 
+const LAB_SERVICES = ["Urinalysis", "Blood Chemistry", "Complete Blood Count (CBC)", "Fecalysis", "Hepa Screening", "Dengue Duo + NS1 Antigen (Package)"];
+const IMAGING_SERVICES = ["Standard 12-Lead ECG", "Stress Test", "Holter Monitoring"];
+
 function NurseDashboard() {
   const navigate = useNavigate();
   const [backendHealth, setBackendHealth] = useState({ checked: false, ok: true, error: '' });
@@ -605,7 +608,9 @@ function NurseDashboard() {
     painLevel: "0",
     nextStepLab: false,
     nextStepImaging: false,
-    nextStepPharmacy: false
+    nextStepPharmacy: false,
+    selectedLabServices: [],
+    selectedImagingServices: []
   });
 
   const walkInRouteOptions = [
@@ -1225,7 +1230,9 @@ function NurseDashboard() {
           mainConcern: addPatientData.mainConcern,
           existingConditions: addPatientData.existingConditions,
           routeNote: addPatientData.routeNote,
-          painLevel: addPatientData.painLevel
+          painLevel: addPatientData.painLevel,
+          selectedLabServices: addPatientData.selectedLabServices || [],
+          selectedImagingServices: addPatientData.selectedImagingServices || []
         })
       });
 
@@ -9170,6 +9177,68 @@ function NurseDashboard() {
                       Pharmacy
                     </label>
                   </div>
+
+                  {addPatientData.nextStepLab && (
+                    <div style={{ marginTop: 12, padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Select Laboratory Services</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {LAB_SERVICES.map(s => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => {
+                              const current = addPatientData.selectedLabServices || [];
+                              const next = current.includes(s) ? current.filter(x => x !== s) : [...current, s];
+                              setAddPatientData(v => ({ ...v, selectedLabServices: next }));
+                            }}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              border: '1px solid #e2e8f0',
+                              background: (addPatientData.selectedLabServices || []).includes(s) ? '#fff7ed' : '#ffffff',
+                              color: (addPatientData.selectedLabServices || []).includes(s) ? '#f97316' : '#475569',
+                              borderColor: (addPatientData.selectedLabServices || []).includes(s) ? '#fdba74' : '#e2e8f0'
+                            }}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {addPatientData.nextStepImaging && (
+                    <div style={{ marginTop: 12, padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Select Imaging/ECG Services</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {IMAGING_SERVICES.map(s => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => {
+                              const current = addPatientData.selectedImagingServices || [];
+                              const next = current.includes(s) ? current.filter(x => x !== s) : [...current, s];
+                              setAddPatientData(v => ({ ...v, selectedImagingServices: next }));
+                            }}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              border: '1px solid #e2e8f0',
+                              background: (addPatientData.selectedImagingServices || []).includes(s) ? '#eff6ff' : '#ffffff',
+                              color: (addPatientData.selectedImagingServices || []).includes(s) ? '#3b82f6' : '#475569',
+                              borderColor: (addPatientData.selectedImagingServices || []).includes(s) ? '#93c5fd' : '#e2e8f0'
+                            }}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <details style={{marginTop: 12}}>
                     <summary style={{cursor: 'pointer', fontWeight: 900, color: '#0f172a'}}>More details (optional)</summary>
                     <div className="input-group" style={{marginTop: '12px'}}>
