@@ -314,6 +314,8 @@ export default function DoctorSecretaryDashboard() {
   const [assignForm, setAssignForm] = useState({ doctorId: '', time: '', status: 'Confirmed' });
   const [assignSaving, setAssignSaving] = useState(false);
   const [assignError, setAssignError] = useState('');
+  const [assignSlots, setAssignSlots] = useState([]);
+  const [assignSlotsLoading, setAssignSlotsLoading] = useState(false);
 
   const [selected, setSelected] = useState(null);
   const [linkedDoctor, setLinkedDoctor] = useState(null);
@@ -705,18 +707,20 @@ export default function DoctorSecretaryDashboard() {
   };
 
   const refreshOnsiteDoctors = async ({ silent } = {}) => {
-    const spec = norm(linkedDoctor?.specialization);
-    if (!spec) {
-      setOnsiteDoctors([]);
-      setOnsiteDoctorsError('Missing linked doctor specialization. Ask admin to link this secretary to a department doctor.');
-      return;
-    }
     if (!silent) setOnsiteDoctorsLoading(true);
     setOnsiteDoctorsError('');
     try {
+      const spec = norm(linkedDoctor?.specialization);
       const params = new URLSearchParams();
-      params.set('specialization', spec);
-      const list = await fetchJson(`/api/video-consults/doctors?${params.toString()}`, { apiBase: API_BASE, headers });
+      if (spec) params.set('specialization', spec);
+      
+      let list = await fetchJson(`/api/video-consults/doctors?${params.toString()}`, { apiBase: API_BASE, headers });
+      
+      // If no doctors found for this specialization, try fetching all doctors
+      if (spec && (!Array.isArray(list) || list.length === 0)) {
+        list = await fetchJson(`/api/video-consults/doctors`, { apiBase: API_BASE, headers });
+      }
+
       setOnsiteDoctors(Array.isArray(list) ? list : []);
     } catch (e) {
       setOnsiteDoctors([]);
@@ -750,13 +754,49 @@ export default function DoctorSecretaryDashboard() {
     }
   };
 
+  const refreshAssignSlots = async (docUuid, date) => {
+    if (!docUuid || !date) {
+      setAssignSlots([]);
+      return;
+    }
+    setAssignSlotsLoading(true);
+    try {
+      const d = new Date(date);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dKey = `${y}-${m}-${day}`;
+      const data = await fetchJson(`/api/doctors/${encodeURIComponent(docUuid)}/availability/slots?date=${encodeURIComponent(dKey)}&mode=onsite`, { apiBase: API_BASE, headers });
+      setAssignSlots(Array.isArray(data?.slots) ? data.slots : []);
+    } catch (e) {
+      setAssignSlots([]);
+    } finally {
+      setAssignSlotsLoading(false);
+    }
+  };
+
   const openAssign = (apt) => {
     if (!apt?.id) return;
     setAssignTarget(apt);
     setAssignError('');
+    setAssignSlots([]);
+
+    let initialTime = '';
+    const rawTime = apt.appointmentTime || apt.appointment_time;
+    if (rawTime) {
+      if (String(rawTime).includes('T')) {
+        const d = new Date(rawTime);
+        if (!Number.isNaN(d.getTime())) {
+          initialTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        }
+      } else {
+        initialTime = String(rawTime).slice(0, 5);
+      }
+    }
+
     setAssignForm({
       doctorId: '',
-      time: String(apt.appointmentTime || apt.appointment_time || '').slice(0, 5),
+      time: initialTime,
       status: 'Confirmed'
     });
     setAssignModalOpen(true);
@@ -926,6 +966,12 @@ export default function DoctorSecretaryDashboard() {
     const t = setInterval(() => refreshAvailability({ silent: true }).catch(() => {}), 20000);
     return () => clearInterval(t);
   }, [activeTab, linkedDoctorId]);
+
+  useEffect(() => {
+    if (assignModalOpen && assignForm.doctorId && assignTarget?.appointmentDate) {
+      refreshAssignSlots(assignForm.doctorId, assignTarget.appointmentDate).catch(() => {});
+    }
+  }, [assignModalOpen, assignForm.doctorId, assignTarget?.appointmentDate]);
 
   useEffect(() => {
     if (user) {
@@ -2209,65 +2255,105 @@ export default function DoctorSecretaryDashboard() {
         )}
 
         {assignModalOpen && assignTarget && (
-          <div className="sec-modal-overlay" onClick={closeAssign}>
-            <div className="sec-modal-card" onClick={(e) => e.stopPropagation()}>
-              <div className="sec-modal-header">
-                <div>
-                  <div className="sec-modal-title">Assign Doctor</div>
-                  <div className="sec-modal-sub">
-                    {`${norm(assignTarget.firstName || assignTarget.first_name)} ${norm(assignTarget.lastName || assignTarget.last_name)}`.trim() || 'Patient'} â€¢ {fmtDate(assignTarget.appointmentDate || assignTarget.appointment_date)}
+          <div className="modal-overlay-fixed" onClick={closeAssign}>
+            <div className="modal-content-medium" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500, padding: '32px', background: '#ffffff', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                  <h3 style={{ color: '#0f172a', fontSize: '24px', fontWeight: '800', margin: 0 }}>Assign Doctor</h3>
+                  <button onClick={closeAssign} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}>
+                    <XCircle size={20} />
+                  </button>
+                </div>
+                
+                <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '16px', marginBottom: 24, border: '1px solid #e2e8f0' }}>
+                  <div style={{ color: '#1e293b', fontSize: '16px', fontWeight: '700' }}>
+                    {`${norm(assignTarget.firstName || assignTarget.first_name)} ${norm(assignTarget.lastName || assignTarget.last_name)}`.trim() || 'Patient'} • {fmtDate(assignTarget.appointmentDate || assignTarget.appointment_date)} • {fmtTime(assignTarget.appointmentTime || assignTarget.appointment_time)}
                   </div>
                 </div>
-                <button className="sec-icon-btn" type="button" onClick={closeAssign}>
-                  <XCircle size={18} />
-                </button>
-              </div>
 
-              <div className="sec-modal-body">
-                {assignError ? <div className="sec-error" style={{ marginBottom: 10 }}>{assignError}</div> : null}
-                <div className="sec-form-grid">
-                  <div className="sec-field sec-field-full">
-                    <label>Assign to doctor</label>
+                {assignError && <div style={{ color: '#ef4444', background: '#fef2f2', padding: '12px', borderRadius: '12px', fontSize: '14px', fontWeight: '600', marginBottom: 20, border: '1px solid #fee2e2' }}>{assignError}</div>}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={{ color: '#475569', fontSize: '14px', fontWeight: '700' }}>Assign to doctor</label>
                     <select
-                      className="sec-input"
+                      style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', fontWeight: '600', color: '#1e293b', background: '#ffffff' }}
                       value={assignForm.doctorId}
                       onChange={(e) => setAssignForm((v) => ({ ...v, doctorId: e.target.value }))}
                       disabled={onsiteDoctorsLoading}
                     >
-                      <option value="">{onsiteDoctorsLoading ? 'Loading doctors…' : 'Select doctor'}</option>
+                      <option value="">{onsiteDoctorsLoading ? 'Loading doctors...' : 'Select doctor'}</option>
                       {(Array.isArray(onsiteDoctors) ? onsiteDoctors : []).map((d) => (
                         <option key={String(d.id)} value={String(d.id)}>
                           {norm(d.name) || `Dr. ${norm(d.first_name)} ${norm(d.last_name)}`.trim() || 'Doctor'}{norm(d.status) ? ` • ${norm(d.status)}` : ''}
                         </option>
                       ))}
                     </select>
-                    {onsiteDoctorsError ? <div className="sec-error" style={{ marginTop: 8 }}>{onsiteDoctorsError}</div> : null}
+                    {onsiteDoctorsError && <div style={{ color: '#ef4444', fontSize: '13px', fontWeight: '600', marginTop: 4 }}>{onsiteDoctorsError}</div>}
                   </div>
-                  <div className="sec-field">
-                    <label>Time</label>
-                    <input className="sec-input" type="time" value={assignForm.time} onChange={(e) => setAssignForm((v) => ({ ...v, time: e.target.value }))} />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <label style={{ color: '#475569', fontSize: '14px', fontWeight: '700' }}>Time {assignSlotsLoading ? '(Loading...)' : ''}</label>
+                      {assignSlots && assignSlots.length > 0 ? (
+                        <select
+                          style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', fontWeight: '600', color: '#1e293b', background: '#ffffff' }}
+                          value={assignForm.time}
+                          onChange={(e) => setAssignForm((v) => ({ ...v, time: e.target.value }))}
+                        >
+                          <option value="">Select time slot</option>
+                          {assignSlots.map((s) => (
+                            <option key={s.time} value={s.time} disabled={!s.available}>
+                              {s.time} {!s.available ? '(Full/Blocked)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input 
+                          type="time" 
+                          style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', fontWeight: '600', color: '#1e293b' }}
+                          value={assignForm.time} 
+                          onChange={(e) => setAssignForm((v) => ({ ...v, time: e.target.value }))} 
+                        />
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <label style={{ color: '#475569', fontSize: '14px', fontWeight: '700' }}>Status</label>
+                      <select 
+                        style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', fontWeight: '600', color: '#1e293b', background: '#ffffff' }}
+                        value={assignForm.status} 
+                        onChange={(e) => setAssignForm((v) => ({ ...v, status: e.target.value }))}
+                      >
+                        <option value="Confirmed">Confirmed</option>
+                        <option value="Checked-in">Checked-in</option>
+                      </select>
+                    </div>
                   </div>
-                  <div className="sec-field">
-                    <label>Status</label>
-                    <select className="sec-input" value={assignForm.status} onChange={(e) => setAssignForm((v) => ({ ...v, status: e.target.value }))}>
-                      <option value="Confirmed">Confirmed</option>
-                      <option value="Checked-in">Checked-in</option>
-                    </select>
-                  </div>
-                  <div className="sec-field sec-field-full">
-                    <label>What this does</label>
-                    <div className="sec-muted" style={{ padding: 10, border: '1px solid #e2e8f0', borderRadius: 10, background: '#f8fafc' }}>
-                      Assigns this onsite booking to a specific doctor so it appears in the doctorâ€™s queue (My Patients).
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={{ color: '#475569', fontSize: '14px', fontWeight: '700' }}>What this does</label>
+                    <div style={{ padding: '14px', background: '#f0f9ff', border: '1px solid #e0f2fe', borderRadius: '12px', color: '#0369a1', fontSize: '14px', fontWeight: '600', lineHeight: '1.5' }}>
+                      Assigns this onsite booking to a specific doctor so it appears in the doctor's queue (My Patients).
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="sec-modal-footer">
-                <div className="sec-modal-actions">
-                  <button className="sec-btn ghost" type="button" onClick={closeAssign} disabled={assignSaving}>Cancel</button>
-                  <button className="sec-btn primary" type="button" onClick={submitAssign} disabled={assignSaving}>
-                    {assignSaving ? 'Assigning…' : 'Confirm & Assign'}
+                <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
+                  <button 
+                    type="button"
+                    onClick={closeAssign} 
+                    disabled={assignSaving}
+                    style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#ffffff', color: '#475569', fontSize: '15px', fontWeight: '700', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={submitAssign} 
+                    disabled={assignSaving}
+                    style={{ flex: 1, padding: '14px', borderRadius: '12px', border: 'none', background: '#f97316', color: '#ffffff', fontSize: '15px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(249, 115, 22, 0.2)' }}
+                  >
+                    {assignSaving ? 'Assigning...' : 'Confirm & Assign'}
                   </button>
                 </div>
               </div>
