@@ -1,0 +1,595 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  schemas   = ["public", "auth"]
+}
+
+model activity_logs {
+  id         BigInt    @id @default(autoincrement())
+  actor_name String?
+  role       String?
+  action     String?
+  target     String?
+  details    String?
+  timestamp  DateTime? @default(now()) @db.Timestamptz(6)
+  @@schema("public")
+}
+
+model admin_logs {
+  id        BigInt    @id @default(autoincrement())
+  email     String?
+  timestamp DateTime? @default(now()) @db.Timestamptz(6)
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model announcements {
+  id         BigInt    @id @default(autoincrement())
+  title      String?
+  content    String?
+  priority   String?
+  target     String?
+  author     String?
+  pinned     Boolean   @default(false)
+  expires_at DateTime? @db.Timestamptz(6)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  @@schema("public")
+}
+
+model appointments {
+  id                 BigInt    @id @default(autoincrement())
+  first_name         String?
+  middle_name        String?
+  last_name          String?
+  email              String?
+  phone              String?
+  date_of_birth      DateTime? @db.Date
+  gender             String?
+  reason             String?
+  appointment_date   DateTime? @db.Date
+  appointment_time   DateTime? @db.Time(6)
+  main_concern       String?
+  symptoms_start     DateTime? @db.Date
+  severity           String?
+  description        String?
+  body_parts         String[]
+  symptoms           String[]
+  emergency_symptoms String[]
+  emergency_name     String?
+  emergency_relation String?
+  emergency_phone    String?
+  status             String?   @default("Pending")
+  doctor_id          String?
+  doctor_uuid        String?   @db.Uuid
+  patient_id         String?   @db.Uuid
+  consultation_mode  String?   @default("onsite")
+  triage_level       Int?
+  triage_status      String?   @default("Unassessed")
+  triage_reasons     Json?
+  triaged_by         String?
+  triaged_at         DateTime? @db.Timestamptz(6)
+  triage_overridden_by String?
+  triage_overridden_at DateTime? @db.Timestamptz(6)
+  meeting_room_id    String?
+  meeting_created_at DateTime? @db.Timestamptz(6)
+  meeting_started_at DateTime? @db.Timestamptz(6)
+  meeting_ended_at   DateTime? @db.Timestamptz(6)
+  meeting_expires_at DateTime? @db.Timestamptz(6)
+  patient_waiting_at DateTime? @db.Timestamptz(6)
+  patient_waiting_name String?
+  walkin_ticket       String?
+  walkin_ticket_seq   Int?
+  walkin_ticket_date  DateTime? @db.Date
+  assignment_status   String?   @default("PENDING_ASSIGNMENT")
+  assigned_at         DateTime? @db.Timestamptz(6)
+  assigned_by         String?
+  completed_at        DateTime? @db.Timestamptz(6)
+  completed_by        String?
+  paymongo_checkout_session_id String?
+  paymongo_payment_id  String?
+  paymongo_event_id    String?
+  payment_status       String?
+  paid_at              DateTime? @db.Timestamptz(6)
+  amount               Int?
+  currency             String?
+  created_at         DateTime? @default(now()) @db.Timestamptz(6)
+  @@schema("public")
+}
+
+model video_booking_holds {
+  id                        BigInt    @id @default(autoincrement())
+  booking_ref               String    @unique
+  patient_id                String?   @db.Uuid
+  patient_email             String?
+  patient_name              String?
+  doctor_name               String?
+  specialization            String?
+  service_type              String?
+  start_at                  DateTime  @db.Timestamptz(6)
+  end_at                    DateTime  @db.Timestamptz(6)
+  slot_date                 DateTime? @db.Date
+  slot_time                 DateTime? @db.Time(6)
+  status                    String    @default("HOLD")
+  expires_at                DateTime  @db.Timestamptz(6)
+  appointment_id            BigInt?
+  paymongo_checkout_session_id String?
+  paymongo_checkout_url     String?
+  paymongo_payment_id       String?
+  paymongo_event_id         String?
+  amount                    Int?
+  currency                  String?   @default("PHP")
+  created_at                DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime  @default(now()) @db.Timestamptz(6)
+  @@schema("public")
+}
+
+model doctor_notes {
+  id          BigInt    @id @default(autoincrement())
+  patient_id  String?   @db.Uuid
+  doctor_name String?
+  subjective  String?
+  objective   String?
+  assessment  String?
+  plan        String?
+  vitals      Json?
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  patients    patients? @relation(fields: [patient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model doctors {
+  id                             String    @id @default(dbgenerated("auth.uid()")) @db.Uuid
+  first_name                     String
+  last_name                      String
+  middle_name                    String?
+  date_of_birth                  DateTime? @db.Date
+  gender                         String?
+  civil_status                   String?
+  nationality                    String?
+  employee_id                    String?   @unique
+  medical_license_number         String?   @unique
+  specialization                 String?
+  sub_specialization             String?
+  department                     String?
+  date_hired                     DateTime? @db.Date
+  employment_status              String?
+  email                          String    @unique
+  account_type                   String?   @default("doctor")
+  status                         String?
+  last_active                    DateTime? @db.Timestamptz(6)
+  avatar_url                     String?
+  phone                          String?
+  street_address                 String?
+  city                           String?
+  province                       String?
+  postal_code                    String?
+  country                        String?
+  emergency_contact_name         String?
+  emergency_contact_phone        String?
+  emergency_contact_relationship String?
+  created_at                     DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                     DateTime? @default(now()) @db.Timestamptz(6)
+  password                       String?
+  reset_password_token           String?
+  reset_password_expires         DateTime? @db.Timestamptz(6)
+  @@schema("public")
+}
+
+model medicines {
+  id          BigInt    @id @default(autoincrement())
+  name        String?   @unique
+  barcode     String?   @unique
+  category    String?
+  category_id BigInt?
+  image_url   String?
+  stock       Int?      @default(0)
+  min_level   Int?      @default(5)
+  unit        String?
+  expiry_date DateTime? @db.Date
+  price       Decimal?  @db.Decimal
+  status      String?
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+  product_categories product_categories? @relation(fields: [category_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  @@schema("public")
+}
+
+model product_categories {
+  id         BigInt      @id @default(autoincrement())
+  name       String      @unique
+  image_url  String?
+  created_at DateTime?   @default(now()) @db.Timestamptz(6)
+  updated_at DateTime?   @default(now()) @db.Timestamptz(6)
+  medicines  medicines[]
+  supplies   supplies[]
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model nurses {
+  id                             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  first_name                     String?
+  last_name                      String?
+  middle_name                    String?
+  date_of_birth                  DateTime? @db.Date
+  gender                         String?
+  civil_status                   String?
+  nationality                    String?
+  employee_id                    String?   @unique
+  medical_license_number         String?
+  specialization                 String?
+  date_hired                     DateTime? @db.Date
+  employment_status              String?
+  department                     String?
+  shift                          String?
+  email                          String?   @unique
+  account_type                   String?   @default("nurse")
+  status                         String?
+  last_active                    DateTime? @db.Timestamptz(6)
+  avatar_url                     String?
+  phone                          String?
+  street_address                 String?
+  city                           String?
+  province                       String?
+  postal_code                    String?
+  country                        String?
+  emergency_contact_name         String?
+  emergency_contact_phone        String?
+  emergency_contact_relationship String?
+  created_at                     DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                     DateTime? @default(now()) @db.Timestamptz(6)
+  password                       String?
+  reset_password_token           String?
+  reset_password_expires         DateTime? @db.Timestamptz(6)
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model patients {
+  id                     String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  first_name             String
+  last_name              String
+  middle_name            String?
+  date_of_birth          DateTime?       @db.Date
+  gender                 String?
+  contact_number         String?
+  email                  String?         @unique
+  street                 String?
+  city                   String?
+  province               String?
+  postal_code            String?
+  country                String?
+  emergency_contacts     Json?
+  blood_type             String?
+  allergies              String?
+  philhealth_number      String?
+  admission_status       String?
+  ward_number            String?
+  diagnosis              String?
+  attending_doctor       String?
+  admission_date         DateTime?       @db.Date
+  clinical_records       Json?
+  created_at             DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime?       @default(now()) @db.Timestamptz(6)
+  password               String?
+  reset_password_token   String?
+  reset_password_expires DateTime?       @db.Timestamptz(6)
+  doctor_notes           doctor_notes[]
+  prescriptions          prescriptions[]
+  requests               requests[]
+  lab_results            lab_results[]
+  clinical_orders        clinical_orders[]
+  clinical_schedule_events clinical_schedule_events[]
+  medical_certificates   medical_certificates[]
+  billing_invoices       billing_invoices[]
+  @@schema("public")
+}
+
+model prescriptions {
+  id                    BigInt    @id @default(autoincrement())
+  patient_id            String?   @db.Uuid
+  doctor_name           String?
+  diagnosis             String?
+  instructions          String?
+  items                 Json?
+  is_sent_to_pharmacy   Boolean?  @default(false)
+  created_at            DateTime? @default(now()) @db.Timestamptz(6)
+  patients              patients? @relation(fields: [patient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  @@schema("public")
+}
+
+model lab_results {
+  id          BigInt    @id @default(autoincrement())
+  order_id    BigInt?
+  patient_id  String?   @db.Uuid
+  type        String?
+  title       String?
+  url         String?
+  result_date DateTime? @db.Date
+  uploaded_by String?
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  patients    patients? @relation(fields: [patient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  clinical_orders clinical_orders? @relation(fields: [order_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  @@schema("public")
+}
+
+model medical_certificates {
+  id              BigInt    @id @default(autoincrement())
+  patient_id      String?   @db.Uuid
+  doctor_name     String?
+  purpose         String?
+  diagnosis       String?
+  recommendations String?
+  valid_until     DateTime? @db.Date
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  patients        patients? @relation(fields: [patient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model requests {
+  id           BigInt    @id @default(autoincrement())
+  patient_id   String?   @db.Uuid
+  patient_name String?
+  requested_by String?
+  message      String?
+  status       String?
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  patients     patients? @relation(fields: [patient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model staff {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  first_name             String?
+  last_name              String?
+  email                  String?   @unique
+  account_type           String?
+  employee_id            String?   @unique
+  status                 String?
+  last_active            DateTime? @db.Timestamptz(6)
+  avatar_url             String?
+  created_at             DateTime? @default(now()) @db.Timestamptz(6)
+  password               String?
+  reset_password_token   String?
+  reset_password_expires DateTime? @db.Timestamptz(6)
+  @@schema("public")
+}
+
+model wards {
+  id             BigInt    @id @default(autoincrement())
+  name           String?   @unique
+  total_capacity Int?
+  color          String?
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model accounts {
+  id             BigInt    @id @default(autoincrement())
+  name           String
+  email          String?
+  password       String?
+  roles          String?
+  linked_doctor_id String? @db.Uuid
+  address        String?
+  age            Int?
+  birthday       DateTime? @db.Date
+  contact_number BigInt?
+  status         String?
+  last_active    DateTime? @db.Timestamptz(6)
+  avatar_url     String?
+  @@schema("public")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model incidents {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @default(now()) @db.Timestamptz(6)
+  created_by_email String
+  incident_type    String?
+  incident_date    DateTime? @db.Date
+  incident_time    DateTime? @db.Time(6)
+  location         String?
+  description      String?
+  action_taken     String?
+  status           String?   @default("submitted")
+  @@schema("public")
+}
+
+model supplies {
+  id         BigInt    @id @default(autoincrement())
+  item_name  String    @unique
+  barcode    String?   @unique
+  category_id BigInt?
+  image_url  String?
+  stock      Int?      @default(0)
+  min_level  Int?      @default(10)
+  unit       String?
+  price      Decimal?  @default(0) @db.Decimal
+  status     String?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  product_categories product_categories? @relation(fields: [category_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  @@schema("public")
+}
+
+model restock_requests {
+  id            BigInt    @id @default(autoincrement())
+  item_type     String
+  item_id       BigInt
+  item_name     String?
+  requested_qty Int       @default(0)
+  fulfilled_qty Int       @default(0)
+  priority      String?   @default("Normal")
+  status        String?   @default("Pending")
+  note          String?
+  requested_by  String?
+  fulfilled_by  String?
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @default(now()) @db.Timestamptz(6)
+  @@schema("public")
+}
+
+model appointment_approval_requests {
+  id                  BigInt    @id @default(autoincrement())
+  patient_id          String?   @db.Uuid
+  patient_name        String?
+  doctor_name         String?
+  nurse_name          String?
+  requested_date      DateTime? @db.Date
+  requested_time      DateTime? @db.Time(6)
+  service_type        String?
+  reason              String?
+  status              String?   @default("Pending")
+  suggested_date      DateTime? @db.Date
+  suggested_time      DateTime? @db.Time(6)
+  suggested_note      String?
+  appointment_id      BigInt?
+  doctor_last_read_at DateTime? @db.Timestamptz(6)
+  nurse_last_read_at  DateTime? @db.Timestamptz(6)
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  @@schema("public")
+}
+
+model appointment_messages {
+  id         BigInt    @id @default(autoincrement())
+  request_id BigInt
+  sender_role String?
+  sender_name String?
+  body       String?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  @@schema("public")
+}
+
+model clinical_orders {
+  id              BigInt    @id @default(autoincrement())
+  patient_id      String?   @db.Uuid
+  patient_name    String?
+  kind            String?
+  service         String?
+  priority        String?   @default("Routine")
+  status          String?   @default("Pending")
+  notes           String?
+  ordered_by_name String?
+  ordered_by_role String?
+  assigned_role   String?
+  assigned_to     String?
+  scheduled_at    DateTime? @db.Timestamptz(6)
+  completed_at    DateTime? @db.Timestamptz(6)
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime? @default(now()) @db.Timestamptz(6)
+  patients        patients? @relation(fields: [patient_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  events          clinical_order_events[]
+  schedule_events clinical_schedule_events[]
+  lab_results     lab_results[]
+  @@schema("public")
+}
+
+model clinical_order_events {
+  id         BigInt    @id @default(autoincrement())
+  order_id   BigInt
+  actor_name String?
+  actor_role String?
+  action     String?
+  from_status String?
+  to_status  String?
+  note       String?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  clinical_orders clinical_orders @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  @@schema("public")
+}
+
+model clinical_schedule_events {
+  id          BigInt    @id @default(autoincrement())
+  role        String?
+  staff_email String?
+  order_id    BigInt?
+  patient_id  String?   @db.Uuid
+  title       String?
+  start_at    DateTime  @db.Timestamptz(6)
+  end_at      DateTime? @db.Timestamptz(6)
+  location    String?
+  status      String?   @default("Scheduled")
+  notes       String?
+  created_by  String?
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+  patients    patients? @relation(fields: [patient_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  clinical_orders clinical_orders? @relation(fields: [order_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  @@schema("public")
+}
+
+model sales {
+  id               BigInt        @id @default(autoincrement())
+  total_amount     Decimal       @db.Decimal
+  payment_received Decimal       @db.Decimal
+  change_amount    Decimal       @db.Decimal
+  pharmacist_name  String
+  created_at       DateTime?     @default(now()) @db.Timestamptz(6)
+  items            sales_items[]
+  @@schema("public")
+}
+
+model sales_items {
+  id            BigInt    @id @default(autoincrement())
+  sale_id       BigInt?
+  item_id       BigInt
+  item_name     String
+  item_type     String
+  quantity      Int
+  price_at_sale Decimal   @db.Decimal
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  sales         sales?    @relation(fields: [sale_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  @@schema("public")
+}
+
+model billing_invoices {
+  id              BigInt                  @id @default(autoincrement())
+  patient_id      String?                 @db.Uuid
+  appointment_id  BigInt?
+  status          String?                 @default("Draft")
+  notes           String?
+  created_by      String?
+  total_amount    Decimal                 @default(0) @db.Decimal
+  created_at      DateTime?               @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime?               @default(now()) @db.Timestamptz(6)
+  patients        patients?               @relation(fields: [patient_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  items           billing_invoice_items[]
+  payments        billing_payments[]
+  @@schema("public")
+}
+
+model billing_invoice_items {
+  id          BigInt           @id @default(autoincrement())
+  invoice_id  BigInt
+  description String
+  quantity    Int              @default(1)
+  unit_price  Decimal          @default(0) @db.Decimal
+  line_total  Decimal          @default(0) @db.Decimal
+  created_at  DateTime?        @default(now()) @db.Timestamptz(6)
+  invoices    billing_invoices @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  @@schema("public")
+}
+
+model billing_payments {
+  id             BigInt           @id @default(autoincrement())
+  invoice_id     BigInt
+  amount         Decimal          @default(0) @db.Decimal
+  method         String?
+  reference      String?
+  received_by    String?
+  idempotency_key String?
+  created_at     DateTime?        @default(now()) @db.Timestamptz(6)
+  invoices       billing_invoices @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  @@schema("public")
+}

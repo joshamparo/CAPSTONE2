@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "checkJs": false,
+    "forceConsistentCasingInFileNames": false,
+    "skipLibCheck": true,
+    "types": [],
+    "maxNodeModuleJsDepth": 0
+  },
+  "typeAcquisition": {
+    "enable": false
+  },
+  "exclude": ["**/node_modules/**", "**/uploads/**", "**/dist/**"]
+}
