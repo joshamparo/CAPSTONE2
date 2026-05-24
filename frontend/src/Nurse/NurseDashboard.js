@@ -49,7 +49,8 @@ import {
     RotateCw,
     Send,
     Upload,
-    Menu
+    Menu,
+    ShieldAlert
   } from 'lucide-react';
 import './NurseDashboard.css';
 import '../Admin/AdminDashboard.css'; 
@@ -1347,23 +1348,23 @@ function NurseDashboard() {
       return Number.isFinite(n) ? n : null;
     };
 
-    const temperature = parseVitalsNumber('temperature', draft.temperature);
-    const systolic = parseVitalsNumber('bp_systolic', draft.bp_systolic);
-    const diastolic = parseVitalsNumber('bp_diastolic', draft.bp_diastolic);
-    const heartRate = parseVitalsNumber('heartRate', draft.heartRate);
-    const respiratoryRate = parseVitalsNumber('respiratoryRate', draft.respiratoryRate);
-    const spo2 = parseVitalsNumber('spo2', draft.spo2);
-    const painLevel = parseVitalsNumber('painLevel', draft.painLevel);
+    const temperature = parseVitalsNumber('temperature', draft?.temperature);
+    const systolic = parseVitalsNumber('bp_systolic', draft?.bp_systolic);
+    const diastolic = parseVitalsNumber('bp_diastolic', draft?.bp_diastolic);
+    const heartRate = parseVitalsNumber('heartRate', draft?.heartRate);
+    const respiratoryRate = parseVitalsNumber('respiratoryRate', draft?.respiratoryRate);
+    const spo2 = parseVitalsNumber('spo2', draft?.spo2);
+    const painLevel = parseVitalsNumber('painLevel', draft?.painLevel);
 
     const issues = [];
     const flags = [];
-    const isER = String(draft.routeType || '').trim() === 'er_consult';
+    const isER = String(draft?.routeType || '').trim() === 'er_consult';
 
     const addIssue = (msg) => issues.push(msg);
     const addFlag = (sev, msg) => flags.push({ severity: sev, message: msg });
 
     // 1. Inconsistent Data Check (Professor's Suggestion)
-    const isNotBreathing = String(draft.mainConcern || '').toLowerCase().includes('not breathing');
+    const isNotBreathing = String(draft?.mainConcern || '').toLowerCase().includes('not breathing');
     if (isNotBreathing && heartRate !== null && heartRate > 0 && heartRate < 150) {
       addIssue('Inconsistent Data: Reported "Not Breathing" but heart rate is normal. Please verify vitals.');
     }
@@ -1416,23 +1417,23 @@ function NurseDashboard() {
     // Level 1 Logic
     if (spo2 !== null && spo2 < 85) makeEmergent('Critical Hypoxia (SpO₂ < 85%)');
     if (isNotBreathing) makeEmergent('Not Breathing');
-    if (String(draft.mainConcern).toLowerCase().includes('unconscious')) makeEmergent('Unconscious');
+    if (String(draft?.mainConcern || '').toLowerCase().includes('unconscious')) makeEmergent('Unconscious');
 
     // Level 2 Logic
     if (spo2 !== null && spo2 >= 85 && spo2 < 92) makeHighRisk('Low SpO₂ (85–91%)');
     if (systolic !== null && (systolic < 90 || systolic >= 200)) makeHighRisk('Critical Blood Pressure');
     if (heartRate !== null && (heartRate > 130 || heartRate < 40)) makeHighRisk('Critical Heart Rate');
-    if (String(draft.severity) === 'Severe') makeHighRisk('Severe Symptom Severity');
-    if (String(draft.mainConcern).toLowerCase().includes('nabagok') || String(draft.mainConcern).toLowerCase().includes('chest pain')) makeHighRisk('High Risk Complaint');
+    if (String(draft?.severity || '') === 'Severe') makeHighRisk('Severe Symptom Severity');
+    if (String(draft?.mainConcern || '').toLowerCase().includes('nabagok') || String(draft?.mainConcern || '').toLowerCase().includes('chest pain')) makeHighRisk('High Risk Complaint');
 
     // Level 3 Logic
     if (level > 2) {
       if (temperature !== null && temperature >= 39) makeUrgent('High Fever (≥ 39°C)');
       if (painLevel !== null && painLevel >= 7) makeUrgent('Severe Pain (7–10)');
-      if (String(draft.severity) === 'Moderate') makeUrgent('Moderate Symptom Severity');
+      if (String(draft?.severity || '') === 'Moderate') makeUrgent('Moderate Symptom Severity');
     }
 
-    const suggestedRouteType = level <= 2 ? 'er_consult' : draft.routeType || 'er_consult';
+    const suggestedRouteType = level <= 2 ? 'er_consult' : draft?.routeType || 'er_consult';
     const suggestedRouteLabel = level <= 2 ? 'ER Consultation' : null;
 
     return {
