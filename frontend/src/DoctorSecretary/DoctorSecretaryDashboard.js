@@ -2294,8 +2294,12 @@ export default function DoctorSecretaryDashboard() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <label style={{ color: '#475569', fontSize: '14px', fontWeight: '700' }}>Time {assignSlotsLoading ? '(Loading...)' : ''}</label>
-                      {assignSlots && assignSlots.length > 0 ? (
+                      <label style={{ color: '#475569', fontSize: '14px', fontWeight: '700' }}>Time</label>
+                      {assignTarget.appointmentTime || assignTarget.appointment_time ? (
+                        <div style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', fontWeight: '700', color: '#0f172a', background: '#f8fafc' }}>
+                          {fmtTime(assignTarget.appointmentTime || assignTarget.appointment_time)}
+                        </div>
+                      ) : assignSlots && assignSlots.length > 0 ? (
                         <select
                           style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', fontWeight: '600', color: '#1e293b', background: '#ffffff' }}
                           value={assignForm.time}
