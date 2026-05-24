@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "postinstall": "prisma generate",
+    "db:push": "prisma db push",
     "start": "node server.js",
     "dev": "nodemon --watch server.js --watch routes --watch .env server.js"
   },
