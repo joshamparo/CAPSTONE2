@@ -220,6 +220,12 @@ buildWardRegistry._cache = { fetchedAt: 0, payload: null, promise: null };
 
 async function buildWardRegistry() {
   await ensureWardInfrastructure();
+  
+  // Ensure cache object exists
+  if (!buildWardRegistry._cache) {
+    buildWardRegistry._cache = { fetchedAt: 0, payload: null, promise: null };
+  }
+
   const now = Date.now();
   if (buildWardRegistry._cache.payload && now - buildWardRegistry._cache.fetchedAt < 5000) {
     return buildWardRegistry._cache.payload;
@@ -229,11 +235,12 @@ async function buildWardRegistry() {
   }
 
   buildWardRegistry._cache.promise = (async () => {
-  const [wardRows, roomRows, patients] = await Promise.all([
-    prisma.wards.findMany({ orderBy: { id: 'asc' } }),
-    getRoomRows(),
-    getAdmittedPatients()
-  ]);
+    try {
+      const [wardRows, roomRows, patients] = await Promise.all([
+        prisma.wards.findMany({ orderBy: { id: 'asc' } }),
+        getRoomRows(),
+        getAdmittedPatients()
+      ]);
 
   await syncWardCapacitiesFromRooms(roomRows);
 
@@ -364,8 +371,14 @@ async function buildWardRegistry() {
   buildWardRegistry._cache.fetchedAt = Date.now();
   buildWardRegistry._cache.payload = payload;
   return payload;
+    } catch (err) {
+      console.error('Error building ward registry:', err);
+      throw err;
+    }
   })().finally(() => {
-    buildWardRegistry._cache.promise = null;
+    if (buildWardRegistry._cache) {
+      buildWardRegistry._cache.promise = null;
+    }
   });
 
   return buildWardRegistry._cache.promise;
