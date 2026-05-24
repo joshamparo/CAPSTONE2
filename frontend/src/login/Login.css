@@ -577,6 +577,50 @@ body {
   gap: 4px;
 }
 
+.input-wrapper.disabled input {
+  background: #f3f4f6;
+  color: #6b7280;
+  cursor: not-allowed;
+  border-color: #e5e7eb;
+}
+
+.password-requirements {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.password-requirements p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0;
+  transition: all 0.3s ease;
+}
+
+.password-requirements p.valid {
+  color: #16a34a;
+  font-weight: 500;
+}
+
+.password-requirements p.invalid {
+  color: #ef4444;
+}
+
+.password-requirements svg {
+  flex-shrink: 0;
+}
+
+.form-actions.center {
+  justify-content: center;
+  margin-top: 16px;
+  margin-bottom: 0;
+}
+
+/* Checklist Item reuse for Login.js */
 .checklist-item {
   display: flex;
   align-items: center;

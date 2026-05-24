@@ -715,6 +715,7 @@ router.post('/', requireRole(['admin']), async (req, res) => {
                     name,
                     email: email || null,
                     password: hashedPassword,
+                    must_change_password: true,
                     roles: normalizedAccountType
                 }
             });
@@ -742,7 +743,8 @@ router.post('/', requireRole(['admin']), async (req, res) => {
             last_name: lastName,
             email: normalizedEmail || null,
             account_type: normalizedAccountType,
-            password: hashedPassword
+            password: hashedPassword,
+            must_change_password: true
         };
 
         if (modelType === 'staff') {
@@ -2337,6 +2339,74 @@ setInterval(async () => {
         console.error("Error in auto-offline job:", err);
     }
 }, 60000); // Run every 60 seconds
+
+// FIRST LOGIN CHANGE PASSWORD Route
+router.post('/first-login-change-password', async (req, res) => {
+    try {
+        const email = normalizeEmail(req.body?.email || '');
+        const tempPassword = String(req.body?.tempPassword || '').trim();
+        const newPassword = String(req.body?.newPassword || '').trim();
+        
+        if (!email || !tempPassword || !newPassword) {
+            return res.status(400).json({ message: "Email, temporary password, and new password are required" });
+        }
+
+        // Find user in any collection
+        let user = await prisma.staff.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
+        let modelType = 'staff';
+        
+        if (!user) {
+            user = await prisma.nurses.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
+            modelType = 'nurses';
+        }
+        if (!user) {
+            user = await prisma.doctors.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
+            modelType = 'doctors';
+        }
+        if (!user) {
+            user = await prisma.accounts.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
+            modelType = 'accounts';
+        }
+        
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // Check if temporary password matches
+        const isMatch = await bcrypt.compare(tempPassword, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: "Invalid temporary password" });
+        }
+        
+        // Hash new password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+        
+        // Update password in DB and set must_change_password to false
+        const updateData = { 
+            password: hashedPassword,
+            must_change_password: false
+        };
+
+        if (modelType === 'accounts') {
+            await prisma.accounts.update({
+                where: { id: user.id },
+                data: updateData
+            });
+        } else {
+            await prisma[modelType].update({
+                where: { id: user.id },
+                data: updateData
+            });
+        }
+        
+        res.json({ success: true, message: "Password updated successfully. You can now login with your new password." });
+        
+    } catch (err) {
+        console.error("First login change password error:", err);
+        res.status(500).json({ message: "Server Error" });
+    }
+});
 
 module.exports = router;
 
