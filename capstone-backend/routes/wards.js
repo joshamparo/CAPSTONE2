@@ -216,9 +216,10 @@ async function getAdmittedPatients() {
   });
 }
 
+buildWardRegistry._cache = { fetchedAt: 0, payload: null, promise: null };
+
 async function buildWardRegistry() {
   await ensureWardInfrastructure();
-  if (!buildWardRegistry._cache) buildWardRegistry._cache = { fetchedAt: 0, payload: null, promise: null };
   const now = Date.now();
   if (buildWardRegistry._cache.payload && now - buildWardRegistry._cache.fetchedAt < 5000) {
     return buildWardRegistry._cache.payload;

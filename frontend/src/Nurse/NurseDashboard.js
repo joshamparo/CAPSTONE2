@@ -2390,14 +2390,10 @@ function NurseDashboard() {
 
   const [wardRegistry, setWardRegistry] = useState({ wards: [], rooms: [], totals: {} });
   const [wardLoading, setWardLoading] = useState(false);
-  const [wardError, setWardError] = useState('');
-  const [selectedWard, setSelectedWard] = useState(null);
   const [assigningPatient, setAssigningPatient] = useState(null);
-  const [showAssignModal, setShowAssignModal] = useState(false);
 
   const fetchWardRegistry = async () => {
     setWardLoading(true);
-    setWardError('');
     try {
       const data = await fetchJson('/api/wards/rooms', {
         apiBase: API_BASE,
@@ -2405,7 +2401,7 @@ function NurseDashboard() {
       });
       setWardRegistry(data || { wards: [], rooms: [], totals: {} });
     } catch (err) {
-      setWardError(String(err?.message || 'Failed to load ward registry.'));
+      console.error('Failed to load ward registry:', err);
     } finally {
       setWardLoading(false);
     }
@@ -2420,7 +2416,6 @@ function NurseDashboard() {
         body: JSON.stringify({ patientId, roomCode })
       });
       fetchWardRegistry();
-      setShowAssignModal(false);
       setAssigningPatient(null);
       addActivity('Patient Assigned', `Patient assigned to ${roomCode}`, 'success');
     } catch (err) {
@@ -5146,20 +5141,20 @@ function NurseDashboard() {
           
           {isSchedulesOpen && (
             <div className="nurse-nav-sub-menu" style={{paddingLeft: isSidebarCollapsed ? '0' : '16px'}}>
-                <button className={`nurse-nav-item sub-item ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')} style={{fontSize: '0.9rem'}}>
-                    <ClipboardList size={18} />
-                    <span>Tasks</span>
-                </button>
-                <button className={`nurse-nav-item sub-item ${view === 'calendar' ? 'active' : ''}`} onClick={() => setView('calendar')} style={{fontSize: '0.9rem'}}>
-                    <Calendar size={18} />
-                    <span>Calendar</span>
-                </button>
-		                <button className={`nurse-nav-item sub-item ${view === 'shifts' ? 'active' : ''}`} onClick={() => setView('shifts')} style={{fontSize: '0.9rem'}}>
-		                    <Clock size={18} />
-		                    <span>My Shifts</span>
-		                </button>
-                </div>
-		            )}
+              <button className={`nurse-nav-item sub-item ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')} style={{fontSize: '0.9rem'}}>
+                <ClipboardList size={18} />
+                <span>Tasks</span>
+              </button>
+              <button className={`nurse-nav-item sub-item ${view === 'calendar' ? 'active' : ''}`} onClick={() => setView('calendar')} style={{fontSize: '0.9rem'}}>
+                <Calendar size={18} />
+                <span>Calendar</span>
+              </button>
+              <button className={`nurse-nav-item sub-item ${view === 'shifts' ? 'active' : ''}`} onClick={() => setView('shifts')} style={{fontSize: '0.9rem'}}>
+                <Clock size={18} />
+                <span>My Shifts</span>
+              </button>
+            </div>
+          )}
 	        </nav>
 
       </aside>
