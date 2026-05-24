@@ -1,0 +1,13 @@
+{
+  "name": "pascualinga-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node capstone-backend/server.js",
+    "build": "cd capstone-backend && npm install && npx prisma generate",
+    "postinstall": "cd capstone-backend && npm install && npx prisma generate"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
