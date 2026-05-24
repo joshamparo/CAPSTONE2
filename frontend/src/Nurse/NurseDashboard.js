@@ -1291,7 +1291,9 @@ function NurseDashboard() {
         mainConcern: "", existingConditions: "", routeNote: "", painLevel: "0",
         nextStepLab: false,
         nextStepImaging: false,
-        nextStepPharmacy: false
+        nextStepPharmacy: false,
+        selectedLabServices: [],
+        selectedImagingServices: []
       });
       await fetchPatientRecords();
       await fetchAppointments();
@@ -2385,6 +2387,71 @@ function NurseDashboard() {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredPatientsForRecords.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredPatientsForRecords, patientPage, patientRecordsPageCount, itemsPerPage]);
+
+  const [wardRegistry, setWardRegistry] = useState({ wards: [], rooms: [], totals: {} });
+  const [wardLoading, setWardLoading] = useState(false);
+  const [wardError, setWardError] = useState('');
+  const [selectedWard, setSelectedWard] = useState(null);
+  const [assigningPatient, setAssigningPatient] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
+  const fetchWardRegistry = async () => {
+    setWardLoading(true);
+    setWardError('');
+    try {
+      const data = await fetchJson('/api/wards/rooms', {
+        apiBase: API_BASE,
+        headers: getAuthHeaders()
+      });
+      setWardRegistry(data || { wards: [], rooms: [], totals: {} });
+    } catch (err) {
+      setWardError(String(err?.message || 'Failed to load ward registry.'));
+    } finally {
+      setWardLoading(false);
+    }
+  };
+
+  const handleAssignPatient = async (patientId, roomCode) => {
+    try {
+      await fetchJson('/api/wards/assign-patient', {
+        apiBase: API_BASE,
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientId, roomCode })
+      });
+      fetchWardRegistry();
+      setShowAssignModal(false);
+      setAssigningPatient(null);
+      addActivity('Patient Assigned', `Patient assigned to ${roomCode}`, 'success');
+    } catch (err) {
+      alert(err.message || 'Failed to assign patient.');
+    }
+  };
+
+  const handleDischargePatient = async (patientId) => {
+    if (!window.confirm('Are you sure you want to discharge this patient?')) return;
+    try {
+      await fetchJson('/api/wards/discharge-patient', {
+        apiBase: API_BASE,
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientId })
+      });
+      fetchWardRegistry();
+      addActivity('Patient Discharged', 'Patient has been discharged from ward.', 'info');
+    } catch (err) {
+      alert(err.message || 'Failed to discharge patient.');
+    }
+  };
+
+  useEffect(() => {
+      if (view === 'ward-management' || view === 'overview') {
+        fetchWardRegistry();
+      }
+      if (view === 'overview' || view === 'er-intake' || view === 'patients') {
+        refreshPatientsList();
+      }
+    }, [view]);
 
   const patientRecordsMatchCount = filteredPatientsForRecords.length;
   const patientRecordsRangeStart = patientRecordsMatchCount === 0 ? 0 : ((Math.min(patientPage, patientRecordsPageCount) - 1) * itemsPerPage) + 1;
@@ -5035,6 +5102,7 @@ function NurseDashboard() {
         </div>
         
         <nav className="nurse-sidebar-nav">
+          <div className="sidebar-section-label">MAIN</div>
           <button className={`nurse-nav-item ${view === 'overview' ? 'active' : ''}`} onClick={() => setView('overview')}>
             <LayoutDashboard size={20} />
             <span>Dashboard</span>
@@ -5050,14 +5118,27 @@ function NurseDashboard() {
             <span>Appointments</span>
           </button>
 
+          <div className="sidebar-section-label">CLINICAL STATIONS</div>
+          <button className={`nurse-nav-item ${view === 'er-intake' ? 'active' : ''}`} onClick={() => setView('er-intake')}>
+            <AlertCircle size={20} />
+            <span>ER Intake</span>
+          </button>
+
           <button className={`nurse-nav-item ${view === 'orders' ? 'active' : ''}`} onClick={() => setView('orders')}>
             <FileText size={20} />
-            <span>Orders</span>
+            <span>Orders Management</span>
           </button>
+
+          <div className="sidebar-section-label">INPATIENT CARE</div>
+          <button className={`nurse-nav-item ${view === 'ward-management' ? 'active' : ''}`} onClick={() => setView('ward-management')}>
+            <BedDouble size={20} />
+            <span>Ward Management</span>
+          </button>
+
           {/* Schedules Dropdown */}
           <button className={`nurse-nav-item ${['schedules', 'tasks', 'calendar', 'shifts'].includes(view) ? 'active' : ''}`} onClick={() => setIsSchedulesOpen(!isSchedulesOpen)}>
             <div style={{display: 'flex', alignItems: 'center', gap: '12px', flex: 1}}>
-                <Calendar size={20} />
+                <Clock size={20} />
                 <span>Schedules</span>
             </div>
             {isSchedulesOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -5342,14 +5423,223 @@ function NurseDashboard() {
                     )}
                 </div>
 	            )}
+            {view === 'ward-management' && (
+                <div className="ward-management-view">
+                    <div className="view-header-stack" style={{ marginBottom: '24px' }}>
+                        <div className="welcome-banner full-width">
+                            <div className="welcome-text">
+                                <div className="workspace-badge workspace-bedside">Inpatient Care</div>
+                                <h1>Ward Management & Bed Assignment</h1>
+                                <p>Monitor bed occupancy and manage patient admissions/transfers across wards.</p>
+                            </div>
+                            <div className="header-actions">
+                                <button className="btn-orange" onClick={fetchWardRegistry} disabled={wardLoading}>
+                                    <RotateCw size={18} className={wardLoading ? 'animate-spin' : ''} />
+                                    <span>Refresh Status</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="dashboard-stats-row">
+                            <div className="stat-card-large">
+                                <div className="stat-icon-large tone-blue"><Bed size={24} /></div>
+                                <div className="stat-content-large">
+                                    <span className="stat-value-large">{wardRegistry.totals?.totalRooms || 0}</span>
+                                    <span className="stat-label-large">Total Beds</span>
+                                </div>
+                            </div>
+                            <div className="stat-card-large">
+                                <div className="stat-icon-large tone-red"><User size={24} /></div>
+                                <div className="stat-content-large">
+                                    <span className="stat-value-large">{wardRegistry.totals?.occupied || 0}</span>
+                                    <span className="stat-label-large">Occupied</span>
+                                </div>
+                            </div>
+                            <div className="stat-card-large">
+                                <div className="stat-icon-large tone-green"><CheckCircle size={24} /></div>
+                                <div className="stat-content-large">
+                                    <span className="stat-value-large">{wardRegistry.totals?.available || 0}</span>
+                                    <span className="stat-label-large">Available</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="ward-grid-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '24px' }}>
+                        <div className="ward-visual-map">
+                            <div className="overview-card">
+                                <div className="card-header">
+                                    <h3>Visual Bed Map</h3>
+                                    <div className="bed-legend" style={{ display: 'flex', gap: '16px', fontSize: '0.85rem' }}>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: 12, height: 12, borderRadius: '50%', background: '#ef4444' }}></span> Occupied</span>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: 12, height: 12, borderRadius: '50%', background: '#22c55e' }}></span> Available</span>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: 12, height: 12, borderRadius: '50%', background: '#94a3b8' }}></span> Maintenance</span>
+                                    </div>
+                                </div>
+                                
+                                {wardLoading ? (
+                                    <div className="loading-state" style={{ padding: '40px', textAlign: 'center' }}>
+                                        <RotateCw className="animate-spin" size={32} />
+                                        <p>Loading bed map...</p>
+                                    </div>
+                                ) : (
+                                    <div className="wards-container">
+                                        {(wardRegistry.wards || []).map(ward => (
+                                            <div key={ward.id} className="ward-group" style={{ marginBottom: '32px' }}>
+                                                <h4 style={{ 
+                                                    borderLeft: `4px solid ${ward.color}`, 
+                                                    paddingLeft: '12px',
+                                                    marginBottom: '16px',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between'
+                                                }}>
+                                                    {ward.name}
+                                                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                                        {ward.occupied} / {ward.totalCapacity} Occupied
+                                                    </span>
+                                                </h4>
+                                                <div className="bed-grid" style={{ 
+                                                    display: 'grid', 
+                                                    gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', 
+                                                    gap: '12px' 
+                                                }}>
+                                                    {(wardRegistry.rooms || []).filter(r => r.wardName === ward.name).map(room => (
+                                                        <div 
+                                                            key={room.id}
+                                                            className={`bed-card ${room.occupied ? 'occupied' : 'available'}`}
+                                                            style={{
+                                                                padding: '12px',
+                                                                borderRadius: '8px',
+                                                                border: '1px solid #e2e8f0',
+                                                                background: room.occupied ? '#fef2f2' : '#f0fdf4',
+                                                                cursor: room.occupied ? 'default' : 'pointer',
+                                                                transition: 'transform 0.2s',
+                                                                position: 'relative'
+                                                            }}
+                                                            onClick={() => !room.occupied && setAssigningPatient({ roomCode: room.roomCode })}
+                                                        >
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                                <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{room.roomCode}</span>
+                                                                {room.occupied ? <User size={16} color="#ef4444" /> : <Bed size={16} color="#22c55e" />}
+                                                            </div>
+                                                            {room.occupied ? (
+                                                                <div className="patient-info">
+                                                                    <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 600 }}>{room.patient?.name}</p>
+                                                                    <button 
+                                                                        className="text-btn" 
+                                                                        style={{ fontSize: '0.7rem', color: '#ef4444', padding: 0, marginTop: '4px' }}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleDischargePatient(room.patient?.id);
+                                                                        }}
+                                                                    >
+                                                                        Discharge
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <span style={{ fontSize: '0.75rem', color: '#16a34a' }}>Available</span>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="ward-sidebar">
+                            <div className="overview-card">
+                                <div className="card-header">
+                                    <h3>Pending Admissions</h3>
+                                </div>
+                                <div className="pending-list">
+                                    {patientsList.filter(p => p.admission_status === 'Admission Requested' || (p.admission_status === 'Emergency' && !p.ward_number)).length === 0 ? (
+                                        <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
+                                            <CheckCircle size={32} style={{ color: '#22c55e', marginBottom: '8px', display: 'block', margin: '0 auto 8px' }} />
+                                            <p>No pending admissions.</p>
+                                        </div>
+                                    ) : (
+                                        patientsList.filter(p => p.admission_status === 'Admission Requested' || (p.admission_status === 'Emergency' && !p.ward_number)).map(p => (
+                                            <div key={p.id} className="pending-item" style={{ 
+                                                padding: '12px', 
+                                                borderBottom: '1px solid #e2e8f0',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center'
+                                            }}>
+                                                <div>
+                                                    <p style={{ margin: 0, fontWeight: 600 }}>{p.first_name} {p.last_name}</p>
+                                                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{p.admission_status}</span>
+                                                </div>
+                                                <button 
+                                                    className="btn-orange-sm"
+                                                    onClick={() => setAssigningPatient({ patientId: p.id, patientName: `${p.first_name} ${p.last_name}` })}
+                                                >
+                                                    Assign Bed
+                                                </button>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {assigningPatient && (
+                        <div className="modal-overlay" onClick={() => setAssigningPatient(null)}>
+                            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                                <h3>{assigningPatient.patientId ? 'Assign Bed to Patient' : 'Assign Patient to Bed'}</h3>
+                                <p>
+                                    {assigningPatient.patientId 
+                                        ? `Assigning ${assigningPatient.patientName} to a bed.`
+                                        : `Assigning a patient to bed ${assigningPatient.roomCode}.`
+                                    }
+                                </p>
+                                
+                                <div className="form-group" style={{ marginTop: '20px' }}>
+                                    <label>{assigningPatient.patientId ? 'Select Bed' : 'Select Patient'}</label>
+                                    {assigningPatient.patientId ? (
+                                        <select 
+                                            className="white-input" 
+                                            onChange={(e) => handleAssignPatient(assigningPatient.patientId, e.target.value)}
+                                            defaultValue=""
+                                        >
+                                            <option value="" disabled>Choose a bed...</option>
+                                            {wardRegistry.rooms?.filter(r => !r.occupied && r.status === 'Available').map(r => (
+                                                <option key={r.id} value={r.roomCode}>{r.roomCode} ({r.wardName})</option>
+                                            ))}
+                                        </select>
+                                    ) : (
+                                        <select 
+                                            className="white-input" 
+                                            onChange={(e) => handleAssignPatient(e.target.value, assigningPatient.roomCode)}
+                                            defaultValue=""
+                                        >
+                                            <option value="" disabled>Choose a patient...</option>
+                                            {patientsList.filter(p => !p.ward_number).map(p => (
+                                                <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+                                    <button className="btn-gray" onClick={() => setAssigningPatient(null)}>Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
             {view === 'overview' && (
                 <div className="overview-container">
                     <div className="overview-header-stack">
                         <div className="welcome-banner full-width">
                             <div className="welcome-text">
                                 <div className={`workspace-badge ${nurseWorkspace.heroTone}`}>{nurseWorkspace.eyebrow}</div>
-                                <h1>{nurseWorkspace.label} Workspace for {user.name}</h1>
-                                <p>{nurseWorkspace.description}</p>
+                                <h1>{nurseWorkspace.label} Workspace Overview</h1>
+                                <p>Welcome back, {user.name}. Here's what's happening in your department today.</p>
                             </div>
                             <div className="welcome-date">
                                 {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -5357,218 +5647,174 @@ function NurseDashboard() {
                         </div>
 
                         <div className="dashboard-stats-row">
-                            {workspaceStats.map((card, index) => (
-                                <div key={`${card.label}-${index}`} className="stat-card-large">
-                                    <div className={`stat-icon-large ${card.tone}`}>
-                                        {card.icon}
-                                    </div>
-                                    <div className="stat-content-large">
-                                        <span className="stat-value-large">{card.value}</span>
-                                        <span className="stat-label-large">{card.label}</span>
-                                        <div className="stat-trend">
-                                            <span className="trend-neutral">{card.detail}</span>
-                                        </div>
-                                    </div>
+                            <div className="stat-card-large">
+                                <div className="stat-icon-large tone-blue"><Users size={24} /></div>
+                                <div className="stat-content-large">
+                                    <span className="stat-value-large">{patientsList.length}</span>
+                                    <span className="stat-label-large">Total Active Patients</span>
                                 </div>
-                            ))}
+                            </div>
+                            <div className="stat-card-large">
+                                <div className="stat-icon-large tone-orange"><LogIn size={24} /></div>
+                                <div className="stat-content-large">
+                                    <span className="stat-value-large">{patientsList.filter(p => p.admission_status === 'Admission Requested').length}</span>
+                                    <span className="stat-label-large">Pending Admissions</span>
+                                </div>
+                            </div>
+                            <div className="stat-card-large">
+                                <div className="stat-icon-large tone-red"><BedDouble size={24} /></div>
+                                <div className="stat-content-large">
+                                    <span className="stat-value-large">{wardRegistry.totals?.occupied || 0} / {wardRegistry.totals?.totalRooms || 0}</span>
+                                    <span className="stat-label-large">Occupied Beds</span>
+                                </div>
+                            </div>
                         </div>
-                        {(statsError || patientsError) ? (
-                          <div className="badge-red" style={{ marginTop: '10px', padding: '10px 12px', width: '100%' }}>
-                            {statsError ? `Stats: ${statsError}` : null}
-                            {statsError && patientsError ? ' • ' : null}
-                            {patientsError ? `Patients: ${patientsError}` : null}
-                          </div>
-                        ) : null}
 
-                        <div className="workspace-focus-grid">
-                            {workspaceFocusCards.map((card, index) => (
-                                <div key={`${card.title}-${index}`} className="workspace-focus-card">
-                                    <span className="workspace-focus-title">{card.title}</span>
-                                    <span className="workspace-focus-value">{card.value}</span>
-                                    <span className="workspace-focus-caption">{card.caption}</span>
-                                </div>
-                            ))}
+                        <div className="quick-actions-section" style={{ marginTop: '24px' }}>
+                            <h3>Quick Actions</h3>
+                            <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
+                                <button className="btn-orange" onClick={() => { setAddPatientData(prev => ({ ...prev, routeType: 'er_consult' })); setShowAddPatientModal(true); }}>
+                                    <Plus size={18} />
+                                    <span>Register Walk-In</span>
+                                </button>
+                                <button className="btn-gray" onClick={() => setView('er-intake')}>
+                                    <AlertTriangle size={18} />
+                                    <span>Emergency Triage</span>
+                                </button>
+                                <button className="btn-gray" onClick={() => setView('ward-management')}>
+                                    <BedDouble size={18} />
+                                    <span>Manage Wards</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="nurse-grid-layout">
-
-
-
-
-
-                        {/* Column 1: Ward Occupancy */}
-                        <div className="grid-col col-ward">
-                            <div className="overview-card full-height">
-                                <div className="card-header">
-                                    <h3>{nurseWorkspace.primaryTitle}</h3>
-                                    {nurseWorkspace.supportsPatientSpaces ? (
-                                        <div className="legend">
-                                            <span className="dot occupied"></span> Occupied
-                                            <span className="dot free"></span> Free
-                                            {nurseWorkspace.type === 'emergency' && Number(liveBoard?.overflowCount || 0) > 0 ? (
-                                              <span className="badge-red" style={{marginLeft: '10px'}}>{liveBoard.overflowCount} overflow</span>
-                                            ) : null}
-                                        </div>
-                                    ) : (
-                                        <span className="badge-count">{workspaceQueueItems.length} queues</span>
-                                    )}
-                                </div>
-                                {nurseWorkspace.supportsPatientSpaces ? (
-                                    <div className="ward-occupancy-grid">
-                                        {wardOccupancy.map(bed => (
-                                            <div 
-                                                key={bed.id} 
-                                                className={`bed-box status-${bed.status}`}
-                                                onClick={() => bed.status === 'occupied' && setSelectedBed(bed)}
-                                                title={bed.status === 'occupied' ? `${bed.patientName}` : 'Available'}
-                                            >
-                                                <div className="bed-icon-wrapper">
-                                                     {bed.status === 'occupied' ? <User size={20} /> : <Bed size={20} />}
-                                                </div>
-                                                <span className="bed-label">{bed.label}</span>
-                                                {bed.status === 'occupied' ? (
-                                                    <span className="bed-patient">{bed.patientName}</span>
-                                                ) : (
-                                                    <span className="bed-patient" style={{color: '#16a34a', fontWeight: '600'}}>Available</span>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="workspace-queue-list">
-                                        {workspaceQueueItems.map((item, index) => (
-                                            <div key={`${item.label}-${index}`} className="workspace-queue-item">
-                                                <div className="workspace-queue-top">
-                                                    <span className="workspace-queue-label">{item.label}</span>
-                                                    <span className="workspace-queue-value">{item.value}</span>
-                                                </div>
-                                                <p className="workspace-queue-note">{item.note}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Column 2: Critical Watchlist */}
-                        <div className="grid-col col-critical">
-                            <div className="overview-card full-height">
-                                <div className="card-header">
-                                    <h3>{nurseWorkspace.secondaryTitle}</h3>
-                                    <span className="badge-red">{nurseWorkspace.supportsPatientSpaces ? `${activeCriticalWatch.length} Active` : `${careTeamDoctors.length} Doctors`}</span>
-                                </div>
-                                {nurseWorkspace.supportsPatientSpaces ? (
-                                    <div className="critical-list-container">
-                                        {activeCriticalWatch.map(p => (
-                                            <div key={p.id} className="critical-item-row">
-                                                <div className="critical-info">
-                                                    <span className="critical-name">{p.name}</span>
-                                                    <span className="critical-loc">{p.room}{p.reason ? ` • ${p.reason}` : ''}</span>
-                                                </div>
-                                                <div className="critical-stats-mini">
-                                                    <div className="stat-pill">BP: <span className={`val-${p.status}`}>{p.bp}</span></div>
-                                                    <div className="stat-pill">HR: <span className={`val-${p.status}`}>{p.hr}</span></div>
-                                                    {p.spo2 && p.spo2 !== '—' ? <div className="stat-pill">SpO2: <span className={`val-${p.status}`}>{p.spo2}</span></div> : null}
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {activeCriticalWatch.length === 0 && (
-                                            <div className="empty-state-mini" style={{textAlign: 'center', padding: '20px', color: '#64748b'}}>
-                                                <CheckCircle size={32} style={{color: '#16a34a', marginBottom: '8px'}} />
-                                                <p>No active watchlist patients in {nurseWorkspace.shortLabel}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="workspace-queue-list">
-                                        {careTeamDoctors.length === 0 ? (
-                                            <div className="empty-state-mini" style={{textAlign: 'center', padding: '20px', color: '#64748b'}}>
-                                                <CheckCircle size={32} style={{color: '#16a34a', marginBottom: '8px'}} />
-                                                <p>No doctor coordination links yet for this shift.</p>
-                                            </div>
-                                        ) : (
-                                            careTeamDoctors.slice(0, 6).map((doctorName, index) => (
-                                                <div key={`${doctorName}-${index}`} className="workspace-queue-item compact">
-                                                    <div className="workspace-queue-top">
-                                                        <span className="workspace-queue-label">{doctorName}</span>
-                                                        <span className="workspace-queue-value">Linked</span>
-                                                    </div>
-                                                    <p className="workspace-queue-note">
-                                                        {openAppointments.length} active appointments, {approvalInbox.length} inbox endorsements, {recentOrders.length} recent orders.
-                                                    </p>
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Column 3: Recent Activity & Tasks */}
-                        <div className="grid-col col-activity">
-                            <div className="overview-card half-height">
+                    <div className="nurse-grid-layout" style={{ marginTop: '32px' }}>
+                        <div className="grid-col col-main">
+                            <div className="overview-card">
                                 <div className="card-header">
                                     <h3>Recent Activity</h3>
+                                    <button className="text-btn" onClick={() => setView('tasks')}>View All</button>
                                 </div>
-                                <div className="activity-list-compact">
-                                    {recentOverviewActivities.length === 0 ? (
-                                      <div className="empty-state-mini" style={{textAlign: 'center', padding: '20px', color: '#64748b'}}>
-                                        <CheckCircle size={28} style={{color: '#16a34a', marginBottom: '8px'}} />
-                                        <p>No recent workflow activity yet.</p>
-                                      </div>
-                                    ) : recentOverviewActivities.map(activity => (
-                                      <div key={activity.id} className="activity-item-compact">
-                                          <div className={`activity-dot ${activity.type}`}></div>
-                                          <div className="activity-content">
-                                              <span className="activity-text">{activity.title}</span>
-                                              <span className="activity-time-mini">{activity.time}</span>
-                                          </div>
-                                      </div>
-                                    ))}
+                                <div className="activity-timeline">
+                                    {notifications.length === 0 ? (
+                                        <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
+                                            <p>No recent activity recorded.</p>
+                                        </div>
+                                    ) : (
+                                        notifications.slice(0, 5).map(notif => (
+                                            <div key={notif.id} className="activity-item" style={{ 
+                                                display: 'flex', 
+                                                gap: '16px', 
+                                                padding: '12px 0', 
+                                                borderBottom: '1px solid #f1f5f9' 
+                                            }}>
+                                                <div className={`activity-icon ${notif.type}`} style={{
+                                                    width: '32px',
+                                                    height: '32px',
+                                                    borderRadius: '50%',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    background: notif.type === 'success' ? '#f0fdf4' : '#eff6ff'
+                                                }}>
+                                                    {notif.type === 'success' ? <CheckCircle size={16} color="#22c55e" /> : <Info size={16} color="#3b82f6" />}
+                                                </div>
+                                                <div className="activity-content">
+                                                    <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>{notif.title}</p>
+                                                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>{notif.message}</p>
+                                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{notif.time}</span>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
                                 </div>
                             </div>
-                            
-                            <div className="overview-card half-height">
+                        </div>
+
+                        <div className="grid-col col-side">
+                            <div className="overview-card">
                                 <div className="card-header">
-                                    <h3>{nurseWorkspace.taskLabel}</h3>
-                                    {urgentTaskCount > 0 && 
-                                        <span className="badge-red">Urgent</span>
-                                    }
+                                    <h3>Ward Overview</h3>
                                 </div>
-                                <div className="tasks-list-compact">
-                                    {overviewSupportTasks.length === 0 ? (
-                                      <div className="empty-state-mini" style={{textAlign: 'center', padding: '20px', color: '#64748b'}}>
-                                        <CheckCircle size={28} style={{color: '#16a34a', marginBottom: '8px'}} />
-                                        <p>No active support tasks right now.</p>
-                                      </div>
-                                    ) : overviewSupportTasks.map(task => (
-                                        <div key={task.id} className="task-item-compact">
-                                            <div
-                                              className={`task-checkbox ${task.source === 'task' && task.completed ? 'checked' : ''}`}
-                                              onClick={() => task.source === 'task' && toggleTask(String(task.id).replace('task-', ''))}
-                                            >
-                                                {task.source === 'task' && task.completed && <Check size={12} color="white" />}
+                                <div className="ward-summary-list">
+                                    {(wardRegistry.wards || []).map(ward => (
+                                        <div key={ward.id} style={{ marginBottom: '16px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.85rem' }}>
+                                                <span>{ward.name}</span>
+                                                <span>{ward.occupied} / {ward.totalCapacity}</span>
                                             </div>
-                                            <div className="task-content-wrapper" style={{flex: 1}}>
-                                                <span className={`task-text-mini ${task.completed ? 'completed' : ''}`} style={task.priority === 'urgent' ? {color: '#ef4444', fontWeight: '700'} : {}}>
-                                                    {task.text}
-                                                </span>
-                                                {task.patientName ? (
-                                                  <span className="activity-time-mini" style={{display: 'block', marginTop: '4px'}}>{task.patientName}</span>
-                                                ) : null}
-                                                {task.priority === 'urgent' && (
-                                                    <span className="task-urgent-badge">Urgent</span>
-                                                )}
+                                            <div style={{ width: '100%', height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                                                <div style={{ 
+                                                    width: ward.totalCapacity > 0 ? `${(ward.occupied / ward.totalCapacity) * 100}%` : '0%', 
+                                                    height: '100%', 
+                                                    background: ward.color 
+                                                }}></div>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
+                                <button className="btn-gray full-width" style={{ marginTop: '12px' }} onClick={() => setView('ward-management')}>
+                                    Full Bed Map
+                                </button>
                             </div>
                         </div>
                     </div>
-
-
+                </div>
+            )}
+            {view === 'er-intake' && (
+                <div className="er-intake-view">
+                    <div className="welcome-banner full-width">
+                        <div className="welcome-text">
+                            <div className="workspace-badge workspace-emergency">Emergency Station</div>
+                            <h1>Emergency Triage & Registration</h1>
+                            <p>Fast-track registration and triage for urgent cases.</p>
+                        </div>
+                        <div className="header-actions">
+                            <button className="btn-orange" onClick={() => { setAddPatientData(prev => ({ ...prev, routeType: 'er_consult' })); setShowAddPatientModal(true); }}>
+                                <Plus size={18} />
+                                <span>New ER Registration</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="overview-card" style={{ marginTop: '24px' }}>
+                        <div className="card-header">
+                            <h3>Active ER Patients</h3>
+                        </div>
+                        <table className="staff-table" style={{ width: '100%' }}>
+                            <thead>
+                                <tr>
+                                    <th>Patient</th>
+                                    <th>Triage Level</th>
+                                    <th>Status</th>
+                                    <th>Time Since Entry</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {patientsList.filter(p => p.admission_status === 'Emergency').length === 0 ? (
+                                    <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px' }}>No active ER patients.</td></tr>
+                                ) : (
+                                    patientsList.filter(p => p.admission_status === 'Emergency').map(p => (
+                                        <tr key={p.id}>
+                                            <td>{p.first_name} {p.last_name}</td>
+                                            <td>
+                                                <span className={`badge-${(p.clinical_records?.erRegistration?.triage?.level === 1 || p.clinical_records?.erRegistration?.triage?.level === 2) ? 'red' : 'orange'}`}>
+                                                    Level {p.clinical_records?.erRegistration?.triage?.level || 'N/A'}
+                                                </span>
+                                            </td>
+                                            <td>{p.admission_status}</td>
+                                            <td>{new Date(p.created_at).toLocaleTimeString()}</td>
+                                            <td>
+                                                <button className="text-btn" onClick={() => { setCentralRecordPatientId(p.id); setCentralRecordOpen(true); }}>View Record</button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
             {view === 'shifts' && (
@@ -8414,15 +8660,25 @@ function NurseDashboard() {
               
               <h3 style={{ color: '#0f172a', fontSize: '24px', fontWeight: '800', marginBottom: 12, margin: 0 }}>Registration successful</h3>
               
-              <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', width: '100%', marginBottom: 24, border: '1px solid #e2e8f0' }}>
+              <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '20px', width: '100%', marginBottom: 24, border: '2px solid #e2e8f0' }}>
+                {walkInNextSteps.ticket && (
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Your Queue Number</div>
+                    <div style={{ fontSize: '48px', fontWeight: '900', color: '#f97316', lineHeight: '1' }}>{walkInNextSteps.ticket}</div>
+                  </div>
+                )}
+                
                 <p style={{ color: '#1e293b', fontSize: '16px', fontWeight: '700', marginBottom: 8, lineHeight: '1.5', margin: 0 }}>
                   {walkInNextSteps.patientName ? `Patient: ${walkInNextSteps.patientName}` : ''}
                   {walkInNextSteps.appointmentId ? ` • Appointment #${walkInNextSteps.appointmentId}` : ''}
-                  {walkInNextSteps.ticket ? ` • Ticket ${walkInNextSteps.ticket}` : ''}
                 </p>
                 <div style={{ color: '#475569', fontSize: '14px', fontWeight: '600', marginTop: 8 }}>
                   {walkInNextSteps.routeLabel ? `Destination: ${walkInNextSteps.routeLabel}` : ''}
                   {walkInNextSteps.routeTarget ? ` • ${walkInNextSteps.routeTarget}` : ''}
+                </div>
+                
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #e2e8f0', fontSize: '13px', color: '#64748b', fontWeight: '600' }}>
+                  Please proceed to the station and wait for your number to be called.
                 </div>
               </div>
 
@@ -9150,7 +9406,71 @@ function NurseDashboard() {
                     <textarea name="mainConcern" value={addPatientData.mainConcern} onChange={handleAddPatientChange} required className="white-input" style={{height: '80px'}} placeholder="What is the patient's current condition?" />
                   </div>
 
-                  <div style={{marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
+                  <div style={{ marginTop: 18, padding: 16, background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <FlaskConical size={18} color="#f97316" /> Laboratory Services (₱100 Fixed)
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {LAB_SERVICES.map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => {
+                            const current = addPatientData.selectedLabServices || [];
+                            const next = current.includes(s) ? current.filter(x => x !== s) : [...current, s];
+                            setAddPatientData(v => ({ ...v, selectedLabServices: next, nextStepLab: next.length > 0 }));
+                          }}
+                          style={{
+                            padding: '8px 14px',
+                            borderRadius: 10,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            border: '1px solid #e2e8f0',
+                            transition: 'all 0.2s',
+                            background: (addPatientData.selectedLabServices || []).includes(s) ? '#f97316' : '#ffffff',
+                            color: (addPatientData.selectedLabServices || []).includes(s) ? '#ffffff' : '#475569',
+                            borderColor: (addPatientData.selectedLabServices || []).includes(s) ? '#ea580c' : '#e2e8f0'
+                          }}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 12, padding: 16, background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Activity size={18} color="#3b82f6" /> Imaging / ECG Services (₱100 Fixed)
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {IMAGING_SERVICES.map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => {
+                            const current = addPatientData.selectedImagingServices || [];
+                            const next = current.includes(s) ? current.filter(x => x !== s) : [...current, s];
+                            setAddPatientData(v => ({ ...v, selectedImagingServices: next, nextStepImaging: next.length > 0 }));
+                          }}
+                          style={{
+                            padding: '8px 14px',
+                            borderRadius: 10,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            border: '1px solid #e2e8f0',
+                            transition: 'all 0.2s',
+                            background: (addPatientData.selectedImagingServices || []).includes(s) ? '#3b82f6' : '#ffffff',
+                            color: (addPatientData.selectedImagingServices || []).includes(s) ? '#ffffff' : '#475569',
+                            borderColor: (addPatientData.selectedImagingServices || []).includes(s) ? '#2563eb' : '#e2e8f0'
+                          }}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{marginTop: 18, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center'}}>
                     <div style={{fontWeight: 900, color: '#0f172a'}}>After submit, open:</div>
                     <label style={{display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#334155'}}>
                       <input
@@ -9177,68 +9497,6 @@ function NurseDashboard() {
                       Pharmacy
                     </label>
                   </div>
-
-                  {addPatientData.nextStepLab && (
-                    <div style={{ marginTop: 12, padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Select Laboratory Services</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {LAB_SERVICES.map(s => (
-                          <button
-                            key={s}
-                            type="button"
-                            onClick={() => {
-                              const current = addPatientData.selectedLabServices || [];
-                              const next = current.includes(s) ? current.filter(x => x !== s) : [...current, s];
-                              setAddPatientData(v => ({ ...v, selectedLabServices: next }));
-                            }}
-                            style={{
-                              padding: '6px 12px',
-                              borderRadius: 6,
-                              fontSize: 12,
-                              fontWeight: 700,
-                              border: '1px solid #e2e8f0',
-                              background: (addPatientData.selectedLabServices || []).includes(s) ? '#fff7ed' : '#ffffff',
-                              color: (addPatientData.selectedLabServices || []).includes(s) ? '#f97316' : '#475569',
-                              borderColor: (addPatientData.selectedLabServices || []).includes(s) ? '#fdba74' : '#e2e8f0'
-                            }}
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {addPatientData.nextStepImaging && (
-                    <div style={{ marginTop: 12, padding: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Select Imaging/ECG Services</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {IMAGING_SERVICES.map(s => (
-                          <button
-                            key={s}
-                            type="button"
-                            onClick={() => {
-                              const current = addPatientData.selectedImagingServices || [];
-                              const next = current.includes(s) ? current.filter(x => x !== s) : [...current, s];
-                              setAddPatientData(v => ({ ...v, selectedImagingServices: next }));
-                            }}
-                            style={{
-                              padding: '6px 12px',
-                              borderRadius: 6,
-                              fontSize: 12,
-                              fontWeight: 700,
-                              border: '1px solid #e2e8f0',
-                              background: (addPatientData.selectedImagingServices || []).includes(s) ? '#eff6ff' : '#ffffff',
-                              color: (addPatientData.selectedImagingServices || []).includes(s) ? '#3b82f6' : '#475569',
-                              borderColor: (addPatientData.selectedImagingServices || []).includes(s) ? '#93c5fd' : '#e2e8f0'
-                            }}
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                   <details style={{marginTop: 12}}>
                     <summary style={{cursor: 'pointer', fontWeight: 900, color: '#0f172a'}}>More details (optional)</summary>
                     <div className="input-group" style={{marginTop: '12px'}}>
@@ -9276,6 +9534,20 @@ function NurseDashboard() {
                           : `${String(addPatientData.firstName || '').trim()} ${String(addPatientData.lastName || '').trim()}`.trim()}</div>
                         <div><span style={{ color: '#64748b' }}>Email:</span> {String(addPatientData.email || '').trim() || '—'}</div>
                         <div><span style={{ color: '#64748b' }}>Main concern:</span> {String(addPatientData.mainConcern || '').trim() || '—'}</div>
+                        
+                        {(addPatientData.selectedLabServices || []).length > 0 && (
+                          <div style={{ marginTop: 8, padding: 8, background: '#fff7ed', borderRadius: 8, border: '1px solid #ffedd5' }}>
+                            <div style={{ color: '#9a3412', fontSize: 12, fontWeight: 900 }}>SELECTED LABORATORY</div>
+                            <div style={{ color: '#ea580c', fontSize: 13 }}>{(addPatientData.selectedLabServices || []).join(', ')}</div>
+                          </div>
+                        )}
+
+                        {(addPatientData.selectedImagingServices || []).length > 0 && (
+                          <div style={{ marginTop: 8, padding: 8, background: '#eff6ff', borderRadius: 8, border: '1px solid #dbeafe' }}>
+                            <div style={{ color: '#1e40af', fontSize: 12, fontWeight: 900 }}>SELECTED IMAGING / ECG</div>
+                            <div style={{ color: '#2563eb', fontSize: 13 }}>{(addPatientData.selectedImagingServices || []).join(', ')}</div>
+                          </div>
+                        )}
                       </div>
                     </div>
 

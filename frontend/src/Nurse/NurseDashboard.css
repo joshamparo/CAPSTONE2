@@ -992,6 +992,151 @@
   border-bottom: 1px solid var(--nurse-border);
 }
 
+/* Sidebar Labels */
+.sidebar-section-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 16px 16px 8px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.nurse-sidebar.collapsed .sidebar-section-label {
+  display: none;
+}
+
+/* Stat Card Tones */
+.tone-blue { background: #eff6ff; color: #3b82f6; }
+.tone-red { background: #fef2f2; color: #ef4444; }
+.tone-green { background: #f0fdf4; color: #22c55e; }
+.tone-orange { background: #fff7ed; color: #f97316; }
+
+/* Quick Actions */
+.btn-orange {
+  background: var(--nurse-primary);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-orange:hover {
+  background: var(--nurse-primary-hover);
+  transform: translateY(-1px);
+}
+
+/* Activity Timeline */
+.activity-item {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Ward Management */
+.ward-management-view {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.bed-card {
+  transition: all 0.2s ease;
+}
+
+.bed-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.bed-card.available:hover {
+  border-color: #22c55e;
+}
+
+.text-btn {
+  background: transparent;
+  border: none;
+  color: var(--nurse-primary);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.text-btn:hover {
+  background: rgba(249, 115, 22, 0.05);
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: white;
+  padding: 32px;
+  border-radius: 20px;
+  width: 90%;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.white-input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.white-input:focus {
+  border-color: var(--nurse-primary);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .dropdown-user-info {
   display: flex;
   align-items: center;
