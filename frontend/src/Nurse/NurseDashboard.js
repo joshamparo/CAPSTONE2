@@ -1268,7 +1268,8 @@ function NurseDashboard() {
       setWalkInPharmacyNotes('');
       setWalkInNextStepsOpen(true);
 
-      // Optional: fast routing after intake (real-time checkboxes)
+      // We'll skip the auto-redirect for now so the user can see the success modal and queue ticket
+      /*
       const shouldOpenLab = Boolean(addPatientData.nextStepLab);
       const shouldOpenImaging = Boolean(addPatientData.nextStepImaging);
       const shouldOpenPharmacy = Boolean(addPatientData.nextStepPharmacy);
@@ -1278,6 +1279,8 @@ function NurseDashboard() {
         else if (shouldOpenImaging) openNextStepsOrders({ tab: 'labs', patientId, patientName });
         else if (shouldOpenPharmacy) openNextStepsOrders({ tab: 'medications', patientId, patientName });
       }
+      */
+
       setShowAddPatientModal(false);
       setAddPatientStep(1);
       setAddPatientData({

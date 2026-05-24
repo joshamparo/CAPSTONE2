@@ -1380,139 +1380,53 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     requesterName,
                     getRequesterEmail(req)
                 ).catch(() => null);
-            } else {
-                if (routeMeta.creates === 'clinical_order') {
-                    const service = String(payload.mainConcern || '').trim() || routeMeta.label;
-                    const isEcg = /\becg\b/i.test(service);
-                    const kind = routeMeta.type === 'lab' ? 'Laboratory' : isEcg ? 'ECG' : 'Radiology';
-                    const assignedRole = routeMeta.type === 'lab' ? 'medtech' : isEcg ? 'ecg_operator' : 'radiographer';
-                    const pricing = resolveClinicalServicePricing({ kind, service });
-                    const status = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
-                    const priority = triage.level <= 2 ? 'urgent' : 'routine';
+            } else if (routeMeta.creates === 'clinical_order') {
+                const service = String(payload.mainConcern || '').trim() || routeMeta.label;
+                const isEcg = /\becg\b/i.test(service);
+                const kind = routeMeta.type === 'lab' ? 'Laboratory' : isEcg ? 'ECG' : 'Radiology';
+                const assignedRole = routeMeta.type === 'lab' ? 'medtech' : isEcg ? 'ecg_operator' : 'radiographer';
+                const pricing = resolveClinicalServicePricing({ kind, service });
+                const status = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
+                const priority = triage.level <= 2 ? 'urgent' : 'routine';
 
-                    const detailLines = [
-                        `${routeMeta.reasonPrefix} ${routeMeta.label}`,
-                        `Service: ${service}`,
-                        String(payload.existingConditions || '').trim() ? `Existing Conditions: ${String(payload.existingConditions || '').trim()}` : null,
-                        String(payload.routeNote || '').trim() ? `Route Note: ${String(payload.routeNote || '').trim()}` : null,
-                        `Vitals: Temp ${intakeEntry.vitals.temperature ?? '—'}, BP ${intakeEntry.vitals.bloodPressure || '—'}, HR ${intakeEntry.vitals.heartRate ?? '—'}, SpO2 ${intakeEntry.vitals.spo2 ?? '—'}`,
-                        `Pain Level: ${Number.isFinite(Number(payload.painLevel)) ? Number(payload.painLevel) : '—'}`
-                    ].filter(Boolean);
+                const detailLines = [
+                    `${routeMeta.reasonPrefix} ${routeMeta.label}`,
+                    `Service: ${service}`,
+                    String(payload.existingConditions || '').trim() ? `Existing Conditions: ${String(payload.existingConditions || '').trim()}` : null,
+                    String(payload.routeNote || '').trim() ? `Route Note: ${String(payload.routeNote || '').trim()}` : null,
+                    `Vitals: Temp ${intakeEntry.vitals.temperature ?? '—'}, BP ${intakeEntry.vitals.bloodPressure || '—'}, HR ${intakeEntry.vitals.heartRate ?? '—'}, SpO2 ${intakeEntry.vitals.spo2 ?? '—'}`,
+                    `Pain Level: ${Number.isFinite(Number(payload.painLevel)) ? Number(payload.painLevel) : '—'}`
+                ].filter(Boolean);
 
-                    try {
-                        const order = await tx.clinical_orders.create({
-                            data: {
-                                patient_id: patient.id,
-                                patient_name: patientName,
-                                kind,
-                                service,
-                                priority,
-                                status,
-                                notes: detailLines.join('\n'),
-                                ordered_by_name: requesterName,
-                                ordered_by_role: 'Nurse',
-                                assigned_role: assignedRole,
-                                assigned_to: null,
-                                scheduled_at: null,
-                                updated_at: new Date()
-                            }
-                        });
-
-                        createdRecord = {
-                            kind: 'clinical_order',
-                            id: order.id.toString(),
-                            status: order.status || status,
-                            target: routeMeta.requestTarget || routeMeta.label
-                        };
-                    } catch (_) {
-                        const request = await tx.requests.create({
-                            data: {
-                                patient_id: patient.id,
-                                patient_name: patientName,
-                                requested_by: requesterName,
-                                message: detailLines.join('\n'),
-                                status: 'Pending'
-                            }
-                        });
-                        createdRecord = {
-                            kind: 'request',
-                            id: request.id.toString(),
-                            status: request.status || 'Pending',
-                            target: routeMeta.requestTarget || routeMeta.label
-                        };
-                    }
-                } else {
-                    const detailLines = [
-                        `${routeMeta.reasonPrefix} ${routeMeta.label}`,
-                        `Main Concern: ${String(payload.mainConcern || '').trim() || 'Walk-in service request'}`,
-                        String(payload.existingConditions || '').trim() ? `Existing Conditions: ${String(payload.existingConditions || '').trim()}` : null,
-                        String(payload.routeNote || '').trim() ? `Route Note: ${String(payload.routeNote || '').trim()}` : null,
-                        `Vitals: Temp ${intakeEntry.vitals.temperature ?? '—'}, BP ${intakeEntry.vitals.bloodPressure || '—'}, HR ${intakeEntry.vitals.heartRate ?? '—'}, SpO2 ${intakeEntry.vitals.spo2 ?? '—'}`,
-                        `Pain Level: ${Number.isFinite(Number(payload.painLevel)) ? Number(payload.painLevel) : '—'}`
-                    ].filter(Boolean);
-
-                    // Automatic clinical order creation for Lab services
-                    if (Array.isArray(payload.selectedLabServices) && payload.selectedLabServices.length > 0) {
-                        for (const service of payload.selectedLabServices) {
-                            const { ticket: labTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], 'LAB');
-                            await tx.clinical_orders.create({
-                                data: {
-                                    patient_id: patient.id,
-                                    patient_name: patientName,
-                                    kind: 'Laboratory',
-                                    service: service,
-                                    priority: 'Routine',
-                                    status: 'Pending',
-                                    notes: `Auto-created from Nurse Walk-In Intake\nTicket: ${labTicket}\n${detailLines.join('\n')}`,
-                                    ordered_by_name: requesterName,
-                                    ordered_by_role: 'Nurse',
-                                    assigned_role: 'Medtech',
-                                    updated_at: new Date()
-                                }
-                            });
+                try {
+                    const { ticket: orderTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], routeMeta.type === 'lab' ? 'LAB' : isEcg ? 'ECG' : 'IMG');
+                    
+                    const order = await tx.clinical_orders.create({
+                        data: {
+                            patient_id: patient.id,
+                            patient_name: patientName,
+                            kind,
+                            service,
+                            priority,
+                            status,
+                            notes: `Ticket: ${orderTicket}\n${detailLines.join('\n')}`,
+                            ordered_by_name: requesterName,
+                            ordered_by_role: 'Nurse',
+                            assigned_role: assignedRole,
+                            assigned_to: null,
+                            scheduled_at: null,
+                            updated_at: new Date()
                         }
-                    }
+                    });
 
-                    // Automatic clinical order creation for Imaging/ECG services
-                    if (Array.isArray(payload.selectedImagingServices) && payload.selectedImagingServices.length > 0) {
-                        for (const service of payload.selectedImagingServices) {
-                            const isECG = service.toLowerCase().includes('ecg');
-                            const { ticket: imgTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], isECG ? 'ECG' : 'IMG');
-                            await tx.clinical_orders.create({
-                                data: {
-                                    patient_id: patient.id,
-                                    patient_name: patientName,
-                                    kind: 'Imaging',
-                                    service: service,
-                                    priority: 'Routine',
-                                    status: 'Pending',
-                                    notes: `Auto-created from Nurse Walk-In Intake\nTicket: ${imgTicket}\n${detailLines.join('\n')}`,
-                                    ordered_by_name: requesterName,
-                                    ordered_by_role: 'Nurse',
-                                    assigned_role: isECG ? 'ECG Operator' : 'Radiographer',
-                                    updated_at: new Date()
-                                }
-                            });
-                        }
-                    }
-
-                    // Fixed 100 pesos billing for selected services
-                    const hasServices = (payload.selectedLabServices?.length > 0) || (payload.selectedImagingServices?.length > 0);
-                    if (hasServices) {
-                        await tx.billing_invoices.create({
-                            data: {
-                                patient_id: patient.id,
-                                patient_name: patientName,
-                                total_amount: 100,
-                                status: 'Pending',
-                                created_by: requesterName,
-                                notes: 'Nurse Walk-In Service Fee (Fixed Rate)',
-                                description: 'Registration & Service Intake Fee',
-                                category: 'Onsite'
-                            }
-                        });
-                    }
-
+                    createdRecord = {
+                        kind: 'clinical_order',
+                        id: order.id.toString(),
+                        status: order.status || status,
+                        ticket: orderTicket,
+                        target: routeMeta.requestTarget || routeMeta.label
+                    };
+                } catch (_) {
                     const request = await tx.requests.create({
                         data: {
                             patient_id: patient.id,
@@ -1529,6 +1443,118 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                         target: routeMeta.requestTarget || routeMeta.label
                     };
                 }
+            } else {
+                const detailLines = [
+                    `${routeMeta.reasonPrefix} ${routeMeta.label}`,
+                    `Main Concern: ${String(payload.mainConcern || '').trim() || 'Walk-in service request'}`,
+                    String(payload.existingConditions || '').trim() ? `Existing Conditions: ${String(payload.existingConditions || '').trim()}` : null,
+                    String(payload.routeNote || '').trim() ? `Route Note: ${String(payload.routeNote || '').trim()}` : null,
+                    `Vitals: Temp ${intakeEntry.vitals.temperature ?? '—'}, BP ${intakeEntry.vitals.bloodPressure || '—'}, HR ${intakeEntry.vitals.heartRate ?? '—'}, SpO2 ${intakeEntry.vitals.spo2 ?? '—'}`,
+                    `Pain Level: ${Number.isFinite(Number(payload.painLevel)) ? Number(payload.painLevel) : '—'}`
+                ].filter(Boolean);
+
+                const generatedTickets = [];
+                if (routeMeta.type === 'pharmacy') {
+                    const { ticket: pharmTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], 'PHARM');
+                    generatedTickets.push(pharmTicket);
+                }
+
+                const request = await tx.requests.create({
+                    data: {
+                        patient_id: patient.id,
+                        patient_name: patientName,
+                        requested_by: requesterName,
+                        message: detailLines.join('\n'),
+                        status: 'Pending'
+                    }
+                });
+                createdRecord = {
+                    kind: 'request',
+                    id: request.id.toString(),
+                    status: request.status || 'Pending',
+                    ticket: generatedTickets.length > 0 ? generatedTickets.join(', ') : null,
+                    target: routeMeta.requestTarget || routeMeta.label
+                };
+            }
+
+            // --- COMMON LOGIC FOR SELECTED LAB/IMAGING SERVICES ---
+            // This now runs for ALL walk-in intakes if checkboxes were checked
+            const generatedExtraTickets = [];
+            const commonDetailLines = [
+                `Vitals: Temp ${intakeEntry.vitals.temperature ?? '—'}, BP ${intakeEntry.vitals.bloodPressure || '—'}, HR ${intakeEntry.vitals.heartRate ?? '—'}`,
+                `Main Concern: ${String(payload.mainConcern || '').trim() || 'Walk-in'}`
+            ];
+
+            if (Array.isArray(payload.selectedLabServices) && payload.selectedLabServices.length > 0) {
+                for (const service of payload.selectedLabServices) {
+                    const { ticket: labTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], 'LAB');
+                    generatedExtraTickets.push(labTicket);
+                    await tx.clinical_orders.create({
+                        data: {
+                            patient_id: patient.id,
+                            patient_name: patientName,
+                            kind: 'Laboratory',
+                            service: service,
+                            priority: 'Routine',
+                            status: 'Pending',
+                            notes: `Auto-created from Nurse Walk-In Intake\nTicket: ${labTicket}\n${commonDetailLines.join('\n')}`,
+                            ordered_by_name: requesterName,
+                            ordered_by_role: 'Nurse',
+                            assigned_role: 'Medtech',
+                            updated_at: new Date()
+                        }
+                    });
+                }
+            }
+
+            if (Array.isArray(payload.selectedImagingServices) && payload.selectedImagingServices.length > 0) {
+                for (const service of payload.selectedImagingServices) {
+                    const isECG = service.toLowerCase().includes('ecg');
+                    const { ticket: imgTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], isECG ? 'ECG' : 'IMG');
+                    generatedExtraTickets.push(imgTicket);
+                    await tx.clinical_orders.create({
+                        data: {
+                            patient_id: patient.id,
+                            patient_name: patientName,
+                            kind: 'Imaging',
+                            service: service,
+                            priority: 'Routine',
+                            status: 'Pending',
+                            notes: `Auto-created from Nurse Walk-In Intake\nTicket: ${imgTicket}\n${commonDetailLines.join('\n')}`,
+                            ordered_by_name: requesterName,
+                            ordered_by_role: 'Nurse',
+                            assigned_role: isECG ? 'ECG Operator' : 'Radiographer',
+                            updated_at: new Date()
+                        }
+                    });
+                }
+            }
+
+            // If extra tickets were generated, append them to the main ticket display
+            if (generatedExtraTickets.length > 0) {
+                const extraTicketStr = generatedExtraTickets.join(', ');
+                if (createdRecord.ticket) {
+                    createdRecord.ticket = `${createdRecord.ticket}, ${extraTicketStr}`;
+                } else {
+                    createdRecord.ticket = extraTicketStr;
+                }
+            }
+
+            // Fixed 100 pesos billing for selected services
+            const hasServices = (payload.selectedLabServices?.length > 0) || (payload.selectedImagingServices?.length > 0);
+            if (hasServices) {
+                await tx.billing_invoices.create({
+                    data: {
+                        patient_id: patient.id,
+                        patient_name: patientName,
+                        total_amount: 100,
+                        status: 'Pending',
+                        created_by: requesterName,
+                        notes: 'Nurse Walk-In Service Fee (Fixed Rate)',
+                        description: 'Registration & Service Intake Fee',
+                        category: 'Onsite'
+                    }
+                });
             }
 
             await tx.activity_logs.create({
