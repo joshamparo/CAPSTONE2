@@ -1,0 +1,461 @@
+/* Appointment.css - Modern Design */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+body {
+    background-color: #f8fafc;
+    color: #1e293b;
+}
+
+.appointment-page-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: radial-gradient(circle at center, #ea580c 0%, #c2410c 100%);
+}
+
+/* --- HEADER --- */
+.appt-header {
+    background: white;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.appt-header-container {
+    width: 100%;
+    max-width: 1200px;
+    padding: 0 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.appt-logo-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.appt-logo-section:hover {
+    opacity: 0.9;
+}
+
+.appt-logo-img {
+    height: 50px;
+    width: auto;
+}
+
+.appt-logo-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.appt-logo-text h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #ea580c;
+    line-height: 1.2;
+    letter-spacing: -0.5px;
+}
+
+.appt-logo-text span {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.appt-nav {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+}
+
+.appt-nav-links {
+    display: flex;
+    gap: 30px;
+}
+
+.appt-nav-links a {
+    text-decoration: none;
+    color: #475569;
+    font-weight: 500;
+    font-size: 0.95rem;
+    transition: color 0.2s;
+}
+
+.appt-nav-links a:hover {
+    color: #ea580c;
+}
+
+.appt-nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.appt-link-highlight {
+    text-decoration: none;
+    color: #ea580c;
+    font-weight: 500;
+    font-size: 0.95rem;
+}
+
+.appt-find-doctor-btn {
+    background: #ea580c;
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 6px -1px rgba(234, 88, 12, 0.2);
+}
+
+.appt-find-doctor-btn:hover {
+    background: #c2410c;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(234, 88, 12, 0.3);
+}
+
+/* --- MAIN CONTENT --- */
+.appt-main-content {
+    flex: 1;
+    padding: 60px 20px;
+    max-width: 1000px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.appt-title-section {
+    text-align: center;
+    margin-bottom: 50px;
+}
+
+.appt-main-title {
+    font-size: 2.5rem;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 10px;
+    letter-spacing: -1px;
+}
+
+.appt-subtitle {
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.9);
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+/* --- FORM CONTAINER --- */
+.appt-form-container {
+    background: white;
+    border-radius: 24px;
+    padding: 40px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+    border: 1px solid #f1f5f9;
+}
+
+.appt-section {
+    margin-bottom: 50px;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 40px;
+}
+
+.appt-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.appt-section-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin-bottom: 30px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.appt-section-title::before {
+    content: "";
+    display: block;
+    width: 6px;
+    height: 24px;
+    background: #ea580c;
+    border-radius: 4px;
+}
+
+/* --- FORM GRID --- */
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 24px;
+}
+
+.form-group label {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #475569;
+}
+
+.form-group label span {
+    font-weight: 400;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    margin-left: 4px;
+}
+
+.appt-input {
+    padding: 14px 18px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    font-size: 1rem;
+    color: #1e293b;
+    transition: all 0.2s;
+    background-color: #f8fafc;
+    width: 100%;
+}
+
+.appt-input:focus {
+    outline: none;
+    border-color: #ea580c;
+    background-color: white;
+    box-shadow: 0 0 0 4px rgba(234, 88, 12, 0.1);
+}
+
+.appt-input.input-error {
+    border-color: #ef4444;
+    background-color: #f8fafc;
+}
+
+.appt-input.input-error:focus {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
+}
+
+.validation-notice {
+    color: #ef4444;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin: 0;
+    animation: none;
+}
+
+/* Layout Helpers */
+.full-width {
+    width: 100%;
+}
+
+.form-row {
+    display: flex;
+    gap: 24px;
+    width: 100%;
+}
+
+.three-col .form-group {
+    flex: 1;
+}
+
+.two-col .form-group {
+    flex: 1;
+}
+
+.align-top {
+    align-items: flex-start;
+}
+
+/* Special Inputs */
+.bg-gray {
+    background-color: #f1f5f9;
+}
+
+.textarea-tall {
+    min-height: 120px;
+    resize: vertical;
+}
+
+/* Checkbox Grid */
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-top: 10px;
+}
+
+.checkbox-grid label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    color: #475569;
+    font-weight: 400;
+    padding: 6px 0;
+    border-radius: 0;
+    transition: color 0.2s;
+}
+
+.checkbox-grid label:hover {
+    color: #0f172a;
+}
+
+.checkbox-grid input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #ea580c;
+    cursor: pointer;
+}
+
+/* Submit Button */
+.form-actions {
+    margin-top: 40px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 14px;
+}
+
+.cancel-appt-btn {
+    background: transparent;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+    padding: 16px 40px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.cancel-appt-btn:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #cbd5e1;
+}
+
+.submit-appt-btn {
+    background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+    color: white;
+    border: none;
+    padding: 16px 40px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 10px 15px -3px rgba(234, 88, 12, 0.3);
+    width: auto;
+}
+
+.submit-appt-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 20px 25px -5px rgba(234, 88, 12, 0.4);
+}
+
+.submit-appt-btn:active {
+    transform: translateY(-1px);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .form-row {
+        flex-direction: column;
+        gap: 20px;
+    }
+    
+    .appt-main-content {
+        padding: 40px 20px;
+    }
+}
+
+@media (max-width: 768px) {
+    .checkbox-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .appt-header {
+        height: auto;
+        padding: 15px 0;
+    }
+    
+    .appt-header-container {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .appt-nav {
+        flex-direction: column;
+        gap: 15px;
+        width: 100%;
+    }
+    
+    .appt-nav-links {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .appt-main-title {
+        font-size: 1.8rem;
+    }
+    
+    .appt-form-container {
+        padding: 24px;
+    }
+    
+    .submit-appt-btn {
+        width: 100%;
+    }
+}
+
+.label-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.soft-card {
+    background: #fafafa;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 18px;
+}
+
+.soft-title {
+    font-size: 1rem !important;
+    font-weight: 500 !important;
+    color: #0f172a !important;
+    margin-bottom: 10px !important;
+}
+
+.checkbox-grid.three {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.mt-10 {
+    margin-top: 10px;
+}
+
+.appt-success {
+    color: #16a34a;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
