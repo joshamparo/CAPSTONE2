@@ -39,9 +39,7 @@ const Login = () => {
   // First Login Change Password State
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [tempPassword, setTempPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [showTempPassword, setShowTempPassword] = useState(false);
+  
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
