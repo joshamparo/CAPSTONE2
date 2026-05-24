@@ -367,47 +367,49 @@
 
 .welcome-banner {
   background: linear-gradient(135deg, var(--nurse-primary) 0%, #fb923c 100%);
-  border-radius: 20px;
-  padding: 32px;
+  border-radius: 16px;
+  padding: 24px 32px;
   color: white;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 10px 25px -5px rgba(249, 115, 22, 0.4);
+  box-shadow: 0 4px 20px -5px rgba(249, 115, 22, 0.3);
 }
 
 .welcome-text h1 {
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   font-weight: 800;
-  margin: 0 0 8px 0;
+  margin: 0 0 4px 0;
 }
 
 .welcome-text p {
   margin: 0;
-  opacity: 0.9;
-  font-size: 1rem;
+  opacity: 0.95;
+  font-size: 0.95rem;
 }
 
 .welcome-date {
-  background: rgba(255,255,255,0.2);
-  padding: 8px 16px;
-  border-radius: 12px;
-  backdrop-filter: blur(4px);
+  background: rgba(255,255,255,0.15);
+  padding: 6px 14px;
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
   font-weight: 600;
+  font-size: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .workspace-badge {
   display: inline-flex;
   align-items: center;
-  padding: 7px 12px;
-  border-radius: 999px;
-  margin-bottom: 12px;
-  font-size: 0.78rem;
+  padding: 5px 10px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .workspace-general,
@@ -424,34 +426,36 @@
 
 .dashboard-stats-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 20px;
 }
 
 .stat-card-large {
   background: var(--nurse-card-bg);
-  border-radius: 16px;
-  padding: 32px;
+  border-radius: 14px;
+  padding: 20px 24px;
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 20px;
   box-shadow: var(--nurse-shadow-sm);
   border: 1px solid var(--nurse-border);
-  transition: transform 0.2s;
+  transition: all 0.2s ease;
 }
 
 .stat-card-large:hover {
   transform: translateY(-2px);
-  box-shadow: var(--nurse-shadow-md);
+  box-shadow: 0 8px 15px -3px rgba(0, 0, 0, 0.08);
+  border-color: rgba(249, 115, 22, 0.2);
 }
 
 .stat-icon-large {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .bg-orange-soft { background: #fff7ed; }
@@ -470,16 +474,215 @@
 }
 
 .stat-value-large {
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 800;
   color: var(--nurse-text-dark);
-  line-height: 1;
-  margin-bottom: 4px;
+  line-height: 1.2;
+  margin-bottom: 2px;
 }
 
 .stat-label-large {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--nurse-text-light);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* Ward Management Improvements */
+.ward-management-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.view-header-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ward-grid-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 24px;
+  align-items: start;
+}
+
+.bed-legend {
+  display: flex;
+  gap: 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  background: #f8fafc;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.ward-group-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-left: 12px;
+  border-left: 4px solid #cbd5e1;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 16px;
+}
+
+.ward-group-title span {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.bed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.bed-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 80px;
+}
+
+.bed-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+.bed-card.occupied {
+  background: #fffafa;
+  border-color: #fee2e2;
+}
+
+.bed-card.available {
+  background: #f8fff9;
+  border-color: #dcfce7;
+}
+
+.bed-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bed-code {
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: #1e293b;
+}
+
+.bed-card .patient-info p {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.discharge-btn {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0;
+  margin-top: 4px;
+  cursor: pointer;
+}
+
+.discharge-btn:hover {
+  text-decoration: underline;
+}
+
+.bed-status-label {
+  font-size: 0.75rem;
+  color: #16a34a;
+  font-weight: 600;
+}
+
+/* Sidebar - Pending Admissions */
+.pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pending-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.pending-item:hover {
+  border-color: var(--nurse-primary);
+  background: white;
+}
+
+.pending-info p {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #1e293b;
+}
+
+.pending-info span {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.btn-orange-sm {
+  background: var(--nurse-primary);
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-orange-sm:hover {
+  background: var(--nurse-primary-hover);
+  transform: translateY(-1px);
+}
+
+.empty-pending {
+  padding: 32px 16px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.empty-pending svg {
+  color: #22c55e;
+  margin-bottom: 12px;
+}
+
+.empty-pending p {
+  margin: 0;
+  font-size: 0.85rem;
   font-weight: 500;
 }
 

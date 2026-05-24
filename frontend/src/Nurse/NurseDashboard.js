@@ -5420,7 +5420,7 @@ function NurseDashboard() {
 	            )}
             {view === 'ward-management' && (
                 <div className="ward-management-view">
-                    <div className="view-header-stack" style={{ marginBottom: '24px' }}>
+                    <div className="view-header-stack">
                         <div className="welcome-banner full-width">
                             <div className="welcome-text">
                                 <div className="workspace-badge workspace-bedside">Inpatient Care</div>
@@ -5460,15 +5460,15 @@ function NurseDashboard() {
                         </div>
                     </div>
 
-                    <div className="ward-grid-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '24px' }}>
+                    <div className="ward-grid-layout">
                         <div className="ward-visual-map">
                             <div className="overview-card">
                                 <div className="card-header">
                                     <h3>Visual Bed Map</h3>
-                                    <div className="bed-legend" style={{ display: 'flex', gap: '16px', fontSize: '0.85rem' }}>
-                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: 12, height: 12, borderRadius: '50%', background: '#ef4444' }}></span> Occupied</span>
-                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: 12, height: 12, borderRadius: '50%', background: '#22c55e' }}></span> Available</span>
-                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: 12, height: 12, borderRadius: '50%', background: '#94a3b8' }}></span> Maintenance</span>
+                                    <div className="bed-legend">
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }}></span> Occupied</span>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e' }}></span> Available</span>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#94a3b8' }}></span> Maintenance</span>
                                     </div>
                                 </div>
                                 
@@ -5480,49 +5480,29 @@ function NurseDashboard() {
                                 ) : (
                                     <div className="wards-container">
                                         {(wardRegistry.wards || []).map(ward => (
-                                            <div key={ward.id} className="ward-group" style={{ marginBottom: '32px' }}>
-                                                <h4 style={{ 
-                                                    borderLeft: `4px solid ${ward.color}`, 
-                                                    paddingLeft: '12px',
-                                                    marginBottom: '16px',
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between'
-                                                }}>
+                                            <div key={ward.id} className="ward-group" style={{ marginBottom: '24px' }}>
+                                                <h4 className="ward-group-title" style={{ borderLeftColor: ward.color }}>
                                                     {ward.name}
-                                                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                                    <span>
                                                         {ward.occupied} / {ward.totalCapacity} Occupied
                                                     </span>
                                                 </h4>
-                                                <div className="bed-grid" style={{ 
-                                                    display: 'grid', 
-                                                    gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', 
-                                                    gap: '12px' 
-                                                }}>
+                                                <div className="bed-grid">
                                                     {(wardRegistry.rooms || []).filter(r => r.wardName === ward.name).map(room => (
                                                         <div 
                                                             key={room.id}
                                                             className={`bed-card ${room.occupied ? 'occupied' : 'available'}`}
-                                                            style={{
-                                                                padding: '12px',
-                                                                borderRadius: '8px',
-                                                                border: '1px solid #e2e8f0',
-                                                                background: room.occupied ? '#fef2f2' : '#f0fdf4',
-                                                                cursor: room.occupied ? 'default' : 'pointer',
-                                                                transition: 'transform 0.2s',
-                                                                position: 'relative'
-                                                            }}
                                                             onClick={() => !room.occupied && setAssigningPatient({ roomCode: room.roomCode })}
                                                         >
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                                                <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{room.roomCode}</span>
-                                                                {room.occupied ? <User size={16} color="#ef4444" /> : <Bed size={16} color="#22c55e" />}
+                                                            <div className="bed-card-header">
+                                                                <span className="bed-code">{room.roomCode}</span>
+                                                                {room.occupied ? <User size={14} color="#ef4444" /> : <Bed size={14} color="#22c55e" />}
                                                             </div>
                                                             {room.occupied ? (
                                                                 <div className="patient-info">
-                                                                    <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 600 }}>{room.patient?.name}</p>
+                                                                    <p>{room.patient?.name}</p>
                                                                     <button 
-                                                                        className="text-btn" 
-                                                                        style={{ fontSize: '0.7rem', color: '#ef4444', padding: 0, marginTop: '4px' }}
+                                                                        className="discharge-btn" 
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
                                                                             handleDischargePatient(room.patient?.id);
@@ -5532,7 +5512,7 @@ function NurseDashboard() {
                                                                     </button>
                                                                 </div>
                                                             ) : (
-                                                                <span style={{ fontSize: '0.75rem', color: '#16a34a' }}>Available</span>
+                                                                <span className="bed-status-label">Available</span>
                                                             )}
                                                         </div>
                                                     ))}
@@ -5551,22 +5531,16 @@ function NurseDashboard() {
                                 </div>
                                 <div className="pending-list">
                                     {patientsList.filter(p => p.admission_status === 'Admission Requested' || (p.admission_status === 'Emergency' && !p.ward_number)).length === 0 ? (
-                                        <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
-                                            <CheckCircle size={32} style={{ color: '#22c55e', marginBottom: '8px', display: 'block', margin: '0 auto 8px' }} />
+                                        <div className="empty-pending">
+                                            <CheckCircle size={32} />
                                             <p>No pending admissions.</p>
                                         </div>
                                     ) : (
                                         patientsList.filter(p => p.admission_status === 'Admission Requested' || (p.admission_status === 'Emergency' && !p.ward_number)).map(p => (
-                                            <div key={p.id} className="pending-item" style={{ 
-                                                padding: '12px', 
-                                                borderBottom: '1px solid #e2e8f0',
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center'
-                                            }}>
-                                                <div>
-                                                    <p style={{ margin: 0, fontWeight: 600 }}>{p.first_name} {p.last_name}</p>
-                                                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{p.admission_status}</span>
+                                            <div key={p.id} className="pending-item">
+                                                <div className="pending-info">
+                                                    <p>{p.first_name} {p.last_name}</p>
+                                                    <span>{p.admission_status}</span>
                                                 </div>
                                                 <button 
                                                     className="btn-orange-sm"
