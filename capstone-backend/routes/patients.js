@@ -1108,6 +1108,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         let level = routeMeta.type === 'er_consult' ? 4 : 3;
         const reasons = [];
 
+        // System Recommendation based on vitals
         if (oxygen > 0 && oxygen < 90) { score += 40; level = 1; label = 'Emergent'; reasons.push('Low Oxygen Saturation'); }
         if (sys > 180 || (sys > 0 && sys < 90)) { score += 25; level = Math.min(level, 2); label = level === 1 ? 'Emergent' : 'Urgent'; reasons.push('Critical Blood Pressure'); }
         if (temp > 39 || (temp > 0 && temp < 35)) { score += 15; level = Math.min(level, 3); reasons.push('Abnormal Temperature'); }
@@ -1115,7 +1116,20 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         if (rr > 0 && (rr >= 30 || rr <= 8)) { score += 15; level = Math.min(level, 2); label = level === 1 ? 'Emergent' : 'Urgent'; reasons.push('Abnormal Respiratory Rate'); }
         if (pain >= 8) { score += 10; level = Math.min(level, 2); reasons.push('Severe pain score'); }
 
-        const triage = { level, score, label, reasons };
+        // Nurse Override Logic (Professor's suggestion)
+        const finalTriageLevel = Number.isFinite(Number(payload.triageLevel)) ? Number(payload.triageLevel) : level;
+        const triageNote = String(payload.triageNote || '').trim();
+        const triageOverridden = finalTriageLevel !== level;
+
+        const triage = { 
+            level: finalTriageLevel, 
+            recommendedLevel: level,
+            overridden: triageOverridden,
+            overrideReason: triageNote,
+            score, 
+            label: finalTriageLevel === 1 ? 'Resuscitation' : finalTriageLevel === 2 ? 'Emergent' : finalTriageLevel === 3 ? 'Urgent' : 'Less Urgent', 
+            reasons 
+        };
         const intakeEntry = buildWalkInClinicalRecordEntry({ routeMeta, requesterName, now, payload, triage });
 
         const result = await prisma.$transaction(async (tx) => {
@@ -1247,6 +1261,14 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             String(payload.existingConditions || '').trim() || null,
                             String(payload.routeNote || '').trim() ? `Intake note: ${String(payload.routeNote || '').trim()}` : null
                         ].filter(Boolean).join('\n') || null,
+                        blood_pressure: (payload.bp_systolic && payload.bp_diastolic) ? `${payload.bp_systolic}/${payload.bp_diastolic}` : null,
+                        heart_rate: Number.isFinite(hr) ? hr : null,
+                        respiratory_rate: Number.isFinite(rr) ? rr : null,
+                        spo2: Number.isFinite(oxygen) ? oxygen : null,
+                        temperature: Number.isFinite(temp) ? temp : null,
+                        triage_override_reason: triageNote || null,
+                        triage_decided_by: requesterName,
+                        triage_final_level: finalTriageLevel,
                         status: routeMeta.type === 'onsite_consult' ? 'Scheduled' : 'Checked-in',
                         consultation_mode: 'onsite',
                         patient_id: patient.id,

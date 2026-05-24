@@ -67,6 +67,7 @@ function NurseDashboard() {
   const navigate = useNavigate();
   const [backendHealth, setBackendHealth] = useState({ checked: false, ok: true, error: '' });
   const [view, setView] = useState('overview');
+  const [bedSearch, setBedSearch] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [statsError, setStatsError] = useState('');
   const [patientsError, setPatientsError] = useState('');
@@ -602,6 +603,9 @@ function NurseDashboard() {
     spo2: "",
     weight: "",
     height: "",
+    severity: "Mild", // Added for triage
+    triageLevel: 4, // Final triage level
+    triageNote: "", // Nurse override note
     mainConcern: "",
     existingConditions: "",
     routeNote: "",
@@ -1227,6 +1231,9 @@ function NurseDashboard() {
           spo2: addPatientData.spo2,
           weight: addPatientData.weight,
           height: addPatientData.height,
+          severity: addPatientData.severity, // Added
+          triageLevel: addPatientData.triageLevel, // Added
+          triageNote: addPatientData.triageNote, // Added
           mainConcern: addPatientData.mainConcern,
           existingConditions: addPatientData.existingConditions,
           routeNote: addPatientData.routeNote,
@@ -1286,8 +1293,17 @@ function NurseDashboard() {
         confirmNotDuplicate: false,
         firstName: "", middleName: "", lastName: "", dateOfBirth: "", gender: "Male",
         contactNumber: "", email: "", address: "", bloodType: "A+",
-        temperature: "", bp_systolic: "", bp_diastolic: "", heartRate: "",
-        respiratoryRate: "", spo2: "", weight: "", height: "",
+        temperature: "",
+        bp_systolic: "",
+        bp_diastolic: "",
+        heartRate: "",
+        respiratoryRate: "",
+        spo2: "",
+        weight: "",
+        height: "",
+        severity: "Mild",
+        triageLevel: 4,
+        triageNote: "",
         mainConcern: "", existingConditions: "", routeNote: "", painLevel: "0",
         nextStepLab: false,
         nextStepImaging: false,
@@ -1346,6 +1362,12 @@ function NurseDashboard() {
     const addIssue = (msg) => issues.push(msg);
     const addFlag = (sev, msg) => flags.push({ severity: sev, message: msg });
 
+    // 1. Inconsistent Data Check (Professor's Suggestion)
+    const isNotBreathing = String(draft.mainConcern || '').toLowerCase().includes('not breathing');
+    if (isNotBreathing && heartRate !== null && heartRate > 0 && heartRate < 150) {
+      addIssue('Inconsistent Data: Reported "Not Breathing" but heart rate is normal. Please verify vitals.');
+    }
+
     // Hard validation (prevents wrong picks / impossible values).
     if (temperature !== null && (temperature < 30 || temperature > 45)) addIssue('Temperature looks invalid (expected 30–45°C).');
     if (systolic !== null && (systolic < 50 || systolic > 260)) addIssue('Systolic BP looks invalid (expected 50–260).');
@@ -1367,60 +1389,47 @@ function NurseDashboard() {
     }
 
     // Deterministic triage flags (no AI inference).
-    // Level: 1 Emergent, 2 Urgent, 3 Moderate, 4 Routine
+    // Level: 1 Resuscitation, 2 Emergent, 3 Urgent, 4 Less Urgent
     let level = 4;
-    let label = 'Routine';
+    let label = 'Less Urgent';
 
     const makeEmergent = (msg) => {
       level = 1;
-      label = 'Emergent';
+      label = 'Resuscitation';
       addFlag('danger', msg);
     };
-    const makeUrgent = (msg) => {
+    const makeHighRisk = (msg) => {
       if (level > 2) {
         level = 2;
-        label = 'Urgent';
+        label = 'Emergent';
       }
       addFlag('warn', msg);
     };
-    const makeModerate = (msg) => {
+    const makeUrgent = (msg) => {
       if (level > 3) {
         level = 3;
-        label = 'Moderate';
+        label = 'Urgent';
       }
       addFlag('info', msg);
     };
 
-    if (spo2 !== null && spo2 > 0) {
-      if (spo2 < 90) makeEmergent('SpO₂ < 90%');
-      else if (spo2 < 92) makeUrgent('SpO₂ 90–91%');
-      else if (spo2 < 95) makeModerate('SpO₂ 92–94%');
-    }
+    // Level 1 Logic
+    if (spo2 !== null && spo2 < 85) makeEmergent('Critical Hypoxia (SpO₂ < 85%)');
+    if (isNotBreathing) makeEmergent('Not Breathing');
+    if (String(draft.mainConcern).toLowerCase().includes('unconscious')) makeEmergent('Unconscious');
 
-    if (systolic !== null && systolic > 0) {
-      if (systolic < 90) makeEmergent('Systolic BP < 90');
-      else if (systolic >= 180) makeUrgent('Systolic BP ≥ 180');
-      else if (systolic >= 160) makeModerate('Systolic BP 160–179');
-    }
+    // Level 2 Logic
+    if (spo2 !== null && spo2 >= 85 && spo2 < 92) makeHighRisk('Low SpO₂ (85–91%)');
+    if (systolic !== null && (systolic < 90 || systolic >= 200)) makeHighRisk('Critical Blood Pressure');
+    if (heartRate !== null && (heartRate > 130 || heartRate < 40)) makeHighRisk('Critical Heart Rate');
+    if (String(draft.severity) === 'Severe') makeHighRisk('Severe Symptom Severity');
+    if (String(draft.mainConcern).toLowerCase().includes('nabagok') || String(draft.mainConcern).toLowerCase().includes('chest pain')) makeHighRisk('High Risk Complaint');
 
-    if (heartRate !== null && heartRate > 0) {
-      if (heartRate > 140 || heartRate < 40) makeUrgent('Abnormal heart rate');
-      else if (heartRate > 120 || heartRate < 50) makeModerate('Borderline heart rate');
-    }
-
-    if (respiratoryRate !== null && respiratoryRate > 0) {
-      if (respiratoryRate >= 30 || respiratoryRate <= 8) makeUrgent('Abnormal respiratory rate');
-      else if (respiratoryRate >= 24 || respiratoryRate <= 10) makeModerate('Borderline respiratory rate');
-    }
-
-    if (temperature !== null && temperature > 0) {
-      if (temperature >= 40 || temperature <= 35) makeUrgent('Abnormal temperature');
-      else if (temperature >= 38.5) makeModerate('Fever ≥ 38.5°C');
-    }
-
-    if (painLevel !== null) {
-      if (painLevel >= 8) makeUrgent('Severe pain (8–10)');
-      else if (painLevel >= 5) makeModerate('Moderate pain (5–7)');
+    // Level 3 Logic
+    if (level > 2) {
+      if (temperature !== null && temperature >= 39) makeUrgent('High Fever (≥ 39°C)');
+      if (painLevel !== null && painLevel >= 7) makeUrgent('Severe Pain (7–10)');
+      if (String(draft.severity) === 'Moderate') makeUrgent('Moderate Symptom Severity');
     }
 
     const suggestedRouteType = level <= 2 ? 'er_consult' : draft.routeType || 'er_consult';
@@ -5160,6 +5169,27 @@ function NurseDashboard() {
       </aside>
 
       <main className={`nurse-main-content ${isSidebarCollapsed ? 'collapsed' : ''}`}>
+        {/* Critical ER Alert Banner */}
+        {patientsList.filter(p => p.triage_level === 1 && p.admission_status === 'Emergency').length > 0 && (
+          <div style={{
+            background: '#fee2e2',
+            borderBottom: '2px solid #ef4444',
+            padding: '12px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            animation: 'pulse-red 2s infinite'
+          }}>
+            <AlertTriangle color="#ef4444" size={24} />
+            <div style={{ flex: 1 }}>
+              <strong style={{ color: '#991b1b', fontSize: '15px' }}>CRITICAL PATIENT ALERT:</strong>
+              <span style={{ color: '#b91c1c', marginLeft: '8px', fontWeight: 700 }}>
+                {patientsList.filter(p => p.triage_level === 1 && p.admission_status === 'Emergency').length} Level 1 (Resuscitation) patient(s) need immediate attention.
+              </span>
+            </div>
+            <button className="btn-red-sm" onClick={() => setView('er-intake')}>View ER Queue</button>
+          </div>
+        )}
         <header className="nurse-header">
             <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 {isSidebarCollapsed ? (
@@ -5557,44 +5587,128 @@ function NurseDashboard() {
                     </div>
 
                     {assigningPatient && (
-                        <div className="modal-overlay" onClick={() => setAssigningPatient(null)}>
-                            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
-                                <h3>{assigningPatient.patientId ? 'Assign Bed to Patient' : 'Assign Patient to Bed'}</h3>
-                                <p>
+                        <div className="modal-overlay" onClick={() => { setAssigningPatient(null); setBedSearch(''); }}>
+                            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px', padding: '24px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                    <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900 }}>
+                                        {assigningPatient.patientId ? 'Select Bed for Patient' : 'Select Patient for Bed'}
+                                    </h3>
+                                    <button className="close-btn" onClick={() => { setAssigningPatient(null); setBedSearch(''); }}>✕</button>
+                                </div>
+                                
+                                <p style={{ color: '#64748b', fontWeight: 700, marginBottom: '20px' }}>
                                     {assigningPatient.patientId 
-                                        ? `Assigning ${assigningPatient.patientName} to a bed.`
+                                        ? `Assigning ${assigningPatient.patientName} to an available bed.`
                                         : `Assigning a patient to bed ${assigningPatient.roomCode}.`
                                     }
                                 </p>
+
+                                <div className="search-box" style={{ marginBottom: '16px', position: 'relative' }}>
+                                    <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                                    <input 
+                                        type="text" 
+                                        className="white-input" 
+                                        style={{ paddingLeft: '40px' }}
+                                        placeholder={assigningPatient.patientId ? "Search bed or ward..." : "Search patient name..."}
+                                        value={bedSearch}
+                                        onChange={(e) => setBedSearch(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
                                 
-                                <div className="form-group" style={{ marginTop: '20px' }}>
-                                    <label>{assigningPatient.patientId ? 'Select Bed' : 'Select Patient'}</label>
+                                <div className="picker-list" style={{ 
+                                    maxHeight: '350px', 
+                                    overflowY: 'auto', 
+                                    border: '1px solid #e2e8f0', 
+                                    borderRadius: '12px',
+                                    background: '#f8fafc'
+                                }}>
                                     {assigningPatient.patientId ? (
-                                        <select 
-                                            className="white-input" 
-                                            onChange={(e) => handleAssignPatient(assigningPatient.patientId, e.target.value)}
-                                            defaultValue=""
-                                        >
-                                            <option value="" disabled>Choose a bed...</option>
-                                            {wardRegistry.rooms?.filter(r => !r.occupied && r.status === 'Available').map(r => (
-                                                <option key={r.id} value={r.roomCode}>{r.roomCode} ({r.wardName})</option>
-                                            ))}
-                                        </select>
+                                        // Bed Selection Mode
+                                        wardRegistry.rooms?.filter(r => !r.occupied && r.status === 'Available')
+                                            .filter(r => r.roomCode.toLowerCase().includes(bedSearch.toLowerCase()) || r.wardName.toLowerCase().includes(bedSearch.toLowerCase()))
+                                            .map(r => (
+                                                <div 
+                                                    key={r.id} 
+                                                    className="picker-item" 
+                                                    onClick={() => handleAssignPatient(assigningPatient.patientId, r.roomCode)}
+                                                    style={{
+                                                        padding: '12px 16px',
+                                                        borderBottom: '1px solid #e2e8f0',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                >
+                                                    <div>
+                                                        <div style={{ fontWeight: 900, color: '#0f172a' }}>{r.roomCode}</div>
+                                                        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>{r.wardName}</div>
+                                                    </div>
+                                                    <div style={{ color: '#22c55e', fontSize: '12px', fontWeight: 900 }}>Available</div>
+                                                </div>
+                                            ))
                                     ) : (
-                                        <select 
-                                            className="white-input" 
-                                            onChange={(e) => handleAssignPatient(e.target.value, assigningPatient.roomCode)}
-                                            defaultValue=""
-                                        >
-                                            <option value="" disabled>Choose a patient...</option>
-                                            {patientsList.filter(p => !p.ward_number).map(p => (
-                                                <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
-                                            ))}
-                                        </select>
+                                        // Patient Selection Mode
+                                        patientsList.filter(p => !p.ward_number && p.admission_status !== 'Discharged')
+                                            .filter(p => `${p.first_name} ${p.last_name}`.toLowerCase().includes(bedSearch.toLowerCase()))
+                                            .map(p => {
+                                                const triage = p.clinical_records?.erRegistration?.triage || {};
+                                                const level = p.triage_level || triage.level || 4;
+                                                const levelColors = {
+                                                    1: { bg: '#fee2e2', text: '#991b1b', border: '#fecaca', label: 'T1' },
+                                                    2: { bg: '#ffedd5', text: '#9a3412', border: '#fed7aa', label: 'T2' },
+                                                    3: { bg: '#e0f2fe', text: '#075985', border: '#bae6fd', label: 'T3' },
+                                                    4: { bg: '#f1f5f9', text: '#334155', border: '#e2e8f0', label: 'T4' }
+                                                };
+                                                const colors = levelColors[level] || levelColors[4];
+                                                
+                                                return (
+                                                    <div 
+                                                        key={p.id} 
+                                                        className="picker-item" 
+                                                        onClick={() => handleAssignPatient(p.id, assigningPatient.roomCode)}
+                                                        style={{
+                                                            padding: '12px 16px',
+                                                            borderBottom: '1px solid #e2e8f0',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            justifyContent: 'space-between',
+                                                            alignItems: 'center',
+                                                            transition: 'all 0.2s'
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                            <div style={{
+                                                                width: '32px', height: '32px', borderRadius: '50%', background: colors.bg,
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                border: `1px solid ${colors.border}`, color: colors.text, fontWeight: 900, fontSize: '11px'
+                                                            }}>
+                                                                {colors.label}
+                                                            </div>
+                                                            <div>
+                                                                <div style={{ fontWeight: 900, color: '#0f172a' }}>{p.first_name} {p.last_name}</div>
+                                                                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700 }}>
+                                                                    {p.admission_status} {p.gender ? `• ${p.gender}` : ''}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <ChevronRight size={16} color="#94a3b8" />
+                                                    </div>
+                                                );
+                                            })
+                                    )}
+                                    {((assigningPatient.patientId && wardRegistry.rooms?.filter(r => !r.occupied && r.status === 'Available').length === 0) ||
+                                      (!assigningPatient.patientId && patientsList.filter(p => !p.ward_number).length === 0)) && (
+                                        <div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
+                                            <p style={{ margin: 0, fontWeight: 700 }}>No results found.</p>
+                                        </div>
                                     )}
                                 </div>
+                                
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
-                                    <button className="btn-gray" onClick={() => setAssigningPatient(null)}>Cancel</button>
+                                    <button className="btn-gray" onClick={() => { setAssigningPatient(null); setBedSearch(''); }}>Cancel</button>
                                 </div>
                             </div>
                         </div>
@@ -9367,6 +9481,69 @@ function NurseDashboard() {
                         <label>Pain (0-10)</label>
                         <input type="number" min="0" max="10" name="painLevel" value={addPatientData.painLevel} onChange={handleAddPatientChange} className="white-input" />
                       </div>
+                      <div className="input-group">
+                        <label>Symptom Severity</label>
+                        <select name="severity" value={addPatientData.severity} onChange={handleAddPatientChange} className="white-input">
+                          <option value="Mild">Mild</option>
+                          <option value="Moderate">Moderate</option>
+                          <option value="Severe">Severe</option>
+                        </select>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {String(addPatientData.routeType || '').trim() === 'er_consult' && quickTriage.level > 0 ? (
+                    <div style={{
+                      marginTop: 18,
+                      padding: 16,
+                      background: '#ffffff',
+                      borderRadius: 16,
+                      border: '2px solid #3b82f6',
+                      boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.1)'
+                    }}>
+                      <div style={{ fontWeight: 900, color: '#1e3a8a', marginBottom: 12, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <ShieldAlert size={20} /> Nurse Triage Decision (Final Say)
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 12 }}>
+                        {[1, 2, 3, 4].map(l => (
+                          <button
+                            key={l}
+                            type="button"
+                            onClick={() => setAddPatientData(v => ({ ...v, triageLevel: l }))}
+                            style={{
+                              padding: '10px 4px',
+                              borderRadius: 12,
+                              fontSize: 12,
+                              fontWeight: 900,
+                              border: '2px solid',
+                              transition: 'all 0.2s',
+                              borderColor: addPatientData.triageLevel === l ? '#3b82f6' : '#e2e8f0',
+                              background: addPatientData.triageLevel === l ? '#eff6ff' : '#ffffff',
+                              color: addPatientData.triageLevel === l ? '#1d4ed8' : '#64748b'
+                            }}
+                          >
+                            Level {l}
+                            {quickTriage.level === l && (
+                              <div style={{ fontSize: 9, opacity: 0.8 }}>(Rec)</div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                      <textarea
+                        placeholder="Optional: Why did you choose this level? (e.g. Patient looks stable)"
+                        name="triageNote"
+                        value={addPatientData.triageNote}
+                        onChange={handleAddPatientChange}
+                        style={{
+                          width: '100%',
+                          height: '60px',
+                          borderRadius: 10,
+                          border: '1px solid #e2e8f0',
+                          padding: '10px',
+                          fontSize: 13,
+                          fontWeight: 700
+                        }}
+                      />
                     </div>
                   ) : null}
                   

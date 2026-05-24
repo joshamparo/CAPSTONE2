@@ -163,6 +163,14 @@ async function ensureAppointmentVideoColumns() {
     await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS triaged_at timestamptz;`);
     await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS triage_overridden_by text;`);
     await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS triage_overridden_at timestamptz;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS blood_pressure text;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS heart_rate integer;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS respiratory_rate integer;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS spo2 integer;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS temperature decimal(5,2);`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS triage_override_reason text;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS triage_decided_by text;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS triage_final_level integer;`);
     await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS patient_waiting_at timestamptz;`);
     await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS patient_waiting_name text;`);
     await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS walkin_ticket text;`);
@@ -298,78 +306,86 @@ function suggestedActionsFor({ level, redFlags, age }) {
     return Array.from(new Set(actions)).slice(0, 6);
 }
 
-function heuristicTriage({ severity, mainConcern, description, symptoms, emergencySymptoms, age, gender }) {
-    const flags = [];
-    const sev = String(severity || '').trim().toLowerCase();
+function protocolBasedTriage({ severity, mainConcern, description, symptoms, emergencySymptoms, age, gender, vitals }) {
+    const rf = Array.isArray(emergencySymptoms) ? emergencySymptoms : [];
+    const syms = Array.isArray(symptoms) ? symptoms : [];
     const text = `${String(mainConcern || '')} ${String(description || '')}`.toLowerCase();
-    const s = normalizeTokens(symptoms).join(' ').toLowerCase();
-    const e = normalizeTokens(emergencySymptoms).join(' ').toLowerCase();
+    
+    // 1. Inconsistent Data Check (Professor's suggestion)
+    const respRate = vitals?.respiratory_rate;
+    const heartRate = vitals?.heart_rate;
+    const isNotBreathing = rf.includes('not breathing') || text.includes('not breathing');
+    
+    if (isNotBreathing && heartRate > 0 && heartRate < 150) {
+        // Technically possible in very early arrest, but usually a data error for triage
+        return {
+            level: 0, // Special code for inconsistent
+            note: 'Inconsistent Data: Patient reported as not breathing but has a pulse. Please verify airway and vitals immediately.',
+            reasons: ['Inconsistent Vitals/Symptoms Mismatch'],
+            inconsistent: true
+        };
+    }
 
-    const has = (needle) => text.includes(needle) || s.includes(needle) || e.includes(needle);
-
-    const critical = [
+    // 2. Level 1: Resuscitation (Immediate)
+    const isCritical = [
         'unconscious',
-        'not breathing',
-        'difficulty breathing',
-        'shortness of breath',
-        'chest pain',
-        'seizure',
-        'severe bleeding',
-        'stroke',
-        'slurred speech'
-    ];
-    if (critical.some((k) => has(k))) {
-        flags.push('critical_red_flag');
-        const redFlags = critical.filter((k) => has(k)).slice(0, 5);
+        'no pulse',
+        'severe respiratory distress',
+        'cardiac arrest',
+        'active seizure'
+    ].some(k => text.includes(k) || rf.includes(k) || syms.includes(k)) || isNotBreathing;
+
+    if (isCritical || (vitals?.spo2 < 85)) {
         return {
             level: 1,
-            confidence: 75,
-            note: 'Critical red-flag symptoms detected. Immediate assessment recommended.',
-            reasons: ['Critical red-flag symptoms detected'],
-            redFlags,
-            suggestedActions: suggestedActionsFor({ level: 1, redFlags, age })
+            note: 'Immediate resuscitation required. Airway/Breathing/Circulation compromised.',
+            reasons: ['Critical physiological instability'],
+            suggestedActions: suggestedActionsFor({ level: 1, redFlags: rf, age })
         };
     }
 
-    const urgent = ['high fever', 'fever', 'severe pain', 'vomiting', 'dehydration', 'blood in stool', 'fainting'];
-    const pediatric = typeof age === 'number' && age < 5;
-    const older = typeof age === 'number' && age >= 65;
-    const urgentHit = urgent.some((k) => has(k)) || sev === 'severe';
-    if (urgentHit || pediatric || older) {
-        const reasons = [];
-        if (urgentHit) reasons.push('Urgent symptom/severity detected');
-        if (pediatric) reasons.push('Pediatric patient (higher caution)');
-        if (older) reasons.push('Older adult (higher caution)');
-        const redFlags = urgent.filter((k) => has(k)).slice(0, 5);
+    // 3. Level 2: Emergent (High Risk)
+    const isEmergent = [
+        'chest pain',
+        'stroke symptoms',
+        'slurred speech',
+        'severe bleeding',
+        'altered mental status',
+        'nabagok' // Head injury from professor's example
+    ].some(k => text.includes(k) || rf.includes(k) || syms.includes(k)) || (vitals?.heart_rate > 120) || (vitals?.heart_rate < 50) || (vitals?.temperature > 39.5);
+
+    if (isEmergent || String(severity).toLowerCase() === 'severe') {
         return {
             level: 2,
-            confidence: 60,
-            note: 'Urgent symptoms or higher-risk age group detected. Prioritize earlier assessment.',
-            reasons,
-            redFlags,
-            suggestedActions: suggestedActionsFor({ level: 2, redFlags, age })
+            note: 'Emergent condition. High risk of deterioration. Prioritize for immediate doctor review.',
+            reasons: ['High-risk clinical symptoms or vital signs'],
+            suggestedActions: suggestedActionsFor({ level: 2, redFlags: rf, age })
         };
     }
 
-    const moderate = sev === 'moderate' || has('pain') || has('cough') || has('diarrhea') || has('headache');
-    if (moderate) {
+    // 4. Level 3: Urgent
+    const isUrgent = String(severity).toLowerCase() === 'moderate' || [
+        'fever',
+        'moderate pain',
+        'vomiting',
+        'dehydration'
+    ].some(k => text.includes(k) || rf.includes(k) || syms.includes(k));
+
+    if (isUrgent) {
         return {
             level: 3,
-            confidence: 55,
-            note: 'Non-critical symptoms detected. Standard triage priority suggested.',
-            reasons: ['Non-critical symptoms'],
-            redFlags: [],
-            suggestedActions: suggestedActionsFor({ level: 3, redFlags: [], age })
+            note: 'Urgent condition. Stable vitals but requires multiple resources.',
+            reasons: ['Moderate clinical symptoms'],
+            suggestedActions: suggestedActionsFor({ level: 3, redFlags: rf, age })
         };
     }
 
+    // 5. Level 4-5: Less Urgent
     return {
         level: 4,
-        confidence: 55,
-        note: 'Mild or non-specific symptoms. Lower triage priority suggested.',
-        reasons: ['Mild/non-specific symptoms'],
-        redFlags: [],
-        suggestedActions: suggestedActionsFor({ level: 4, redFlags: [], age })
+        note: 'Non-urgent. Stable condition. Routine assessment.',
+        reasons: ['Mild/Stable symptoms'],
+        suggestedActions: suggestedActionsFor({ level: 4, redFlags: rf, age })
     };
 }
 
@@ -387,21 +403,27 @@ async function applyAiTriageToAppointment(appointmentId) {
     const severity = String(apt.severity || '').trim();
     const gender = String(apt.gender || '').trim() || null;
     const age = parseAgeFromDob(apt.date_of_birth);
+    const vitals = {
+        blood_pressure: apt.blood_pressure,
+        heart_rate: apt.heart_rate,
+        respiratory_rate: apt.respiratory_rate,
+        spo2: apt.spo2,
+        temperature: apt.temperature
+    };
 
-    const hasInput = Boolean(mainConcern || description || symptoms.length || emergencySymptoms.length || severity);
+    const hasInput = Boolean(mainConcern || description || symptoms.length || emergencySymptoms.length || severity || vitals.heart_rate);
     if (!hasInput) return null;
 
-    const base = heuristicTriage({ severity, mainConcern, description, symptoms, emergencySymptoms, age, gender });
-    const triage = base;
+    const triage = protocolBasedTriage({ severity, mainConcern, description, symptoms, emergencySymptoms, age, gender, vitals });
 
     const triageReasons = {
         note: triage.note,
         reasons: triage.reasons,
-        redFlags: triage.redFlags,
-        suggestedActions: triage.suggestedActions,
-        confidence: triage.confidence,
-        source: 'rule_based_ai',
-        version: 'rules-v2'
+        redFlags: triage.redFlags || [],
+        suggestedActions: triage.suggestedActions || [],
+        inconsistent: triage.inconsistent || false,
+        source: 'protocol_engine_v1',
+        version: 'esi-v5-adapted'
     };
 
     const updated = await prisma.appointments
@@ -409,17 +431,16 @@ async function applyAiTriageToAppointment(appointmentId) {
             where: { id: BigInt(appointmentId) },
             data: {
                 triage_level: triage.level,
-                triage_status: 'Assessed',
+                triage_status: triage.inconsistent ? 'Warning' : 'Assessed',
                 triage_reasons: triageReasons,
-                triaged_by: 'AI (Rule-based)',
+                triaged_by: 'System (ESI Protocol)',
                 triaged_at: new Date()
             }
         })
         .catch(() => null);
+    
     if (updated) {
-        const reds = Array.isArray(triage.redFlags) ? triage.redFlags.slice(0, 5) : [];
-        const detail = `Level ${triage.level}. Confidence ${triage.confidence}%.${reds.length ? ` Red flags: ${reds.join(', ')}` : ''}`;
-        logSystemAppointmentActivity(appointmentId, 'AI Triage Assessed', detail).catch(() => {});
+        logSystemAppointmentActivity(appointmentId, 'System Triage Assessed', `Level ${triage.level}: ${triage.note}`).catch(() => {});
     }
     return updated;
 }
