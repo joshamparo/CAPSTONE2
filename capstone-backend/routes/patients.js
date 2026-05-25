@@ -1473,7 +1473,11 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     id: request.id.toString(),
                     status: request.status || 'Pending',
                     ticket: generatedTickets.length > 0 ? generatedTickets.join(', ') : null,
-                    target: routeMeta.requestTarget || routeMeta.label
+                    target: routeMeta.requestTarget || routeMeta.label,
+                    services: [
+                        ...(payload.selectedLabServices || []),
+                        ...(payload.selectedImagingServices || [])
+                    ].join(', ')
                 };
             }
 

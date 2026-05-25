@@ -1254,6 +1254,8 @@ function NurseDashboard() {
         ? `${String(response.patient.first_name || response.patient.firstName || '').trim()} ${String(response.patient.last_name || response.patient.lastName || '').trim()}`.trim()
         : '';
       const appointmentId = routeKind === 'appointment' ? routeId : '';
+      const services = response?.routing?.services || '';
+      
       setWalkInNextSteps({
         patientId: patientId || null,
         patientName: patientName || null,
@@ -1261,7 +1263,7 @@ function NurseDashboard() {
         ticket: routeTicket || null,
         routeType: addPatientData.routeType,
         routeLabel,
-        routeTarget: routeTarget || null,
+        routeTarget: services ? services : (routeTarget || null),
         routeKind: routeKind || null
       });
       setWalkInPharmacyDest('in_house');
