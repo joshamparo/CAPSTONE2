@@ -267,7 +267,6 @@ async function buildWardRegistry() {
   const roomByCode = new Map(baseRooms.map((room) => [normalizeText(room.roomCode), room]));
   const occupiedRoomIds = new Set();
   const roomPatientMap = new Map();
-  const wardDemand = new Map();
 
   patients.forEach((patient) => {
     const wardNumber = normalizeText(patient.ward_number);
@@ -280,31 +279,6 @@ async function buildWardRegistry() {
         id: String(patient.id),
         name: patientLabel
       });
-      return;
-    }
-
-    const wardName = classifyPatientWard(patient);
-    wardDemand.set(wardName, (wardDemand.get(wardName) || 0) + 1);
-  });
-
-  const roomsByWard = baseRooms.reduce((acc, room) => {
-    const key = room.wardName || 'Unassigned';
-    if (!acc.has(key)) acc.set(key, []);
-    acc.get(key).push(room);
-    return acc;
-  }, new Map());
-
-  const overflowByWard = new Map();
-
-  roomsByWard.forEach((rooms, wardName) => {
-    const demand = Number(wardDemand.get(wardName) || 0);
-    if (demand <= 0) return;
-
-    const autoAssignable = rooms.filter((room) => !occupiedRoomIds.has(room.id) && canAutoAssignRoom(room.manualStatus));
-    const assigned = autoAssignable.slice(0, demand);
-    assigned.forEach((room) => occupiedRoomIds.add(room.id));
-    if (demand > assigned.length) {
-      overflowByWard.set(wardName, demand - assigned.length);
     }
   });
 
@@ -320,14 +294,12 @@ async function buildWardRegistry() {
     };
   });
 
-  const knownWardNames = new Set([
+  const knownWardNames = Array.from(new Set([
     ...Array.from(wardMetaByName.keys()),
-    ...Array.from(roomsByWard.keys())
-  ]);
+    ...baseRooms.map(r => r.wardName)
+  ])).filter(Boolean);
 
-  const wards = Array.from(knownWardNames)
-    .filter(Boolean)
-    .map((wardName) => {
+  const wards = knownWardNames.map((wardName) => {
       const rooms = effectiveRooms.filter((room) => room.wardName === wardName);
       const occupied = rooms.filter((room) => room.status === 'Occupied').length;
       const available = rooms.filter((room) => room.status === 'Available').length;
@@ -347,7 +319,7 @@ async function buildWardRegistry() {
         cleaning,
         maintenance,
         inactive,
-        overflow: Number(overflowByWard.get(wardName) || 0)
+        overflow: 0
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -560,19 +532,31 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
 router.post('/assign-patient', requireRole(['admin', 'nurse']), async (req, res) => {
   try {
     const { patientId, roomCode } = req.body;
+    console.log('[AssignPatient] Payload:', { patientId, roomCode });
+
     if (!patientId || !roomCode) {
       return res.status(400).json({ message: 'Patient ID and Room Code are required.' });
     }
 
     const patient = await prisma.patients.findUnique({ where: { id: patientId } });
-    if (!patient) return res.status(404).json({ message: 'Patient not found.' });
+    if (!patient) {
+        console.error('[AssignPatient] Patient not found:', patientId);
+        return res.status(404).json({ message: 'Patient not found.' });
+    }
 
     // Check if room is available
     const registry = await buildWardRegistry();
     const targetRoom = registry.rooms.find(r => normalizeText(r.roomCode) === normalizeText(roomCode));
     
-    if (!targetRoom) return res.status(404).json({ message: 'Room not found.' });
-    if (targetRoom.occupied) return res.status(400).json({ message: 'Room is already occupied.' });
+    if (!targetRoom) {
+        console.error('[AssignPatient] Room not found:', roomCode);
+        return res.status(404).json({ message: 'Room not found.' });
+    }
+    
+    if (targetRoom.occupied) {
+        console.error('[AssignPatient] Room already occupied:', roomCode, 'by', targetRoom.patient?.name);
+        return res.status(400).json({ message: `Room ${roomCode} is already occupied.` });
+    }
 
     await prisma.patients.update({
       where: { id: patientId },
@@ -583,11 +567,13 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), async (req, res)
       }
     });
 
+    console.log('[AssignPatient] Success:', { patientId, roomCode });
     // Clear cache
     buildWardRegistry._cache.payload = null;
     
     res.json({ message: 'Patient assigned successfully.' });
   } catch (err) {
+    console.error('[AssignPatient] Error:', err);
     res.status(500).json({ message: err.message || 'Failed to assign patient.' });
   }
 });
