@@ -220,6 +220,14 @@ const Login = () => {
             localStorage.setItem('tempUserDetails', JSON.stringify(data));
           } else {
             const errorData = await res.json();
+            if (res.status === 403 && errorData.mustChangePassword) {
+              // Force change password mode
+              setError("Security update required: Please set your new password before logging in.");
+              setIsFirstLogin(true);
+              setEmail(errorData.email || email);
+              setTempPassword(password); // Pre-fill temp password with what they just tried
+              return;
+            }
             setError(errorData.message || 'Invalid Email or Password.');
           }
         } catch (err) {
