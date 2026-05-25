@@ -1545,8 +1545,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             if (hasServices) {
                 await tx.billing_invoices.create({
                     data: {
-                        patient_id: patient.id,
-                        patient_name: patientName,
+                        patients: { connect: { id: patient.id } },
                         total_amount: 100,
                         status: 'Pending',
                         created_by: requesterName,
