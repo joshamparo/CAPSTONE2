@@ -332,15 +332,6 @@ router.post('/login', async (req, res) => {
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid Credentials' });
         }
-
-        // Check if password change is required
-        if (user.must_change_password) {
-            return res.status(403).json({ 
-                message: 'Password change required', 
-                mustChangePassword: true,
-                email: user.email
-            });
-        }
         
         // Update status to Online
         if (modelType && modelType !== 'accounts') {
@@ -724,7 +715,6 @@ router.post('/', requireRole(['admin']), async (req, res) => {
                     name,
                     email: email || null,
                     password: hashedPassword,
-                    must_change_password: true,
                     roles: normalizedAccountType
                 }
             });
@@ -752,8 +742,7 @@ router.post('/', requireRole(['admin']), async (req, res) => {
             last_name: lastName,
             email: normalizedEmail || null,
             account_type: normalizedAccountType,
-            password: hashedPassword,
-            must_change_password: true
+            password: hashedPassword
         };
 
         if (modelType === 'staff') {

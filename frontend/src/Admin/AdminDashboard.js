@@ -2730,9 +2730,9 @@ function AdminDashboard() {
                     to_email: newUser.email,
                     temp_password: tempPassword,
                     system_name: 'Pascualinga',
-                    login_link: `${LOGIN_LINK}?mode=first-login&email=${encodeURIComponent(newUser.email)}`,
-                    login_url: `${LOGIN_LINK}?mode=first-login&email=${encodeURIComponent(newUser.email)}`,
-                    portal_link: `${LOGIN_LINK}?mode=first-login&email=${encodeURIComponent(newUser.email)}`,
+                    login_link: LOGIN_LINK,
+                    login_url: LOGIN_LINK,
+                    portal_link: LOGIN_LINK,
                     website_url: 'https://pascualinga.com'
                   },
                   EMAILJS_PUBLIC_KEY
@@ -2800,9 +2800,9 @@ function AdminDashboard() {
                                 to_email: newUser.email,
                                 temp_password: tempPassword,
                                 system_name: 'Pascualinga',
-                                login_link: `${LOGIN_LINK}?mode=first-login&email=${encodeURIComponent(newUser.email)}`,
-                                login_url: `${LOGIN_LINK}?mode=first-login&email=${encodeURIComponent(newUser.email)}`,
-                                portal_link: `${LOGIN_LINK}?mode=first-login&email=${encodeURIComponent(newUser.email)}`,
+                                login_link: LOGIN_LINK,
+                                login_url: LOGIN_LINK,
+                                portal_link: LOGIN_LINK,
                                 website_url: 'https://pascualinga.com'
                               },
                               EMAILJS_PUBLIC_KEY

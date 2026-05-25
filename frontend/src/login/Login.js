@@ -35,28 +35,8 @@ const Login = () => {
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [isLockedOut, setIsLockedOut] = useState(false);
   const [lockoutTimer, setLockoutTimer] = useState(0);
-  
-  // First Login Change Password State
-  const [isFirstLogin, setIsFirstLogin] = useState(false);
-  const [tempPassword, setTempPassword] = useState('');
-  const [showTempPassword, setShowTempPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
 
   const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    if (params.get('mode') === 'first-login') {
-      setIsFirstLogin(true);
-      const emailParam = params.get('email');
-      if (emailParam) {
-        setEmail(decodeURIComponent(emailParam));
-      }
-    }
-  }, [location]);
 
   useEffect(() => {
     const prevHtmlOverflow = document.documentElement.style.overflow;
@@ -116,60 +96,6 @@ const Login = () => {
     return () => clearInterval(timer);
   }, [isLockedOut, lockoutTimer]);
 
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    if (!tempPassword || !newPassword || !confirmNewPassword) {
-      setError("Please fill in all fields.");
-      return;
-    }
-
-    if (newPassword !== confirmNewPassword) {
-      setError("New passwords do not match.");
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setError("New password must be at least 6 characters.");
-      return;
-    }
-
-    setIsSubmittingPassword(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/staff/first-login-change-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim(),
-          tempPassword: tempPassword.trim(),
-          newPassword: newPassword.trim()
-        })
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        setSuccess("Password updated successfully! You can now login.");
-        setTimeout(() => {
-          setIsFirstLogin(false);
-          setTempPassword('');
-          setNewPassword('');
-          setConfirmNewPassword('');
-          // Clear URL params
-          navigate('/login', { replace: true });
-        }, 2000);
-      } else {
-        setError(data.message || "Failed to update password.");
-      }
-    } catch (err) {
-      console.error("Change password error:", err);
-      setError("Cannot connect to the server.");
-    } finally {
-      setIsSubmittingPassword(false);
-    }
-  };
-
   const handleLogin = async (e) => {
     e.preventDefault();
     if (isLockedOut) return;
@@ -220,14 +146,6 @@ const Login = () => {
             localStorage.setItem('tempUserDetails', JSON.stringify(data));
           } else {
             const errorData = await res.json().catch(() => ({}));
-            if (res.status === 403 && errorData.mustChangePassword) {
-              // Force change password mode
-              setError("Security update required: Please set your new password before logging in.");
-              setIsFirstLogin(true);
-              setEmail(errorData.email || email);
-              setTempPassword(password); // Pre-fill temp password with what they just tried
-              return;
-            }
             setError(errorData.message || 'Invalid Email or Password.');
           }
         } catch (err) {
@@ -427,17 +345,8 @@ const Login = () => {
               alt="PGH Logo" 
               className="brand-logo" 
             />
-            {isFirstLogin ? (
-              <>
-                <h2>Security Update</h2>
-                <p className="subtitle">Please set your new account password</p>
-              </>
-            ) : (
-              <>
-                <h2>Welcome Back</h2>
-                <p className="subtitle">Please sign in to continue</p>
-              </>
-            )}
+            <h2>Welcome Back</h2>
+            <p className="subtitle">Please sign in to continue</p>
           </div>
 
           <div className="alerts-slot">
@@ -453,160 +362,57 @@ const Login = () => {
             )}
           </div>
 
-          {isFirstLogin ? (
-            <form onSubmit={handleChangePassword} className="login-form">
-              <div className="form-group">
+          <form onSubmit={handleLogin} className="login-form">
+            <div className="form-group">
+              <div className="label-row">
                 <label>Email Address</label>
-                <div className="input-wrapper disabled">
-                  <User className="field-icon" size={20} />
-                  <input 
-                    type="text" 
-                    value={email}
-                    disabled={true}
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label>Temporary Password</label>
-                <div className="input-wrapper">
-                  <Lock className="field-icon" size={20} />
-                  <input 
-                    type={showTempPassword ? "text" : "password"}
-                    placeholder="Enter temporary password" 
-                    value={tempPassword}
-                    onChange={(e) => setTempPassword(e.target.value)}
-                    required
-                  />
-                  <button 
-                    type="button"
-                    className="toggle-password"
-                    onClick={() => setShowTempPassword(!showTempPassword)}
-                  >
-                    {showTempPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label>New Password</label>
-                <div className="input-wrapper">
-                  <ShieldCheck className="field-icon" size={20} />
-                  <input 
-                    type={showNewPassword ? "text" : "password"}
-                    placeholder="Enter new password" 
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                  />
-                  <button 
-                    type="button"
-                    className="toggle-password"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                  >
-                    {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                  </button>
-                </div>
-                <div className="password-requirements">
-                  <p className={newPassword.length >= 6 ? 'valid' : ''}>
-                    {newPassword.length >= 6 ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-                    At least 6 characters
-                  </p>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label>Confirm New Password</label>
-                <div className="input-wrapper">
-                  <ShieldCheck className="field-icon" size={20} />
-                  <input 
-                    type={showConfirmPassword ? "text" : "password"}
-                    placeholder="Confirm new password" 
-                    value={confirmNewPassword}
-                    onChange={(e) => setConfirmNewPassword(e.target.value)}
-                    required
-                  />
-                  <button 
-                    type="button"
-                    className="toggle-password"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  >
-                    {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                  </button>
-                </div>
-                {confirmNewPassword && (
-                  <div className="password-requirements">
-                    <p className={newPassword === confirmNewPassword ? 'valid' : 'invalid'}>
-                      {newPassword === confirmNewPassword ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-                      Passwords match
-                    </p>
-                  </div>
+                {firstCharNotice && (
+                  <span className="login-field-notice">{firstCharNotice}</span>
                 )}
               </div>
-
-              <button type="submit" className="submit-btn" disabled={isSubmittingPassword}>
-                {isSubmittingPassword ? "Updating Password..." : "Update Password & Continue"}
-              </button>
-
-              <div className="form-actions center">
-                <span className="forgot-link" onClick={() => setIsFirstLogin(false)}>
-                  Back to standard login
-                </span>
+              <div className="input-wrapper">
+                <User className="field-icon" size={20} />
+                <input 
+                  type="text" 
+                  placeholder="Enter your email" 
+                  value={email}
+                  onChange={handleEmailChange}
+                  disabled={isLockedOut}
+                />
               </div>
-            </form>
-          ) : (
-            <form onSubmit={handleLogin} className="login-form">
-              <div className="form-group">
-                <div className="label-row">
-                  <label>Email Address</label>
-                  {firstCharNotice && (
-                    <span className="login-field-notice">{firstCharNotice}</span>
-                  )}
-                </div>
-                <div className="input-wrapper">
-                  <User className="field-icon" size={20} />
-                  <input 
-                    type="text" 
-                    placeholder="Enter your email" 
-                    value={email}
-                    onChange={handleEmailChange}
-                    disabled={isLockedOut}
-                  />
-                </div>
-              </div>
+            </div>
 
-              <div className="form-group">
-                <label>Password</label>
-                <div className="input-wrapper">
-                  <Lock className="field-icon" size={20} />
-                  <input 
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Enter your password" 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLockedOut}
-                  />
-                  <button 
-                    type="button"
-                    className="toggle-password"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                  </button>
-                </div>
+            <div className="form-group">
+              <label>Password</label>
+              <div className="input-wrapper">
+                <Lock className="field-icon" size={20} />
+                <input 
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLockedOut}
+                />
+                <button 
+                  type="button"
+                  className="toggle-password"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
               </div>
+            </div>
 
-              <div className="form-actions">
-                <span className="forgot-link" onClick={() => navigate('/recovery')}>
-                  Forgot password?
-                </span>
-              </div>
+            <div className="form-actions">
+              <span className="forgot-link" onClick={() => navigate('/recovery')}>
+                Forgot password?
+              </span>
+            </div>
 
-              <button type="submit" className="submit-btn" disabled={isLockedOut}>
-                Login
-              </button>
-            </form>
-          )}
+            <button type="submit" className="submit-btn" disabled={isLockedOut}>
+              Login
+            </button>
+          </form>
 
           <div className="login-footer">
             <a href="/" className="back-link">
