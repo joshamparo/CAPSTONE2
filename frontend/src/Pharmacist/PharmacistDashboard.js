@@ -1123,6 +1123,7 @@ function PharmacistDashboard() {
     if (!q) return medicines;
     return medicines.filter((m) => (
       String(m.name || '').toLowerCase().includes(q) ||
+      String(m.barcode || '').toLowerCase().includes(q) ||
       String(m.category || '').toLowerCase().includes(q) ||
       String(m.status || '').toLowerCase().includes(q)
     ));
@@ -1148,6 +1149,7 @@ function PharmacistDashboard() {
     if (!q) return supplies;
     return supplies.filter((s) => (
       String(s.item_name || '').toLowerCase().includes(q) ||
+      String(s.barcode || '').toLowerCase().includes(q) ||
       String(s.status || '').toLowerCase().includes(q)
     ));
   }, [activeTab, inventoryFocus, supplies, searchText]);
@@ -2184,6 +2186,7 @@ function PharmacistDashboard() {
         if (!q) return true;
         return (
           String(p.name || '').toLowerCase().includes(q) ||
+          String(p.barcode || '').toLowerCase().includes(q) ||
           String(p.categoryName || '').toLowerCase().includes(q)
         );
       })

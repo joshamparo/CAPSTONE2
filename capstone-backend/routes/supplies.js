@@ -107,6 +107,7 @@ router.get('/', async (req, res) => {
     const mapped = items.map((s) => ({
       id: s.id != null ? s.id.toString() : '',
       item_name: s.item_name || null,
+      barcode: s.barcode || null,
       stock: s.stock != null ? Number(s.stock) : 0,
       min_level: s.min_level != null ? Number(s.min_level) : 10,
       unit: s.unit || null,
