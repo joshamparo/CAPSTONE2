@@ -39,7 +39,7 @@ const Login = () => {
   // First Login Change Password State
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [tempPassword, setTempPassword] = useState('');
-  
+  const [showTempPassword, setShowTempPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
@@ -215,11 +215,11 @@ const Login = () => {
     
           if (res.ok) {
             const data = await res.json();
-            role = (data.account_type || data.accountType || '').toLowerCase(); // Ensures routing doesn't break
+            role = (data.account_type || data.accountType || data.roles || '').toLowerCase(); // Ensures routing doesn't break
             isValid = true;
             localStorage.setItem('tempUserDetails', JSON.stringify(data));
           } else {
-            const errorData = await res.json();
+            const errorData = await res.json().catch(() => ({}));
             if (res.status === 403 && errorData.mustChangePassword) {
               // Force change password mode
               setError("Security update required: Please set your new password before logging in.");
