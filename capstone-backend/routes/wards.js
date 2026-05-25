@@ -199,7 +199,6 @@ async function getAdmittedPatients() {
   return prisma.patients.findMany({
     where: {
       OR: [
-        { admission_status: 'Admitted' },
         { admission_status: 'Inpatient' },
         { admission_status: 'Emergency' },
         { ward_number: { not: null } },
@@ -562,7 +561,7 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), async (req, res)
       where: { id: patientId },
       data: {
         ward_number: roomCode,
-        admission_status: 'Admitted'
+        admission_status: 'Inpatient'
       }
     });
 
