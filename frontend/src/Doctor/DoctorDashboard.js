@@ -593,12 +593,13 @@ function DoctorDashboard() {
   }, []);
 
   const activePatientMeta = useMemo(() => {
-    const email = selectedPatient?.email || selectedPatient?.email_address || '';
-    const contact = selectedPatient?.contactNumber || selectedPatient?.contact_number || selectedPatient?.phone || '';
-    const gender = selectedPatient?.gender || selectedPatient?.sex || '';
-    const allergies = selectedPatient?.allergies || '';
+    const p = recordProfile || selectedPatient || {};
+    const email = p.email || p.email_address || '';
+    const contact = p.contactNumber || p.contact_number || p.phone || '';
+    const gender = p.gender || p.sex || '';
+    const allergies = p.allergies || '';
     return { email, contact, gender, allergies };
-  }, [selectedPatient]);
+  }, [selectedPatient, recordProfile]);
 
   const fetchRecordList = async () => {
     if (!userRole) return;
@@ -1080,6 +1081,7 @@ function DoctorDashboard() {
   useEffect(() => {
     if (selectedPatient?._id) {
       fetchPatientVitalsAndTriage(selectedPatient._id);
+      fetchRecordDetails(selectedPatient._id);
       if (isERDoctor) {
         fetchEROrders(selectedPatient._id).catch(() => {});
         fetchWards().catch(() => {});
@@ -1096,6 +1098,8 @@ function DoctorDashboard() {
       setErOrders([]);
       setErOrdersError('');
       setSelectedWard('');
+      setRecordProfile(null);
+      setRecordHistory(null);
     }
   }, [selectedPatient?._id, isERDoctor]);
 
@@ -2789,10 +2793,10 @@ function DoctorDashboard() {
             <div className="doc-pill"><span className="doc-pill-k">Contact</span><span className="doc-pill-v">{activePatientMeta.contact || '—'}</span></div>
             <div className="doc-pill"><span className="doc-pill-k">Gender</span><span className="doc-pill-v">{activePatientMeta.gender || '—'}</span></div>
             <div className="doc-pill"><span className="doc-pill-k">Allergies</span><span className="doc-pill-v">{activePatientMeta.allergies || '—'}</span></div>
-            <div className="doc-pill"><span className="doc-pill-k">Blood Type</span><span className="doc-pill-v">{selectedPatient?.bloodType || '—'}</span></div>
-            <div className="doc-pill"><span className="doc-pill-k">Diagnosis</span><span className="doc-pill-v">{selectedPatient?.diagnosis || '—'}</span></div>
-            <div className="doc-pill"><span className="doc-pill-k">Ward</span><span className="doc-pill-v">{selectedPatient?.wardNumber || '—'}</span></div>
-            <div className="doc-pill"><span className="doc-pill-k">Admission</span><span className="doc-pill-v">{selectedPatient?.admissionStatus || '—'}</span></div>
+            <div className="doc-pill"><span className="doc-pill-k">Blood Type</span><span className="doc-pill-v">{recordProfile?.blood_type || recordProfile?.bloodType || selectedPatient?.bloodType || '—'}</span></div>
+            <div className="doc-pill"><span className="doc-pill-k">Diagnosis</span><span className="doc-pill-v">{recordProfile?.diagnosis || selectedPatient?.diagnosis || '—'}</span></div>
+            <div className="doc-pill"><span className="doc-pill-k">Ward</span><span className="doc-pill-v">{recordProfile?.ward_number || recordProfile?.wardNumber || selectedPatient?.wardNumber || '—'}</span></div>
+            <div className="doc-pill"><span className="doc-pill-k">Admission</span><span className="doc-pill-v">{recordProfile?.admission_status || recordProfile?.admissionStatus || selectedPatient?.admissionStatus || '—'}</span></div>
           </div>
 
           <div className="doc-history">
