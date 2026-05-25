@@ -593,9 +593,9 @@ function DoctorDashboard() {
   }, []);
 
   const activePatientMeta = useMemo(() => {
-    const email = selectedPatient?.email || '';
-    const contact = selectedPatient?.contactNumber || '';
-    const gender = selectedPatient?.sex || selectedPatient?.gender || '';
+    const email = selectedPatient?.email || selectedPatient?.email_address || '';
+    const contact = selectedPatient?.contactNumber || selectedPatient?.contact_number || selectedPatient?.phone || '';
+    const gender = selectedPatient?.gender || selectedPatient?.sex || '';
     const allergies = selectedPatient?.allergies || '';
     return { email, contact, gender, allergies };
   }, [selectedPatient]);
@@ -620,12 +620,17 @@ function DoctorDashboard() {
 
         const rows = rowsRaw.map(p => ({
           patient: {
+            ...p,
             id: p.id,
-            first_name: p.first_name,
-            last_name: p.last_name,
+            firstName: p.first_name || p.firstName,
+            lastName: p.last_name || p.lastName,
+            contactNumber: p.contact_number || p.contactNumber,
             email: p.email,
             gender: p.gender || p.sex,
-            blood_type: p.blood_type || p.bloodType
+            bloodType: p.blood_type || p.bloodType,
+            admissionStatus: p.admission_status || p.admissionStatus,
+            wardNumber: p.ward_number || p.wardNumber,
+            diagnosis: p.diagnosis
           },
           lastVisitAt: p.updated_at || p.created_at
         }));
@@ -2535,11 +2540,28 @@ function DoctorDashboard() {
                     (aptPatientId ? patients.find((p) => String(p._id || p.id || '').trim() === aptPatientId) : null) ||
                     (aptEmail ? patients.find((p) => String(p.email || '').trim().toLowerCase() === aptEmail) : null) ||
                     null;
-                  if (matched) {
-                    setSelectedPatient(matched);
-                  } else {
-                    setToast({ type: 'error', message: 'Patient record not found in system.' });
-                  }
+                  
+                  // Merge info from appointment for completeness
+                  const mergedPatient = {
+                    ...(matched || {}),
+                    _id: matched?._id || matched?.id || aptPatientId || apt.id,
+                    firstName: matched?.firstName || matched?.first_name || apt.firstName || apt.first_name,
+                    lastName: matched?.lastName || matched?.last_name || apt.lastName || apt.last_name,
+                    email: matched?.email || apt.email,
+                    contactNumber: matched?.contactNumber || matched?.contact_number || apt.phone || apt.contactNumber,
+                    gender: matched?.gender || matched?.sex || apt.gender || apt.sex,
+                    bloodType: matched?.bloodType || matched?.blood_type || apt.bloodType || apt.blood_type,
+                    // Pass vitals from appointment as fallback
+                    vitalsFallback: {
+                      bp: apt.blood_pressure || apt.bp,
+                      hr: apt.heart_rate || apt.hr,
+                      rr: apt.respiratory_rate || apt.rr,
+                      temp: apt.temperature || apt.temp,
+                      spo2: apt.spo2
+                    }
+                  };
+
+                  setSelectedPatient(mergedPatient);
                 }}
                 style={{
                   width: '100%',
@@ -2723,7 +2745,7 @@ function DoctorDashboard() {
             )}
           </div>
 
-          {erVitals && (
+          {(erVitals || selectedPatient?.vitalsFallback) && (
             <div className="doc-vitals-display" style={{ 
               display: 'grid', 
               gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', 
@@ -2736,24 +2758,24 @@ function DoctorDashboard() {
             }}>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>BP</div>
-                <div style={{ fontWeight: 800, color: '#0f172a' }}>{erVitals.bp || '—'}</div>
+                <div style={{ fontWeight: 800, color: '#0f172a' }}>{erVitals?.bp || selectedPatient?.vitalsFallback?.bp || '—'}</div>
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>HR</div>
-                <div style={{ fontWeight: 800, color: (Number(erVitals.hr) > 100 || Number(erVitals.hr) < 60) ? '#b91c1c' : '#0f172a' }}>{erVitals.hr || '—'}</div>
+                <div style={{ fontWeight: 800, color: (Number(erVitals?.hr || selectedPatient?.vitalsFallback?.hr) > 100 || Number(erVitals?.hr || selectedPatient?.vitalsFallback?.hr) < 60) ? '#b91c1c' : '#0f172a' }}>{erVitals?.hr || selectedPatient?.vitalsFallback?.hr || '—'}</div>
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Temp</div>
-                <div style={{ fontWeight: 800, color: (Number(erVitals.temp) > 37.8 || Number(erVitals.temp) < 35.5) ? '#b91c1c' : '#0f172a' }}>{erVitals.temp || '—'}°C</div>
+                <div style={{ fontWeight: 800, color: (Number(erVitals?.temp || selectedPatient?.vitalsFallback?.temp) > 37.8 || Number(erVitals?.temp || selectedPatient?.vitalsFallback?.temp) < 35.5) ? '#b91c1c' : '#0f172a' }}>{erVitals?.temp || selectedPatient?.vitalsFallback?.temp || '—'}°C</div>
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>SpO2</div>
-                <div style={{ fontWeight: 800, color: Number(erVitals.spo2) < 95 ? '#b91c1c' : '#0f172a' }}>{erVitals.spo2 || '—'}%</div>
+                <div style={{ fontWeight: 800, color: Number(erVitals?.spo2 || selectedPatient?.vitalsFallback?.spo2) < 95 ? '#b91c1c' : '#0f172a' }}>{erVitals?.spo2 || selectedPatient?.vitalsFallback?.spo2 || '—'}%</div>
               </div>
-              {erVitals.rr && (
+              {(erVitals?.rr || selectedPatient?.vitalsFallback?.rr) && (
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>RR</div>
-                  <div style={{ fontWeight: 800, color: '#0f172a' }}>{erVitals.rr}</div>
+                  <div style={{ fontWeight: 800, color: '#0f172a' }}>{erVitals?.rr || selectedPatient?.vitalsFallback?.rr}</div>
                 </div>
               )}
             </div>
@@ -3173,17 +3195,17 @@ function DoctorDashboard() {
                       <td>
                         <div className="doc-patient-cell">
                           <div className="doc-avatar-sm">
-                            {(p.first_name || p.firstName || 'U')[0]}{(p.last_name || p.lastName || 'P')[0]}
+                            {(p.firstName || p.first_name || 'U')[0]}{(p.lastName || p.last_name || 'P')[0]}
                           </div>
                           <div className="doc-patient-info">
-                            <div className="doc-name">{p.first_name || p.firstName} {p.last_name || p.lastName}</div>
+                            <div className="doc-name">{p.firstName || p.first_name} {p.lastName || p.last_name}</div>
                             <div className="doc-email">{p.email}</div>
                           </div>
                         </div>
                       </td>
                       <td><span className="doc-id-badge">{String(p.id || '').slice(0, 8)}</span></td>
                       <td>{p.gender || p.sex || '—'}</td>
-                      <td>{p.blood_type || p.bloodType || '—'}</td>
+                      <td>{p.bloodType || p.blood_type || '—'}</td>
                       <td>{row.lastVisitAt ? new Date(row.lastVisitAt).toLocaleDateString() : '—'}</td>
                       <td>
                         <button
