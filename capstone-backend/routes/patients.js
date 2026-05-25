@@ -1549,9 +1549,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                         total_amount: 100,
                         status: 'Pending',
                         created_by: requesterName,
-                        notes: 'Nurse Walk-In Service Fee (Fixed Rate)',
-                        description: 'Registration & Service Intake Fee',
-                        category: 'Onsite'
+                        notes: 'Nurse Walk-In Service Fee (Fixed Rate) - Registration & Service Intake Fee (Onsite)'
                     }
                 });
             }
