@@ -330,23 +330,11 @@ async function ensureAvailabilityTables() {
 
 let doctorAvailabilityEnsuredAt = 0;
 let doctorAvailabilityEnsurePromise = null;
-const DOCTOR_AVAILABILITY_AUTO_ENSURE =
-  String(process.env.DOCTOR_AVAILABILITY_AUTO_ENSURE || '').trim().toLowerCase() !== 'false';
+const DOCTOR_AVAILABILITY_AUTO_ENSURE = false; // Disabled to prevent Request Timeouts in production
 
 async function ensureAvailabilityTablesOnce() {
-  if (!DOCTOR_AVAILABILITY_AUTO_ENSURE) return;
-  if (doctorAvailabilityEnsuredAt) return;
-  if (!doctorAvailabilityEnsurePromise) {
-    doctorAvailabilityEnsurePromise = ensureAvailabilityTables()
-      .then(() => {
-        doctorAvailabilityEnsuredAt = Date.now();
-      })
-      .catch((err) => {
-        doctorAvailabilityEnsurePromise = null;
-        throw err;
-      });
-  }
-  await doctorAvailabilityEnsurePromise;
+  // Logic disabled to prevent slow DDL operations during requests
+  return;
 }
 
 function inferRole(req) {
@@ -486,22 +474,6 @@ async function loadBlockedDates({ doctorId, from, to }) {
         `
       )
       .catch(() => []);
-
-    if (!usedSupabase && getSupabaseAdmin() && Array.isArray(rows) && rows.length) {
-      try {
-        for (const r of rows) {
-          const d = r?.date || r?.available_date;
-          if (!d) continue;
-          await upsertBlockedDateSupabase({
-            doctorId,
-            date: String(d).slice(0, 10),
-            startTime: r?.startTime || null,
-            endTime: r?.endTime || null,
-            reason: r?.reason || null
-          });
-        }
-      } catch (_) {}
-    }
   }
 
   return (Array.isArray(rows) ? rows : []).map((row) => ({
