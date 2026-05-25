@@ -30,11 +30,13 @@ router.get('/products', requireRole(['pharmacist', 'admin', 'nurse']), async (re
     if (q) {
       medWhere.OR = [
         { name: { contains: q, mode: 'insensitive' } },
+        { barcode: { equals: q } },
         { category: { contains: q, mode: 'insensitive' } },
         { product_categories: { is: { name: { contains: q, mode: 'insensitive' } } } }
       ];
       supWhere.OR = [
         { item_name: { contains: q, mode: 'insensitive' } },
+        { barcode: { equals: q } },
         { product_categories: { is: { name: { contains: q, mode: 'insensitive' } } } }
       ];
     }
@@ -93,9 +95,13 @@ router.get('/products', requireRole(['pharmacist', 'admin', 'nurse']), async (re
       if (q) {
         medFallbackWhere.OR = [
           { name: { contains: q, mode: 'insensitive' } },
+          { barcode: { equals: q } },
           { category: { contains: q, mode: 'insensitive' } }
         ];
-        supFallbackWhere.OR = [{ item_name: { contains: q, mode: 'insensitive' } }];
+        supFallbackWhere.OR = [
+          { item_name: { contains: q, mode: 'insensitive' } },
+          { barcode: { equals: q } }
+        ];
       }
 
       try {
