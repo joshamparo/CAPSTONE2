@@ -697,7 +697,6 @@ function NurseDashboard() {
   };
 
   const walkInNeedsDoctor =
-    addPatientData.routeType === 'er_consult' ||
     addPatientData.routeType === 'admission_eval';
 
   const walkInPatientDirectory = useMemo(() => {

@@ -183,7 +183,7 @@ function getWalkInRouteMeta(routeType) {
     return {
         type: 'er_consult',
         label: 'ER Consultation',
-        needsDoctor: true,
+        needsDoctor: false,
         creates: 'appointment',
         reasonPrefix: '[TRIAGE][WALK-IN] ER Consultation'
     };
