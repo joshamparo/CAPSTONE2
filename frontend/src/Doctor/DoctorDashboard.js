@@ -2558,6 +2558,11 @@ function DoctorDashboard() {
                       rr: apt.respiratory_rate || apt.rr,
                       temp: apt.temperature || apt.temp,
                       spo2: apt.spo2
+                    },
+                    // Pass triage from appointment as fallback
+                    triageFallback: {
+                      triage_level: apt.triageLevel || apt.triage_level,
+                      priority_label: apt.triageStatus || apt.triage_status
                     }
                   };
 
@@ -2731,55 +2736,53 @@ function DoctorDashboard() {
             <div className="doc-patient-name">
               {`${selectedPatient.firstName} ${selectedPatient.lastName}`}
             </div>
-            {erTriage && (
-              <div className={`doc-badge triage-level-${erTriage.triage_level}`} style={{ 
-                background: erTriage.triage_level === 1 ? '#fee2e2' : erTriage.triage_level === 2 ? '#ffedd5' : '#f0f9ff',
-                color: erTriage.triage_level === 1 ? '#991b1b' : erTriage.triage_level === 2 ? '#9a3412' : '#075985',
+            {(erTriage || selectedPatient?.triageFallback?.triage_level) && (
+              <div className={`doc-badge triage-level-${erTriage?.triage_level || selectedPatient?.triageFallback?.triage_level}`} style={{ 
+                background: (erTriage?.triage_level || selectedPatient?.triageFallback?.triage_level) === 1 ? '#fee2e2' : (erTriage?.triage_level || selectedPatient?.triageFallback?.triage_level) === 2 ? '#ffedd5' : '#f0f9ff',
+                color: (erTriage?.triage_level || selectedPatient?.triageFallback?.triage_level) === 1 ? '#991b1b' : (erTriage?.triage_level || selectedPatient?.triageFallback?.triage_level) === 2 ? '#9a3412' : '#075985',
                 fontWeight: 800,
                 border: '1px solid currentColor',
                 fontSize: '0.75rem',
                 padding: '4px 8px'
               }}>
-                LEVEL {erTriage.triage_level}: {erTriage.priority_label}
+                LEVEL {erTriage?.triage_level || selectedPatient?.triageFallback?.triage_level}: {erTriage?.priority_label || selectedPatient?.triageFallback?.priority_label || 'Assessed'}
               </div>
             )}
           </div>
 
-          {(erVitals || selectedPatient?.vitalsFallback) && (
-            <div className="doc-vitals-display" style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', 
-              gap: '8px', 
-              marginBottom: '16px',
-              padding: '12px',
-              background: '#f8fafc',
-              borderRadius: '12px',
-              border: '1px solid #e2e8f0'
-            }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>BP</div>
-                <div style={{ fontWeight: 800, color: '#0f172a' }}>{erVitals?.bp || selectedPatient?.vitalsFallback?.bp || '—'}</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>HR</div>
-                <div style={{ fontWeight: 800, color: (Number(erVitals?.hr || selectedPatient?.vitalsFallback?.hr) > 100 || Number(erVitals?.hr || selectedPatient?.vitalsFallback?.hr) < 60) ? '#b91c1c' : '#0f172a' }}>{erVitals?.hr || selectedPatient?.vitalsFallback?.hr || '—'}</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Temp</div>
-                <div style={{ fontWeight: 800, color: (Number(erVitals?.temp || selectedPatient?.vitalsFallback?.temp) > 37.8 || Number(erVitals?.temp || selectedPatient?.vitalsFallback?.temp) < 35.5) ? '#b91c1c' : '#0f172a' }}>{erVitals?.temp || selectedPatient?.vitalsFallback?.temp || '—'}°C</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>SpO2</div>
-                <div style={{ fontWeight: 800, color: Number(erVitals?.spo2 || selectedPatient?.vitalsFallback?.spo2) < 95 ? '#b91c1c' : '#0f172a' }}>{erVitals?.spo2 || selectedPatient?.vitalsFallback?.spo2 || '—'}%</div>
-              </div>
-              {(erVitals?.rr || selectedPatient?.vitalsFallback?.rr) && (
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>RR</div>
-                  <div style={{ fontWeight: 800, color: '#0f172a' }}>{erVitals?.rr || selectedPatient?.vitalsFallback?.rr}</div>
-                </div>
-              )}
+          <div className="doc-vitals-display" style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', 
+            gap: '8px', 
+            marginBottom: '16px',
+            padding: '12px',
+            background: '#f8fafc',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0'
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>BP</div>
+              <div style={{ fontWeight: 800, color: '#0f172a' }}>{erVitals?.bp || selectedPatient?.vitalsFallback?.bp || '—'}</div>
             </div>
-          )}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>HR</div>
+              <div style={{ fontWeight: 800, color: (Number(erVitals?.hr || selectedPatient?.vitalsFallback?.hr) > 100 || Number(erVitals?.hr || selectedPatient?.vitalsFallback?.hr) < 60) ? '#b91c1c' : '#0f172a' }}>{erVitals?.hr || selectedPatient?.vitalsFallback?.hr || '—'}</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Temp</div>
+              <div style={{ fontWeight: 800, color: (Number(erVitals?.temp || selectedPatient?.vitalsFallback?.temp) > 37.8 || Number(erVitals?.temp || selectedPatient?.vitalsFallback?.temp) < 35.5) ? '#b91c1c' : '#0f172a' }}>{erVitals?.temp || selectedPatient?.vitalsFallback?.temp || '—'}°C</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>SpO2</div>
+              <div style={{ fontWeight: 800, color: Number(erVitals?.spo2 || selectedPatient?.vitalsFallback?.spo2) < 95 ? '#b91c1c' : '#0f172a' }}>{erVitals?.spo2 || selectedPatient?.vitalsFallback?.spo2 || '—'}%</div>
+            </div>
+            {(erVitals?.rr || selectedPatient?.vitalsFallback?.rr) && (
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>RR</div>
+                <div style={{ fontWeight: 800, color: '#0f172a' }}>{erVitals?.rr || selectedPatient?.vitalsFallback?.rr}</div>
+              </div>
+            )}
+          </div>
 
           <div className="doc-patient-grid">
             <div className="doc-pill"><span className="doc-pill-k">Email</span><span className="doc-pill-v">{activePatientMeta.email || '—'}</span></div>
