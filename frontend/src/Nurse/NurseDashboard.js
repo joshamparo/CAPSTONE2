@@ -89,6 +89,38 @@ function NurseDashboard() {
   const [showSettings, setShowSettings] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+  // Settings State
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('nurseSettings');
+      return saved ? JSON.parse(saved) : {
+        emailNotifications: true,
+        audibleAlerts: true,
+        autoRefresh: true,
+        compactView: false
+      };
+    } catch (_) {
+      return {
+        emailNotifications: true,
+        audibleAlerts: true,
+        autoRefresh: true,
+        compactView: false
+      };
+    }
+  });
+
+  // Persist Settings
+  useEffect(() => {
+    localStorage.setItem('nurseSettings', JSON.stringify(settings));
+    
+    // Apply compact view class to body if enabled
+    if (settings.compactView) {
+      document.body.classList.add('compact-mode');
+    } else {
+      document.body.classList.remove('compact-mode');
+    }
+  }, [settings]);
+
   // Department State
   const normalizeDeptId = (v) => {
     const raw = String(v || '').trim();
@@ -2961,6 +2993,54 @@ function NurseDashboard() {
       });
   };
 
+  // Audible Alerts Logic
+  useEffect(() => {
+    if (!settings.audibleAlerts) return;
+
+    const criticalPatientsCount = patientsList.filter(p => 
+      (p.triage_level === 1 || p.triage_level === 2) && 
+      (p.admission_status === 'Emergency' || p.admission_status === 'Waiting')
+    ).length;
+
+    if (criticalPatientsCount > 0) {
+      // Simple beep sound using Web Audio API
+      const playBeep = () => {
+        try {
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const oscillator = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+
+          oscillator.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(440, audioCtx.currentTime); // A4
+          gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+
+          oscillator.start();
+          oscillator.stop(audioCtx.currentTime + 0.2);
+        } catch (e) {
+          console.error("Audio error:", e);
+        }
+      };
+      
+      playBeep();
+    }
+  }, [patientsList.length, settings.audibleAlerts]);
+
+  // Auto Refresh Logic
+  useEffect(() => {
+    if (!settings.autoRefresh) return;
+
+    const interval = setInterval(() => {
+      if (typeof refreshPatientsList === 'function') refreshPatientsList();
+      if (typeof fetchAppointments === 'function') fetchAppointments();
+      if (typeof fetchWardRegistry === 'function') fetchWardRegistry();
+    }, 30000); // 30 seconds refresh
+
+    return () => clearInterval(interval);
+  }, [settings.autoRefresh, view]);
+
   // --- Calendar State ---
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarEvents, setCalendarEvents] = useState(() => {
@@ -5246,30 +5326,87 @@ function NurseDashboard() {
 	                        {showSettings && (
 	                            <div className="dropdown-menu-card settings-card" onClick={(e) => e.stopPropagation()}>
 	                                <div className="dropdown-header">
-	                                    <h4>Settings</h4>
+	                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <Settings size={18} className="text-orange" />
+                                          <h4 style={{ margin: 0 }}>Nurse Settings</h4>
+                                      </div>
 	                                </div>
 	                                <div className="settings-list">
 	                                    <div className="setting-item">
-	                                        <div className="setting-info">
+	                                        <div className="setting-icon-box">
+                                              <Bell size={18} />
+                                          </div>
+                                          <div className="setting-info">
 	                                            <p className="setting-label">Email Notifications</p>
-	                                            <p className="setting-desc">Daily summaries</p>
+	                                            <p className="setting-desc">Daily shift summaries</p>
 	                                        </div>
 	                                        <label className="switch">
-	                                            <input type="checkbox" defaultChecked />
+	                                            <input 
+                                                type="checkbox" 
+                                                checked={settings.emailNotifications} 
+                                                onChange={(e) => setSettings({...settings, emailNotifications: e.target.checked})}
+                                              />
 	                                            <span className="slider round"></span>
 	                                        </label>
 	                                    </div>
-	                                    <div className="setting-item">
-	                                        <div className="setting-info">
-	                                            <p className="setting-label">Dark Mode</p>
-	                                            <p className="setting-desc">Reduce eye strain</p>
+
+                                      <div className="setting-item">
+	                                        <div className="setting-icon-box">
+                                              <ShieldAlert size={18} />
+                                          </div>
+                                          <div className="setting-info">
+	                                            <p className="setting-label">Audible Alerts</p>
+	                                            <p className="setting-desc">Sound for critical patients</p>
 	                                        </div>
 	                                        <label className="switch">
-	                                            <input type="checkbox" />
+	                                            <input 
+                                                type="checkbox" 
+                                                checked={settings.audibleAlerts} 
+                                                onChange={(e) => setSettings({...settings, audibleAlerts: e.target.checked})}
+                                              />
+	                                            <span className="slider round"></span>
+	                                        </label>
+	                                    </div>
+
+                                      <div className="setting-item">
+	                                        <div className="setting-icon-box">
+                                              <RotateCw size={18} />
+                                          </div>
+                                          <div className="setting-info">
+	                                            <p className="setting-label">Auto Refresh</p>
+	                                            <p className="setting-desc">Refresh every 30s</p>
+	                                        </div>
+	                                        <label className="switch">
+	                                            <input 
+                                                type="checkbox" 
+                                                checked={settings.autoRefresh} 
+                                                onChange={(e) => setSettings({...settings, autoRefresh: e.target.checked})}
+                                              />
+	                                            <span className="slider round"></span>
+	                                        </label>
+	                                    </div>
+
+                                      <div className="setting-item">
+	                                        <div className="setting-icon-box">
+                                              <LayoutDashboard size={18} />
+                                          </div>
+                                          <div className="setting-info">
+	                                            <p className="setting-label">Compact View</p>
+	                                            <p className="setting-desc">Optimize for efficiency</p>
+	                                        </div>
+	                                        <label className="switch">
+	                                            <input 
+                                                type="checkbox" 
+                                                checked={settings.compactView} 
+                                                onChange={(e) => setSettings({...settings, compactView: e.target.checked})}
+                                              />
 	                                            <span className="slider round"></span>
 	                                        </label>
 	                                    </div>
 	                                </div>
+                                  <div style={{ padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+                                      <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>Settings are saved locally.</p>
+                                  </div>
 	                            </div>
 	                        )}
 	                    </div>

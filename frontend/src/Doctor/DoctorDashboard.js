@@ -833,8 +833,8 @@ function DoctorDashboard() {
     }
   };
 
-  const fetchERVitalsAndTriage = async (patientId) => {
-    if (!patientId || !isERDoctor) return;
+  const fetchPatientVitalsAndTriage = async (patientId) => {
+    if (!patientId) return;
     try {
       if (!supabase) return;
 
@@ -842,7 +842,6 @@ function DoctorDashboard() {
         .from('patient_vitals_logs')
         .select('*')
         .eq('patient_id', String(patientId))
-        .eq('context', 'ER')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -853,14 +852,13 @@ function DoctorDashboard() {
         .from('er_triage_logs')
         .select('*')
         .eq('patient_id', String(patientId))
-        .eq('context', 'ER')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (!tErr) setERTriage(triage);
     } catch (e) {
-      console.error('Failed to fetch ER data:', e);
+      console.error('Failed to fetch patient data:', e);
     }
   };
 
@@ -1075,16 +1073,18 @@ function DoctorDashboard() {
   };
 
   useEffect(() => {
-    if (selectedPatient?._id && isERDoctor) {
-      fetchERVitalsAndTriage(selectedPatient._id);
-      fetchEROrders(selectedPatient._id).catch(() => {});
-      fetchWards().catch(() => {});
-      setSelectedWard(String(selectedPatient?.wardNumber || selectedPatient?.ward_number || '').trim());
-      // Auto-scroll to clinical actions for ER doctors
-      setTimeout(() => {
-        const el = document.querySelector('.er-clinical-card');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 300);
+    if (selectedPatient?._id) {
+      fetchPatientVitalsAndTriage(selectedPatient._id);
+      if (isERDoctor) {
+        fetchEROrders(selectedPatient._id).catch(() => {});
+        fetchWards().catch(() => {});
+        setSelectedWard(String(selectedPatient?.wardNumber || selectedPatient?.ward_number || '').trim());
+        // Auto-scroll to clinical actions for ER doctors
+        setTimeout(() => {
+          const el = document.querySelector('.er-clinical-card');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+      }
     } else {
       setERVitals(null);
       setERTriage(null);
@@ -2144,7 +2144,7 @@ function DoctorDashboard() {
           <button 
             type="button" 
             className="doc-icon-btn" 
-            onClick={() => fetchERVitalsAndTriage(selectedPatient._id)}
+            onClick={() => fetchPatientVitalsAndTriage(selectedPatient._id)}
             title="Refresh Vitals/Triage"
           >
             <RotateCw size={14} />
@@ -2709,7 +2709,55 @@ function DoctorDashboard() {
             <div className="doc-patient-name">
               {`${selectedPatient.firstName} ${selectedPatient.lastName}`}
             </div>
+            {erTriage && (
+              <div className={`doc-badge triage-level-${erTriage.triage_level}`} style={{ 
+                background: erTriage.triage_level === 1 ? '#fee2e2' : erTriage.triage_level === 2 ? '#ffedd5' : '#f0f9ff',
+                color: erTriage.triage_level === 1 ? '#991b1b' : erTriage.triage_level === 2 ? '#9a3412' : '#075985',
+                fontWeight: 800,
+                border: '1px solid currentColor',
+                fontSize: '0.75rem',
+                padding: '4px 8px'
+              }}>
+                LEVEL {erTriage.triage_level}: {erTriage.priority_label}
+              </div>
+            )}
           </div>
+
+          {erVitals && (
+            <div className="doc-vitals-display" style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', 
+              gap: '8px', 
+              marginBottom: '16px',
+              padding: '12px',
+              background: '#f8fafc',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>BP</div>
+                <div style={{ fontWeight: 800, color: '#0f172a' }}>{erVitals.bp || '—'}</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>HR</div>
+                <div style={{ fontWeight: 800, color: (Number(erVitals.hr) > 100 || Number(erVitals.hr) < 60) ? '#b91c1c' : '#0f172a' }}>{erVitals.hr || '—'}</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Temp</div>
+                <div style={{ fontWeight: 800, color: (Number(erVitals.temp) > 37.8 || Number(erVitals.temp) < 35.5) ? '#b91c1c' : '#0f172a' }}>{erVitals.temp || '—'}°C</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>SpO2</div>
+                <div style={{ fontWeight: 800, color: Number(erVitals.spo2) < 95 ? '#b91c1c' : '#0f172a' }}>{erVitals.spo2 || '—'}%</div>
+              </div>
+              {erVitals.rr && (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>RR</div>
+                  <div style={{ fontWeight: 800, color: '#0f172a' }}>{erVitals.rr}</div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="doc-patient-grid">
             <div className="doc-pill"><span className="doc-pill-k">Email</span><span className="doc-pill-v">{activePatientMeta.email || '—'}</span></div>

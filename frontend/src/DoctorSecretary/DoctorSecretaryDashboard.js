@@ -54,9 +54,20 @@ const fmtDate = (v) => {
 const fmtTime = (v) => {
   if (!v) return '—';
   const s = String(v);
+  let d = null;
   if (s.includes('T')) {
-    const d = new Date(v);
-    if (!Number.isNaN(d.getTime())) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    d = new Date(v);
+  } else {
+    // Handle HH:mm or HH:mm:ss
+    const parts = s.split(':');
+    if (parts.length >= 2) {
+      d = new Date();
+      d.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+    }
+  }
+  
+  if (d && !Number.isNaN(d.getTime())) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
   return s.slice(0, 5);
 };
@@ -784,13 +795,25 @@ export default function DoctorSecretaryDashboard() {
     let initialTime = '';
     const rawTime = apt.appointmentTime || apt.appointment_time;
     if (rawTime) {
-      if (String(rawTime).includes('T')) {
-        const d = new Date(rawTime);
+      const s = String(rawTime);
+      if (s.includes('T')) {
+        const d = new Date(s);
         if (!Number.isNaN(d.getTime())) {
           initialTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
         }
+      } else if (s.toLowerCase().includes('am') || s.toLowerCase().includes('pm')) {
+        // Handle "05:00 PM" format
+        try {
+          const [timePart, modifier] = s.split(' ');
+          let [hours, minutes] = timePart.split(':');
+          if (hours === '12') hours = '00';
+          if (modifier.toLowerCase() === 'pm') hours = parseInt(hours, 10) + 12;
+          initialTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        } catch (_) {
+          initialTime = s.slice(0, 5);
+        }
       } else {
-        initialTime = String(rawTime).slice(0, 5);
+        initialTime = s.slice(0, 5);
       }
     }
 

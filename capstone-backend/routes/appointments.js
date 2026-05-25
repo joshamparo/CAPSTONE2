@@ -233,8 +233,9 @@ function formatHHmm(v) {
     if (!v) return null;
     const d = v instanceof Date ? v : parseTimeValue(v);
     if (!d || Number.isNaN(d.getTime())) return null;
-    const hh = String(v instanceof Date ? d.getUTCHours() : d.getHours()).padStart(2, '0');
-    const mm = String(v instanceof Date ? d.getUTCMinutes() : d.getMinutes()).padStart(2, '0');
+    // Use local time components to avoid UTC shift issues
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
     return `${hh}:${mm}`;
 }
 
@@ -1813,175 +1814,125 @@ router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary'
 
             const consultationMode = String(existing.consultation_mode || '').trim().toLowerCase() || 'onsite';
             if (consultationMode === 'onsite') {
-                await prisma.$executeRawUnsafe(`
-                    CREATE TABLE IF NOT EXISTS public.doctor_availability_rules (
-                      id BIGSERIAL PRIMARY KEY,
-                      doctor_id UUID NOT NULL REFERENCES public.doctors(id) ON DELETE CASCADE,
-                      mode TEXT NOT NULL DEFAULT 'onsite',
-                      day_of_week INT NOT NULL,
-                      start_time TIME NOT NULL,
-                      end_time TIME NOT NULL,
-                      slot_minutes INT NOT NULL DEFAULT 30,
-                      max_per_slot INT NOT NULL DEFAULT 1,
-                      active BOOLEAN NOT NULL DEFAULT true,
-                      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                    );
-                `);
-                await prisma.$executeRawUnsafe(`
-                    CREATE TABLE IF NOT EXISTS public.doctor_availability_exceptions (
-                      id BIGSERIAL PRIMARY KEY,
-                      doctor_id UUID NOT NULL REFERENCES public.doctors(id) ON DELETE CASCADE,
-                      mode TEXT NOT NULL DEFAULT 'onsite',
-                      date DATE NOT NULL,
-                      start_time TIME NULL,
-                      end_time TIME NULL,
-                      kind TEXT NOT NULL DEFAULT 'block',
-                      note TEXT NULL,
-                      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                    );
-                `);
-                await prisma.$executeRawUnsafe(`
-                    CREATE TABLE IF NOT EXISTS public.doctor_availability_date_windows (
-                      id BIGSERIAL PRIMARY KEY,
-                      doctor_id UUID NOT NULL REFERENCES public.doctors(id) ON DELETE CASCADE,
-                      mode TEXT NOT NULL DEFAULT 'onsite',
-                      date DATE NOT NULL,
-                      start_time TIME NOT NULL,
-                      end_time TIME NOT NULL,
-                      slot_minutes INT NOT NULL DEFAULT 30,
-                      max_per_slot INT NOT NULL DEFAULT 1,
-                      active BOOLEAN NOT NULL DEFAULT true,
-                      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                    );
-                `);
-                await prisma.$executeRawUnsafe(`
-                    CREATE TABLE IF NOT EXISTS public.doctor_availability_day_offs (
-                      id BIGSERIAL PRIMARY KEY,
-                      doctor_id UUID NOT NULL REFERENCES public.doctors(id) ON DELETE CASCADE,
-                      mode TEXT NOT NULL DEFAULT 'onsite',
-                      day_of_week INT NOT NULL,
-                      active BOOLEAN NOT NULL DEFAULT true,
-                      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                      UNIQUE (doctor_id, mode, day_of_week)
-                    );
-                `);
-
                 const requestedDate = existing.appointment_date ? new Date(existing.appointment_date) : null;
                 if (!requestedDate || Number.isNaN(requestedDate.getTime())) return res.status(400).json({ message: 'Missing appointment date.' });
                 const dateKey = requestedDate.toISOString().slice(0, 10);
 
-                let blocks = null;
-                try {
-                    blocks = await loadDoctorAvailabilityBlocksSupabase({ doctorId: doctorUuid, dateKey });
-                } catch (_) {
-                    blocks = null;
-                }
-                if (blocks?.dayBlocked) return res.status(409).json({ message: 'Doctor is not available on this date.' });
-                if (blocks && isMinutesBlockedByAvailability({ minutes: resolvedMin, blocks })) {
-                    return res.status(409).json({ message: 'Selected time is not available.' });
-                }
+                // Skip availability check if doctor and time haven't changed for this record
+                const existingTime = formatHHmm(existing.appointment_time);
+                const doctorChanged = dataToUpdate.doctor_uuid && dataToUpdate.doctor_uuid !== existing.doctor_uuid;
+                const timeChanged = resolvedTime !== existingTime;
 
-                const dayOffRows = await prisma.$queryRaw`
-                    SELECT day_of_week AS "dayOfWeek"
-                    FROM public.doctor_availability_day_offs
-                    WHERE doctor_id = ${doctorUuid}::uuid
-                      AND lower(mode) = 'onsite'
-                      AND active = true
-                `;
-                const dayOffs = (Array.isArray(dayOffRows) ? dayOffRows : [])
-                    .map((r) => Number(r?.dayOfWeek))
-                    .filter((v) => Number.isFinite(v) && v >= 0 && v <= 6);
-                if (dayOffs.includes(requestedDate.getDay())) return res.status(409).json({ message: 'Doctor is not available on this day.' });
+                if (doctorChanged || timeChanged) {
+                    let blocks = null;
+                    try {
+                        blocks = await loadDoctorAvailabilityBlocksSupabase({ doctorId: doctorUuid, dateKey });
+                    } catch (_) {
+                        blocks = null;
+                    }
+                    if (blocks?.dayBlocked) return res.status(409).json({ message: 'Doctor is not available on this date (Full Day Blocked).' });
+                    if (blocks && isMinutesBlockedByAvailability({ minutes: resolvedMin, blocks })) {
+                        return res.status(409).json({ message: `Selected time (${resolvedTime}) is blocked by doctor availability.` });
+                    }
 
-                const dateWindows = await prisma.$queryRaw`
-                    SELECT to_char(start_time, 'HH24:MI') AS "startTime",
-                           to_char(end_time, 'HH24:MI') AS "endTime",
-                           slot_minutes AS "slotMinutes",
-                           max_per_slot AS "maxPerSlot"
-                    FROM public.doctor_availability_date_windows
-                    WHERE doctor_id = ${doctorUuid}::uuid
-                      AND lower(mode) = 'onsite'
-                      AND active = true
-                      AND date = ${dateKey}::date
-                    ORDER BY start_time ASC
-                `;
-                const dateWindowList = Array.isArray(dateWindows) ? dateWindows : [];
+                    const dayOffRows = await prisma.$queryRaw`
+                        SELECT day_of_week AS "dayOfWeek"
+                        FROM public.doctor_availability_day_offs
+                        WHERE doctor_id = ${doctorUuid}::uuid
+                          AND lower(mode) = 'onsite'
+                          AND active = true
+                    `;
+                    const dayOffs = (Array.isArray(dayOffRows) ? dayOffRows : [])
+                        .map((r) => Number(r?.dayOfWeek))
+                        .filter((v) => Number.isFinite(v) && v >= 0 && v <= 6);
+                    if (dayOffs.includes(requestedDate.getDay())) return res.status(409).json({ message: 'Doctor is not available on this day of the week (Day Off).' });
 
-                const exceptions = await prisma.$queryRaw`
-                    SELECT to_char(start_time, 'HH24:MI') AS "startTime",
-                           to_char(end_time, 'HH24:MI') AS "endTime"
-                    FROM public.doctor_availability_exceptions
-                    WHERE doctor_id = ${doctorUuid}::uuid
-                      AND lower(mode) = 'onsite'
-                      AND date = ${dateKey}::date
-                `;
-                const exc = Array.isArray(exceptions) ? exceptions : [];
-                const fullDayBlocked = exc.some((e) => !e?.startTime && !e?.endTime);
-                if (fullDayBlocked) return res.status(409).json({ message: 'Doctor is not available on this date.' });
+                    const exceptions = await prisma.$queryRaw`
+                        SELECT to_char(start_time, 'HH24:MI') AS "startTime",
+                               to_char(end_time, 'HH24:MI') AS "endTime"
+                        FROM public.doctor_availability_exceptions
+                        WHERE doctor_id = ${doctorUuid}::uuid
+                          AND lower(mode) = 'onsite'
+                          AND date = ${dateKey}::date
+                    `;
+                    const exc = Array.isArray(exceptions) ? exceptions : [];
+                    const fullDayBlocked = exc.some((e) => !e?.startTime && !e?.endTime);
+                    if (fullDayBlocked) return res.status(409).json({ message: 'Doctor is not available on this date (Exception Block).' });
 
-                const blockedByPartial = exc.some((e) => {
-                    const s = timeToMinutes(e?.startTime);
-                    const en = timeToMinutes(e?.endTime);
-                    if (s === null || en === null) return false;
-                    return resolvedMin >= s && resolvedMin < en;
-                });
-                if (blockedByPartial) return res.status(409).json({ message: 'Selected time is not available.' });
+                    const blockedByPartial = exc.some((e) => {
+                        const s = timeToMinutes(e?.startTime);
+                        const en = timeToMinutes(e?.endTime);
+                        if (s === null || en === null) return false;
+                        return resolvedMin >= s && resolvedMin < en;
+                    });
+                    if (blockedByPartial) return res.status(409).json({ message: `Selected time (${resolvedTime}) is within a blocked time range.` });
 
-                let sourceList = dateWindowList;
-                if (!sourceList.length) {
-                    const dow = requestedDate.getDay();
-                    const rules = await prisma.$queryRaw`
+                    const dateWindows = await prisma.$queryRaw`
                         SELECT to_char(start_time, 'HH24:MI') AS "startTime",
                                to_char(end_time, 'HH24:MI') AS "endTime",
                                slot_minutes AS "slotMinutes",
                                max_per_slot AS "maxPerSlot"
-                        FROM public.doctor_availability_rules
+                        FROM public.doctor_availability_date_windows
                         WHERE doctor_id = ${doctorUuid}::uuid
                           AND lower(mode) = 'onsite'
                           AND active = true
-                          AND day_of_week = ${dow}
+                          AND date = ${dateKey}::date
                         ORDER BY start_time ASC
                     `;
-                    sourceList = Array.isArray(rules) ? rules : [];
-                }
-                if (!sourceList.length) return res.status(409).json({ message: 'Doctor is not available on this day.' });
+                    const dateWindowList = Array.isArray(dateWindows) ? dateWindows : [];
 
-                let matchingRule = null;
-                for (const r of sourceList) {
-                    const startMin = timeToMinutes(r?.startTime);
-                    const endMin = timeToMinutes(r?.endTime);
-                    const step = Math.max(5, Math.min(240, Math.trunc(Number(r?.slotMinutes || 30) || 30)));
-                    if (startMin === null || endMin === null) continue;
-                    if (resolvedMin < startMin) continue;
-                    if (resolvedMin + step > endMin) continue;
-                    if ((resolvedMin - startMin) % step !== 0) continue;
-                    matchingRule = { maxPerSlot: Math.max(1, Math.min(20, Math.trunc(Number(r?.maxPerSlot || 1) || 1))) };
-                    break;
-                }
-                if (!matchingRule) return res.status(409).json({ message: 'Selected time is not available.' });
+                    let sourceList = dateWindowList;
+                    if (!sourceList.length) {
+                        const dow = requestedDate.getDay();
+                        const rules = await prisma.$queryRaw`
+                            SELECT to_char(start_time, 'HH24:MI') AS "startTime",
+                                   to_char(end_time, 'HH24:MI') AS "endTime",
+                                   slot_minutes AS "slotMinutes",
+                                   max_per_slot AS "maxPerSlot"
+                            FROM public.doctor_availability_rules
+                            WHERE doctor_id = ${doctorUuid}::uuid
+                              AND lower(mode) = 'onsite'
+                              AND active = true
+                              AND day_of_week = ${dow}
+                            ORDER BY start_time ASC
+                        `;
+                        sourceList = Array.isArray(rules) ? rules : [];
+                    }
+                    if (!sourceList.length) return res.status(409).json({ message: 'Doctor has no availability rules set for this day.' });
 
-                const sameSlot = await prisma.appointments.findMany({
-                    where: {
-                        doctor_uuid: doctorUuid,
-                        consultation_mode: 'onsite',
-                        appointment_date: requestedDate
-                    },
-                    select: { id: true, appointment_time: true, status: true }
-                }).catch(() => []);
-                const count = (Array.isArray(sameSlot) ? sameSlot : []).filter((a) => {
-                    if (String(a.id) === String(existing.id)) return false;
-                    const st = String(a.status || '').trim().toLowerCase();
-                    if (st.includes('cancel') || st.includes('reject') || st.includes('no show') || st.includes('no-show')) return false;
-                    const t = a.appointment_time ? new Date(a.appointment_time) : null;
-                    if (!t) return false;
-                    const hhmm = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
-                    return hhmm === resolvedTime;
-                }).length;
-                if (count >= matchingRule.maxPerSlot) return res.status(409).json({ message: 'Selected slot is no longer available.' });
+                    let matchingRule = null;
+                    for (const r of sourceList) {
+                        const startMin = timeToMinutes(r?.startTime);
+                        const endMin = timeToMinutes(r?.endTime);
+                        const step = Math.max(5, Math.min(240, Math.trunc(Number(r?.slotMinutes || 30) || 30)));
+                        if (startMin === null || endMin === null) continue;
+                        if (resolvedMin < startMin) continue;
+                        if (resolvedMin + step > endMin) continue;
+                        if ((resolvedMin - startMin) % step !== 0) continue;
+                        matchingRule = { maxPerSlot: Math.max(1, Math.min(20, Math.trunc(Number(r?.maxPerSlot || 1) || 1))) };
+                        break;
+                    }
+                    if (!matchingRule) return res.status(409).json({ message: `Selected time (${resolvedTime}) does not match any available doctor slots.` });
+
+                    const sameSlot = await prisma.appointments.findMany({
+                        where: {
+                            doctor_uuid: doctorUuid,
+                            consultation_mode: 'onsite',
+                            appointment_date: requestedDate
+                        },
+                        select: { id: true, appointment_time: true, status: true }
+                    }).catch(() => []);
+                    const count = (Array.isArray(sameSlot) ? sameSlot : []).filter((a) => {
+                        if (String(a.id) === String(existing.id)) return false;
+                        const st = String(a.status || '').trim().toLowerCase();
+                        if (st.includes('cancel') || st.includes('reject') || st.includes('no show') || st.includes('no-show')) return false;
+                        const t = a.appointment_time ? new Date(a.appointment_time) : null;
+                        if (!t) return false;
+                        const hhmm = formatHHmm(t);
+                        return hhmm === resolvedTime;
+                    }).length;
+                    if (count >= matchingRule.maxPerSlot) return res.status(409).json({ message: 'Selected slot is already full.' });
+                }
             }
 
             if (existing.appointment_date) {
@@ -1989,8 +1940,9 @@ router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary'
                 const emailKey = String(existing.email || '').trim();
                 const dateOnly = new Date(existing.appointment_date);
                 dateOnly.setHours(0, 0, 0, 0);
-                const dummy = new Date();
+                
                 const [hhx, mmx] = resolvedTime.split(':').map((v) => parseInt(v, 10));
+                const dummy = new Date(dateOnly);
                 dummy.setHours(hhx, mmx, 0, 0);
 
                 const overlapRows = await prisma.appointments
@@ -2014,12 +1966,9 @@ router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary'
                     return true;
                 });
                 if (hasOverlap) return res.status(409).json({ message: 'Patient already has an appointment at the selected date/time.' });
+                
+                dataToUpdate.appointment_time = dummy;
             }
-
-            const [hh, mm] = resolvedTime.split(':').map((v) => parseInt(v, 10));
-            const dummyDate = new Date();
-            dummyDate.setHours(hh, mm, 0, 0);
-            dataToUpdate.appointment_time = dummyDate;
         }
 
         if (triageLevel !== undefined) {
