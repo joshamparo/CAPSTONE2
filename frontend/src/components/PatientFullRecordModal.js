@@ -87,7 +87,10 @@ export default function PatientFullRecordModal({
   const [tab, setTab] = useState('overview');
 
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open) {
+      setTab('overview');
+      return undefined;
+    }
     if (!patientId) {
       setRecord(null);
       setError('Missing patient ID.');
@@ -123,13 +126,12 @@ export default function PatientFullRecordModal({
 
   useEffect(() => {
     if (!open) return undefined;
-    setTab('overview');
     const onKeyDown = (event) => {
       if (event.key === 'Escape') onClose?.();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, patientId, onClose]);
+  }, [open, onClose]);
 
   if (!open) return null;
 
