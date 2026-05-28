@@ -665,14 +665,18 @@ async function computeDoctorAvailabilitySlots({ doctorId, mode, dateKey: dKey })
   const dt = new Date(dKey);
   if (Number.isNaN(dt.getTime())) return [];
 
-  const blockedDates = await loadBlockedDates({ doctorId, from: dKey, to: dKey });
+  // Run initial checks and loads in parallel to speed up processing
+  const [blockedDates, rules, dateWindows, dayOffs, exceptions] = await Promise.all([
+    loadBlockedDates({ doctorId, from: dKey, to: dKey }),
+    loadRules({ doctorId, mode }),
+    loadDateWindows({ doctorId, mode, from: dKey, to: dKey }),
+    loadDayOffs({ doctorId, mode }),
+    loadExceptions({ doctorId, mode, from: dKey, to: dKey })
+  ]).catch(() => [[], [], [], [], []]);
+
   const dayBlocked = (Array.isArray(blockedDates) ? blockedDates : []).some((b) => !b?.startTime && !b?.endTime);
   if (dayBlocked) return [];
 
-  const rules = await loadRules({ doctorId, mode });
-  const dateWindows = await loadDateWindows({ doctorId, mode, from: dKey, to: dKey });
-  const dayOffs = await loadDayOffs({ doctorId, mode });
-  const exceptions = await loadExceptions({ doctorId, mode, from: dKey, to: dKey });
   const combinedExceptions = [...(Array.isArray(exceptions) ? exceptions : []), ...(Array.isArray(blockedDates) ? blockedDates : [])];
 
   const appts = await prisma.appointments
@@ -938,8 +942,14 @@ router.get(
 
       const byTime = new Map();
       if (doctorIds.length) {
-        for (const doctorId of doctorIds) {
-          const slots = await computeDoctorAvailabilitySlots({ doctorId, mode, dateKey: dKey }).catch(() => []);
+        // Parallelize slot computation for all doctors in the specialization to avoid timeouts
+        const slotResults = await Promise.all(
+          doctorIds.map(doctorId => 
+            computeDoctorAvailabilitySlots({ doctorId, mode, dateKey: dKey }).catch(() => [])
+          )
+        );
+
+        for (const slots of slotResults) {
           for (const s of Array.isArray(slots) ? slots : []) {
             const t = String(s?.time || '').trim();
             if (!t) continue;
