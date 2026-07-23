@@ -964,6 +964,7 @@ function AdminDashboard() {
   const [announcementDeleteConfirmation, setAnnouncementDeleteConfirmation] = useState(null);
   const [viewingAnnouncement, setViewingAnnouncement] = useState(null);
   const [announcementsError, setAnnouncementsError] = useState("");
+  const [announcementsPage, setAnnouncementsPage] = useState(1);
 
   const [opsSettings, setOpsSettings] = useState({ incidentOverdueHours: 24, lowStockThreshold: 5 });
 
@@ -3882,68 +3883,98 @@ function AdminDashboard() {
                   ) : announcements.length === 0 ? (
                     <div className="empty-state-sm">No announcements yet.</div>
                   ) : (
-                    [...announcements]
-                      .sort((a, b) => {
+                    (() => {
+                      const sorted = [...announcements].sort((a, b) => {
                         const ap = a.pinned ? 1 : 0;
                         const bp = b.pinned ? 1 : 0;
                         if (ap !== bp) return bp - ap;
                         const at = new Date(a.createdAt || a.created_at || 0).getTime();
                         const bt = new Date(b.createdAt || b.created_at || 0).getTime();
                         return bt - at;
-                      })
-                      .map((ann) => {
-                        const id = ann.id || ann._id;
-                        const priority = String(ann.priority || 'Normal');
-                        const pinned = Boolean(ann.pinned);
-                        const expiresAt = ann.expiresAt || ann.expires_at || null;
-                        const createdAt = ann.createdAt || ann.created_at;
-                        const createdText = createdAt ? new Date(createdAt).toLocaleDateString() : '';
-                        const expText = expiresAt ? new Date(expiresAt).toLocaleDateString() : '';
-                        const target = ann.target || 'All';
+                      });
+                      const perPage = 3;
+                      const totalPages = Math.ceil(sorted.length / perPage);
+                      const start = (announcementsPage - 1) * perPage;
+                      const end = start + perPage;
+                      const paginated = sorted.slice(start, end);
 
-                        return (
-                          <div key={String(id)} className={`announcement-card priority-${priority.toLowerCase()} ${pinned ? 'ann-pinned' : ''}`}>
-                            <div className="announcement-header">
-                              <span className="ann-title">{ann.title}</span>
-                              <div className="ann-badges">
-                                {pinned && <span className="ann-badge badge-pinned">Pinned</span>}
-                                <span className={`ann-badge badge-${priority.toLowerCase()}`}>{priority}</span>
+                      return (
+                        <>
+                          {paginated.map((ann) => {
+                            const id = ann.id || ann._id;
+                            const priority = String(ann.priority || 'Normal');
+                            const pinned = Boolean(ann.pinned);
+                            const expiresAt = ann.expiresAt || ann.expires_at || null;
+                            const createdAt = ann.createdAt || ann.created_at;
+                            const createdText = createdAt ? new Date(createdAt).toLocaleDateString() : '';
+                            const expText = expiresAt ? new Date(expiresAt).toLocaleDateString() : '';
+                            const target = ann.target || 'All';
+
+                            return (
+                              <div key={String(id)} className={`announcement-card priority-${priority.toLowerCase()} ${pinned ? 'ann-pinned' : ''}`}>
+                                <div className="announcement-header">
+                                  <span className="ann-title">{ann.title}</span>
+                                  <div className="ann-badges">
+                                    {pinned && <span className="ann-badge badge-pinned">Pinned</span>}
+                                    <span className={`ann-badge badge-${priority.toLowerCase()}`}>{priority}</span>
+                                  </div>
+                                </div>
+                                <p className="ann-content">{ann.content}</p>
+                                <div className="ann-footer">
+                                  <span className="ann-meta">Posted by {ann.author || 'Admin'}{createdText ? ` • ${createdText}` : ''}</span>
+                                  <span className="ann-meta">Target: {target}</span>
+                                  {expText ? <span className="ann-meta">Expires: {expText}</span> : null}
+                                  <div className="ann-footer-actions">
+                                    <button type="button" className="ann-pin-btn" onClick={() => setViewingAnnouncement(ann)}>
+                                      View
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="ann-pin-btn"
+                                      onClick={() => updateAnnouncement(id, { pinned: !pinned })}
+                                    >
+                                      {pinned ? 'Unpin' : 'Pin'}
+                                    </button>
+                                    {expiresAt ? (
+                                      <button type="button" className="ann-pin-btn" onClick={() => updateAnnouncement(id, { expiresAt: null })}>
+                                        Clear expiry
+                                      </button>
+                                    ) : null}
+                                    <button
+                                      onClick={() => setAnnouncementDeleteConfirmation({ id, title: ann.title })}
+                                      className="ann-delete-btn"
+                                      type="button"
+                                      title="Delete announcement"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
+                            );
+                          })}
+                          {totalPages > 1 && (
+                            <div className="announcement-pagination">
+                              <button
+                                className="ann-pin-btn"
+                                disabled={announcementsPage === 1}
+                                onClick={() => setAnnouncementsPage(p => p - 1)}
+                              >
+                                Previous
+                              </button>
+                              <span className="pagination-info">Page {announcementsPage} of {totalPages}</span>
+                              <button
+                                className="ann-pin-btn"
+                                disabled={announcementsPage === totalPages}
+                                onClick={() => setAnnouncementsPage(p => p + 1)}
+                              >
+                                Next
+                              </button>
                             </div>
-                            <p className="ann-content">{ann.content}</p>
-                            <div className="ann-footer">
-                              <span className="ann-meta">Posted by {ann.author || 'Admin'}{createdText ? ` • ${createdText}` : ''}</span>
-                              <span className="ann-meta">Target: {target}</span>
-                              {expText ? <span className="ann-meta">Expires: {expText}</span> : null}
-                              <div className="ann-footer-actions">
-                                <button type="button" className="ann-pin-btn" onClick={() => setViewingAnnouncement(ann)}>
-                                  View
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ann-pin-btn"
-                                  onClick={() => updateAnnouncement(id, { pinned: !pinned })}
-                                >
-                                  {pinned ? 'Unpin' : 'Pin'}
-                                </button>
-                                {expiresAt ? (
-                                  <button type="button" className="ann-pin-btn" onClick={() => updateAnnouncement(id, { expiresAt: null })}>
-                                    Clear expiry
-                                  </button>
-                                ) : null}
-                                <button
-                                  onClick={() => setAnnouncementDeleteConfirmation({ id, title: ann.title })}
-                                  className="ann-delete-btn"
-                                  type="button"
-                                  title="Delete announcement"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
+                          )}
+                        </>
+                      );
+                    })()
                   )}
                 </div>
               </div>
