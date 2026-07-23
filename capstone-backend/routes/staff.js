@@ -380,11 +380,10 @@ router.post('/login', async (req, res) => {
                 account_type: user.roles || 'staff',
                 linkedDoctorId,
                 linked_doctor_id: linkedDoctorId,
-                avatarUrl,
-                must_change_password: user.must_change_password || false
+                avatarUrl
             });
         } else {
-            res.json({ ...userData, avatarUrl, must_change_password: user.must_change_password || false });
+            res.json({ ...userData, avatarUrl });
         }
         
     } catch (err) {
@@ -716,8 +715,7 @@ router.post('/', requireRole(['admin']), async (req, res) => {
                     name,
                     email: email || null,
                     password: hashedPassword,
-                    roles: normalizedAccountType,
-                    must_change_password: true
+                    roles: normalizedAccountType
                 }
             });
 
@@ -744,8 +742,7 @@ router.post('/', requireRole(['admin']), async (req, res) => {
             last_name: lastName,
             email: normalizedEmail || null,
             account_type: normalizedAccountType,
-            password: hashedPassword,
-            must_change_password: true
+            password: hashedPassword
         };
 
         if (modelType === 'staff') {
@@ -2109,11 +2106,6 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         
         let updateData = { ...restData };
         
-        // If password is being changed, set must_change_password to false
-        if (req.body.password) {
-            updateData.must_change_password = false;
-        }
-        
         if (model === 'accounts') {
             if (phone !== undefined) {
                 // contact_number is BigInt in prisma schema
@@ -2303,10 +2295,7 @@ router.post('/reset-password', async (req, res) => {
         if (modelType === 'accounts') {
             await prisma.accounts.update({
                 where: { id: user.id },
-                data: { 
-                    password: hashedPassword,
-                    must_change_password: false 
-                }
+                data: { password: hashedPassword }
             });
         } else {
             await prisma[modelType].update({
@@ -2314,8 +2303,7 @@ router.post('/reset-password', async (req, res) => {
                 data: { 
                     password: hashedPassword,
                     reset_password_token: null,
-                    reset_password_expires: null,
-                    must_change_password: false
+                    reset_password_expires: null
                 }
             });
         }

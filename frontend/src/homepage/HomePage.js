@@ -212,25 +212,25 @@ function HomePage() {
   }, [newsItems, newsLoading]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return undefined;
+        if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return undefined;
 
-    const elements = Array.from(document.querySelectorAll('.reveal-on-scroll'));
-    if (!elements.length) return undefined;
+        const elements = Array.from(document.querySelectorAll('.reveal-on-scroll, .reveal-on-zoom'));
+        if (!elements.length) return undefined;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          entry.target.classList.add('is-visible');
-          observer.unobserve(entry.target);
-        });
-      },
-      { threshold: 0.16, rootMargin: '0px 0px -48px 0px' }
-    );
+        const observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) return;
+              entry.target.classList.add('is-visible');
+              observer.unobserve(entry.target);
+            });
+          },
+          { threshold: 0.16, rootMargin: '0px 0px -48px 0px' }
+        );
 
-    elements.forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
-  }, []);
+        elements.forEach((element) => observer.observe(element));
+        return () => observer.disconnect();
+      }, []);
 
   const visibleNews = useMemo(() => {
     if (newsLoading) return [{}, {}, {}];
@@ -292,25 +292,30 @@ function HomePage() {
         }
         .reveal-on-scroll {
           opacity: 0;
-          transform: translateY(42px);
-          transition: opacity 0.8s ease, transform 0.8s ease;
+          transform: translateY(48px);
+          transition: opacity 1s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+          will-change: opacity, transform;
         }
         .reveal-on-scroll.is-visible {
           opacity: 1;
           transform: translateY(0);
         }
-        .reveal-delay-1 {
-          transition-delay: 0.08s;
+        .reveal-on-zoom {
+          opacity: 0;
+          transform: translateY(48px) scale(0.95);
+          transition: opacity 1s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+          will-change: opacity, transform;
         }
-        .reveal-delay-2 {
-          transition-delay: 0.16s;
+        .reveal-on-zoom.is-visible {
+          opacity: 1;
+          transform: translateY(0) scale(1);
         }
-        .reveal-delay-3 {
-          transition-delay: 0.24s;
-        }
-        .reveal-delay-4 {
-          transition-delay: 0.32s;
-        }
+        .reveal-delay-1 { transition-delay: 0.08s; }
+        .reveal-delay-2 { transition-delay: 0.16s; }
+        .reveal-delay-3 { transition-delay: 0.24s; }
+        .reveal-delay-4 { transition-delay: 0.32s; }
+        .reveal-delay-5 { transition-delay: 0.4s; }
+        .reveal-delay-6 { transition-delay: 0.48s; }
         .eyebrow {
           display: inline-flex;
           align-items: center;
@@ -1574,7 +1579,7 @@ function HomePage() {
               </div>
             </div>
           </div>
-          <div className="identity-visual reveal-on-scroll reveal-delay-2">
+          <div className="identity-visual reveal-on-zoom reveal-delay-2">
             <img
               src={process.env.PUBLIC_URL + "/images/IMG_20260126_112706_079.jpg"}
               alt="About Pascual General Hospital"
@@ -1597,8 +1602,8 @@ function HomePage() {
             </p>
           </div>
           <div className="care-grid">
-            {careEnvironmentCards.map((card, index) => (
-              <article key={card.title} className={`care-card reveal-on-scroll reveal-delay-${(index % 3) + 1}`}>
+          {careEnvironmentCards.map((card, index) => (
+            <div key={card.title} className={`care-card reveal-on-zoom reveal-delay-${(index % 4) + 1}`}>
                 <div className="care-card-image">
                   <img src={process.env.PUBLIC_URL + card.image} alt={card.title} />
                 </div>
@@ -1606,7 +1611,7 @@ function HomePage() {
                   <h3>{card.title}</h3>
                   <p>{card.text}</p>
                 </div>
-              </article>
+              </div>
             ))}
           </div>
         </div>
