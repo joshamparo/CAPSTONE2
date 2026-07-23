@@ -1418,10 +1418,12 @@ function AdminDashboard() {
           setAnnouncementsError("");
           const data = await fetchJson(`/api/announcements`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
           setAnnouncements(Array.isArray(data) ? data : []);
+          setAnnouncementsPage(1); // Reset to page 1 when fetching new announcements
       } catch (error) {
           console.error("Error fetching announcements:", error);
           setAnnouncements([]);
           setAnnouncementsError(String(error?.message || "Unable to load announcements. Please check the server connection."));
+          setAnnouncementsPage(1);
       }
   };
 
@@ -3893,8 +3895,13 @@ function AdminDashboard() {
                         return bt - at;
                       });
                       const perPage = 3;
-                      const totalPages = Math.ceil(sorted.length / perPage);
-                      const start = (announcementsPage - 1) * perPage;
+                      const totalPages = Math.max(1, Math.ceil(sorted.length / perPage));
+                      // Clamp page number to total pages
+                      if (announcementsPage > totalPages) {
+                        setTimeout(() => setAnnouncementsPage(totalPages), 0);
+                      }
+                      const safePage = Math.min(announcementsPage, totalPages);
+                      const start = (safePage - 1) * perPage;
                       const end = start + perPage;
                       const paginated = sorted.slice(start, end);
 
@@ -3957,16 +3964,16 @@ function AdminDashboard() {
                             <div className="announcement-pagination">
                               <button
                                 className="ann-pin-btn"
-                                disabled={announcementsPage === 1}
-                                onClick={() => setAnnouncementsPage(p => p - 1)}
+                                disabled={safePage === 1}
+                                onClick={() => setAnnouncementsPage(p => Math.max(1, p - 1))}
                               >
                                 Previous
                               </button>
-                              <span className="pagination-info">Page {announcementsPage} of {totalPages}</span>
+                              <span className="pagination-info">Page {safePage} of {totalPages}</span>
                               <button
                                 className="ann-pin-btn"
-                                disabled={announcementsPage === totalPages}
-                                onClick={() => setAnnouncementsPage(p => p + 1)}
+                                disabled={safePage === totalPages}
+                                onClick={() => setAnnouncementsPage(p => Math.min(totalPages, p + 1))}
                               >
                                 Next
                               </button>
