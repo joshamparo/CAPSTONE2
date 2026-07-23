@@ -225,7 +225,7 @@ function HomePage() {
               observer.unobserve(entry.target);
             });
           },
-          { threshold: 0.16, rootMargin: '0px 0px -48px 0px' }
+          { threshold: 0.08, rootMargin: '0px 0px -16px 0px' }
         );
 
         elements.forEach((element) => observer.observe(element));
@@ -1399,7 +1399,7 @@ function HomePage() {
         <div className="hero-overlay" />
         <div className="hero-shell">
           <div className="hero-layout page-shell">
-            <div className="hero-panel reveal-on-scroll is-visible">
+            <div className="hero-panel reveal-on-scroll">
               <div className="eyebrow">Private Hospital Care</div>
               <div className="hero-content" style={{ position: 'static', transform: 'none', left: 'auto', top: 'auto', width: '100%', maxWidth: 'none', textAlign: 'left' }}>
                 <h1 className="hero-title">Professional, compassionate care for every family we serve.</h1>
@@ -1423,7 +1423,7 @@ function HomePage() {
                 </div>
               </div>
             </div>
-            <div className="hero-info-card reveal-on-scroll reveal-delay-2 is-visible">
+            <div className="hero-info-card reveal-on-scroll reveal-delay-2">
               <div className="hero-info-title">Visit with confidence</div>
               <div className="hero-info-subtitle">
                 Helpful public information stays visible so visitors can act quickly and navigate the hospital with ease.
