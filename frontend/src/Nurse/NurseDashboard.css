@@ -1157,12 +1157,17 @@
 .modern-table-wrapper {
   flex: 1;
   overflow: auto;
+  max-height: 600px; /* limits height for sticky header to work */
+  border-radius: 12px;
+  border: 1px solid var(--nurse-border);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 .modern-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
+  margin: 0;
 }
 
 .modern-table th {
@@ -1177,6 +1182,7 @@
   position: sticky;
   top: 0;
   z-index: 10;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
   white-space: nowrap;
 }
 
@@ -2581,6 +2587,42 @@ body.compact-mode .workspace-queue-item {
   font-size: 1rem;
   font-weight: 700;
   color: var(--nurse-text-dark);
+}
+
+/* Triage Badges */
+.triage-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.triage-1 {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.triage-2 {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.triage-3 {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.triage-4 {
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
 }
 
 .badge-count {

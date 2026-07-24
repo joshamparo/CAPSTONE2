@@ -6067,23 +6067,26 @@ function NurseDashboard() {
                             </thead>
                             <tbody>
                                 {patientsList.filter(p => p.admission_status === 'Emergency').length === 0 ? (
-                                    <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px' }}>No active ER patients.</td></tr>
+                                    <tr><td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>No active ER patients.</td></tr>
                                 ) : (
-                                    patientsList.filter(p => p.admission_status === 'Emergency').map(p => (
+                                    patientsList.filter(p => p.admission_status === 'Emergency').map(p => {
+                                        const triageLevel = p.clinical_records?.erRegistration?.triage?.level || p.triage_level || 4;
+                                        return (
                                         <tr key={p.id}>
-                                            <td>{p.first_name} {p.last_name}</td>
+                                            <td style={{ fontWeight: 700 }}>{p.first_name} {p.last_name}</td>
                                             <td>
-                                                <span className={`badge-${(p.clinical_records?.erRegistration?.triage?.level === 1 || p.clinical_records?.erRegistration?.triage?.level === 2) ? 'red' : 'orange'}`}>
-                                                    Level {p.clinical_records?.erRegistration?.triage?.level || 'N/A'}
+                                                <span className={`triage-badge triage-${triageLevel}`}>
+                                                    Level {triageLevel}
                                                 </span>
                                             </td>
-                                            <td>{p.admission_status}</td>
-                                            <td>{new Date(p.created_at).toLocaleTimeString()}</td>
+                                            <td><span className="bed-status-label" style={{ color: '#0f172a', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px' }}>{p.admission_status}</span></td>
+                                            <td style={{ color: '#64748b', fontSize: '0.85rem' }}>{new Date(p.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
                                             <td>
-                                                <button className="text-btn" onClick={() => { setCentralRecordPatientId(p.id); setCentralRecordOpen(true); }}>View Record</button>
+                                                <button className="btn-gray" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => { setCentralRecordPatientId(p.id); setCentralRecordOpen(true); }}>View Record</button>
                                             </td>
                                         </tr>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </tbody>
                         </table>
@@ -6746,22 +6749,23 @@ function NurseDashboard() {
                             </div>
                         </div>
                         
-                        <div className="patient-list-container patient-records-container">
-                            <div className="list-controls">
-                                <div className="search-input-modern">
+                        <div className="patient-list-container patient-records-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                            <div className="list-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                <div className="search-input-modern" style={{ width: '350px' }}>
                                     <Search size={18} className="text-slate-400" />
                                     <input 
                                         type="text" 
                                         placeholder="Search by name, ID, or ward..." 
                                         value={patientSearch}
                                         onChange={(e) => setPatientSearch(e.target.value)}
+                                        style={{ width: '100%' }}
                                     />
                                 </div>
-                            </div>
-                            <div className="walkin-results-count" style={{marginBottom: '14px'}}>
-                              {patientRecordsMatchCount === 0
-                                ? 'No patient records match your search.'
-                                : `Showing ${patientRecordsRangeStart}-${patientRecordsRangeEnd} of ${patientRecordsMatchCount} patient${patientRecordsMatchCount === 1 ? '' : 's'}`}
+                                <div className="walkin-results-count" style={{ margin: 0, fontWeight: 600, color: '#64748b' }}>
+                                  {patientRecordsMatchCount === 0
+                                    ? 'No patient records match your search.'
+                                    : `Showing ${patientRecordsRangeStart}-${patientRecordsRangeEnd} of ${patientRecordsMatchCount} patient${patientRecordsMatchCount === 1 ? '' : 's'}`}
+                                </div>
                             </div>
 
                             {/* Table */}
@@ -6856,26 +6860,30 @@ function NurseDashboard() {
                                 </table>
                             </div>
                             {filteredPatientsForRecords.length > itemsPerPage ? (
-                              <div className="walkin-pagination" style={{ padding: '16px 0 0' }}>
-                                <button
-                                  type="button"
-                                  className="walkin-page-btn"
-                                  onClick={() => setPatientPage((page) => Math.max(1, page - 1))}
-                                  disabled={patientPage <= 1}
-                                >
-                                  Previous
-                                </button>
-                                <div className="walkin-page-status">
+                              <div className="walkin-pagination" style={{ padding: '16px 0 0', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '16px' }}>
+                                <div className="walkin-page-status" style={{ margin: 0, fontWeight: 600, color: '#64748b' }}>
                                   Page {Math.min(patientPage, patientRecordsPageCount)} of {patientRecordsPageCount}
                                 </div>
-                                <button
-                                  type="button"
-                                  className="walkin-page-btn"
-                                  onClick={() => setPatientPage((page) => Math.min(patientRecordsPageCount, page + 1))}
-                                  disabled={patientPage >= patientRecordsPageCount}
-                                >
-                                  Next
-                                </button>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button
+                                      type="button"
+                                      className="btn-gray"
+                                      style={{ padding: '6px 12px' }}
+                                      onClick={() => setPatientPage((page) => Math.max(1, page - 1))}
+                                      disabled={patientPage <= 1}
+                                    >
+                                      Previous
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn-gray"
+                                      style={{ padding: '6px 12px' }}
+                                      onClick={() => setPatientPage((page) => Math.min(patientRecordsPageCount, page + 1))}
+                                      disabled={patientPage >= patientRecordsPageCount}
+                                    >
+                                      Next
+                                    </button>
+                                </div>
                               </div>
                             ) : null}
                         </div>
