@@ -101,18 +101,23 @@ const inferInvoiceDepartment = (invoice) => {
   return notes.length > 54 ? `${notes.slice(0, 54)}…` : notes;
 };
 
-const buildConsultationReceipt = ({ invoice, payment, user, amountReceivedOverride }) => {
+const buildConsultationReceipt = ({ invoice, payment, user, amountReceivedOverride, philhealthDeduction, hmoCoverage, hmoProvider }) => {
   if (!invoice || !payment) return null;
   const source = inferInvoiceSource(invoice);
   const patientName = invoice.patients
     ? `${String(invoice.patients.first_name || '').trim()} ${String(invoice.patients.last_name || '').trim()}`.trim()
     : 'Patient';
-  const amountDue = Number(invoice.total_amount || 0);
+  
+  const originalBalance = Number(invoice.balance_amount || invoice.total_amount || 0);
+  const ph = Number(philhealthDeduction || 0);
+  const hmo = Number(hmoCoverage || 0);
+  const amountDueAfterDeductions = Math.max(0, originalBalance - ph - hmo);
+
   const amountReceived = Number.isFinite(Number(amountReceivedOverride))
     ? Number(amountReceivedOverride)
     : Number(payment.amount || 0);
-  const priorBalance = Number(invoice.balance_amount || amountDue);
-  const remainingBalance = Math.max(0, priorBalance - amountReceived);
+  
+  const remainingBalance = Math.max(0, amountDueAfterDeductions - amountReceived);
   const fullyPaid = remainingBalance <= 0.0001;
   return {
     receiptNumber: `PGH-${receiptPrefixForSource(source)}-${String(payment.id || invoice.id || 'PAY')}`,
@@ -121,16 +126,20 @@ const buildConsultationReceipt = ({ invoice, payment, user, amountReceivedOverri
     paidAtLabel: formatDateTime(payment.created_at || payment.createdAt),
     cashierName: String(user?.name || user?.first_name || user?.firstName || user?.email || 'Cashier'),
     method: payment.method || 'Cash',
-    reference: payment.reference || 'â€”',
+    reference: payment.reference || '—',
     patientName,
     serviceLabel: (invoice.items || []).map((item) => item?.description).filter(Boolean).join(', ') || source,
-    amountDue,
+    amountDue: originalBalance,
+    philhealthDeduction: ph,
+    hmoCoverage: hmo,
+    hmoProvider: hmoProvider || '',
+    netAmountDue: amountDueAfterDeductions,
     amountReceived,
-    change: Math.max(0, amountReceived - priorBalance),
+    change: Math.max(0, amountReceived - amountDueAfterDeductions),
     source,
     note: fullyPaid
       ? 'Payment confirmed. Consultation billing is fully settled.'
-      : `Partial payment recorded. Remaining balance: â‚± ${toMoney(remainingBalance)}`
+      : `Partial payment recorded. Remaining balance: ₱ ${toMoney(remainingBalance)}`
   };
 };
 
@@ -314,6 +323,11 @@ export default function OfficeStaffDashboard({ mode }) {
   const [refundReason, setRefundReason] = useState('');
   const [voidReference, setVoidReference] = useState('');
   const [voidReason, setVoidReason] = useState('');
+
+  // HMO & Deductions UI state
+  const [hmoProvider, setHmoProvider] = useState('');
+  const [philhealthDeduction, setPhilhealthDeduction] = useState('');
+  const [hmoCoverage, setHmoCoverage] = useState('');
 
   const [labOrders, setLabOrders] = useState([]);
   const [labOrdersLoading, setLabOrdersLoading] = useState(false);
@@ -500,6 +514,15 @@ export default function OfficeStaffDashboard({ mode }) {
           ? 'Payment confirmed. Video consultation booking is settled.'
           : 'Payment confirmed. Please present this receipt if verification is needed.'
     );
+
+    const deductionRows = [];
+    if (receipt.philhealthDeduction > 0) {
+      deductionRows.push(`<div class="row"><span class="label">PhilHealth</span><span>- PHP ${safe(toMoney(receipt.philhealthDeduction))}</span></div>`);
+    }
+    if (receipt.hmoCoverage > 0) {
+      deductionRows.push(`<div class="row"><span class="label">HMO (${safe(receipt.hmoProvider || 'Provider')})</span><span>- PHP ${safe(toMoney(receipt.hmoCoverage))}</span></div>`);
+    }
+
     popup.document.write(`
       <html>
         <head>
@@ -515,6 +538,7 @@ export default function OfficeStaffDashboard({ mode }) {
             .label { color: #64748b; }
             .total { font-size: 18px; font-weight: 800; }
             .note { margin-top: 14px; font-size: 12px; color: #475569; line-height: 1.5; }
+            .deduction { color: #dc2626; font-style: italic; }
           </style>
         </head>
         <body>
@@ -536,7 +560,9 @@ export default function OfficeStaffDashboard({ mode }) {
             <div class="row"><span class="label">Patient</span><span>${safe(receipt.patientName)}</span></div>
             <div class="row"><span class="label">Service</span><span>${safe(receipt.serviceLabel)}</span></div>
             <div class="line"></div>
-            <div class="row"><span class="label">Amount Due</span><span>PHP ${safe(toMoney(receipt.amountDue))}</span></div>
+            <div class="row"><span class="label">Gross Amount</span><span>PHP ${safe(toMoney(receipt.amountDue))}</span></div>
+            ${deductionRows.join('')}
+            <div class="row"><span class="label">Net Amount Due</span><span>PHP ${safe(toMoney(receipt.netAmountDue || receipt.amountDue))}</span></div>
             <div class="row"><span class="label">Amount Received</span><span>PHP ${safe(toMoney(receipt.amountReceived))}</span></div>
             <div class="row total"><span>Status</span><span>PAID</span></div>
             <div class="row total"><span>Change</span><span>PHP ${safe(toMoney(receipt.change))}</span></div>
@@ -554,6 +580,10 @@ export default function OfficeStaffDashboard({ mode }) {
     setSelectedInvoiceLoading(true);
     setPaymentError('');
     setAdjustmentError('');
+    // Reset Deductions
+    setPhilhealthDeduction('');
+    setHmoCoverage('');
+    setHmoProvider('');
     try {
       const data = await fetchJson(`/api/billing/invoices/${invoiceId}`, { apiBase: API_BASE, headers: buildHeaders(user) });
       setSelectedInvoice(data);
@@ -593,8 +623,11 @@ export default function OfficeStaffDashboard({ mode }) {
   }, [invoiceItems]);
 
   const selectedInvoiceDue = useMemo(() => {
-    return Number(selectedInvoice?.balance_amount || 0);
-  }, [selectedInvoice]);
+    const rawBalance = Number(selectedInvoice?.balance_amount || 0);
+    const ph = Number(philhealthDeduction || 0);
+    const hmo = Number(hmoCoverage || 0);
+    return Math.max(0, rawBalance - ph - hmo);
+  }, [selectedInvoice, philhealthDeduction, hmoCoverage]);
 
   const paymentEntryValue = useMemo(() => {
     if (payMethod === 'Cash') return Number(String(cashReceived || payAmount || '').trim() || 0);
@@ -707,7 +740,15 @@ export default function OfficeStaffDashboard({ mode }) {
       const received = method === 'Cash' ? Number(String(cashReceived || payAmount || '').trim()) : due;
       setCashReceived('');
       setPayAmount('');
-      setPaymentReceipt(buildConsultationReceipt({ invoice: selectedInvoice, payment: createdPayment, user, amountReceivedOverride: received }));
+      setPaymentReceipt(buildConsultationReceipt({ 
+        invoice: selectedInvoice, 
+        payment: createdPayment, 
+        user, 
+        amountReceivedOverride: received,
+        philhealthDeduction,
+        hmoCoverage,
+        hmoProvider
+      }));
       await openInvoice(selectedInvoice.id);
       await refreshInvoices();
       await refreshPaymentHistory();
@@ -746,7 +787,15 @@ export default function OfficeStaffDashboard({ mode }) {
             setPayReference('');
             setCashReceived('');
             setPayAmount('');
-            setPaymentReceipt(buildConsultationReceipt({ invoice: latest, payment: newestPayment, user, amountReceivedOverride: received }));
+            setPaymentReceipt(buildConsultationReceipt({ 
+              invoice: latest, 
+              payment: newestPayment, 
+              user, 
+              amountReceivedOverride: received,
+              philhealthDeduction,
+              hmoCoverage,
+              hmoProvider
+            }));
             await openInvoice(selectedInvoice.id);
             await refreshInvoices();
             await refreshPaymentHistory();
@@ -763,6 +812,17 @@ export default function OfficeStaffDashboard({ mode }) {
 
   const createAdjustment = async (type) => {
     if (!user || !selectedInvoice?.id) return;
+    
+    // Add Reason validation for both Void and Refund
+    if (type === 'void' && !voidReason.trim()) {
+      setAdjustmentError('Please provide a reason for voiding this invoice.');
+      return;
+    }
+    if (type === 'refund' && !refundReason.trim()) {
+      setAdjustmentError('Please provide a reason for this refund.');
+      return;
+    }
+
     setAdjustmentLoading(true);
     setAdjustmentError('');
     try {
@@ -774,10 +834,10 @@ export default function OfficeStaffDashboard({ mode }) {
         if (!ref) throw new Error('Refund reference is required.');
         payload.amount = amountRaw;
         payload.reference = ref;
-        payload.reason = refundReason ? String(refundReason).trim() : null;
+        payload.reason = String(refundReason).trim();
       } else if (type === 'void') {
         payload.reference = voidReference ? String(voidReference).trim() : null;
-        payload.reason = voidReason ? String(voidReason).trim() : 'Voided invoice';
+        payload.reason = String(voidReason).trim();
       } else {
         throw new Error('Invalid adjustment type.');
       }
@@ -788,6 +848,13 @@ export default function OfficeStaffDashboard({ mode }) {
         headers: buildHeaders(user),
         body: JSON.stringify(payload)
       });
+
+      // Clear fields after success
+      setVoidReason('');
+      setVoidReference('');
+      setRefundReason('');
+      setRefundReference('');
+      setRefundAmount('');
 
       await openInvoice(selectedInvoice.id);
       await refreshInvoices();
@@ -2427,6 +2494,34 @@ export default function OfficeStaffDashboard({ mode }) {
     </div>
   </div>
 
+  <div className="office-payment-quick-cash" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+    {[100, 500, 1000].map(amount => (
+      <button 
+        key={amount}
+        type="button" 
+        className="office-btn ghost" 
+        style={{ border: '1px solid #e2e8f0', flex: 1 }}
+        onClick={() => {
+          setCashReceived(String(amount));
+          setPayAmount(String(amount));
+        }}
+      >
+        ₱ {amount}
+      </button>
+    ))}
+    <button 
+      type="button" 
+      className="office-btn ghost" 
+      style={{ border: '1px solid #ea580c', color: '#ea580c', flex: 1.5 }}
+      onClick={() => {
+        setCashReceived(String(selectedInvoiceDue));
+        setPayAmount(String(selectedInvoiceDue));
+      }}
+    >
+      Exact Amount
+    </button>
+  </div>
+
   {paymentError ? <div className="admin-alert error" style={{ marginBottom: 10 }}>{paymentError}</div> : null}
   {payMethod === 'Cash' && paymentShort ? (
     <div className="office-payment-warning">
@@ -2435,6 +2530,36 @@ export default function OfficeStaffDashboard({ mode }) {
   ) : null}
 
   <div className="office-payment-form">
+    <div className="office-payment-field">
+      <label>PhilHealth Deduction</label>
+      <input
+        className="office-input"
+        type="number"
+        value={philhealthDeduction}
+        onChange={(e) => setPhilhealthDeduction(e.target.value)}
+        placeholder="₱ 0.00"
+      />
+    </div>
+    <div className="office-payment-field">
+      <label>HMO Provider (Placeholder)</label>
+      <select className="office-select" value={hmoProvider} onChange={(e) => setHmoProvider(e.target.value)}>
+        <option value="">Select HMO</option>
+        <option value="Maxicare">Maxicare</option>
+        <option value="Medicard">Medicard</option>
+        <option value="Intellicare">Intellicare</option>
+      </select>
+    </div>
+    <div className="office-payment-field">
+      <label>HMO Coverage</label>
+      <input
+        className="office-input"
+        type="number"
+        value={hmoCoverage}
+        onChange={(e) => setHmoCoverage(e.target.value)}
+        placeholder="₱ 0.00"
+      />
+    </div>
+
     <div className="office-payment-field">
       <label>Payment method</label>
       <select className="office-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
