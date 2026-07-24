@@ -149,32 +149,32 @@ function HomePage() {
   const [newsItems, setNewsItems] = useState([
     {
       id: 'news-1',
-      category: 'Philippine News',
-      label: 'Health Policy',
-      source: 'Philstar',
-      title: "Confused about the zero-balance billing policy? Here's an explainer.",
-      summary: 'The government’s zero-balance billing policy applies to all Filipinos admitted to basic or ward accommodations in DOH-listed hospitals, covering all expenses including procedures and medicines.',
-      url: 'https://www.philstar.com/headlines/2025/08/02/2462356/confused-about-zero-balance-billing-policy-heres-explainer',
-      imageUrl: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=900&q=80'
+      category: 'Health & Lifestyle',
+      label: 'PhilHealth',
+      source: 'PhilHealth',
+      title: 'PhilHealth, CHR Unite to Champion Healthcare as a Fundamental Human Right',
+      summary: 'PhilHealth and the Commission on Human Rights (CHR) joined forces for a learning forum titled "Health as a Human Right: Bridging the Healthcare Divide" to reinforce access to quality healthcare as a fundamental human right.',
+      url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a3b405bdfbb6.php',
+      imageUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=900&q=80'
     },
     {
       id: 'news-2',
       category: 'Health & Lifestyle',
       label: 'PhilHealth',
-      source: 'Philstar',
-      title: 'PhilHealth to regain P60-billion excess funds after DPWH savings — Marcos',
-      summary: 'President Marcos announced that P60 billion in excess PhilHealth funds will be restored to the state health insurer to expand healthcare services and reduce out-of-pocket costs for Filipino patients.',
-      url: 'https://www.philstar.com/headlines/2025/09/20/2474203/philhealth-regain-p60-billion-excess-funds-after-dpwh-savings-marcos',
-      imageUrl: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=900&q=80'
+      source: 'PhilHealth',
+      title: 'PhilHealth Launches GAMOT in Zamboanga Sibugay, Offering ₱20,000 in Annual Free Medicines',
+      summary: 'PhilHealth officially launched the Guaranteed and Accessible Medications for Outpatient Treatment (GAMOT) program, establishing a provincial system where eligible members can access up to ₱20,000 worth of free essential medicines annually.',
+      url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a2634094e2bd.php',
+      imageUrl: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=900&q=80'
     },
     {
       id: 'news-3',
-      category: 'Health & Lifestyle',
-      label: 'DOH / PhilHealth',
+      category: 'Philippine News',
+      label: 'DOH Philippines',
       source: 'Inquirer.net',
-      title: 'DOH: Zero billing to cover PhilHealth direct contributors in pay wards',
-      summary: 'Direct contributors of PhilHealth will soon be able to avail themselves of a pay ward or shared room in hospitals run by the Department of Health (DOH) for free under the zero balance billing (ZBB) policy.',
-      url: 'https://newsinfo.inquirer.net/2179859/doh-zero-billing-to-cover-philhealth-direct-contributors-in-pay-wards',
+      title: 'Health workers to new DOH chief: Tackle unresolved healthcare woes',
+      summary: 'Health care workers in both public and private sectors welcomed the appointment of Dr. Brix Pujalte Jr. as the new DOH secretary, calling for him to address unresolved problems and improve public healthcare.',
+      url: 'https://newsinfo.inquirer.net/2263694/health-workers-to-new-doh-chief-tackle-unresolved-healthcare-woes',
       imageUrl: 'https://images.unsplash.com/photo-1530497610245-94d3c16cda28?auto=format&fit=crop&w=900&q=80'
     }
   ]);
