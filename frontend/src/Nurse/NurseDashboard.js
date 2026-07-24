@@ -2441,11 +2441,13 @@ function NurseDashboard() {
 
   const [wardRegistry, setWardRegistry] = useState({ wards: [], rooms: [], totals: {} });
   const [wardLoading, setWardLoading] = useState(false);
+  const [wardError, setWardError] = useState(null);
   const [assigningPatient, setAssigningPatient] = useState(null);
 
   const fetchWardRegistry = async () => {
     if (document.visibilityState !== 'visible') return;
     setWardLoading(true);
+    setWardError(null);
     try {
       const data = await fetchJson('/api/wards/rooms', {
         apiBase: API_BASE,
@@ -2454,6 +2456,7 @@ function NurseDashboard() {
       setWardRegistry(data || { wards: [], rooms: [], totals: {} });
     } catch (err) {
       console.error('Failed to load ward registry:', err);
+      setWardError(err.message || 'Failed to load bed map from server.');
     } finally {
       setWardLoading(false);
     }
@@ -5659,6 +5662,16 @@ function NurseDashboard() {
                                     <div className="loading-state" style={{ padding: '40px', textAlign: 'center' }}>
                                         <RotateCw className="animate-spin" size={32} />
                                         <p>Loading bed map...</p>
+                                    </div>
+                                ) : wardError ? (
+                                    <div style={{ padding: '40px', textAlign: 'center', color: '#ef4444', background: '#fef2f2', borderRadius: '12px', margin: '20px' }}>
+                                        <p style={{ fontWeight: 'bold', margin: 0 }}>⚠️ {wardError}</p>
+                                        <p style={{ fontSize: '0.85rem', marginTop: '8px' }}>Please check your database connection.</p>
+                                    </div>
+                                ) : (!wardRegistry.wards || wardRegistry.wards.length === 0) ? (
+                                    <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+                                        <p style={{ fontWeight: 'bold', margin: 0 }}>No wards available</p>
+                                        <p style={{ fontSize: '0.85rem', marginTop: '8px' }}>There are no wards configured in the system yet.</p>
                                     </div>
                                 ) : (
                                     <div className="wards-container">
