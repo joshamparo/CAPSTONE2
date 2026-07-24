@@ -4206,132 +4206,9 @@ function AdminDashboard() {
             );
           })()}
 
-          <div className="dashboard-grid-asymmetric admin-panel-grid">
-          <div className="dashboard-section-card admin-panel-card compact-activity-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
-            <div className="dashboard-section-header">
-              <h3 className="dashboard-section-title">
-                <History size={20} className="text-purple-600" /> Audit Log
-              </h3>
-            </div>
-            <div className="modern-list scrollable-list-y compact-list" style={{ flex: 1, minHeight: '350px', maxHeight: '350px', overflowY: 'auto' }}>
-                  {activityLogs.length === 0 ? (
-                    <div className="empty-state-sm">No audit logs.</div>
-                  ) : (
-                    activityLogs.map((log) => (
-                      <div key={log._id} className="modern-list-item compact-item-row">
-                        <div className="activity-icon-box">
-                          <FileText size={14} />
-                        </div>
-                        <div className="item-content">
-                          <div className="item-title text-sm">{log.action}</div>
-                          <div className="item-subtitle text-xs text-muted">
-                            {log.details} • {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-            </div>
-          </div>
-
-          {/* Bulk Import/Export & Role Management */}
-            <div className="dashboard-section-card admin-panel-card" style={{ margin: 0 }}>
-                <div className="dashboard-section-header">
-                  <h3 className="dashboard-section-title">
-                    <UserCog size={20} className="text-blue-600" /> User Management
-                  </h3>
-                  <button className="btn-orange-sm" onClick={() => setShowRoleMgmt(!showRoleMgmt)}><ShieldCheck size={16} /> Roles</button>
-                </div>
-                <div className="bulk-actions-row">
-                  <label className="bulk-label">Bulk Import/Export:</label>
-                  <input type="file" accept="application/json" style={{ display: 'none' }} id="import-staff" onChange={(e) => handleImport('staff', e)} />
-                  <button className="btn-gray" onClick={() => document.getElementById('import-staff').click()}><Upload size={14} /> Import Staff</button>
-                  <button className="btn-gray" onClick={() => handleExport('staff')}><Download size={14} /> Export Staff</button>
-                  <input type="file" accept="application/json" style={{ display: 'none' }} id="import-patient" onChange={(e) => handleImport('patient', e)} />
-                  <button className="btn-gray" onClick={() => document.getElementById('import-patient').click()}><Upload size={14} /> Import Patients</button>
-                  <button className="btn-gray" onClick={() => handleExport('patient')}><Download size={14} /> Export Patients</button>
-                </div>
-                {showRoleMgmt && roles && Array.isArray(roles) && (
-                  <div className="role-mgmt-modal">
-                    <h4>Role Management</h4>
-                    <div className="role-list">
-                      {roles.map((role, idx) => (
-                        <div key={role.name} className="role-item">
-                          <span className="role-name">{role.name}</span>
-                          <button className="btn-orange-sm" onClick={() => { setSelectedRole(role); setRoleEditPerms(role.permissions); }}>Edit</button>
-                        </div>
-                      ))}
-                    </div>
-                    {selectedRole && (
-                      <div className="role-edit-panel">
-                        <h5>Edit Permissions for {selectedRole.name}</h5>
-                        <input type="text" value={roleEditPerms && Array.isArray(roleEditPerms) ? roleEditPerms.join(', ') : ''} onChange={e => setRoleEditPerms(e.target.value.split(',').map(s => s.trim()))} />
-                        <button className="btn-orange-sm" onClick={async () => {
-                          const nextRoles = roles.map(r => r.name === selectedRole.name ? { ...r, permissions: roleEditPerms } : r);
-                          setRoles(nextRoles);
-                          await persistSystemSettings({ roles: nextRoles }, "Role permissions saved.");
-                          setSelectedRole(null);
-                        }}>Save</button>
-                        <button className="btn-gray" onClick={() => setSelectedRole(null)}>Cancel</button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-          </div>
-
-          {/* ...existing code... (rest of dashboard widgets, e.g. ward, inventory, etc.) */}
-
-           {/* Operations Row: To-Do List */}
-           <div className="dashboard-grid-asymmetric admin-panel-grid">
-              <div className="dashboard-section-card admin-panel-card" style={{ margin: 0 }}>
-                  <div className="dashboard-section-header">
-                      <h3 className="dashboard-section-title">
-                        <Bell size={20} className="text-orange-600" /> Operational Snapshot
-                      </h3>
-                      <span className="text-xs text-slate-500 font-medium">{pendingIncidentsCount + pendingRestockCount + lowStockCount} items to monitor</span>
-                  </div>
-                  <div className="cmd-list">
-                    <div className="cmd-item">
-                      <div className="cmd-item-main">
-                        <div className="cmd-item-top">
-                          <div className="cmd-item-title">Pending approvals and escalations</div>
-                          <div className="cmd-badge">{pendingIncidentsCount}</div>
-                        </div>
-                        <div className="cmd-item-sub">Incident items still require admin attention.</div>
-                      </div>
-                      <div className="cmd-item-actions">
-                        <button type="button" className="cmd-btn" onClick={() => setView('incidents')}>Open</button>
-                      </div>
-                    </div>
-                    <div className="cmd-item">
-                      <div className="cmd-item-main">
-                        <div className="cmd-item-top">
-                          <div className="cmd-item-title">Restock queue</div>
-                          <div className="cmd-badge">{pendingRestockCount}</div>
-                        </div>
-                        <div className="cmd-item-sub">Pharmacy-submitted stock requests waiting for review.</div>
-                      </div>
-                      <div className="cmd-item-actions">
-                        <button type="button" className="cmd-btn" onClick={() => document.getElementById('admin-inventory')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Review</button>
-                      </div>
-                    </div>
-                    <div className="cmd-item">
-                      <div className="cmd-item-main">
-                        <div className="cmd-item-top">
-                          <div className="cmd-item-title">Care activity this period</div>
-                          <div className="cmd-badge">{totalAppointments}</div>
-                        </div>
-                        <div className="cmd-item-sub">Appointments, registrations, and patient movement in the current dataset.</div>
-                      </div>
-                      <div className="cmd-item-actions">
-                        <button type="button" className="cmd-btn" onClick={() => setView('reports')}>View reports</button>
-                      </div>
-                    </div>
-                  </div>
-              </div>
-              {/* Admin To-Do List */}
-              <div className="dashboard-section-card admin-panel-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
+                    <div className="dashboard-grid-asymmetric admin-panel-grid" style={{ alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                <div className="dashboard-section-card admin-panel-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
                   <div className="dashboard-section-header">
                       <h3 className="dashboard-section-title">
                         <ListTodo size={20} className="text-purple-600" /> My Tasks
@@ -4378,304 +4255,127 @@ function AdminDashboard() {
                       )}
                   </div>
               </div>
-           </div>
-
-           {/* Main Content Area */}
-           <div className="dashboard-grid-asymmetric admin-panel-grid">
-                 {/* Ward Status Widget */}
-                 <div className="dashboard-section-card admin-panel-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
-                    <div className="dashboard-section-header">
-                        <h3 className="dashboard-section-title">
-                          <Activity size={20} className="text-red-500" /> Ward Capacity
-                        </h3>
-                    </div>
-
-                    <div className="ward-capacity-summary-grid">
-                      <div className="ward-capacity-stat-card">
-                        <span className="ward-capacity-stat-label">Total Rooms</span>
-                        <strong className="ward-capacity-stat-value">{wardCapacityBoard.totalRooms}</strong>
-                        <span className="ward-capacity-stat-meta">Hospital-wide room inventory</span>
+                <div className="dashboard-section-card admin-panel-card" style={{ margin: 0 }}>
+                  <div className="dashboard-section-header">
+                      <h3 className="dashboard-section-title">
+                        <Bell size={20} className="text-orange-600" /> Operational Snapshot
+                      </h3>
+                      <span className="text-xs text-slate-500 font-medium">{pendingIncidentsCount + pendingRestockCount + lowStockCount} items to monitor</span>
+                  </div>
+                  <div className="cmd-list">
+                    <div className="cmd-item">
+                      <div className="cmd-item-main">
+                        <div className="cmd-item-top">
+                          <div className="cmd-item-title">Pending approvals and escalations</div>
+                          <div className="cmd-badge">{pendingIncidentsCount}</div>
+                        </div>
+                        <div className="cmd-item-sub">Incident items still require admin attention.</div>
                       </div>
-                      <div className="ward-capacity-stat-card">
-                        <span className="ward-capacity-stat-label">Occupied</span>
-                        <strong className="ward-capacity-stat-value">{wardCapacityBoard.occupiedRooms}</strong>
-                        <span className="ward-capacity-stat-meta">Patients currently assigned</span>
-                      </div>
-                      <div className="ward-capacity-stat-card">
-                        <span className="ward-capacity-stat-label">Available</span>
-                        <strong className="ward-capacity-stat-value">{wardCapacityBoard.availableRooms}</strong>
-                        <span className="ward-capacity-stat-meta">Ready for new admissions</span>
-                      </div>
-                      <div className="ward-capacity-stat-card">
-                        <span className="ward-capacity-stat-label">Room Holds</span>
-                        <strong className="ward-capacity-stat-value">
-                          {Number(wardCapacityBoard.reservedRooms || 0) + Number(wardCapacityBoard.cleaningRooms || 0) + Number(wardCapacityBoard.maintenanceRooms || 0)}
-                        </strong>
-                        <span className="ward-capacity-stat-meta">
-                          {wardCapacityBoard.overflowRooms > 0
-                            ? `${wardCapacityBoard.overflowRooms} overflow patient${wardCapacityBoard.overflowRooms > 1 ? 's' : ''} to review`
-                            : `${wardCapacityBoard.criticalWards} ward${wardCapacityBoard.criticalWards !== 1 ? 's' : ''} at 80% occupancy or higher`}
-                        </span>
+                      <div className="cmd-item-actions">
+                        <button type="button" className="cmd-btn" onClick={() => setView('incidents')}>Open</button>
                       </div>
                     </div>
-
-                    <div className="ward-capacity-toolbar">
-                      <div>
-                        <div className="ward-capacity-toolbar-title">25-room live occupancy board</div>
-                        <div className="ward-capacity-toolbar-subtitle">
-                          Occupied rooms stay patient-driven. Admin can manage reserved, cleaning, and maintenance room states here.
+                    <div className="cmd-item">
+                      <div className="cmd-item-main">
+                        <div className="cmd-item-top">
+                          <div className="cmd-item-title">Restock queue</div>
+                          <div className="cmd-badge">{pendingRestockCount}</div>
                         </div>
+                        <div className="cmd-item-sub">Pharmacy-submitted stock requests waiting for review.</div>
                       </div>
-                      <div className="ward-capacity-toolbar-actions">
-                        <button
-                          type="button"
-                          className={`ward-capacity-filter-btn ${selectedWardCapacity === 'all' ? 'active' : ''}`}
-                          onClick={() => setSelectedWardCapacity('all')}
-                        >
-                          Show all rooms
-                        </button>
-                        <button
-                          type="button"
-                          className={`ward-capacity-filter-btn ${showAddRoomForm ? 'active' : ''}`}
-                          onClick={() => {
-                            setShowAddRoomForm((prev) => !prev);
-                            setNewRoomError('');
-                          }}
-                        >
-                          {showAddRoomForm ? 'Close add room' : 'Add room'}
-                        </button>
+                      <div className="cmd-item-actions">
+                        <button type="button" className="cmd-btn" onClick={() => document.getElementById('admin-inventory')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Review</button>
                       </div>
                     </div>
-
-                    {showAddRoomForm && (
-                      <div className="ward-room-editor">
-                        <div className="ward-room-editor-header">
-                          <div>
-                            <div className="ward-room-editor-title">Add new room</div>
-                            <div className="ward-room-editor-subtitle">Create another room slot and assign it to the correct ward.</div>
-                          </div>
+                    <div className="cmd-item">
+                      <div className="cmd-item-main">
+                        <div className="cmd-item-top">
+                          <div className="cmd-item-title">Care activity this period</div>
+                          <div className="cmd-badge">{totalAppointments}</div>
                         </div>
-                        <div className="ward-room-editor-grid">
-                          <label className="ward-room-field">
-                            <span>Room Code</span>
-                            <input
-                              type="text"
-                              value={newRoomForm.roomCode}
-                              onChange={(e) => setNewRoomForm((prev) => ({ ...prev, roomCode: e.target.value }))}
-                              placeholder="GW-13"
-                            />
-                          </label>
-                          <label className="ward-room-field">
-                            <span>Ward</span>
-                            <select
-                              value={newRoomForm.wardName}
-                              onChange={(e) => setNewRoomForm((prev) => ({ ...prev, wardName: e.target.value }))}
-                            >
-                              {wardCapacityBoard.wards.map((ward) => (
-                                <option key={`new-room-ward-${ward.id}`} value={ward.name}>{ward.name}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="ward-room-field">
-                            <span>Starting Status</span>
-                            <select
-                              value={newRoomForm.status}
-                              onChange={(e) => setNewRoomForm((prev) => ({ ...prev, status: e.target.value }))}
-                            >
-                              <option value="Available">Available</option>
-                              <option value="Reserved">Reserved</option>
-                              <option value="Cleaning">Cleaning</option>
-                              <option value="Maintenance">Maintenance</option>
-                              <option value="Inactive">Inactive</option>
-                            </select>
-                          </label>
-                        </div>
-                        <label className="ward-room-field">
-                          <span>Room Note</span>
-                          <textarea
-                            rows={3}
-                            value={newRoomForm.note}
-                            onChange={(e) => setNewRoomForm((prev) => ({ ...prev, note: e.target.value }))}
-                            placeholder="Optional prep note for this room."
-                          />
-                        </label>
-                        {newRoomError ? <div className="ward-room-feedback error">{newRoomError}</div> : null}
-                        <div className="ward-room-editor-actions">
-                          <button type="button" className="btn-white-sm" onClick={() => setShowAddRoomForm(false)}>Cancel</button>
-                          <button type="button" className="btn-orange-sm" onClick={handleCreateRoom} disabled={newRoomSaving}>
-                            {newRoomSaving ? 'Adding...' : 'Save Room'}
-                          </button>
-                        </div>
+                        <div className="cmd-item-sub">Appointments, registrations, and patient movement in the current dataset.</div>
                       </div>
-                    )}
-
-                    <div className="ward-grid ward-capacity-grid">
-                        {wardCapacityBoard.wards.map((ward) => (
-                          <button
-                            key={ward.id}
-                            type="button"
-                            className={`ward-card ward-capacity-card ${selectedWardCapacity === ward.id ? 'active' : ''}`}
-                            onClick={() => setSelectedWardCapacity(ward.id)}
-                          >
-                              <div className="ward-capacity-card-topline">
-                                <span className="ward-name">{ward.name}</span>
-                                <span
-                                  className="ward-capacity-badge"
-                                  style={{ color: ward.color, borderColor: `${ward.color}33`, background: `${ward.color}14` }}
-                                >
-                                  {ward.statusLabel}
-                                </span>
-                              </div>
-                              <div className="ward-info">
-                                  <span className="ward-count">{ward.occupied}/{ward.total} occupied</span>
-                                  <span className="ward-capacity-available">{ward.available} open</span>
-                              </div>
-                              <div className="progress-bar-bg">
-                                  <div 
-                                    className="progress-fill" 
-                                    style={{ 
-                                      width: `${ward.ratio * 100}%`,
-                                      backgroundColor: ward.color 
-                                    }}
-                                  ></div>
-                              </div>
-                              <div className="ward-capacity-footer">
-                                <span>{Math.round(ward.ratio * 100)}% in use</span>
-                                {ward.overflow > 0 ? (
-                                  <span className="ward-capacity-overflow">+{ward.overflow} overflow</span>
-                                ) : (
-                                  <span>Room drilldown ready</span>
-                                )}
-                              </div>
-                          </button>
-                        ))}
+                      <div className="cmd-item-actions">
+                        <button type="button" className="cmd-btn" onClick={() => setView('reports')}>View reports</button>
+                      </div>
                     </div>
-
-                    <div className="ward-room-board">
-                      <div className="ward-room-board-header">
-                        <div>
-                          <div className="ward-room-board-title">
-                            {selectedWardDetails ? `${selectedWardDetails.name} room view` : 'All ward rooms'}
-                          </div>
-                          <div className="ward-room-board-subtitle">
-                            {selectedWardDetails
-                              ? `${selectedWardDetails.occupied} occupied, ${selectedWardDetails.available} available in ${selectedWardDetails.name}.`
-                              : `Showing all ${wardCapacityBoard.totalRooms} rooms across ICU, General Ward, Pediatrics, and Emergency.`}
-                          </div>
+                  </div>
+              </div>
+                <div className="dashboard-section-card admin-panel-card compact-activity-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
+            <div className="dashboard-section-header">
+              <h3 className="dashboard-section-title">
+                <History size={20} className="text-purple-600" /> Audit Log
+              </h3>
+            </div>
+            <div className="modern-list scrollable-list-y compact-list" style={{ flex: 1, minHeight: '350px', maxHeight: '350px', overflowY: 'auto' }}>
+                  {activityLogs.length === 0 ? (
+                    <div className="empty-state-sm">No audit logs.</div>
+                  ) : (
+                    activityLogs.map((log) => (
+                      <div key={log._id} className="modern-list-item compact-item-row">
+                        <div className="activity-icon-box">
+                          <FileText size={14} />
                         </div>
-                        <div className="ward-room-legend">
-                          <span className="ward-room-legend-item"><span className="ward-room-legend-dot occupied"></span>Occupied</span>
-                          <span className="ward-room-legend-item"><span className="ward-room-legend-dot available"></span>Available</span>
-                          <span className="ward-room-legend-item"><span className="ward-room-legend-dot reserved"></span>Reserved</span>
-                          <span className="ward-room-legend-item"><span className="ward-room-legend-dot cleaning"></span>Cleaning</span>
-                          <span className="ward-room-legend-item"><span className="ward-room-legend-dot maintenance"></span>Maintenance</span>
+                        <div className="item-content">
+                          <div className="item-title text-sm">{log.action}</div>
+                          <div className="item-subtitle text-xs text-muted">
+                            {log.details} • {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
                         </div>
                       </div>
-
-                      <div className="ward-room-grid">
-                        {filteredRoomTiles.map((room) => (
-                          <div
-                            key={room.id}
-                            className={`ward-room-tile ${room.status} ${selectedWardRoomId === room.id ? 'active' : ''}`}
-                            style={{ '--room-accent': room.color }}
-                            onClick={() => setSelectedWardRoomId(room.id)}
-                          >
-                            <div className="ward-room-label">{room.label}</div>
-                            <div className="ward-room-ward">{room.wardName}</div>
-                            <div className="ward-room-status">{room.statusLabel}</div>
-                            {room.patient ? <div className="ward-room-patient">{room.patient.name}</div> : null}
-                          </div>
-                        ))}
-                      </div>
-
-                      {selectedWardRoom ? (
-                        <div className="ward-room-editor">
-                          <div className="ward-room-editor-header">
-                            <div>
-                              <div className="ward-room-editor-title">Edit {selectedWardRoom.label}</div>
-                              <div className="ward-room-editor-subtitle">
-                                {selectedWardRoom.status === 'occupied'
-                                  ? 'This room is occupied, so patient assignment controls its live occupancy.'
-                                  : 'Update its operational state to keep live capacity accurate.'}
-                              </div>
-                            </div>
-                            <span className="ward-capacity-badge" style={{ color: selectedWardRoom.color, borderColor: `${selectedWardRoom.color}33`, background: `${selectedWardRoom.color}14` }}>
-                              {selectedWardRoom.statusLabel}
-                            </span>
-                          </div>
-
-                          <div className="ward-room-editor-grid">
-                            <label className="ward-room-field">
-                              <span>Room Code</span>
-                              <input
-                                type="text"
-                                value={roomEditor.roomCode}
-                                onChange={(e) => setRoomEditor((prev) => ({ ...prev, roomCode: e.target.value }))}
-                              />
-                            </label>
-                            <label className="ward-room-field">
-                              <span>Ward</span>
-                              <select
-                                value={roomEditor.wardName}
-                                onChange={(e) => setRoomEditor((prev) => ({ ...prev, wardName: e.target.value }))}
-                              >
-                                {wardCapacityBoard.wards.map((ward) => (
-                                  <option key={`edit-room-ward-${ward.id}`} value={ward.name}>{ward.name}</option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="ward-room-field">
-                              <span>Operational Status</span>
-                              <select
-                                value={roomEditor.status}
-                                onChange={(e) => setRoomEditor((prev) => ({ ...prev, status: e.target.value }))}
-                                disabled={selectedWardRoom.status === 'occupied'}
-                              >
-                                <option value="Available">Available</option>
-                                <option value="Reserved">Reserved</option>
-                                <option value="Cleaning">Cleaning</option>
-                                <option value="Maintenance">Maintenance</option>
-                                <option value="Inactive">Inactive</option>
-                              </select>
-                            </label>
-                          </div>
-
-                          <label className="ward-room-field">
-                            <span>Room Note</span>
-                            <textarea
-                              rows={3}
-                              value={roomEditor.note}
-                              onChange={(e) => setRoomEditor((prev) => ({ ...prev, note: e.target.value }))}
-                              placeholder="Leave room-specific preparation or maintenance notes here."
-                            />
-                          </label>
-
-                          {roomEditorError ? <div className="ward-room-feedback error">{roomEditorError}</div> : null}
-                          {roomEditorSuccess ? <div className="ward-room-feedback success">{roomEditorSuccess}</div> : null}
-
-                          <div className="ward-room-editor-actions">
-                            <button
-                              type="button"
-                              className="btn-white-sm"
-                              onClick={() => setSelectedWardRoomId('')}
-                            >
-                              Close
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-orange-sm"
-                              onClick={handleSaveRoom}
-                              disabled={roomSaving}
-                            >
-                              {roomSaving ? 'Saving...' : 'Save Changes'}
-                            </button>
-                          </div>
+                    ))
+                  )}
+            </div>
+          </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                <div className="dashboard-section-card admin-panel-card" style={{ margin: 0 }}>
+                  <div className="dashboard-section-header">
+                      <h3 className="dashboard-section-title">
+                        <Bell size={20} className="text-orange-600" /> Operational Snapshot
+                      </h3>
+                      <span className="text-xs text-slate-500 font-medium">{pendingIncidentsCount + pendingRestockCount + lowStockCount} items to monitor</span>
+                  </div>
+                  <div className="cmd-list">
+                    <div className="cmd-item">
+                      <div className="cmd-item-main">
+                        <div className="cmd-item-top">
+                          <div className="cmd-item-title">Pending approvals and escalations</div>
+                          <div className="cmd-badge">{pendingIncidentsCount}</div>
                         </div>
-                      ) : null}
+                        <div className="cmd-item-sub">Incident items still require admin attention.</div>
+                      </div>
+                      <div className="cmd-item-actions">
+                        <button type="button" className="cmd-btn" onClick={() => setView('incidents')}>Open</button>
+                      </div>
                     </div>
-                 </div>
-
-                 <div className="dashboard-section-card admin-panel-card compact-activity-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
+                    <div className="cmd-item">
+                      <div className="cmd-item-main">
+                        <div className="cmd-item-top">
+                          <div className="cmd-item-title">Restock queue</div>
+                          <div className="cmd-badge">{pendingRestockCount}</div>
+                        </div>
+                        <div className="cmd-item-sub">Pharmacy-submitted stock requests waiting for review.</div>
+                      </div>
+                      <div className="cmd-item-actions">
+                        <button type="button" className="cmd-btn" onClick={() => document.getElementById('admin-inventory')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Review</button>
+                      </div>
+                    </div>
+                    <div className="cmd-item">
+                      <div className="cmd-item-main">
+                        <div className="cmd-item-top">
+                          <div className="cmd-item-title">Care activity this period</div>
+                          <div className="cmd-badge">{totalAppointments}</div>
+                        </div>
+                        <div className="cmd-item-sub">Appointments, registrations, and patient movement in the current dataset.</div>
+                      </div>
+                      <div className="cmd-item-actions">
+                        <button type="button" className="cmd-btn" onClick={() => setView('reports')}>View reports</button>
+                      </div>
+                    </div>
+                  </div>
+              </div>
+                <div className="dashboard-section-card admin-panel-card compact-activity-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
                      <div className="dashboard-section-header">
                          <h3 className="dashboard-section-title">
                            <Activity size={18} className="text-blue-600" /> Recent Activity
@@ -4701,9 +4401,35 @@ function AdminDashboard() {
                          )}
                      </div>
                  </div>
-           </div>
-
-           <div id="admin-inventory" className="dashboard-section-card" style={{ margin: 0 }}>
+                <div className="dashboard-section-card admin-panel-card compact-activity-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
+            <div className="dashboard-section-header">
+              <h3 className="dashboard-section-title">
+                <History size={20} className="text-purple-600" /> Audit Log
+              </h3>
+            </div>
+            <div className="modern-list scrollable-list-y compact-list" style={{ flex: 1, minHeight: '350px', maxHeight: '350px', overflowY: 'auto' }}>
+                  {activityLogs.length === 0 ? (
+                    <div className="empty-state-sm">No audit logs.</div>
+                  ) : (
+                    activityLogs.map((log) => (
+                      <div key={log._id} className="modern-list-item compact-item-row">
+                        <div className="activity-icon-box">
+                          <FileText size={14} />
+                        </div>
+                        <div className="item-content">
+                          <div className="item-title text-sm">{log.action}</div>
+                          <div className="item-subtitle text-xs text-muted">
+                            {log.details} • {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+            </div>
+          </div>
+            </div>
+          </div>
+<div id="admin-inventory" className="dashboard-section-card" style={{ margin: 0 }}>
                <div className="dashboard-section-header">
                    <h3 className="dashboard-section-title">
                      <Pill size={20} className="text-emerald-600" /> Restock Requests (From Pharmacy)
