@@ -21,7 +21,7 @@ const PUBLIC_KNOWLEDGE = [
   {
     id: 'public-contact',
     title: 'Contact information',
-    text: 'The public contact details shown on the website include the emergency and contact number 0915 312 7144, the email address pascualgenhospi@gmail.com, and the location Pascual General Hospital, Novaliches, Quezon City, Metro Manila.'
+    text: 'The public contact details shown on the website include the emergency and contact number 0915 312 7144, the email address pascualgenhospi@gmail.com, and the location Pascual General Hospital, Novaliches, Quezon City, Metro Manila. Exact location on Google Maps: https://www.google.com/maps/place/Pascual+General+Hospital/@14.666991,121.0090838,17z'
   },
   {
     id: 'public-hours',
