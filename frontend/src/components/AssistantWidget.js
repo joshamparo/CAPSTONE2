@@ -23,6 +23,7 @@ const ROLE_QUICK_QUESTIONS = {
   public: [
     'What services does the hospital offer?',
     'Where is the hospital located?',
+    'How does the Pascualinga system work?',
     'What is the emergency contact number?',
     'What are your visiting hours?'
   ],
@@ -122,11 +123,10 @@ function getPanelMeta(pathname) {
 }
 
 function initialGreeting(role, pathname) {
-  const meta = getPanelMeta(pathname);
   if (role === 'public' || pathname === '/') {
-    return `Hello. I’m Pascualinga Assistant. I can quickly help with hospital services, contact details, location, visiting information, and public updates.`;
+    return `Hello! I’m your Pascualinga Assistant. I can help you with hospital info, services, location, or explain how our whole system works. Magtanong ka lang!`;
   }
-  return `Hello. I’m Pascualinga Assistant for ${ROLE_LABELS[role] || 'your account'}. I can guide you using role-appropriate help for this page and your workflow.`;
+  return `Hello! I’m your ${ROLE_LABELS[role] || 'User'} Assistant. I can guide you through your current dashboard and specific tasks. Ano ang matutulong ko?`;
 }
 
 export default function AssistantWidget({ pathname = '/' }) {
@@ -335,7 +335,7 @@ export default function AssistantWidget({ pathname = '/' }) {
               <div className="assistant-widget-input-row">
                 <textarea
                   className="assistant-widget-textarea"
-                  placeholder={role === 'public' ? 'Ask about services, location, contact details, or updates...' : 'Ask about your current page or workflow...'}
+                  placeholder={role === 'public' ? 'Magtanong tungkol sa ospital o sa system...' : 'Ask about your dashboard or tasks...'}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={handleKeyDown}

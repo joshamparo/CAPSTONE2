@@ -221,11 +221,20 @@ const ROLE_QUICK_ANSWERS = {
     'what are the hospital core values?': 'The homepage includes a Mission, Vision and Core Values section that presents the hospital as guided by compassionate, accessible, quality, and community-centered healthcare principles.',
     'is the emergency department open 24/7?': 'Yes. The homepage states that the emergency department is staffed 24/7, and it highlights 0915 312 7144 for urgent concerns and emergency coordination.',
     'does the hospital have a pharmacy?': 'Yes. The homepage highlights pharmacy support, safe dispensing, accessible medicine coordination, and convenient service points as part of the hospital environment.',
-    'hello': 'Hello! How can I help? You can ask about services, location, contact details, visiting info, emergency contact, and public updates.',
-    'hi': 'Hi! How can I help? You can ask about services, location, contact details, visiting info, emergency contact, and public updates.',
-    'hey': 'Hey! How can I help? You can ask about services, location, contact details, visiting info, emergency contact, and public updates.',
-    'kamusta': 'Hello! Paano ako makakatulong? Puwede kang magtanong tungkol sa services, location, contact details, emergency contact, at public updates ng ospital.',
-    'kumusta': 'Hello! Paano ako makakatulong? Puwede kang magtanong tungkol sa services, location, contact details, emergency contact, at public updates ng ospital.'
+    'hello': 'Hello! How can I help you today? You can ask about our hospital services, location, contact details, or how our Pascualinga system works.',
+    'hi': 'Hi! How can I help you today? You can ask about our hospital services, location, contact details, or how our Pascualinga system works.',
+    'hey': 'Hey there! How can I help you? You can ask about our hospital services, location, contact details, or how our Pascualinga system works.',
+    'kamusta': 'Hello! Kumusta? Paano ako makakatulong sa iyo ngayon? Maaari kang magtanong tungkol sa aming serbisyo, lokasyon, contact details, o kung paano gamitin ang Pascualinga system.',
+    'kumusta': 'Hello! Kumusta? Paano ako makakatulong sa iyo ngayon? Maaari kang magtanong tungkol sa aming serbisyo, lokasyon, contact details, o kung paano gamitin ang Pascualinga system.',
+    'good morning': 'Good morning! How can I assist you with Pascual General Hospital today?',
+    'good afternoon': 'Good afternoon! How can I assist you with Pascual General Hospital today?',
+    'good evening': 'Good evening! How can I assist you with Pascual General Hospital today?',
+    'magandang umaga': 'Magandang umaga! Paano kita matutulungan tungkol sa Pascual General Hospital?',
+    'magandang hapon': 'Magandang hapon! Paano kita matutulungan tungkol sa Pascual General Hospital?',
+    'magandang gabi': 'Magandang gabi! Paano kita matutulungan tungkol sa Pascual General Hospital?',
+    'salamat': 'Walang anuman! Masaya akong makatulong. May iba ka pa bang katanungan?',
+    'thank you': 'You\'re welcome! I\'m happy to help. Do you have any other questions?',
+    'thanks': 'You\'re welcome! I\'m happy to help. Do you have any other questions?'
   },
   admin: {
     'how do i post announcements?': 'Open the admin dashboard and go to the announcements area. From there, create or manage announcements using the admin-only controls, then confirm the post details before saving.',
@@ -489,6 +498,17 @@ function detectPublicIntent(normalized) {
     return 'what is this website for?';
   }
 
+  if (
+    normalized.includes('system') ||
+    normalized.includes('platform') ||
+    normalized.includes('how it works') ||
+    normalized.includes('paano gamitin') ||
+    normalized.includes('how to use') ||
+    normalized.includes('whole system')
+  ) {
+    return 'what can this system do?';
+  }
+
   return '';
 }
 
@@ -595,8 +615,10 @@ function detectRoleIntent(role, normalized) {
 function knowledgeEntriesForRole(role, pathname) {
   const entries = PUBLIC_KNOWLEDGE.map((item) => ({ ...item, audience: 'public' }));
 
+  // Always include system knowledge so the AI can explain the whole system even to public users
+  SYSTEM_KNOWLEDGE.forEach((item) => entries.push({ ...item, audience: 'internal' }));
+
   if (role !== 'public') {
-    SYSTEM_KNOWLEDGE.forEach((item) => entries.push({ ...item, audience: 'internal' }));
     (ROLE_GUIDES[role] || ROLE_GUIDES.staff || []).forEach((text, index) => {
       entries.push({
         id: `${role}-guide-${index + 1}`,
@@ -921,7 +943,19 @@ function localizeAssistantText(message, preferredLanguage, role) {
     ],
     [
       'The Pascualinga platform combines a public hospital website with role-based internal dashboards so visitors can access hospital information while authorized users can manage operational, administrative, and clinical workflows.',
-      'Pinagsasama ng Pascualinga platform ang public hospital website at role-based internal dashboards para makakuha ang mga bisita ng hospital information habang ang mga authorized users naman ay nakakapamahala ng operational, administrative, at clinical workflows.'
+      'Ang Pascualinga platform ay kombinasyon ng public hospital website at mga role-based internal dashboards. Dito, ang mga bisita ay makakakita ng impormasyon tungkol sa ospital, habang ang mga authorized users naman ay nakakapamahala ng operational, administrative, at clinical workflows gaya ng ER Intake, Bed Map, at Patient Records.'
+    ],
+    [
+      'The internal system is designed for role-based use by administrators, doctors, nurses, pharmacists, cashiers, doctor secretaries, medtechs, radiographers, ECG operators, physical therapists, general staff, and patient-facing accounts where applicable.',
+      'Ang system ay dinesenyo para sa iba\'t ibang roles gaya ng Admin, Doctor, Nurse, Pharmacist, Cashier, Medtech, at iba pa. Bawat role ay may kani-kaniyang dashboard para sa mas mabilis at organized na trabaho sa ospital.'
+    ],
+    [
+      'The admin side of the system includes dashboards for announcements, staff management, inventory, analytics, settings, role permissions, and operational monitoring.',
+      'Sa Admin side, may mga dashboard para sa announcements, staff management, inventory, analytics, settings, at monitoring ng buong operations ng ospital.'
+    ],
+    [
+      'The clinical side of the system supports patient queue handling, records, requests, approvals, laboratory and imaging task visibility, prescriptions, and role-specific workflow coordination.',
+      'Sa Clinical side naman, sinusuportahan nito ang patient queue, records, requests, approvals, at ang laboratory/imaging tasks para sa mas mabilis na serbisyo sa pasyente.'
     ],
     [
       'The system helps doctors manage patient queue work, records, orders, approvals, certificates, and related clinical coordination inside the authorized doctor dashboard.',
@@ -978,32 +1012,27 @@ function localAssistantReply({ role, message, pathname, preferredLanguage = 'eng
     normalized === 'kumusta' ||
     normalized === 'hello po' ||
     normalized === 'hi po' ||
-    normalized === 'hey po';
+    normalized === 'hey po' ||
+    normalized === 'salamat' ||
+    normalized === 'thank you' ||
+    normalized === 'thanks' ||
+    normalized === 'magandang umaga' ||
+    normalized === 'magandang hapon' ||
+    normalized === 'magandang gabi';
 
   if (isGreeting) {
-    if (effectiveLanguage === 'tagalog') {
-      return {
-        answer:
-          role === 'public'
-            ? 'Hello! Paano ako makakatulong? Puwede kang magtanong tungkol sa services, location, contact details, visiting info, emergency contact, at public updates ng ospital.'
-            : `Hello! Nandito ako para tumulong. Sabihin mo lang kung anong module o task ang ginagawa mo sa page na ito at gagabayan kita step-by-step (base sa role mo).`,
-        source: 'knowledge',
-        grounded: true,
-        suggestions: role === 'public'
-          ? ['Services', 'Location', 'Contact details', 'Emergency number', 'Public updates']
-          : ['Appointments', 'Billing', 'Patients', 'Inventory', 'Announcements']
-      };
-    }
+    const greetingKey = normalized.includes('salamat') || normalized.includes('thank') ? 'thank you' : (normalized.includes('kamusta') || normalized.includes('kumusta') ? 'kamusta' : (normalized.includes('umaga') ? 'magandang umaga' : (normalized.includes('hapon') ? 'magandang hapon' : (normalized.includes('gabi') ? 'magandang gabi' : 'hello'))));
+    
+    // For local fallback, we pick the best translation from our pool
+    const pool = ROLE_QUICK_ANSWERS.public;
+    const answer = pool[normalized] || pool[greetingKey] || pool['hello'];
 
     return {
-      answer:
-        role === 'public'
-          ? 'Hello! How can I help? You can ask about services, location, contact details, visiting info, emergency contact, and public updates.'
-          : 'Hello! Tell me what module or task you are doing on this page and I’ll guide you with role-appropriate steps.',
+      answer: localizeAssistantText(answer, effectiveLanguage, role),
       source: 'knowledge',
       grounded: true,
       suggestions: role === 'public'
-        ? ['Services', 'Location', 'Contact details', 'Emergency number', 'Public updates']
+        ? ['Services', 'Location', 'Contact details', 'Emergency number', 'How the system works']
         : ['Appointments', 'Billing', 'Patients', 'Inventory', 'Announcements']
     };
   }
@@ -1088,8 +1117,8 @@ function buildSystemPrompt({ role, pathname, preferredLanguage }) {
     'If the question is outside scope or the answer is uncertain, say so clearly and redirect politely.',
     'Keep answers concise, professional, and helpful.',
     preferredLanguage === 'tagalog'
-      ? 'The user is writing in Tagalog or Taglish. Reply in natural Tagalog or clear Taglish, while keeping hospital names, module names, and system labels unchanged when needed.'
-      : 'Reply in English unless the user clearly asks in another language.',
+      ? 'CRITICAL: The user is writing in Tagalog or Taglish. You MUST reply ONLY in Tagalog or natural Taglish. Do NOT use English unless for specific technical labels.'
+      : 'CRITICAL: The user is writing in English. You MUST reply ONLY in English. Do NOT use Tagalog.',
     'Use only the grounded context below.',
     gatherContext(role, pathname)
   ].join('\n\n');
