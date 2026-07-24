@@ -147,13 +147,15 @@ export default function PatientFullRecordModal({
   const serviceRequests = Array.isArray(record?.requests) ? record.requests : [];
   const timeline = Array.isArray(record?.timeline) ? record.timeline : [];
   const walkIns = Array.isArray(record?.clinicalRecords?.walkInIntakes) ? record.clinicalRecords.walkInIntakes : [];
+  const erRegistration = record?.clinicalRecords?.erRegistration;
   const emergencyContacts = readEmergencyContacts(patient);
 
   const tabs = [
     { key: 'overview', label: 'Overview', icon: <UserRound size={16} /> },
-    { key: 'encounters', label: 'Encounters', icon: <Activity size={16} /> },
+    { key: 'vitals', label: 'Vitals & Triage', icon: <Activity size={16} /> },
+    { key: 'encounters', label: 'Encounters', icon: <Stethoscope size={16} /> },
     { key: 'timeline', label: 'Timeline', icon: <ClipboardList size={16} /> },
-    ...(canSeeNotes(role) ? [{ key: 'notes', label: 'Clinical Notes', icon: <Stethoscope size={16} /> }] : []),
+    ...(canSeeNotes(role) ? [{ key: 'notes', label: 'Clinical Notes', icon: <FileText size={16} /> }] : []),
     { key: 'orders', label: 'Orders & Results', icon: <FlaskConical size={16} /> },
     { key: 'prescriptions', label: 'Prescriptions', icon: <FileText size={16} /> },
     { key: 'admission', label: 'Admission', icon: <Receipt size={16} /> },
@@ -519,6 +521,84 @@ export default function PatientFullRecordModal({
                       </div>
                     )}
                   </section>
+                </div>
+              ) : null}
+
+              {tab === 'vitals' ? (
+                <div className="patient-record-grid">
+                  {erRegistration && erRegistration.vitals ? (
+                    <section className="patient-record-card full-width" style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)' }}>
+                      <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Latest ER Vitals</span>
+                        <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 'normal' }}>{fmtDateTime(erRegistration.createdAt)}</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px', marginTop: '16px' }}>
+                        <div style={{ padding: '16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px' }}>Blood Pressure</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 900, color: erRegistration.triage?.reasons?.includes('Critical Blood Pressure') ? '#dc2626' : '#0f172a' }}>
+                            {erRegistration.vitals.bloodPressure || DASH} <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>mmHg</span>
+                          </div>
+                        </div>
+                        <div style={{ padding: '16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px' }}>Heart Rate</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 900, color: erRegistration.triage?.reasons?.includes('Abnormal Heart Rate') ? '#dc2626' : '#0f172a' }}>
+                            {erRegistration.vitals.heartRate || DASH} <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>bpm</span>
+                          </div>
+                        </div>
+                        <div style={{ padding: '16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px' }}>Temperature</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 900, color: erRegistration.triage?.reasons?.includes('Abnormal Temperature') ? '#dc2626' : '#0f172a' }}>
+                            {erRegistration.vitals.temperature || DASH} <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>°C</span>
+                          </div>
+                        </div>
+                        <div style={{ padding: '16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px' }}>SpO2</div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 900, color: erRegistration.triage?.reasons?.includes('Low Oxygen Saturation') ? '#dc2626' : '#0f172a' }}>
+                            {erRegistration.vitals.spo2 || DASH} <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>%</span>
+                          </div>
+                        </div>
+                      </div>
+                      {erRegistration.triage && (
+                        <div style={{ marginTop: '20px', padding: '16px', borderRadius: '12px', background: '#fff', border: '1px solid #e2e8f0' }}>
+                          <strong style={{ fontSize: '0.85rem', color: '#475569', textTransform: 'uppercase' }}>Triage Assessment:</strong>
+                          <div style={{ display: 'flex', gap: '12px', marginTop: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <span style={{ padding: '6px 12px', borderRadius: '8px', background: erRegistration.triage.level <= 2 ? '#fee2e2' : '#f1f5f9', color: erRegistration.triage.level <= 2 ? '#b91c1c' : '#475569', fontWeight: 800, fontSize: '0.85rem' }}>
+                              Level {erRegistration.triage.level} ({erRegistration.triage.label})
+                            </span>
+                            {erRegistration.triage.reasons?.map((reason, i) => (
+                              <span key={i} style={{ fontSize: '0.85rem', color: '#dc2626', background: '#fff', border: '1px solid #fecaca', padding: '4px 10px', borderRadius: '6px' }}>⚠️ {reason}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </section>
+                  ) : (
+                    <div className="patient-record-card full-width">
+                      {sectionEmpty('No ER vitals recorded.')}
+                    </div>
+                  )}
+
+                  {walkIns.length > 0 && (
+                    <section className="patient-record-card full-width">
+                      <div className="card-title">Walk-In Intake History</div>
+                      <div className="patient-record-list compact">
+                        {walkIns.map((w, idx) => (
+                          <div key={idx} className="patient-record-list-item">
+                            <div className="list-head">
+                              <strong>{w.mainConcern || 'Walk-in Intake'}</strong>
+                              <span>{fmtDateTime(w.createdAt)}</span>
+                            </div>
+                            <div className="list-meta" style={{ marginTop: '12px', display: 'flex', gap: '16px', background: '#fff', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                               {w.vitals?.bloodPressure && <div><span style={{color: '#94a3b8', fontSize: '0.75rem', textTransform:'uppercase', fontWeight: 700}}>BP</span> <strong style={{color:'#0f172a', display:'block'}}>{w.vitals.bloodPressure}</strong></div>}
+                               {w.vitals?.heartRate && <div><span style={{color: '#94a3b8', fontSize: '0.75rem', textTransform:'uppercase', fontWeight: 700}}>HR</span> <strong style={{color:'#0f172a', display:'block'}}>{w.vitals.heartRate} bpm</strong></div>}
+                               {w.vitals?.temperature && <div><span style={{color: '#94a3b8', fontSize: '0.75rem', textTransform:'uppercase', fontWeight: 700}}>Temp</span> <strong style={{color:'#0f172a', display:'block'}}>{w.vitals.temperature} °C</strong></div>}
+                               {w.vitals?.spo2 && <div><span style={{color: '#94a3b8', fontSize: '0.75rem', textTransform:'uppercase', fontWeight: 700}}>SpO2</span> <strong style={{color:'#0f172a', display:'block'}}>{w.vitals.spo2} %</strong></div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
                 </div>
               ) : null}
 

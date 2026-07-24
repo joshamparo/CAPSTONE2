@@ -6106,44 +6106,45 @@ function NurseDashboard() {
                     </div>
 
                     <div className="shift-cards-grid">
-                        <div className="overview-card shift-status-card">
-                            <div className="card-header">
-                                <h3>Current Shift</h3>
-                                <span className="badge-status inpatient">Active</span>
+                        <div className="overview-card shift-status-card" style={{ background: 'linear-gradient(135deg, #ea580c 0%, #c2410c 100%)', color: 'white', border: 'none' }}>
+                            <div className="card-header" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                <h3 style={{ color: 'white' }}>Current Shift</h3>
+                                <span className="badge-status" style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none' }}>Active</span>
                             </div>
                             <div className="shift-details">
-                                <div className="shift-time-large">{currentShiftLabel}</div>
-                                <div className="shift-meta">
+                                <div className="shift-time-large" style={{ color: 'white', fontSize: '2rem', fontWeight: 900 }}>{currentShiftLabel}</div>
+                                <div className="shift-meta" style={{ color: 'rgba(255,255,255,0.9)' }}>
                                     <span style={{display:'flex', gap:'8px', alignItems:'center'}}><User size={16}/>{user.departmentLabel || formatDepartmentLabel(activeDept)}</span>
                                     <span style={{display:'flex', gap:'8px', alignItems:'center'}}><Calendar size={16}/> {new Date().toLocaleDateString()}</span>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="overview-card">
+                        <div className="overview-card" style={{ border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
                             <div className="card-header">
                                 <h3>Shared Handover</h3>
                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                     {handoverHistory[0]?.status === 'acknowledged' ? (
                                         <span className="badge-status paid">Acknowledged</span>
                                     ) : null}
-                                    <button className="btn-gray" type="button" onClick={saveHandoverNote} disabled={handoverSaving || handoverLoading}>
-                                        <Save size={14} /> {handoverSaving ? 'Saving...' : 'Save'}
+                                    <button className="btn-gray" type="button" onClick={saveHandoverNote} disabled={handoverSaving || handoverLoading} style={{ padding: '6px 12px' }}>
+                                        <Save size={14} /> {handoverSaving ? 'Saving...' : 'Save Notes'}
                                     </button>
                                 </div>
                             </div>
                             <textarea 
                                 className="box-input box-textarea" 
-                                style={{height: '120px', border: 'none', background: '#f8fafc', resize: 'none'}}
+                                style={{height: '120px', border: '1px solid #cbd5e1', background: '#f8fafc', resize: 'none', borderRadius: '12px', padding: '16px', fontSize: '0.95rem'}}
                                 value={shiftNotes}
                                 onChange={(e) => setShiftNotes(e.target.value)}
                                 placeholder="Write the live shift handover for the next nurse..."
                             />
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginTop: '12px', alignItems: 'center' }}>
-                                <div style={{ fontSize: '0.86rem', color: '#64748b' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginTop: '16px', alignItems: 'center' }}>
+                                <div style={{ fontSize: '0.86rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <Clock size={14} />
                                     {handoverHistory[0]?.created_by_name ? `Latest by ${handoverHistory[0].created_by_name}` : 'No saved handover yet.'}
                                 </div>
-                                <button className="btn-gray" type="button" onClick={acknowledgeHandover} disabled={!handoverId || handoverAcknowledging}>
+                                <button className="btn-gray" type="button" onClick={acknowledgeHandover} disabled={!handoverId || handoverAcknowledging} style={{ padding: '6px 12px' }}>
                                     <Check size={14} /> {handoverAcknowledging ? 'Acknowledging...' : 'Acknowledge'}
                                 </button>
                         </div>
@@ -7413,18 +7414,22 @@ function NurseDashboard() {
                                 <span className="col-count">{tasks.filter(t => t.priority === 'urgent').length}</span>
                             </div>
                             <div className="kanban-list">
-                                {tasks.filter(t => t.priority === 'urgent').map(task => (
-                                    <div key={task.id} className="kanban-card card-urgent">
-                                        <div className="card-top">
-                                            <span className="card-time">{task.time}</span>
-                                            <button className="btn-icon-small" onClick={() => deleteTask(task.id)}><X size={14} /></button>
+                                {tasks.filter(t => t.priority === 'urgent').length === 0 ? (
+                                    <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', border: '1px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc', fontSize: '0.85rem' }}>No urgent tasks.</div>
+                                ) : (
+                                    tasks.filter(t => t.priority === 'urgent').map(task => (
+                                        <div key={task.id} className="kanban-card card-urgent">
+                                            <div className="card-top">
+                                                <span className="card-time">{task.time}</span>
+                                                <button className="btn-icon-small" onClick={() => deleteTask(task.id)}><X size={14} /></button>
+                                            </div>
+                                            <p className="card-text">{task.text}</p>
+                                            <div className="card-actions">
+                                                <button className="btn-move" onClick={() => moveTask(task.id, 'routine')}>→</button>
+                                            </div>
                                         </div>
-                                        <p className="card-text">{task.text}</p>
-                                        <div className="card-actions">
-                                            <button className="btn-move" onClick={() => moveTask(task.id, 'routine')}>→</button>
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         </div>
 
@@ -7436,19 +7441,23 @@ function NurseDashboard() {
                                 <span className="col-count">{tasks.filter(t => t.priority === 'routine').length}</span>
                             </div>
                             <div className="kanban-list">
-                                {tasks.filter(t => t.priority === 'routine').map(task => (
-                                    <div key={task.id} className="kanban-card card-routine">
-                                        <div className="card-top">
-                                            <span className="card-time">{task.time}</span>
-                                            <button className="btn-icon-small" onClick={() => deleteTask(task.id)}><X size={14} /></button>
+                                {tasks.filter(t => t.priority === 'routine').length === 0 ? (
+                                    <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', border: '1px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc', fontSize: '0.85rem' }}>No routine tasks.</div>
+                                ) : (
+                                    tasks.filter(t => t.priority === 'routine').map(task => (
+                                        <div key={task.id} className="kanban-card card-routine">
+                                            <div className="card-top">
+                                                <span className="card-time">{task.time}</span>
+                                                <button className="btn-icon-small" onClick={() => deleteTask(task.id)}><X size={14} /></button>
+                                            </div>
+                                            <p className="card-text">{task.text}</p>
+                                            <div className="card-actions">
+                                                <button className="btn-move" onClick={() => moveTask(task.id, 'urgent')}>←</button>
+                                                <button className="btn-move" onClick={() => moveTask(task.id, 'handover')}>→</button>
+                                            </div>
                                         </div>
-                                        <p className="card-text">{task.text}</p>
-                                        <div className="card-actions">
-                                            <button className="btn-move" onClick={() => moveTask(task.id, 'urgent')}>←</button>
-                                            <button className="btn-move" onClick={() => moveTask(task.id, 'handover')}>→</button>
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         </div>
 
@@ -7460,18 +7469,22 @@ function NurseDashboard() {
                                 <span className="col-count">{tasks.filter(t => t.priority === 'handover').length}</span>
                             </div>
                             <div className="kanban-list">
-                                {tasks.filter(t => t.priority === 'handover').map(task => (
-                                    <div key={task.id} className="kanban-card card-handover">
-                                        <div className="card-top">
-                                            <span className="card-time">{task.time}</span>
-                                            <button className="btn-icon-small" onClick={() => deleteTask(task.id)}><X size={14} /></button>
+                                {tasks.filter(t => t.priority === 'handover').length === 0 ? (
+                                    <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', border: '1px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc', fontSize: '0.85rem' }}>No handover tasks.</div>
+                                ) : (
+                                    tasks.filter(t => t.priority === 'handover').map(task => (
+                                        <div key={task.id} className="kanban-card card-handover">
+                                            <div className="card-top">
+                                                <span className="card-time">{task.time}</span>
+                                                <button className="btn-icon-small" onClick={() => deleteTask(task.id)}><X size={14} /></button>
+                                            </div>
+                                            <p className="card-text">{task.text}</p>
+                                            <div className="card-actions">
+                                                <button className="btn-move" onClick={() => moveTask(task.id, 'routine')}>←</button>
+                                            </div>
                                         </div>
-                                        <p className="card-text">{task.text}</p>
-                                        <div className="card-actions">
-                                            <button className="btn-move" onClick={() => moveTask(task.id, 'routine')}>←</button>
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         </div>
                     </div>
@@ -8598,56 +8611,60 @@ function NurseDashboard() {
                       </div>
 
                       {clinicalUpdateFormData.type === 'Vitals' && (
-                        <div className="form-grid-2-col">
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
                           <div className="input-group">
-                            <label>Blood Pressure</label>
+                            <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Blood Pressure (mmHg)</label>
                             <input
                               type="text"
                               name="bloodPressure"
                               value={clinicalUpdateFormData.bloodPressure}
                               onChange={handleClinicalUpdateChange}
-                              placeholder="120/80"
+                              placeholder="e.g. 120/80"
                               className="box-input"
+                              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '12px' }}
                             />
                           </div>
                           <div className="input-group">
-                            <label>Heart Rate</label>
+                            <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Heart Rate (bpm)</label>
                             <input
                               type="text"
                               name="heartRate"
                               value={clinicalUpdateFormData.heartRate}
                               onChange={handleClinicalUpdateChange}
-                              placeholder="75"
+                              placeholder="e.g. 75"
                               className="box-input"
+                              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '12px' }}
                             />
                           </div>
                           <div className="input-group">
-                            <label>Temp (°C)</label>
+                            <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Temperature (°C)</label>
                             <input
                               type="text"
                               name="temperature"
                               value={clinicalUpdateFormData.temperature}
                               onChange={handleClinicalUpdateChange}
-                              placeholder="36.5"
+                              placeholder="e.g. 36.5"
                               className="box-input"
+                              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '12px' }}
                             />
                           </div>
                           <div className="input-group">
-                            <label>Resp. Rate</label>
+                            <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Resp. Rate (cpm)</label>
                             <input
                               type="text"
                               name="respiratoryRate"
                               value={clinicalUpdateFormData.respiratoryRate}
                               onChange={handleClinicalUpdateChange}
-                              placeholder="16"
+                              placeholder="e.g. 16"
                               className="box-input"
+                              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '12px' }}
                             />
                           </div>
                         </div>
                       )}
                   </div>
 
-                  <div className="detail-item full">
+                  <div className="detail-item full" style={{ marginTop: '20px' }}>
                     <h4 className="detail-label" style={{borderBottom: '1px solid #e2e8f0', paddingBottom: '8px', marginBottom: '16px'}}>Clinical Notes</h4>
                     <div className="input-group">
                         <textarea
@@ -8657,7 +8674,7 @@ function NurseDashboard() {
                           placeholder="Enter observation details..."
                           required
                           className="box-input box-textarea"
-                          style={{minHeight: '100px'}}
+                          style={{minHeight: '120px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px'}}
                         />
                     </div>
                   </div>
