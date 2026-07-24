@@ -1093,6 +1093,7 @@ function AdminDashboard() {
   // Ward/Bed Status State (Initialized empty, fetched from API)
   const [wardStatus, setWardStatus] = useState([]);
   const [selectedWardCapacity, setSelectedWardCapacity] = useState('all');
+  const [wardCapacitySection, setWardCapacitySection] = useState('overview');
   const [wardRoomRegistry, setWardRoomRegistry] = useState({ wards: [], rooms: [], totals: null });
   const [selectedWardRoomId, setSelectedWardRoomId] = useState('');
   const [roomEditor, setRoomEditor] = useState({ roomCode: '', wardName: '', status: 'Available', note: '' });
@@ -1257,6 +1258,7 @@ function AdminDashboard() {
         status: 'Available',
         note: ''
       });
+      setWardCapacitySection('rooms');
       setSelectedWardRoomId(String(created?.id || ''));
       const createdWard = (Array.isArray(registry?.wards) ? registry.wards : []).find((ward) => normalizeWardName(ward.name) === normalizeWardName(created?.wardName));
       setSelectedWardCapacity(createdWard ? String(createdWard.id) : 'all');
@@ -3540,6 +3542,176 @@ function AdminDashboard() {
         { key: 'open-reports', label: 'Open Reports', description: 'Jump to analytics, reports, and exports.', icon: <ClipboardList size={18} />, onClick: () => setView('reports') }
       ];
 
+      const renderAnnouncementsPanel = (extraClassName = '') => (
+        <div className={`dashboard-section-card ${extraClassName}`.trim()}>
+          <div className="dashboard-section-header">
+            <h3 className="dashboard-section-title">
+              <Megaphone size={20} className="text-orange-600" /> Announcements
+            </h3>
+          </div>
+          <div className="announcement-input-area">
+            <input
+              type="text"
+              placeholder="Announcement Title"
+              className="announcement-input"
+              value={newAnnouncement.title}
+              onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
+            />
+            <div className="announcement-actions">
+              <select
+                className="announcement-select"
+                value={newAnnouncement.priority}
+                onChange={(e) => setNewAnnouncement({ ...newAnnouncement, priority: e.target.value })}
+              >
+                <option value="Normal">Normal</option>
+                <option value="Urgent">Urgent</option>
+                <option value="Info">Info</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Message content..."
+                className="announcement-input flex-grow"
+                value={newAnnouncement.content}
+                onChange={(e) => setNewAnnouncement({ ...newAnnouncement, content: e.target.value })}
+              />
+              <select
+                className="announcement-select"
+                value={announcementTargets[0] || ''}
+                onChange={(e) => setAnnouncementTargets([e.target.value])}
+              >
+                <option value="">All</option>
+                <option value="Doctor">Doctor</option>
+                <option value="Nurse">Nurse</option>
+                <option value="Staff">Staff</option>
+              </select>
+              <select
+                className="announcement-select"
+                value={announcementExpiryDays}
+                onChange={(e) => setAnnouncementExpiryDays(e.target.value)}
+              >
+                <option value="">No expiry</option>
+                <option value="1">1 day</option>
+                <option value="7">7 days</option>
+                <option value="30">30 days</option>
+              </select>
+              <label className="ann-pin-toggle">
+                <input
+                  type="checkbox"
+                  checked={announcementPinned}
+                  onChange={(e) => setAnnouncementPinned(e.target.checked)}
+                />
+                <span>Pin</span>
+              </label>
+              <button className="btn-orange-sm" onClick={handlePostAnnouncement}>Post</button>
+            </div>
+          </div>
+          <div className="announcement-list">
+            {announcementsError ? (
+              <div className="empty-state-sm">{announcementsError}</div>
+            ) : announcements.length === 0 ? (
+              <div className="empty-state-sm">No announcements yet.</div>
+            ) : (
+              (() => {
+                const sorted = [...announcements].sort((a, b) => {
+                  const ap = a.pinned ? 1 : 0;
+                  const bp = b.pinned ? 1 : 0;
+                  if (ap !== bp) return bp - ap;
+                  const at = new Date(a.createdAt || a.created_at || 0).getTime();
+                  const bt = new Date(b.createdAt || b.created_at || 0).getTime();
+                  return bt - at;
+                });
+                const perPage = 3;
+                const totalPages = Math.max(1, Math.ceil(sorted.length / perPage));
+                if (announcementsPage > totalPages) {
+                  setTimeout(() => setAnnouncementsPage(totalPages), 0);
+                }
+                const safePage = Math.min(announcementsPage, totalPages);
+                const start = (safePage - 1) * perPage;
+                const end = start + perPage;
+                const paginated = sorted.slice(start, end);
+
+                return (
+                  <>
+                    {paginated.map((ann) => {
+                      const id = ann.id || ann._id;
+                      const priority = String(ann.priority || 'Normal');
+                      const pinned = Boolean(ann.pinned);
+                      const expiresAt = ann.expiresAt || ann.expires_at || null;
+                      const createdAt = ann.createdAt || ann.created_at;
+                      const createdText = createdAt ? new Date(createdAt).toLocaleDateString() : '';
+                      const expText = expiresAt ? new Date(expiresAt).toLocaleDateString() : '';
+                      const target = ann.target || 'All';
+
+                      return (
+                        <div key={String(id)} className={`announcement-card priority-${priority.toLowerCase()} ${pinned ? 'ann-pinned' : ''}`}>
+                          <div className="announcement-header">
+                            <span className="ann-title">{ann.title}</span>
+                            <div className="ann-badges">
+                              {pinned && <span className="ann-badge badge-pinned">Pinned</span>}
+                              <span className={`ann-badge badge-${priority.toLowerCase()}`}>{priority}</span>
+                            </div>
+                          </div>
+                          <p className="ann-content">{ann.content}</p>
+                          <div className="ann-footer">
+                            <span className="ann-meta">Posted by {ann.author || 'Admin'}{createdText ? ` • ${createdText}` : ''}</span>
+                            <span className="ann-meta">Target: {target}</span>
+                            {expText ? <span className="ann-meta">Expires: {expText}</span> : null}
+                            <div className="ann-footer-actions">
+                              <button type="button" className="ann-pin-btn" onClick={() => setViewingAnnouncement(ann)}>
+                                View
+                              </button>
+                              <button
+                                type="button"
+                                className="ann-pin-btn"
+                                onClick={() => updateAnnouncement(id, { pinned: !pinned })}
+                              >
+                                {pinned ? 'Unpin' : 'Pin'}
+                              </button>
+                              {expiresAt ? (
+                                <button type="button" className="ann-pin-btn" onClick={() => updateAnnouncement(id, { expiresAt: null })}>
+                                  Clear expiry
+                                </button>
+                              ) : null}
+                              <button
+                                onClick={() => setAnnouncementDeleteConfirmation({ id, title: ann.title })}
+                                className="ann-delete-btn"
+                                type="button"
+                                title="Delete announcement"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {totalPages > 1 && (
+                      <div className="announcement-pagination">
+                        <button
+                          className="ann-pin-btn"
+                          disabled={safePage === 1}
+                          onClick={() => setAnnouncementsPage(p => Math.max(1, p - 1))}
+                        >
+                          Previous
+                        </button>
+                        <span className="pagination-info">Page {safePage} of {totalPages}</span>
+                        <button
+                          className="ann-pin-btn"
+                          disabled={safePage === totalPages}
+                          onClick={() => setAnnouncementsPage(p => Math.min(totalPages, p + 1))}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </>
+                );
+              })()
+            )}
+          </div>
+        </div>
+      );
+
 
       return (
         <div className="staff-management-container admin-dashboard-shell" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -3598,64 +3770,137 @@ function AdminDashboard() {
                   </h3>
                 </div>
 
-                <div className="ward-capacity-summary-grid">
-                  <div className="ward-capacity-stat-card">
-                    <span className="ward-capacity-stat-label">Total Rooms</span>
-                    <strong className="ward-capacity-stat-value">{wardCapacityBoard.totalRooms}</strong>
-                    <span className="ward-capacity-stat-meta">Hospital-wide room inventory</span>
-                  </div>
-                  <div className="ward-capacity-stat-card">
-                    <span className="ward-capacity-stat-label">Occupied</span>
-                    <strong className="ward-capacity-stat-value">{wardCapacityBoard.occupiedRooms}</strong>
-                    <span className="ward-capacity-stat-meta">Patients currently assigned</span>
-                  </div>
-                  <div className="ward-capacity-stat-card">
-                    <span className="ward-capacity-stat-label">Available</span>
-                    <strong className="ward-capacity-stat-value">{wardCapacityBoard.availableRooms}</strong>
-                    <span className="ward-capacity-stat-meta">Ready for new admissions</span>
-                  </div>
-                  <div className="ward-capacity-stat-card">
-                    <span className="ward-capacity-stat-label">Room Holds</span>
-                    <strong className="ward-capacity-stat-value">
-                      {Number(wardCapacityBoard.reservedRooms || 0) + Number(wardCapacityBoard.cleaningRooms || 0) + Number(wardCapacityBoard.maintenanceRooms || 0)}
-                    </strong>
-                    <span className="ward-capacity-stat-meta">
-                      {wardCapacityBoard.overflowRooms > 0
-                        ? `${wardCapacityBoard.overflowRooms} overflow patient${wardCapacityBoard.overflowRooms > 1 ? 's' : ''} to review`
-                        : `${wardCapacityBoard.criticalWards} ward${wardCapacityBoard.criticalWards !== 1 ? 's' : ''} at 80% occupancy or higher`}
-                    </span>
-                  </div>
-                </div>
-
                 <div className="ward-capacity-toolbar">
                   <div>
-                    <div className="ward-capacity-toolbar-title">25-room live occupancy board</div>
+                    <div className="ward-capacity-toolbar-title">
+                      {wardCapacitySection === 'overview' ? 'Ward capacity overview' : 'All ward rooms'}
+                    </div>
                     <div className="ward-capacity-toolbar-subtitle">
-                      Occupied rooms stay patient-driven. Admin can manage reserved, cleaning, and maintenance room states here.
+                      {wardCapacitySection === 'overview'
+                        ? 'Use the overview first, then open the room board on the next page when you need room-level control.'
+                        : 'Occupied rooms stay patient-driven. Admin can manage reserved, cleaning, and maintenance room states here.'}
                     </div>
                   </div>
                   <div className="ward-capacity-toolbar-actions">
                     <button
                       type="button"
-                      className={`ward-capacity-filter-btn ${selectedWardCapacity === 'all' ? 'active' : ''}`}
-                      onClick={() => setSelectedWardCapacity('all')}
+                      className={`ward-capacity-filter-btn ${wardCapacitySection === 'overview' ? 'active' : ''}`}
+                      onClick={() => {
+                        setWardCapacitySection('overview');
+                        setShowAddRoomForm(false);
+                        setSelectedWardRoomId('');
+                      }}
                     >
-                      Show all rooms
+                      Overview
                     </button>
                     <button
                       type="button"
-                      className={`ward-capacity-filter-btn ${showAddRoomForm ? 'active' : ''}`}
+                      className={`ward-capacity-filter-btn ${wardCapacitySection === 'rooms' ? 'active' : ''}`}
                       onClick={() => {
-                        setShowAddRoomForm((prev) => !prev);
-                        setNewRoomError('');
+                        setSelectedWardCapacity('all');
+                        setSelectedWardRoomId('');
+                        setShowAddRoomForm(false);
+                        setWardCapacitySection('rooms');
                       }}
                     >
-                      {showAddRoomForm ? 'Close add room' : 'Add room'}
+                      All ward rooms
                     </button>
+                    {wardCapacitySection === 'rooms' ? (
+                      <button
+                        type="button"
+                        className={`ward-capacity-filter-btn ${showAddRoomForm ? 'active' : ''}`}
+                        onClick={() => {
+                          setShowAddRoomForm((prev) => !prev);
+                          setNewRoomError('');
+                        }}
+                      >
+                        {showAddRoomForm ? 'Close add room' : 'Add room'}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
 
-                {showAddRoomForm && (
+                {wardCapacitySection === 'overview' ? (
+                  <>
+                    <div className="ward-capacity-summary-grid">
+                      <div className="ward-capacity-stat-card">
+                        <span className="ward-capacity-stat-label">Total Rooms</span>
+                        <strong className="ward-capacity-stat-value">{wardCapacityBoard.totalRooms}</strong>
+                        <span className="ward-capacity-stat-meta">Hospital-wide room inventory</span>
+                      </div>
+                      <div className="ward-capacity-stat-card">
+                        <span className="ward-capacity-stat-label">Occupied</span>
+                        <strong className="ward-capacity-stat-value">{wardCapacityBoard.occupiedRooms}</strong>
+                        <span className="ward-capacity-stat-meta">Patients currently assigned</span>
+                      </div>
+                      <div className="ward-capacity-stat-card">
+                        <span className="ward-capacity-stat-label">Available</span>
+                        <strong className="ward-capacity-stat-value">{wardCapacityBoard.availableRooms}</strong>
+                        <span className="ward-capacity-stat-meta">Ready for new admissions</span>
+                      </div>
+                      <div className="ward-capacity-stat-card">
+                        <span className="ward-capacity-stat-label">Room Holds</span>
+                        <strong className="ward-capacity-stat-value">
+                          {Number(wardCapacityBoard.reservedRooms || 0) + Number(wardCapacityBoard.cleaningRooms || 0) + Number(wardCapacityBoard.maintenanceRooms || 0)}
+                        </strong>
+                        <span className="ward-capacity-stat-meta">
+                          {wardCapacityBoard.overflowRooms > 0
+                            ? `${wardCapacityBoard.overflowRooms} overflow patient${wardCapacityBoard.overflowRooms > 1 ? 's' : ''} to review`
+                            : `${wardCapacityBoard.criticalWards} ward${wardCapacityBoard.criticalWards !== 1 ? 's' : ''} at 80% occupancy or higher`}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="ward-grid ward-capacity-grid">
+                      {wardCapacityBoard.wards.map((ward) => (
+                        <button
+                          key={ward.id}
+                          type="button"
+                          className={`ward-card ward-capacity-card ${selectedWardCapacity === ward.id ? 'active' : ''}`}
+                          onClick={() => {
+                            setSelectedWardCapacity(ward.id);
+                            setSelectedWardRoomId('');
+                            setShowAddRoomForm(false);
+                            setWardCapacitySection('rooms');
+                          }}
+                        >
+                          <div className="ward-capacity-card-topline">
+                            <span className="ward-name">{ward.name}</span>
+                            <span
+                              className="ward-capacity-badge"
+                              style={{ color: ward.color, borderColor: `${ward.color}33`, background: `${ward.color}14` }}
+                            >
+                              {ward.statusLabel}
+                            </span>
+                          </div>
+                          <div className="ward-info">
+                            <span className="ward-count">{ward.occupied}/{ward.total} occupied</span>
+                            <span className="ward-capacity-available">{ward.available} open</span>
+                          </div>
+                          <div className="progress-bar-bg">
+                            <div
+                              className="progress-fill"
+                              style={{
+                                width: `${ward.ratio * 100}%`,
+                                backgroundColor: ward.color
+                              }}
+                            ></div>
+                          </div>
+                          <div className="ward-capacity-footer">
+                            <span>{Math.round(ward.ratio * 100)}% in use</span>
+                            {ward.overflow > 0 ? (
+                              <span className="ward-capacity-overflow">+{ward.overflow} overflow</span>
+                            ) : (
+                              <span>Open room board</span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+
+                {wardCapacitySection === 'rooms' && showAddRoomForm && (
                   <div className="ward-room-editor">
                     <div className="ward-room-editor-header">
                       <div>
@@ -3716,49 +3961,7 @@ function AdminDashboard() {
                     </div>
                   </div>
                 )}
-
-                <div className="ward-grid ward-capacity-grid">
-                  {wardCapacityBoard.wards.map((ward) => (
-                    <button
-                      key={ward.id}
-                      type="button"
-                      className={`ward-card ward-capacity-card ${selectedWardCapacity === ward.id ? 'active' : ''}`}
-                      onClick={() => setSelectedWardCapacity(ward.id)}
-                    >
-                      <div className="ward-capacity-card-topline">
-                        <span className="ward-name">{ward.name}</span>
-                        <span
-                          className="ward-capacity-badge"
-                          style={{ color: ward.color, borderColor: `${ward.color}33`, background: `${ward.color}14` }}
-                        >
-                          {ward.statusLabel}
-                        </span>
-                      </div>
-                      <div className="ward-info">
-                        <span className="ward-count">{ward.occupied}/{ward.total} occupied</span>
-                        <span className="ward-capacity-available">{ward.available} open</span>
-                      </div>
-                      <div className="progress-bar-bg">
-                        <div
-                          className="progress-fill"
-                          style={{
-                            width: `${ward.ratio * 100}%`,
-                            backgroundColor: ward.color
-                          }}
-                        ></div>
-                      </div>
-                      <div className="ward-capacity-footer">
-                        <span>{Math.round(ward.ratio * 100)}% in use</span>
-                        {ward.overflow > 0 ? (
-                          <span className="ward-capacity-overflow">+{ward.overflow} overflow</span>
-                        ) : (
-                          <span>Room drilldown ready</span>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
+                {wardCapacitySection === 'rooms' ? (
                 <div className="ward-room-board">
                   <div className="ward-room-board-header">
                     <div>
@@ -3881,6 +4084,7 @@ function AdminDashboard() {
                     </div>
                   ) : null}
                 </div>
+                ) : null}
               </div>
 
               <div className="dashboard-section-card admin-panel-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
@@ -3933,6 +4137,8 @@ function AdminDashboard() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              {renderAnnouncementsPanel('admin-panel-card admin-dashboard-announcements')}
+
               <div className="dashboard-section-card admin-panel-card" style={{ margin: 0 }}>
                 <div className="dashboard-section-header">
                   <h3 className="dashboard-section-title">
@@ -4036,7 +4242,7 @@ function AdminDashboard() {
             </div>
           </div>
           {/* Analytics Row */}
-          <div className="admin-analytics-row">
+          <div className="admin-analytics-row admin-analytics-row-single">
               <div className="admin-analytics-left">
                 <div className="dashboard-section-card analytics-card" style={{ height: 'auto' }}>
                   <div className="dashboard-section-header">
@@ -4264,174 +4470,6 @@ function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="dashboard-section-card analytics-card admin-announcements-card">
-                <div className="dashboard-section-header">
-                  <h3 className="dashboard-section-title">
-                    <Megaphone size={20} className="text-orange-600" /> Announcements
-                  </h3>
-                </div>
-                <div className="announcement-input-area">
-                  <input
-                    type="text"
-                    placeholder="Announcement Title"
-                    className="announcement-input"
-                    value={newAnnouncement.title}
-                    onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
-                  />
-                  <div className="announcement-actions">
-                    <select
-                      className="announcement-select"
-                      value={newAnnouncement.priority}
-                      onChange={(e) => setNewAnnouncement({ ...newAnnouncement, priority: e.target.value })}
-                    >
-                      <option value="Normal">Normal</option>
-                      <option value="Urgent">Urgent</option>
-                      <option value="Info">Info</option>
-                    </select>
-                    <input
-                      type="text"
-                      placeholder="Message content..."
-                      className="announcement-input flex-grow"
-                      value={newAnnouncement.content}
-                      onChange={(e) => setNewAnnouncement({ ...newAnnouncement, content: e.target.value })}
-                    />
-                    <select
-                      className="announcement-select"
-                      value={announcementTargets[0] || ''}
-                      onChange={(e) => setAnnouncementTargets([e.target.value])}
-                    >
-                      <option value="">All</option>
-                      <option value="Doctor">Doctor</option>
-                      <option value="Nurse">Nurse</option>
-                      <option value="Staff">Staff</option>
-                    </select>
-                    <select
-                      className="announcement-select"
-                      value={announcementExpiryDays}
-                      onChange={(e) => setAnnouncementExpiryDays(e.target.value)}
-                    >
-                      <option value="">No expiry</option>
-                      <option value="1">1 day</option>
-                      <option value="7">7 days</option>
-                      <option value="30">30 days</option>
-                    </select>
-                    <label className="ann-pin-toggle">
-                      <input
-                        type="checkbox"
-                        checked={announcementPinned}
-                        onChange={(e) => setAnnouncementPinned(e.target.checked)}
-                      />
-                      <span>Pin</span>
-                    </label>
-                    <button className="btn-orange-sm" onClick={handlePostAnnouncement}>Post</button>
-                  </div>
-                </div>
-                <div className="announcement-list">
-                  {announcementsError ? (
-                    <div className="empty-state-sm">{announcementsError}</div>
-                  ) : announcements.length === 0 ? (
-                    <div className="empty-state-sm">No announcements yet.</div>
-                  ) : (
-                    (() => {
-                      const sorted = [...announcements].sort((a, b) => {
-                        const ap = a.pinned ? 1 : 0;
-                        const bp = b.pinned ? 1 : 0;
-                        if (ap !== bp) return bp - ap;
-                        const at = new Date(a.createdAt || a.created_at || 0).getTime();
-                        const bt = new Date(b.createdAt || b.created_at || 0).getTime();
-                        return bt - at;
-                      });
-                      const perPage = 3;
-                      const totalPages = Math.max(1, Math.ceil(sorted.length / perPage));
-                      // Clamp page number to total pages
-                      if (announcementsPage > totalPages) {
-                        setTimeout(() => setAnnouncementsPage(totalPages), 0);
-                      }
-                      const safePage = Math.min(announcementsPage, totalPages);
-                      const start = (safePage - 1) * perPage;
-                      const end = start + perPage;
-                      const paginated = sorted.slice(start, end);
-
-                      return (
-                        <>
-                          {paginated.map((ann) => {
-                            const id = ann.id || ann._id;
-                            const priority = String(ann.priority || 'Normal');
-                            const pinned = Boolean(ann.pinned);
-                            const expiresAt = ann.expiresAt || ann.expires_at || null;
-                            const createdAt = ann.createdAt || ann.created_at;
-                            const createdText = createdAt ? new Date(createdAt).toLocaleDateString() : '';
-                            const expText = expiresAt ? new Date(expiresAt).toLocaleDateString() : '';
-                            const target = ann.target || 'All';
-
-                            return (
-                              <div key={String(id)} className={`announcement-card priority-${priority.toLowerCase()} ${pinned ? 'ann-pinned' : ''}`}>
-                                <div className="announcement-header">
-                                  <span className="ann-title">{ann.title}</span>
-                                  <div className="ann-badges">
-                                    {pinned && <span className="ann-badge badge-pinned">Pinned</span>}
-                                    <span className={`ann-badge badge-${priority.toLowerCase()}`}>{priority}</span>
-                                  </div>
-                                </div>
-                                <p className="ann-content">{ann.content}</p>
-                                <div className="ann-footer">
-                                  <span className="ann-meta">Posted by {ann.author || 'Admin'}{createdText ? ` • ${createdText}` : ''}</span>
-                                  <span className="ann-meta">Target: {target}</span>
-                                  {expText ? <span className="ann-meta">Expires: {expText}</span> : null}
-                                  <div className="ann-footer-actions">
-                                    <button type="button" className="ann-pin-btn" onClick={() => setViewingAnnouncement(ann)}>
-                                      View
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="ann-pin-btn"
-                                      onClick={() => updateAnnouncement(id, { pinned: !pinned })}
-                                    >
-                                      {pinned ? 'Unpin' : 'Pin'}
-                                    </button>
-                                    {expiresAt ? (
-                                      <button type="button" className="ann-pin-btn" onClick={() => updateAnnouncement(id, { expiresAt: null })}>
-                                        Clear expiry
-                                      </button>
-                                    ) : null}
-                                    <button
-                                      onClick={() => setAnnouncementDeleteConfirmation({ id, title: ann.title })}
-                                      className="ann-delete-btn"
-                                      type="button"
-                                      title="Delete announcement"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                          {totalPages > 1 && (
-                            <div className="announcement-pagination">
-                              <button
-                                className="ann-pin-btn"
-                                disabled={safePage === 1}
-                                onClick={() => setAnnouncementsPage(p => Math.max(1, p - 1))}
-                              >
-                                Previous
-                              </button>
-                              <span className="pagination-info">Page {safePage} of {totalPages}</span>
-                              <button
-                                className="ann-pin-btn"
-                                disabled={safePage === totalPages}
-                                onClick={() => setAnnouncementsPage(p => Math.min(totalPages, p + 1))}
-                              >
-                                Next
-                              </button>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()
-                  )}
-                </div>
-              </div>
           </div>
 
           {viewingAnnouncement && (
