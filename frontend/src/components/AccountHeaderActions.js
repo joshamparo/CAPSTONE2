@@ -610,22 +610,6 @@ export default function AccountHeaderActions({
                       <div className="aha-settings-list">
                         <div className="aha-setting-row">
                           <div className="aha-setting-info">
-                            <div className="aha-setting-label">Email Notifications</div>
-                            <div className="aha-setting-desc">Daily summaries</div>
-                          </div>
-                          <label className="aha-switch">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(settingsPrefs.emailSummaries)}
-                              onChange={(e) => saveSettings({ emailSummaries: e.target.checked })}
-                              disabled={settingsSaving}
-                            />
-                            <span className="aha-slider"></span>
-                          </label>
-                        </div>
-
-                        <div className="aha-setting-row">
-                          <div className="aha-setting-info">
                             <div className="aha-setting-label">Quiet Hours</div>
                             <div className="aha-setting-desc">Mute alerts at night</div>
                           </div>

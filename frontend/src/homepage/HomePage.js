@@ -1391,7 +1391,7 @@ function HomePage() {
             <a href="#contact">Contact Us</a>
             {user ? (
               <div className="user-greeting-wrapper">
-                <span className="nav-user-greeting" style={{ fontWeight: '600', color: '#334155', marginRight: '10px' }}>
+                <span className="nav-user-greeting">
                   Hello, {user.name}
                 </span>
                 <button 
@@ -1438,7 +1438,7 @@ function HomePage() {
           <div className="hero-layout page-shell">
             <div className="hero-panel reveal-on-scroll">
               <div className="eyebrow">Private Hospital Care</div>
-              <div className="hero-content" style={{ position: 'static', transform: 'none', left: 'auto', top: 'auto', width: '100%', maxWidth: 'none', textAlign: 'left' }}>
+              <div className="hero-content-panel">
                 <h1 className="hero-title">Professional, compassionate care for every family we serve.</h1>
                 <p className="hero-subtitle">
                   Pascual General Hospital combines a warm private-hospital experience with dependable emergency support,
@@ -1632,9 +1632,9 @@ function HomePage() {
       <section className="care-section page-section" id="facilities">
         <div className="page-shell">
           <div className="text-center reveal-on-scroll">
-            <div className="eyebrow" style={{ marginBottom: '1rem' }}>Hospital Environment</div>
+            <div className="eyebrow">Hospital Environment</div>
             <h2 className="section-title">A care environment that feels capable, organized, and welcoming.</h2>
-            <p className="section-subtitle" style={{ maxWidth: '760px', margin: '0 auto' }}>
+            <p className="section-subtitle mx-auto">
               Real hospital visuals help visitors understand the setting before they arrive, reinforcing trust and a sense of readiness.
             </p>
           </div>
@@ -1689,25 +1689,25 @@ function HomePage() {
       </section>
 
       {/* News & Updates Section */}
-      <section className="news-section page-section" id="news" style={{ padding: '5rem 2rem', backgroundColor: '#ffffff' }}>
+      <section className="news-section page-section" id="news">
         <div className="page-shell">
-          <div style={{ textAlign: 'center', marginBottom: '4rem' }} className="reveal-on-scroll">
-            <div className="eyebrow" style={{ marginBottom: '1rem' }}>Current Updates</div>
-            <h2 className="section-title" style={{ fontSize: '2.5rem', color: '#0f172a' }}>News & Health Updates</h2>
-            <p style={{ color: '#64748b', fontSize: '1.1rem', marginTop: '1rem' }}>
+          <div className="news-head reveal-on-scroll">
+            <div className="eyebrow">Current Updates</div>
+            <h2 className="section-title">News & Health Updates</h2>
+            <p className="section-subtitle">
               Live news links from legitimate online publishers, with health and public-interest stories prioritized.
             </p>
           </div>
           
-          <div className="news-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+          <div className="news-grid">
             {newsError ? (
-              <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#b91c1c', fontWeight: 700 }}>
+              <div className="news-error-msg">
                 Unable to refresh the live feed right now.
               </div>
             ) : null}
 
             {!newsLoading && !visibleNews.length ? (
-              <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#475569', lineHeight: '1.7' }}>
+              <div className="news-empty-msg">
                 No live news articles are available at the moment. Please check back shortly.
               </div>
             ) : null}
@@ -1728,26 +1728,28 @@ function HomePage() {
               const badge = badgeStyleByCategory[cat] || badgeStyleByCategory['Philippine News'];
 
               return (
-                <div key={n?.id || idx} className={`news-card reveal-on-scroll reveal-delay-${(idx % 3) + 1}`} style={{ background: '#f8fafc', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0', transition: 'all 0.3s ease' }}>
-                  <img src={img} alt={`${cat || 'PH'} News`} style={{ width: '100%', height: '200px', objectFit: 'cover' }} />
-                  <div style={{ padding: '1.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: '#64748b', fontSize: '0.85rem', fontWeight: '600', flexWrap: 'wrap' }}>
-                      <span style={{ background: badge.bg, color: badge.fg, padding: '4px 10px', borderRadius: '50px' }}>{label}</span>
-                      <span>{source || cat || 'Philippines'}</span>
+                <div key={n?.id || idx} className={`news-card reveal-on-scroll reveal-delay-${(idx % 3) + 1}`}>
+                  <div className="news-card-image">
+                    <img src={img} alt={`${cat || 'PH'} News`} />
+                  </div>
+                  <div className="news-card-body">
+                    <div className="news-card-meta">
+                      <span className="news-label" style={{ background: badge.bg, color: badge.fg }}>{label}</span>
+                      <span className="news-source">{source || cat || 'Philippines'}</span>
                     </div>
 
                     {newsLoading ? (
-                      <>
-                        <div style={{ height: 18, width: '90%', background: '#e2e8f0', borderRadius: 8, marginBottom: 10 }} />
-                        <div style={{ height: 12, width: '100%', background: '#e2e8f0', borderRadius: 8, marginBottom: 8 }} />
-                        <div style={{ height: 12, width: '92%', background: '#e2e8f0', borderRadius: 8, marginBottom: 20 }} />
-                        <div style={{ height: 14, width: 90, background: '#fed7aa', borderRadius: 8 }} />
-                      </>
+                      <div className="news-skeleton">
+                        <div className="skeleton-title" />
+                        <div className="skeleton-text" />
+                        <div className="skeleton-text short" />
+                        <div className="skeleton-link" />
+                      </div>
                     ) : (
                       <>
-                        <h3 style={{ fontSize: '1.25rem', color: '#0f172a', marginBottom: '0.75rem', lineHeight: '1.4' }}>{title}</h3>
-                        <p style={{ color: '#475569', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1.5rem' }}>{summary}</p>
-                        <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#ea580c', fontWeight: '600', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <h3 className="news-title">{title}</h3>
+                        <p className="news-summary">{summary}</p>
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="news-read-more">
                           Read More →
                         </a>
                       </>
@@ -1833,47 +1835,41 @@ function HomePage() {
       {/* Emergency Banner (Moved to bottom) */}
       <section className="emergency-banner-improved page-section">
         <div className="emergency-content-improved reveal-on-scroll">
-          <div className="banner-section" style={{ flex: '1 1 500px' }}>
-            <h2 style={{ fontSize: '2.5rem', fontWeight: '800', margin: '0 0 10px 0' }}>Need Immediate Care?</h2>
-            <p style={{ fontSize: '1.2rem', margin: 0, opacity: '0.9' }}>Our emergency department is staffed 24/7 with specialists ready to handle any critical situation.</p>
+          <div className="banner-info">
+            <h2 className="banner-title">Need Immediate Care?</h2>
+            <p className="banner-text">Our emergency department is staffed 24/7 with specialists ready to handle any critical situation.</p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', background: 'rgba(255,255,255,0.1)', padding: '20px 40px', borderRadius: '20px', backdropFilter: 'blur(10px)' }}>
-            <Phone size={32} fill="white" />
-            <div>
-              <div style={{ fontSize: '1.1rem', opacity: '0.9', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '600' }}>Emergency Dial</div>
-              <div style={{ fontSize: '2.5rem', fontWeight: '800', lineHeight: '1' }}>0915 312 7144</div>
+          <div className="banner-cta">
+            <div className="banner-icon-box">
+              <Phone size={32} fill="white" />
+            </div>
+            <div className="banner-cta-text">
+              <div className="banner-label">Emergency Dial</div>
+              <div className="banner-number">0915 312 7144</div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Global Footer */}
-      <footer className="global-footer page-section" style={{ backgroundColor: '#0f172a', color: '#f8fafc', padding: '4rem 2rem 2rem 2rem' }}>
-        <div className="page-shell reveal-on-scroll" style={{ display: 'flex', flexWrap: 'wrap', gap: '3rem', justifyContent: 'space-between' }}>
+      <footer className="global-footer page-section">
+        <div className="page-shell footer-grid reveal-on-scroll">
           
           {/* Brand & Socials */}
-          <div style={{ flex: '1 1 300px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.25rem' }}>
-              <img src={process.env.PUBLIC_URL + "/images/pgh logo.png"} alt="PGH Logo" style={{ width: '45px', height: '45px', backgroundColor: 'white', borderRadius: '50%', padding: '4px' }} />
-              <h2 style={{ margin: 0, fontSize: '1.75rem', color: '#ffffff', letterSpacing: '1px' }}>PASCUALINGA</h2>
+          <div className="footer-brand">
+            <div className="footer-logo-box">
+              <img src={process.env.PUBLIC_URL + "/images/pgh logo.png"} alt="PGH Logo" className="footer-logo-img" />
+              <h2 className="footer-brand-name">PASCUALINGA</h2>
             </div>
-            <p style={{ color: '#94a3b8', lineHeight: '1.6', marginBottom: '1.5rem', fontSize: '1rem' }}>
+            <p className="footer-brand-desc">
               Trusted care, guided by compassion and innovation. Your health and safety are our top priorities.
             </p>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <a href="#facebook" style={{ color: '#f8fafc', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '10px 16px', backgroundColor: '#1e293b', borderRadius: '8px', transition: 'background 0.3s' }}>
-                <Facebook size={20} color="#3b82f6" /> <span style={{fontSize: '0.95rem', fontWeight: '500'}}>Facebook</span>
-              </a>
-              <a href="#viber" style={{ color: '#f8fafc', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '10px 16px', backgroundColor: '#1e293b', borderRadius: '8px', transition: 'background 0.3s' }}>
-                <MessageCircle size={20} color="#a855f7" /> <span style={{fontSize: '0.95rem', fontWeight: '500'}}>Viber</span>
-              </a>
-            </div>
           </div>
 
           {/* Quick Links */}
-          <div style={{ flex: '1 1 200px' }}>
+          <div className="footer-links-col">
             <h3 className="footer-title">Quick Links</h3>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <ul className="footer-links-list">
               <li><a href="#about" className="footer-link">About Us</a></li>
               <li><a href="#services" className="footer-link">Our Services</a></li>
               <li><a href="#facilities" className="footer-link">Facilities</a></li>
@@ -1883,9 +1879,9 @@ function HomePage() {
           </div>
 
           {/* Legal */}
-          <div style={{ flex: '1 1 200px' }}>
+          <div className="footer-links-col">
             <h3 className="footer-title">Legal</h3>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <ul className="footer-links-list">
               <li><a href="#privacy" className="footer-link">Privacy Policy</a></li>
               <li><a href="#terms" className="footer-link">Terms of Service</a></li>
               <li><a href="#patient-rights" className="footer-link">Patient Rights</a></li>
@@ -1894,7 +1890,7 @@ function HomePage() {
 
         </div>
         
-        <div className="page-shell" style={{ marginTop: '4rem', paddingTop: '1.5rem', borderTop: '1px solid #334155', textAlign: 'center', color: '#64748b' }}>
+        <div className="footer-bottom">
           <p>&copy; {new Date().getFullYear()} Pascual General Hospital. All rights reserved.</p>
         </div>
       </footer>

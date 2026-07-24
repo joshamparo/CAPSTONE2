@@ -94,14 +94,12 @@ function NurseDashboard() {
     try {
       const saved = localStorage.getItem('nurseSettings');
       return saved ? JSON.parse(saved) : {
-        emailNotifications: true,
         audibleAlerts: true,
         autoRefresh: true,
         compactView: false
       };
     } catch (_) {
       return {
-        emailNotifications: true,
         audibleAlerts: true,
         autoRefresh: true,
         compactView: false

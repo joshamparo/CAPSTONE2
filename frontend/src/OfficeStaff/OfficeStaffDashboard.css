@@ -863,6 +863,46 @@
   font-weight: 900;
 }
 
+.office-payment-metric.total-due {
+  background: linear-gradient(135deg, #fff7ed 0%, #fff 100%);
+  border: 2px solid #fed7aa;
+}
+
+.office-payment-metric.total-due strong {
+  color: #ea580c;
+  font-size: 1.6rem;
+}
+
+.office-payment-field-group {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+}
+
+.office-receipt-preview-wrap {
+  margin-top: 14px;
+  padding: 16px;
+  background: #f1f5f9;
+  border-radius: 16px;
+  border: 1px dashed #cbd5e1;
+}
+
+.office-receipt-preview-title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .office-payment-metric.accent {
   border-color: #fed7aa;
   background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);

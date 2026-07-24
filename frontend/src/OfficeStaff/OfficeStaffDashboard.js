@@ -2480,8 +2480,8 @@ export default function OfficeStaffDashboard({ mode }) {
   </div>
 
   <div className="office-payment-metrics">
-    <div className="office-payment-metric">
-      <span>Amount Due</span>
+    <div className="office-payment-metric total-due">
+      <span>Net Amount Due</span>
       <strong>PHP {toMoney(selectedInvoiceDue)}</strong>
     </div>
     <div className={`office-payment-metric ${payMethod === 'Cash' && paymentEntryValue > 0 ? 'accent' : ''}`}>
@@ -2500,7 +2500,7 @@ export default function OfficeStaffDashboard({ mode }) {
         key={amount}
         type="button" 
         className="office-btn ghost" 
-        style={{ border: '1px solid #e2e8f0', flex: 1 }}
+        style={{ border: '1px solid #e2e8f0', flex: 1, height: '44px', borderRadius: '14px' }}
         onClick={() => {
           setCashReceived(String(amount));
           setPayAmount(String(amount));
@@ -2512,7 +2512,7 @@ export default function OfficeStaffDashboard({ mode }) {
     <button 
       type="button" 
       className="office-btn ghost" 
-      style={{ border: '1px solid #ea580c', color: '#ea580c', flex: 1.5 }}
+      style={{ border: '2px solid #ea580c', color: '#ea580c', flex: 1.5, height: '44px', borderRadius: '14px' }}
       onClick={() => {
         setCashReceived(String(selectedInvoiceDue));
         setPayAmount(String(selectedInvoiceDue));
@@ -2522,14 +2522,7 @@ export default function OfficeStaffDashboard({ mode }) {
     </button>
   </div>
 
-  {paymentError ? <div className="admin-alert error" style={{ marginBottom: 10 }}>{paymentError}</div> : null}
-  {payMethod === 'Cash' && paymentShort ? (
-    <div className="office-payment-warning">
-      Cash received is below the amount due of PHP {toMoney(selectedInvoiceDue)}.
-    </div>
-  ) : null}
-
-  <div className="office-payment-form">
+  <div className="office-payment-field-group">
     <div className="office-payment-field">
       <label>PhilHealth Deduction</label>
       <input
@@ -2559,14 +2552,28 @@ export default function OfficeStaffDashboard({ mode }) {
         placeholder="₱ 0.00"
       />
     </div>
+  </div>
 
+  {paymentError ? <div className="admin-alert error" style={{ marginBottom: 10 }}>{paymentError}</div> : null}
+  {payMethod === 'Cash' && paymentShort ? (
+    <div className="office-payment-warning" style={{ marginBottom: 12 }}>
+      Cash received is below the amount due of PHP {toMoney(selectedInvoiceDue)}.
+    </div>
+  ) : null}
+
+  <div className="office-payment-form" style={{ marginTop: '12px' }}>
     <div className="office-payment-field">
       <label>Payment method</label>
-      <select className="office-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
-        <option value="Cash">Cash</option>
-        <option value="GCash" disabled>GCash (Unavailable)</option>
-        <option value="Card">Card</option>
-      </select>
+      <div style={{ position: 'relative' }}>
+        <select className="office-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} style={{ paddingLeft: '40px' }}>
+          <option value="Cash">Cash</option>
+          <option value="GCash" disabled>GCash (Unavailable)</option>
+          <option value="Card">Card</option>
+        </select>
+        <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
+          {payMethod === 'Cash' ? <Banknote size={18} /> : payMethod === 'Card' ? <CreditCard size={18} /> : <Wallet size={18} />}
+        </div>
+      </div>
     </div>
 
     <div className="office-payment-field">
