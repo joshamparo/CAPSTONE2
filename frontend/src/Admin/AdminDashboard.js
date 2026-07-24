@@ -4206,14 +4206,14 @@ function AdminDashboard() {
             );
           })()}
 
-          <div className="dashboard-grid-equal-2 admin-panel-grid">
-          <div className="dashboard-section-card admin-panel-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
+          <div className="dashboard-grid-asymmetric admin-panel-grid">
+          <div className="dashboard-section-card admin-panel-card compact-activity-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
             <div className="dashboard-section-header">
               <h3 className="dashboard-section-title">
                 <History size={20} className="text-purple-600" /> Audit Log
               </h3>
             </div>
-            <div className="modern-list scrollable-list-y" style={{ flex: 1, minHeight: '350px', maxHeight: '350px' }}>
+            <div className="modern-list scrollable-list-y compact-list" style={{ flex: 1, minHeight: '350px', maxHeight: '350px', overflowY: 'auto' }}>
                   {activityLogs.length === 0 ? (
                     <div className="empty-state-sm">No audit logs.</div>
                   ) : (
@@ -4283,7 +4283,7 @@ function AdminDashboard() {
           {/* ...existing code... (rest of dashboard widgets, e.g. ward, inventory, etc.) */}
 
            {/* Operations Row: To-Do List */}
-           <div className="dashboard-grid-equal-2 admin-panel-grid">
+           <div className="dashboard-grid-asymmetric admin-panel-grid">
               <div className="dashboard-section-card admin-panel-card" style={{ margin: 0 }}>
                   <div className="dashboard-section-header">
                       <h3 className="dashboard-section-title">
@@ -4381,7 +4381,7 @@ function AdminDashboard() {
            </div>
 
            {/* Main Content Area */}
-           <div className="dashboard-grid-equal-2 admin-panel-grid">
+           <div className="dashboard-grid-asymmetric admin-panel-grid">
                  {/* Ward Status Widget */}
                  <div className="dashboard-section-card admin-panel-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
                     <div className="dashboard-section-header">
@@ -4675,13 +4675,13 @@ function AdminDashboard() {
                     </div>
                  </div>
 
-                 <div className="dashboard-section-card admin-panel-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
+                 <div className="dashboard-section-card admin-panel-card compact-activity-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
                      <div className="dashboard-section-header">
                          <h3 className="dashboard-section-title">
-                           <Activity size={20} className="text-blue-600" /> Recent Activity
+                           <Activity size={18} className="text-blue-600" /> Recent Activity
                          </h3>
                      </div>
-                     <div className="modern-list scrollable-list-y compact-list" style={{ flex: 1 }}>
+                     <div className="modern-list scrollable-list-y compact-list" style={{ flex: 1, maxHeight: '280px', overflowY: 'auto' }}>
                          {recentActivities.length === 0 ? (
                              <div className="empty-state-sm">No recent activity.</div>
                          ) : (

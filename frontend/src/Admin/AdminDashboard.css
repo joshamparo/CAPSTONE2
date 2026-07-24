@@ -715,6 +715,13 @@ body {
   margin-bottom: 32px;
 }
 
+.dashboard-grid-asymmetric {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 32px;
+  margin-bottom: 32px;
+}
+
 .analytics-grid {
   display: grid;
   gap: 32px; /* Space between quick stat cards */
@@ -3473,6 +3480,62 @@ input:checked + .slider:before {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* Compact Activity Card Fixes */
+.compact-activity-card {
+  padding: 16px !important;
+}
+
+.compact-activity-card .dashboard-section-header {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+}
+
+.compact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px !important;
+}
+
+.compact-item-row {
+  padding: 10px 12px !important;
+  border-radius: 12px !important;
+  background: #f8fafc;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.compact-item-row:hover {
+  background: white !important;
+  border-color: #fed7aa !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.activity-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.compact-item-row .item-title {
+  font-size: 0.88rem !important;
+  font-weight: 600 !important;
+  margin-bottom: 2px;
+}
+
+.compact-item-row .item-subtitle {
+  font-size: 0.75rem !important;
+  color: var(--text-muted);
 }
 
 /* Widget Customization Bar */
