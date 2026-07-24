@@ -3485,6 +3485,8 @@ input:checked + .slider:before {
 /* Compact Activity Card Fixes */
 .compact-activity-card {
   padding: 16px !important;
+  height: auto !important;
+  align-self: start;
 }
 
 .compact-activity-card .dashboard-section-header {

@@ -4681,7 +4681,7 @@ function AdminDashboard() {
                            <Activity size={18} className="text-blue-600" /> Recent Activity
                          </h3>
                      </div>
-                     <div className="modern-list scrollable-list-y compact-list" style={{ flex: 1, maxHeight: '280px', overflowY: 'auto' }}>
+                     <div className="modern-list compact-list" style={{ flex: 1 }}>
                          {recentActivities.length === 0 ? (
                              <div className="empty-state-sm">No recent activity.</div>
                          ) : (
