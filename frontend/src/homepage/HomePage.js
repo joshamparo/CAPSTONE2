@@ -176,6 +176,36 @@ function HomePage() {
       summary: 'Health care workers in both public and private sectors welcomed the appointment of Dr. Brix Pujalte Jr. as the new DOH secretary, calling for him to address unresolved problems and improve public healthcare.',
       url: 'https://newsinfo.inquirer.net/2263694/health-workers-to-new-doh-chief-tackle-unresolved-healthcare-woes',
       imageUrl: 'https://images.unsplash.com/photo-1530497610245-94d3c16cda28?auto=format&fit=crop&w=900&q=80'
+    },
+    {
+      id: 'news-4',
+      category: 'Global Health',
+      label: 'WHO Updates',
+      source: 'World Health Organization',
+      title: 'WHO adds first diagnostic test for Ebola Bundibugyo virus to its Emergency Use Listing',
+      summary: 'The WHO has added the first molecular diagnostic test for Bundibugyo virus to its Emergency Use Listing, helping confirm infection rapidly and accurately to contain outbreaks.',
+      url: 'https://www.who.int/news/item/02-07-2026-who-adds-first-diagnostic-test-for-ebola-bundibugyo-virus-to-its-emergency-use-listing',
+      imageUrl: 'https://images.unsplash.com/photo-1584515933487-779824d29309?auto=format&fit=crop&w=900&q=80'
+    },
+    {
+      id: 'news-5',
+      category: 'Health Research',
+      label: 'Vaccines',
+      source: 'Health Pulse Online',
+      title: 'WHO: Next-Gen Flu Shots To Slash Deaths by Millions',
+      summary: 'A new WHO assessment estimates that next-generation influenza vaccines could prevent up to 18 billion cases of the flu and save more than 6 million lives globally over the next 25 years.',
+      url: 'https://healthpulseonline.com/who-next-gen-flu-shots-to-slash-deaths-by-millions/',
+      imageUrl: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=900&q=80'
+    },
+    {
+      id: 'news-6',
+      category: 'Global Health',
+      label: 'Epidemic Response',
+      source: 'New Kerala',
+      title: 'India Can Boost Ebola Vaccine and Antibody Development via WHO Lab Network: Ex-WHO Chief',
+      summary: 'Former WHO Chief Scientist Soumya Swaminathan emphasized that India can play a key role in accelerating Ebola-related research and developing vaccines through international collaboration.',
+      url: 'https://www.newkerala.com/news/a/india-can-boost-ebola-vaccine-antibody-development-through-805.htm',
+      imageUrl: 'https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?auto=format&fit=crop&w=900&q=80'
     }
   ]);
   const [newsLoading, setNewsLoading] = useState(false);
