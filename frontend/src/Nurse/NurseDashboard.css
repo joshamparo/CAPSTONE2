@@ -739,7 +739,7 @@
   display: grid;
   grid-template-columns: 2fr 1fr 1fr;
   gap: 24px;
-  height: 500px; /* Fixed height for box-type look */
+  min-height: 500px; /* Changed from fixed height to min-height for responsive box-type look */
 }
 
 .grid-col {
@@ -2210,6 +2210,19 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 24px;
+}
+
+.empty-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--nurse-text-dark);
+  margin: 0 0 8px 0;
+}
+
+.empty-subtitle {
+  font-size: 0.95rem;
+  color: var(--nurse-text-light);
+  margin: 0;
 }
 
 /* --- Notification Dropdown --- */

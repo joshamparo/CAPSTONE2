@@ -263,6 +263,8 @@ function NurseDashboard() {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
+      if (cancelled) return;
+      if (document.visibilityState !== 'visible') return;
       const r = await checkBackendHealth(API_BASE);
       if (cancelled) return;
       setBackendHealth({ checked: true, ok: r.ok, error: r.ok ? '' : (r.error || 'Backend offline') });
@@ -1739,6 +1741,7 @@ function NurseDashboard() {
   };
 
   const fetchAppointments = async () => {
+    if (document.visibilityState !== 'visible') return;
     setLoadingAppointments(true);
     setAppointmentsError('');
     try {
@@ -1853,6 +1856,7 @@ function NurseDashboard() {
   }, [careTeamDoctors]);
 
   const refreshPatientsList = async () => {
+    if (document.visibilityState !== 'visible') return;
     setLoadingPatients(true);
     setPatientsError('');
     try {
@@ -1959,6 +1963,7 @@ function NurseDashboard() {
   };
 
   const fetchApprovalInbox = async () => {
+    if (document.visibilityState !== 'visible') return;
     setApprovalInboxLoading(true);
     setApprovalInboxError('');
     try {
@@ -2439,6 +2444,7 @@ function NurseDashboard() {
   const [assigningPatient, setAssigningPatient] = useState(null);
 
   const fetchWardRegistry = async () => {
+    if (document.visibilityState !== 'visible') return;
     setWardLoading(true);
     try {
       const data = await fetchJson('/api/wards/rooms', {
@@ -2525,6 +2531,7 @@ function NurseDashboard() {
   };
 
   const pollMyLabResultVerifications = async () => {
+      if (document.visibilityState !== 'visible') return;
       try {
           const res = await fetch(`${API_BASE}/api/lab-results/mine?take=50`, { headers: { ...getAuthHeaders() } });
           const data = await res.json().catch(() => []);
@@ -2629,6 +2636,7 @@ function NurseDashboard() {
 
     // 2. Poll for Admin Announcements (API)
     const fetchAnnouncements = async () => {
+      if (document.visibilityState !== 'visible') return;
       try {
         const response = await fetch(`${API_BASE}/api/announcements`, { headers: { ...getAuthHeaders() } });
         if (response.ok) {
@@ -2779,6 +2787,7 @@ function NurseDashboard() {
   const currentShiftLabel = user.shiftLabel || deriveShiftLabel();
 
   const refreshNurseWorkflow = async ({ silent = false } = {}) => {
+      if (document.visibilityState !== 'visible') return;
       if (!silent) {
           setHandoverLoading(true);
           setTasksLoading(true);
@@ -3494,6 +3503,7 @@ function NurseDashboard() {
 
       // 2. Poll for Admin Announcements (API)
       const fetchAnnouncements = async () => {
+          if (document.visibilityState !== 'visible') return;
           try {
               const response = await fetch(`${API_BASE}/api/announcements`, { headers: { ...getAuthHeaders() } });
               if (response.ok) {
@@ -4172,6 +4182,7 @@ function NurseDashboard() {
   // Fetch Dashboard Stats
   React.useEffect(() => {
     const fetchStats = async () => {
+        if (document.visibilityState !== 'visible') return;
         try {
             setStatsError('');
             const data = await fetchJson('/api/stats/overview', { apiBase: API_BASE, headers: { ...getAuthHeaders() }, timeoutMs: 15000 });
@@ -8943,16 +8954,31 @@ function NurseDashboard() {
               </button>
             </div>
             
-            <div style={{padding: '14px 20px', background: '#ffffff', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', position: 'relative'}}>
-               <div className={`nurse-step-dot ${addPatientStep >= 1 ? 'active' : ''}`}>1</div>
-               <div className="nurse-step-line"></div>
-               <div className={`nurse-step-dot ${addPatientStep >= 2 ? 'active' : ''}`}>2</div>
-               <div className={`nurse-step-dot ${addPatientStep >= 3 ? 'active' : ''}`}>3</div>
+            <div style={{padding: '24px 40px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0'}}>
+               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+                 <div className="nurse-step-line" style={{ position: 'absolute', top: '50%', left: '0', right: '0', height: '2px', background: '#e2e8f0', zIndex: 1, transform: 'translateY(-50%)' }}>
+                   <div style={{ height: '100%', background: 'var(--nurse-primary)', width: addPatientStep === 1 ? '0%' : addPatientStep === 2 ? '50%' : '100%', transition: 'width 0.3s ease' }}></div>
+                 </div>
+                 
+                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, gap: '8px' }}>
+                   <div className={`nurse-step-dot ${addPatientStep >= 1 ? 'active' : ''}`}>1</div>
+                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: addPatientStep >= 1 ? 'var(--nurse-primary)' : '#64748b' }}>Details</span>
+                 </div>
+                 
+                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, gap: '8px' }}>
+                   <div className={`nurse-step-dot ${addPatientStep >= 2 ? 'active' : ''}`}>2</div>
+                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: addPatientStep >= 2 ? 'var(--nurse-primary)' : '#64748b' }}>Triage</span>
+                 </div>
+
+                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, gap: '8px' }}>
+                   <div className={`nurse-step-dot ${addPatientStep >= 3 ? 'active' : ''}`}>3</div>
+                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: addPatientStep >= 3 ? 'var(--nurse-primary)' : '#64748b' }}>Confirm</span>
+                 </div>
+               </div>
                
                <style>{`
-                 .nurse-step-dot { width: 30px; height: 30px; border-radius: 999px; background: #f1f5f9; color: #475569; display: flex; align-items: center; justify-content: center; font-weight: 900; z-index: 2; border: 1px solid #e2e8f0; }
-                 .nurse-step-dot.active { background: var(--nurse-primary); color: #fff; box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.1); }
-                 .nurse-step-line { position: absolute; top: 30px; left: 52px; right: 52px; height: 2px; background: #e2e8f0; z-index: 1; }
+                 .nurse-step-dot { width: 36px; height: 36px; border-radius: 50%; background: white; color: #94a3b8; display: flex; align-items: center; justify-content: center; font-weight: 800; border: 2px solid #e2e8f0; transition: all 0.3s ease; }
+                 .nurse-step-dot.active { background: var(--nurse-primary); color: #fff; border-color: var(--nurse-primary); box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.15); }
                `}</style>
             </div>
 
