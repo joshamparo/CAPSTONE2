@@ -129,12 +129,8 @@ async function ensureRoomSeed() {
     await prisma.$executeRawUnsafe(
       `
         INSERT INTO public.ward_rooms (room_code, ward_name, status, note)
-        VALUES ($1, $2, $3, $4)
-      `,
-      room.room_code,
-      room.ward_name,
-      room.status,
-      room.note
+        VALUES ('${room.room_code.replace(/'/g, "''")}', '${room.ward_name.replace(/'/g, "''")}', '${room.status.replace(/'/g, "''")}', '${(room.note || '').replace(/'/g, "''")}')
+      `
     );
   }
 }
@@ -170,11 +166,12 @@ async function ensureWardExists(wardName) {
 
 async function getRoomRows() {
   await ensureWardInfrastructure();
-  return prisma.$queryRawUnsafe(`
+  const rooms = await prisma.$queryRawUnsafe(`
     SELECT id, room_code, ward_name, status, note, created_at, updated_at
     FROM public.ward_rooms
     ORDER BY ward_name ASC, room_code ASC
   `);
+  return rooms;
 }
 
 async function syncWardCapacitiesFromRooms(roomRows) {
@@ -196,23 +193,12 @@ async function syncWardCapacitiesFromRooms(roomRows) {
 }
 
 async function getAdmittedPatients() {
-  return prisma.patients.findMany({
-    where: {
-      OR: [
-        { admission_status: 'Inpatient' },
-        { admission_status: 'Emergency' },
-        { ward_number: { not: null } },
-        { ward_number: { not: '' } }
-      ]
-    },
-    select: {
-      id: true,
-      first_name: true,
-      last_name: true,
-      ward_number: true,
-      admission_status: true
-    }
-  });
+  const admitted = await prisma.$queryRawUnsafe(`
+    SELECT id, ward_number 
+    FROM public.patients 
+    WHERE admission_status = 'Admitted' AND ward_number IS NOT NULL AND ward_number != ''
+  `);
+  return Array.isArray(admitted) ? admitted : [];
 }
 
 buildWardRegistry._cache = { fetchedAt: 0, payload: null, promise: null };
@@ -422,12 +408,8 @@ router.post('/rooms', requireRole(['admin']), async (req, res) => {
     await prisma.$executeRawUnsafe(
       `
         INSERT INTO public.ward_rooms (room_code, ward_name, status, note, updated_at)
-        VALUES ($1, $2, $3, $4, NOW())
-      `,
-      payload.roomCode,
-      payload.wardName,
-      payload.status,
-      payload.note
+        VALUES ('${payload.roomCode.replace(/'/g, "''")}', '${payload.wardName.replace(/'/g, "''")}', '${payload.status.replace(/'/g, "''")}', '${(payload.note || '').replace(/'/g, "''")}', NOW())
+      `
     );
 
     const registry = await buildWardRegistry();
@@ -467,14 +449,9 @@ router.patch('/rooms/:id', requireRole(['admin']), async (req, res) => {
     await prisma.$executeRawUnsafe(
       `
         UPDATE public.ward_rooms
-        SET room_code = $1, ward_name = $2, status = $3, note = $4, updated_at = NOW()
-        WHERE id = $5::bigint
-      `,
-      payload.roomCode,
-      payload.wardName,
-      payload.status,
-      payload.note,
-      roomId
+        SET room_code = '${payload.roomCode.replace(/'/g, "''")}', ward_name = '${payload.wardName.replace(/'/g, "''")}', status = '${payload.status.replace(/'/g, "''")}', note = '${(payload.note || '').replace(/'/g, "''")}', updated_at = NOW()
+        WHERE id = ${roomId}::bigint
+      `
     );
 
     const registry = await buildWardRegistry();
