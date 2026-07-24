@@ -40,6 +40,15 @@
 .aha-switch input:checked + .aha-slider{background:#ea580c; border-color:#ea580c;}
 .aha-switch input:checked + .aha-slider:before{transform:translate(18px, -50%);}
 
+.aha-toggle{position:relative; width:44px; height:24px; border-radius:999px; border:1px solid #e2e8f0; background:#f1f5f9; cursor:pointer; transition:all .2s ease; padding:0; flex-shrink:0;}
+.aha-toggle.on{background:#ea580c; border-color:#ea580c;}
+.aha-toggle-thumb{position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:999px; background:#fff; box-shadow:0 2px 4px rgba(0,0,0,.1); transition:all .2s cubic-bezier(0.4, 0, 0.2, 1);}
+.aha-toggle.on .aha-toggle-thumb{left:22px;}
+
+html[data-theme='dark'] .aha-toggle{background:rgba(148,163,184,.15); border-color:var(--app-border);}
+html[data-theme='dark'] .aha-toggle.on{background:#ea580c; border-color:#ea580c;}
+html[data-theme='dark'] .aha-toggle-thumb{background:#fff;}
+
 .aha-profile-wrapper{position:relative; display:flex; align-items:center; gap:10px; border:1px solid #e2e8f0; background:#fff; padding:8px 10px; border-radius:16px; cursor:pointer;}
 .aha-profile-wrapper:hover{background:#f8fafc;}
 .aha-profile-info{display:flex; flex-direction:column; line-height:1.05; text-align:left;}

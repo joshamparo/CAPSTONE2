@@ -167,6 +167,37 @@ export default function OfficeStaffDashboard({ mode }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [profileMessage, setProfileMessage] = useState({ text: '', type: '' });
 
+  const [privacyMode, setPrivacyMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('systemPreferences');
+      return saved ? JSON.parse(saved).privacyMode : false;
+    } catch (_) {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const handleStorage = () => {
+      try {
+        const saved = localStorage.getItem('systemPreferences');
+        if (saved) setPrivacyMode(JSON.parse(saved).privacyMode);
+      } catch (_) {}
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  const blurStyle = useMemo(() => privacyMode ? { filter: 'blur(8px)', transition: 'filter 0.3s ease' } : {}, [privacyMode]);
+  const blurOnHover = (e) => {
+    if (privacyMode) {
+      e.currentTarget.style.filter = 'none';
+    }
+  };
+  const resetBlur = (e) => {
+    if (privacyMode) {
+      e.currentTarget.style.filter = 'blur(8px)';
+    }
+  };
   const role = String(mode || '').toLowerCase();
   const roleLabel = role === 'doctor_secretary' ? 'Doctor Secretary' : 'Cashier';
 
@@ -702,6 +733,25 @@ export default function OfficeStaffDashboard({ mode }) {
     }
   };
 
+  const [receiptToPrint, setReceiptToPrint] = useState(null);
+
+  // Auto Print logic
+  useEffect(() => {
+    if (receiptToPrint) {
+      try {
+        const saved = localStorage.getItem('systemPreferences');
+        const autoPrint = saved ? JSON.parse(saved).autoPrint : false;
+        if (autoPrint) {
+          // Short delay to ensure state is settled
+          setTimeout(() => {
+            printPaymentReceipt(receiptToPrint);
+            setReceiptToPrint(null);
+          }, 300);
+        }
+      } catch (_) {}
+    }
+  }, [receiptToPrint]);
+
   const createPayment = async () => {
     if (!user || !selectedInvoice?.id) return;
     setPaymentLoading(true);
@@ -740,7 +790,7 @@ export default function OfficeStaffDashboard({ mode }) {
       const received = method === 'Cash' ? Number(String(cashReceived || payAmount || '').trim()) : due;
       setCashReceived('');
       setPayAmount('');
-      setPaymentReceipt(buildConsultationReceipt({ 
+      const receipt = buildConsultationReceipt({ 
         invoice: selectedInvoice, 
         payment: createdPayment, 
         user, 
@@ -748,7 +798,9 @@ export default function OfficeStaffDashboard({ mode }) {
         philhealthDeduction,
         hmoCoverage,
         hmoProvider
-      }));
+      });
+      setPaymentReceipt(receipt);
+      setReceiptToPrint(receipt);
       await openInvoice(selectedInvoice.id);
       await refreshInvoices();
       await refreshPaymentHistory();
@@ -787,7 +839,7 @@ export default function OfficeStaffDashboard({ mode }) {
             setPayReference('');
             setCashReceived('');
             setPayAmount('');
-            setPaymentReceipt(buildConsultationReceipt({ 
+            const receipt = buildConsultationReceipt({ 
               invoice: latest, 
               payment: newestPayment, 
               user, 
@@ -795,7 +847,9 @@ export default function OfficeStaffDashboard({ mode }) {
               philhealthDeduction,
               hmoCoverage,
               hmoProvider
-            }));
+            });
+            setPaymentReceipt(receipt);
+            setReceiptToPrint(receipt);
             await openInvoice(selectedInvoice.id);
             await refreshInvoices();
             await refreshPaymentHistory();
@@ -1551,7 +1605,7 @@ export default function OfficeStaffDashboard({ mode }) {
               </div>
               <div className="office-kpi">
                 <div className="office-kpi-k">Collected Today</div>
-                <div className="office-kpi-v">₱ {toMoney(billingSummary.collectedToday)}</div>
+                <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>₱ {toMoney(billingSummary.collectedToday)}</div>
                 <div className="office-kpi-meta">{billingSummary.paidToday} settled invoice(s)</div>
               </div>
               <div className="office-kpi">
@@ -2131,42 +2185,42 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div className="office-grid-3" style={{ gap: 14 }}>
                   <div className="office-kpi">
                     <div className="office-kpi-k">Billing Collected</div>
-                    <div className="office-kpi-v">₱ {String(closeout?.billing?.total_collected ?? '0.00')}</div>
+                    <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>₱ {String(closeout?.billing?.total_collected ?? '0.00')}</div>
                   </div>
                   <div className="office-kpi">
                     <div className="office-kpi-k">Payments</div>
-                    <div className="office-kpi-v">{Number(closeout?.billing?.payments_count ?? 0) || 0}</div>
+                    <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>{Number(closeout?.billing?.payments_count ?? 0) || 0}</div>
                   </div>
                   <div className="office-kpi">
                     <div className="office-kpi-k">Refunded</div>
-                    <div className="office-kpi-v">₱ {String(closeout?.billing?.total_refunded ?? '0.00')}</div>
+                    <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>₱ {String(closeout?.billing?.total_refunded ?? '0.00')}</div>
                   </div>
 
                   <div className="office-kpi">
                     <div className="office-kpi-k">Pharmacy Net Sales</div>
-                    <div className="office-kpi-v">₱ {String(closeout?.pharmacy_pos?.net_sales ?? '0.00')}</div>
+                    <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>₱ {String(closeout?.pharmacy_pos?.net_sales ?? '0.00')}</div>
                   </div>
                   <div className="office-kpi">
                     <div className="office-kpi-k">Pharmacy Transactions</div>
-                    <div className="office-kpi-v">{Number(closeout?.pharmacy_pos?.transactions ?? 0) || 0}</div>
+                    <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>{Number(closeout?.pharmacy_pos?.transactions ?? 0) || 0}</div>
                   </div>
                   <div className="office-kpi">
                     <div className="office-kpi-k">Sales Reports Submitted</div>
-                    <div className="office-kpi-v">{Number(closeout?.sales_reports_submitted ?? 0) || 0}</div>
+                    <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>{Number(closeout?.sales_reports_submitted ?? 0) || 0}</div>
                   </div>
                   <div className="office-kpi">
                     <div className="office-kpi-k">Onsite Consultations</div>
-                    <div className="office-kpi-v">₱ {String(closeout?.billing?.by_source?.onsite ?? '0.00')}</div>
+                    <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>₱ {String(closeout?.billing?.by_source?.onsite ?? '0.00')}</div>
                     <div className="office-kpi-meta">{Number(closeout?.billing?.by_source?.counts?.onsite ?? 0) || 0} payment(s)</div>
                   </div>
                   <div className="office-kpi">
                     <div className="office-kpi-k">Video Consultations</div>
-                    <div className="office-kpi-v">₱ {String(closeout?.billing?.by_source?.video ?? '0.00')}</div>
+                    <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>₱ {String(closeout?.billing?.by_source?.video ?? '0.00')}</div>
                     <div className="office-kpi-meta">{Number(closeout?.billing?.by_source?.counts?.video ?? 0) || 0} payment(s)</div>
                   </div>
                   <div className="office-kpi">
                     <div className="office-kpi-k">Lab Collections</div>
-                    <div className="office-kpi-v">₱ {String(closeout?.billing?.by_source?.lab ?? '0.00')}</div>
+                    <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>₱ {String(closeout?.billing?.by_source?.lab ?? '0.00')}</div>
                     <div className="office-kpi-meta">{Number(closeout?.billing?.by_source?.counts?.lab ?? 0) || 0} payment(s)</div>
                   </div>
                 </div>

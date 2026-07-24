@@ -85,7 +85,25 @@ export default function AccountHeaderActions({
   const [notifError, setNotifError] = useState('');
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
-  const [settingsPrefs, setSettingsPrefs] = useState({});
+  const [settingsPrefs, setSettingsPrefs] = useState(() => {
+    try {
+      const saved = localStorage.getItem('systemPreferences');
+      return saved ? JSON.parse(saved) : { quietHours: false, privacyMode: false, autoPrint: false };
+    } catch (_) {
+      return { quietHours: false, privacyMode: false, autoPrint: false };
+    }
+  });
+
+  // Sync with localStorage
+  useEffect(() => {
+    localStorage.setItem('systemPreferences', JSON.stringify(settingsPrefs));
+    // Trigger storage event for other tabs
+    window.dispatchEvent(new Event('storage'));
+  }, [settingsPrefs]);
+
+  const togglePreference = (key) => {
+    setSettingsPrefs(prev => ({ ...prev, [key]: !prev[key] }));
+  };
   const [settingsError, setSettingsError] = useState('');
   const announcementHideRef = useRef(null);
   const announcementPollRef = useRef(null);
@@ -599,7 +617,8 @@ export default function AccountHeaderActions({
             {showSettings ? (
               <div className="aha-dropdown" onClick={(e) => e.stopPropagation()}>
                 <div className="aha-dropdown-head">
-                  <div className="aha-dropdown-title">Settings</div>
+                  <Settings size={14} />
+                  <div className="aha-dropdown-title">System Settings</div>
                 </div>
                 <div className="aha-dropdown-body">
                   {settingsLoading ? (
@@ -610,18 +629,44 @@ export default function AccountHeaderActions({
                       <div className="aha-settings-list">
                         <div className="aha-setting-row">
                           <div className="aha-setting-info">
-                            <div className="aha-setting-label">Quiet Hours</div>
-                            <div className="aha-setting-desc">Mute alerts at night</div>
+                            <span className="aha-setting-label">Quiet Hours</span>
+                            <span className="aha-setting-desc">Mute alerts at night</span>
                           </div>
-                          <label className="aha-switch">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(settingsPrefs.quietHours)}
-                              onChange={(e) => saveSettings({ quietHours: e.target.checked })}
-                              disabled={settingsSaving}
-                            />
-                            <span className="aha-slider"></span>
-                          </label>
+                          <button
+                            type="button"
+                            className={`aha-toggle ${settingsPrefs.quietHours ? 'on' : ''}`}
+                            onClick={() => togglePreference('quietHours')}
+                          >
+                            <div className="aha-toggle-thumb" />
+                          </button>
+                        </div>
+
+                        <div className="aha-setting-row">
+                          <div className="aha-setting-info">
+                            <span className="aha-setting-label">Privacy Mode</span>
+                            <span className="aha-setting-desc">Blur sensitive amounts</span>
+                          </div>
+                          <button
+                            type="button"
+                            className={`aha-toggle ${settingsPrefs.privacyMode ? 'on' : ''}`}
+                            onClick={() => togglePreference('privacyMode')}
+                          >
+                            <div className="aha-toggle-thumb" />
+                          </button>
+                        </div>
+
+                        <div className="aha-setting-row">
+                          <div className="aha-setting-info">
+                            <span className="aha-setting-label">Auto Print</span>
+                            <span className="aha-setting-desc">Print receipt after payment</span>
+                          </div>
+                          <button
+                            type="button"
+                            className={`aha-toggle ${settingsPrefs.autoPrint ? 'on' : ''}`}
+                            onClick={() => togglePreference('autoPrint')}
+                          >
+                            <div className="aha-toggle-thumb" />
+                          </button>
                         </div>
                       </div>
                     </>

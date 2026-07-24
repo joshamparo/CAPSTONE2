@@ -155,6 +155,38 @@ function NurseDashboard() {
     return serviceKey === deptKey || (serviceKey && deptKey && (serviceKey.includes(deptKey) || deptKey.includes(serviceKey)));
   };
 
+  const [privacyMode, setPrivacyMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('systemPreferences');
+      return saved ? JSON.parse(saved).privacyMode : false;
+    } catch (_) {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const handleStorage = () => {
+      try {
+        const saved = localStorage.getItem('systemPreferences');
+        if (saved) setPrivacyMode(JSON.parse(saved).privacyMode);
+      } catch (_) {}
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  const blurStyle = useMemo(() => privacyMode ? { filter: 'blur(8px)', transition: 'filter 0.3s ease' } : {}, [privacyMode]);
+  const blurOnHover = (e) => {
+    if (privacyMode) {
+      e.currentTarget.style.filter = 'none';
+    }
+  };
+  const resetBlur = (e) => {
+    if (privacyMode) {
+      e.currentTarget.style.filter = 'blur(8px)';
+    }
+  };
+
   const toDbId = (v) => {
     const s = String(v || '').trim();
     if (!s) return null;
@@ -9090,7 +9122,9 @@ function NurseDashboard() {
                       <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
                         <div style={{ fontWeight: 900, color: '#0f172a' }}>Estimated consultation fee</div>
                         <div style={{ fontWeight: 900, color: '#0f172a' }}>
-                          {walkInConsultFeeLoading ? 'Loading…' : walkInConsultFeePreview?.defaultFee ? `₱ ${toMoney(walkInConsultFeePreview.defaultFee)}` : '—'}
+                          <span style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>
+                            {walkInConsultFeeLoading ? 'Loading…' : walkInConsultFeePreview?.defaultFee ? `₱ ${toMoney(walkInConsultFeePreview.defaultFee)}` : '—'}
+                          </span>
                         </div>
                       </div>
                       {walkInConsultFeeError ? (
@@ -9877,11 +9911,12 @@ function NurseDashboard() {
                         {String(addPatientData.routeType || '').trim() === 'onsite_consult' ? (
                           <>
                             <div><span style={{ color: '#64748b' }}>Service:</span> {String(addPatientData.selectedSpecialization || '').trim() || '—'}</div>
-                            <div>
-                              <span style={{ color: '#64748b' }}>Scheduled:</span>{' '}
-                              {addPatientData.preferredDate
-                                ? `${addPatientData.preferredDate}${addPatientData.preferredTime ? ` ${formatTime12(addPatientData.preferredTime)}` : ''}`
-                                : '—'}
+                            <div><span style={{ color: '#64748b' }}>Scheduled:</span>{' '}
+                              <span style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>
+                                {addPatientData.preferredDate
+                                  ? `${addPatientData.preferredDate}${addPatientData.preferredTime ? ` ${formatTime12(addPatientData.preferredTime)}` : ''}`
+                                  : '—'}
+                              </span>
                             </div>
                           </>
                         ) : null}
@@ -9924,8 +9959,10 @@ function NurseDashboard() {
                         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
                           <div style={{ fontWeight: 900, color: '#0f172a' }}>Estimated fee</div>
                           <div style={{ fontWeight: 900, color: '#0f172a' }}>
+                          <span style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>
                             {walkInConsultFeeLoading ? 'Loading…' : walkInConsultFeePreview?.defaultFee ? `₱ ${toMoney(walkInConsultFeePreview.defaultFee)}` : '—'}
-                          </div>
+                          </span>
+                        </div>
                         </div>
                         {walkInConsultFeeError ? (
                           <div style={{ marginTop: 8, color: '#b91c1c', fontWeight: 700 }}>{walkInConsultFeeError}</div>
