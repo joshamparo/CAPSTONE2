@@ -3712,6 +3712,111 @@ function AdminDashboard() {
         </div>
       );
 
+      const renderOperationalSnapshotPanel = (extraClassName = '') => (
+        <div className={`dashboard-section-card ${extraClassName}`.trim()} style={{ margin: 0 }}>
+          <div className="dashboard-section-header">
+            <h3 className="dashboard-section-title">
+              <Bell size={20} className="text-orange-600" /> Operational Snapshot
+            </h3>
+            <span className="text-xs text-slate-500 font-medium">{pendingIncidentsCount + pendingRestockCount + lowStockCount} items to monitor</span>
+          </div>
+          <div className="cmd-list">
+            <div className="cmd-item">
+              <div className="cmd-item-main">
+                <div className="cmd-item-top">
+                  <div className="cmd-item-title">Pending approvals and escalations</div>
+                  <div className="cmd-badge">{pendingIncidentsCount}</div>
+                </div>
+                <div className="cmd-item-sub">Incident items still require admin attention.</div>
+              </div>
+              <div className="cmd-item-actions">
+                <button type="button" className="cmd-btn" onClick={() => setView('incidents')}>Open</button>
+              </div>
+            </div>
+            <div className="cmd-item">
+              <div className="cmd-item-main">
+                <div className="cmd-item-top">
+                  <div className="cmd-item-title">Restock queue</div>
+                  <div className="cmd-badge">{pendingRestockCount}</div>
+                </div>
+                <div className="cmd-item-sub">Pharmacy-submitted stock requests waiting for review.</div>
+              </div>
+              <div className="cmd-item-actions">
+                <button type="button" className="cmd-btn" onClick={() => document.getElementById('admin-inventory')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Review</button>
+              </div>
+            </div>
+            <div className="cmd-item">
+              <div className="cmd-item-main">
+                <div className="cmd-item-top">
+                  <div className="cmd-item-title">Care activity this period</div>
+                  <div className="cmd-badge">{totalAppointments}</div>
+                </div>
+                <div className="cmd-item-sub">Appointments, registrations, and patient movement in the current dataset.</div>
+              </div>
+              <div className="cmd-item-actions">
+                <button type="button" className="cmd-btn" onClick={() => setView('reports')}>View reports</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+
+      const renderPatientTrendPanel = (extraClassName = '') => (
+        <div className={`dashboard-section-card ${extraClassName}`.trim()} style={{ height: 'auto', margin: 0 }}>
+          <div className="dashboard-section-header">
+            <h3 className="dashboard-section-title">
+              <Activity size={20} className="text-orange-600" /> Patient Trend
+            </h3>
+            <select
+              className="settings-select"
+              style={{ padding: '4px 8px', fontSize: '0.85rem' }}
+              value={dashboardRange}
+              onChange={(e) => setDashboardRange(Number(e.target.value))}
+            >
+              <option value={7}>Last 7 Days</option>
+              <option value={14}>Last 14 Days</option>
+              <option value={30}>Last 30 Days</option>
+            </select>
+          </div>
+          <div className="admin-trend-summary">
+            <div className="admin-trend-stat">
+              <span className="admin-trend-stat-k">Total patients in range</span>
+              <strong className="admin-trend-stat-v">{totalTrendPatients}</strong>
+            </div>
+            <div className="admin-trend-stat">
+              <span className="admin-trend-stat-k">Period comparison</span>
+              <strong className={`admin-trend-stat-v ${trendDelta >= 0 ? 'up' : 'down'}`}>
+                {trendDelta >= 0 ? `+${trendDelta}%` : `${trendDelta}%`}
+              </strong>
+            </div>
+          </div>
+          <div style={{ width: '100%', minHeight: 240, marginTop: '1rem' }}>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={patientTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
+                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: 'var(--chart-tick)', fontSize: 12 }} dy={10} />
+                <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: 'var(--chart-tick)', fontSize: 12 }} />
+                <Tooltip
+                  cursor={{ fill: 'var(--chart-cursor)' }}
+                  contentStyle={{
+                    borderRadius: '10px',
+                    border: '1px solid var(--chart-tooltip-border)',
+                    background: 'var(--chart-tooltip-bg)',
+                    color: 'var(--chart-tooltip-text)',
+                    boxShadow: '0 14px 28px rgba(2,6,23,.18)'
+                  }}
+                />
+                <Bar dataKey="count" name="Patients" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                  {patientTrendData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.count > 0 ? '#ea580c' : '#fdba74'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      );
+
 
       return (
         <div className="staff-management-container admin-dashboard-shell" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -3762,7 +3867,7 @@ function AdminDashboard() {
           </div>
 
           <div className="dashboard-grid-asymmetric admin-panel-grid" style={{ alignItems: 'flex-start' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+            <div className="admin-dashboard-column admin-dashboard-main-column">
               <div className="dashboard-section-card admin-panel-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
                 <div className="dashboard-section-header">
                   <h3 className="dashboard-section-title">
@@ -4087,52 +4192,7 @@ function AdminDashboard() {
                 ) : null}
               </div>
 
-              <div className="dashboard-section-card admin-panel-card" style={{ margin: 0 }}>
-                <div className="dashboard-section-header">
-                  <h3 className="dashboard-section-title">
-                    <Bell size={20} className="text-orange-600" /> Operational Snapshot
-                  </h3>
-                  <span className="text-xs text-slate-500 font-medium">{pendingIncidentsCount + pendingRestockCount + lowStockCount} items to monitor</span>
-                </div>
-                <div className="cmd-list">
-                  <div className="cmd-item">
-                    <div className="cmd-item-main">
-                      <div className="cmd-item-top">
-                        <div className="cmd-item-title">Pending approvals and escalations</div>
-                        <div className="cmd-badge">{pendingIncidentsCount}</div>
-                      </div>
-                      <div className="cmd-item-sub">Incident items still require admin attention.</div>
-                    </div>
-                    <div className="cmd-item-actions">
-                      <button type="button" className="cmd-btn" onClick={() => setView('incidents')}>Open</button>
-                    </div>
-                  </div>
-                  <div className="cmd-item">
-                    <div className="cmd-item-main">
-                      <div className="cmd-item-top">
-                        <div className="cmd-item-title">Restock queue</div>
-                        <div className="cmd-badge">{pendingRestockCount}</div>
-                      </div>
-                      <div className="cmd-item-sub">Pharmacy-submitted stock requests waiting for review.</div>
-                    </div>
-                    <div className="cmd-item-actions">
-                      <button type="button" className="cmd-btn" onClick={() => document.getElementById('admin-inventory')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Review</button>
-                    </div>
-                  </div>
-                  <div className="cmd-item">
-                    <div className="cmd-item-main">
-                      <div className="cmd-item-top">
-                        <div className="cmd-item-title">Care activity this period</div>
-                        <div className="cmd-badge">{totalAppointments}</div>
-                      </div>
-                      <div className="cmd-item-sub">Appointments, registrations, and patient movement in the current dataset.</div>
-                    </div>
-                    <div className="cmd-item-actions">
-                      <button type="button" className="cmd-btn" onClick={() => setView('reports')}>View reports</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              {renderPatientTrendPanel('admin-panel-card admin-dashboard-feature-card')}
 
               <div className="dashboard-section-card admin-panel-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
                 <div className="dashboard-section-header">
@@ -4183,7 +4243,7 @@ function AdminDashboard() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+            <div className="admin-dashboard-column admin-dashboard-side-column">
               {renderAnnouncementsPanel('admin-panel-card admin-dashboard-announcements')}
 
               <div className="dashboard-section-card admin-panel-card compact-activity-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
@@ -4192,7 +4252,7 @@ function AdminDashboard() {
                     <Activity size={18} className="text-blue-600" /> Recent Activity
                   </h3>
                 </div>
-                <div className="modern-list compact-list" style={{ flex: 1 }}>
+                <div className="modern-list compact-list scrollable-list-y admin-dashboard-aligned-list" style={{ flex: 1 }}>
                   {recentActivities.length === 0 ? (
                     <div className="empty-state-sm">No recent activity.</div>
                   ) : (
@@ -4244,59 +4304,7 @@ function AdminDashboard() {
           {/* Analytics Row */}
           <div className="admin-analytics-row admin-analytics-row-single">
               <div className="admin-analytics-left">
-                <div className="dashboard-section-card analytics-card" style={{ height: 'auto' }}>
-                  <div className="dashboard-section-header">
-                    <h3 className="dashboard-section-title">
-                      <Activity size={20} className="text-orange-600" /> Patient Trend
-                    </h3>
-                    <select 
-                      className="settings-select" 
-                      style={{ padding: '4px 8px', fontSize: '0.85rem' }} 
-                      value={dashboardRange} 
-                      onChange={(e) => setDashboardRange(Number(e.target.value))}
-                    >
-                        <option value={7}>Last 7 Days</option>
-                        <option value={14}>Last 14 Days</option>
-                        <option value={30}>Last 30 Days</option>
-                    </select>
-                  </div>
-                  <div className="admin-trend-summary">
-                    <div className="admin-trend-stat">
-                      <span className="admin-trend-stat-k">Total patients in range</span>
-                      <strong className="admin-trend-stat-v">{totalTrendPatients}</strong>
-                    </div>
-                    <div className="admin-trend-stat">
-                      <span className="admin-trend-stat-k">Period comparison</span>
-                      <strong className={`admin-trend-stat-v ${trendDelta >= 0 ? 'up' : 'down'}`}>
-                        {trendDelta >= 0 ? `+${trendDelta}%` : `${trendDelta}%`}
-                      </strong>
-                    </div>
-                  </div>
-                  <div style={{ width: '100%', minHeight: 240, marginTop: '1rem' }}>
-                    <ResponsiveContainer width="100%" height={240}>
-                      <BarChart data={patientTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
-                        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: 'var(--chart-tick)', fontSize: 12 }} dy={10} />
-                        <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: 'var(--chart-tick)', fontSize: 12 }} />
-                        <Tooltip
-                          cursor={{ fill: 'var(--chart-cursor)' }}
-                          contentStyle={{
-                            borderRadius: '10px',
-                            border: '1px solid var(--chart-tooltip-border)',
-                            background: 'var(--chart-tooltip-bg)',
-                            color: 'var(--chart-tooltip-text)',
-                            boxShadow: '0 14px 28px rgba(2,6,23,.18)'
-                          }}
-                        />
-                        <Bar dataKey="count" name="Patients" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                          {patientTrendData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.count > 0 ? '#ea580c' : '#fdba74'} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+                {renderOperationalSnapshotPanel('analytics-card admin-dashboard-analytics-snapshot')}
 
                 <div className="dashboard-section-card analytics-card admin-ai-card" style={{ height: 'auto' }}>
                   <div className="dashboard-section-header">

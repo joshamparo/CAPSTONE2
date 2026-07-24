@@ -722,6 +722,33 @@ body {
   margin-bottom: 32px;
 }
 
+.admin-dashboard-column {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 0;
+}
+
+.admin-dashboard-feature-card {
+  min-height: 390px;
+}
+
+.admin-dashboard-announcements {
+  display: flex;
+  flex-direction: column;
+  min-height: 390px;
+}
+
+.admin-dashboard-aligned-list {
+  min-height: 350px;
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+.admin-dashboard-analytics-snapshot {
+  min-height: 0;
+}
+
 .analytics-grid {
   display: grid;
   gap: 32px; /* Space between quick stat cards */
@@ -1753,7 +1780,7 @@ body {
 }
 
 .admin-dashboard-announcements {
-  min-height: 0;
+  min-height: 390px;
 }
 
 .admin-dashboard-announcements .announcement-input-area {
@@ -1761,7 +1788,8 @@ body {
 }
 
 .admin-dashboard-announcements .announcement-list {
-  max-height: 520px;
+  flex: 1;
+  max-height: 390px;
   overflow-y: auto;
   padding-right: 6px;
 }
@@ -1770,6 +1798,13 @@ body {
   .admin-announcements-card {
     position: static;
     top: auto;
+  }
+
+  .admin-dashboard-feature-card,
+  .admin-dashboard-announcements,
+  .admin-dashboard-aligned-list {
+    min-height: auto;
+    max-height: none;
   }
 }
 
