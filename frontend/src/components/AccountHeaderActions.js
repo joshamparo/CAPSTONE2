@@ -617,8 +617,10 @@ export default function AccountHeaderActions({
             {showSettings ? (
               <div className="aha-dropdown" onClick={(e) => e.stopPropagation()}>
                 <div className="aha-dropdown-head">
-                  <Settings size={14} />
-                  <div className="aha-dropdown-title">System Settings</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Settings size={14} />
+                    <div className="aha-dropdown-title">System Settings</div>
+                  </div>
                 </div>
                 <div className="aha-dropdown-body">
                   {settingsLoading ? (

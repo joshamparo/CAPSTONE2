@@ -7,9 +7,9 @@
 .aha-sep{width:1px; height:34px; background:#e2e8f0;}
 
 .aha-dropdown{position:absolute; top:calc(100% + 10px); right:0; width:300px; background:#fff; border:1px solid #e2e8f0; border-radius:14px; box-shadow:0 14px 28px rgba(2,6,23,.12); overflow:hidden; z-index:70;}
-.aha-dropdown-head{padding:12px 14px; border-bottom:1px solid #f1f5f9; display:flex; align-items:center; justify-content:space-between;}
-.aha-dropdown-title{font-weight:900; color:#0f172a;}
-.aha-dropdown-body{padding:12px 14px;}
+.aha-dropdown-head{padding:12px 14px; border-bottom:1px solid #f1f5f9; display:flex; align-items:center; justify-content:flex-start;}
+.aha-dropdown-title{font-weight:900; color:#0f172a; font-size: 0.95rem;}
+.aha-dropdown-body{padding:10px;}
 .aha-muted{color:#64748b; font-weight:700; font-size:0.9rem;}
 .aha-badge{position:absolute; top:8px; right:8px; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#ea580c; color:#fff; font-size:0.72rem; font-weight:900; display:flex; align-items:center; justify-content:center; border:2px solid #fff; line-height:1;}
 .aha-link-btn{border:0; background:transparent; color:#ea580c; font-weight:900; cursor:pointer; padding:0; font-size:0.82rem;}
@@ -28,11 +28,11 @@
 .aha-notif-message{color:#64748b; font-weight:700; font-size:0.82rem; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .aha-notif-time{font-size:0.72rem; color:#94a3b8; font-weight:800;}
 
-.aha-settings-list{display:flex; flex-direction:column; gap:10px;}
-.aha-setting-row{display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid #e2e8f0; border-radius:14px; padding:10px 12px; background:#fff;}
-.aha-setting-info{display:flex; flex-direction:column; gap:2px; min-width:0;}
-.aha-setting-label{font-weight:900; color:#0f172a; font-size:0.92rem;}
-.aha-setting-desc{color:#64748b; font-weight:700; font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.aha-settings-list{display:flex; flex-direction:column; gap:8px;}
+.aha-setting-row{display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid #f1f5f9; border-radius:12px; padding:10px 12px; background:#fff; text-align: left;}
+.aha-setting-info{display:flex; flex-direction:column; gap:1px; min-width:0; flex: 1; text-align: left;}
+.aha-setting-label{font-weight:900; color:#0f172a; font-size:0.9rem; text-align: left;}
+.aha-setting-desc{color:#64748b; font-weight:700; font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align: left;}
 .aha-switch{position:relative; display:inline-block; width:44px; height:26px; flex:0 0 auto;}
 .aha-switch input{opacity:0; width:0; height:0;}
 .aha-slider{position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#e2e8f0; transition:.15s; border-radius:999px; border:1px solid #cbd5e1;}
