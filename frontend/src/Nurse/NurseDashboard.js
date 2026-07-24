@@ -5351,24 +5351,6 @@ function NurseDashboard() {
                                       </div>
 	                                </div>
 	                                <div className="settings-list">
-	                                    <div className="setting-item">
-	                                        <div className="setting-icon-box">
-                                              <Bell size={18} />
-                                          </div>
-                                          <div className="setting-info">
-	                                            <p className="setting-label">Email Notifications</p>
-	                                            <p className="setting-desc">Daily shift summaries</p>
-	                                        </div>
-	                                        <label className="switch">
-	                                            <input 
-                                                type="checkbox" 
-                                                checked={settings.emailNotifications} 
-                                                onChange={(e) => setSettings({...settings, emailNotifications: e.target.checked})}
-                                              />
-	                                            <span className="slider round"></span>
-	                                        </label>
-	                                    </div>
-
                                       <div className="setting-item">
 	                                        <div className="setting-icon-box">
                                               <ShieldAlert size={18} />
