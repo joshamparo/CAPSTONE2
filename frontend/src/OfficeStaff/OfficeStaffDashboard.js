@@ -2571,7 +2571,7 @@ export default function OfficeStaffDashboard({ mode }) {
           <option value="Card">Card</option>
         </select>
         <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
-          {payMethod === 'Cash' ? <Banknote size={18} /> : payMethod === 'Card' ? <CreditCard size={18} /> : <Wallet size={18} />}
+          {payMethod === 'Cash' ? <CreditCard size={18} /> : payMethod === 'Card' ? <CreditCard size={18} /> : <CreditCard size={18} />}
         </div>
       </div>
     </div>
