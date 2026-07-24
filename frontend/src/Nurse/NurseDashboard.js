@@ -2443,6 +2443,11 @@ function NurseDashboard() {
   const [wardLoading, setWardLoading] = useState(false);
   const [wardError, setWardError] = useState(null);
   const [assigningPatient, setAssigningPatient] = useState(null);
+  const [collapsedWards, setCollapsedWards] = useState({});
+
+  const toggleWardCollapse = (wardId) => {
+    setCollapsedWards(prev => ({ ...prev, [wardId]: !prev[wardId] }));
+  };
 
   const fetchWardRegistry = async () => {
     if (document.visibilityState !== 'visible') return;
@@ -5677,42 +5682,61 @@ function NurseDashboard() {
                                     <div className="wards-container">
                                         {(wardRegistry.wards || []).map(ward => (
                                             <div key={ward.id} className="ward-group" style={{ marginBottom: '24px' }}>
-                                                <h4 className="ward-group-title" style={{ borderLeftColor: ward.color }}>
-                                                    {ward.name}
+                                                <div 
+                                                    className="ward-group-title" 
+                                                    style={{ borderLeftColor: ward.color, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', userSelect: 'none' }}
+                                                    onClick={() => toggleWardCollapse(ward.id)}
+                                                >
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        {collapsedWards[ward.id] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                                                        <h4 style={{ margin: 0 }}>{ward.name}</h4>
+                                                    </div>
                                                     <span>
                                                         {ward.occupied} / {ward.totalCapacity} Occupied
                                                     </span>
-                                                </h4>
-                                                <div className="bed-grid">
-                                                    {(wardRegistry.rooms || []).filter(r => r.wardName === ward.name).map(room => (
-                                                        <div 
-                                                            key={room.id}
-                                                            className={`bed-card ${room.occupied ? 'occupied' : 'available'}`}
-                                                            onClick={() => !room.occupied && setAssigningPatient({ roomCode: room.roomCode })}
-                                                        >
-                                                            <div className="bed-card-header">
-                                                                <span className="bed-code">{room.roomCode}</span>
-                                                                {room.occupied ? <User size={14} color="#ef4444" /> : <Bed size={14} color="#22c55e" />}
-                                                            </div>
-                                                            {room.occupied ? (
-                                                                <div className="patient-info">
-                                                                    <p>{room.patient?.name}</p>
-                                                                    <button 
-                                                                        className="discharge-btn" 
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            handleDischargePatient(room.patient?.id);
-                                                                        }}
-                                                                    >
-                                                                        Discharge
-                                                                    </button>
-                                                                </div>
-                                                            ) : (
-                                                                <span className="bed-status-label">Available</span>
-                                                            )}
-                                                        </div>
-                                                    ))}
                                                 </div>
+                                                {!collapsedWards[ward.id] && (
+                                                    <div className="bed-grid" style={{ marginTop: '16px' }}>
+                                                        {(wardRegistry.rooms || []).filter(r => r.wardName === ward.name).map(room => (
+                                                            <div 
+                                                                key={room.id}
+                                                                className={`bed-card ${room.occupied ? 'occupied' : 'available'}`}
+                                                                onClick={() => !room.occupied && setAssigningPatient({ roomCode: room.roomCode })}
+                                                            >
+                                                                <div className="bed-card-header">
+                                                                    <span className="bed-code">{room.roomCode}</span>
+                                                                    {room.occupied ? <User size={14} color="#ef4444" /> : <Bed size={14} color="#22c55e" />}
+                                                                </div>
+                                                                {room.occupied ? (
+                                                                    <div className="patient-info">
+                                                                        <div className="patient-info-content">
+                                                                            <div className="patient-avatar">
+                                                                                {room.patient?.name ? room.patient.name.charAt(0).toUpperCase() : 'P'}
+                                                                            </div>
+                                                                            <div className="patient-details">
+                                                                                <p className="patient-name" title={room.patient?.name || 'Unknown Patient'}>
+                                                                                    {room.patient?.name || 'Unknown'}
+                                                                                </p>
+                                                                                <p className="patient-status">Admitted</p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <button 
+                                                                            className="discharge-btn" 
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleDischargePatient(room.patient?.id);
+                                                                            }}
+                                                                        >
+                                                                            Discharge
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="bed-status-label">Available</span>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
