@@ -2057,6 +2057,69 @@ body {
   }
 }
 
+/* --- Admin Safe Fixes (Error Banners & UI Polish) --- */
+.has-error-banner {
+  padding-top: 48px !important;
+}
+
+.admin-error-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10000;
+  background: #fee2e2;
+  border-bottom: 1px solid #fecaca;
+  color: #991b1b;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 10px 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  animation: slideDown 0.3s ease-out forwards;
+}
+
+.admin-error-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-error-icon {
+  font-size: 1.1rem;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+/* Polish for in-form alerts */
+.alert-error, .alert-success {
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alert-error {
+  background-color: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.alert-success {
+  background-color: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
 .staff-header {
   gap: 18px;
   flex-wrap: wrap;

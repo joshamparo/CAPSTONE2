@@ -12,11 +12,9 @@ import { checkBackendHealth, fetchJson } from "../utils/api";
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const WEB_ORIGIN = String(process.env.REACT_APP_WEB_ORIGIN || '').trim() || 'https://pascualinga.com';
 const LOGIN_LINK = 'https://pascualinga.com/login';
-const EMAILJS_SERVICE_ID = process.env.REACT_APP_EMAILJS_SERVICE_ID || 'service_ur884qv';
-const EMAILJS_PUBLIC_KEY = process.env.REACT_APP_EMAILJS_PUBLIC_KEY || '45tRyW8WG36pIFeBo';
-const EMAILJS_STAFF_TEMPLATE_ID =
-  String(process.env.REACT_APP_EMAILJS_STAFF_TEMPLATE_ID || '').trim() ||
-  'template_zkps5b8';
+const EMAILJS_SERVICE_ID = process.env.REACT_APP_EMAILJS_SERVICE_ID || '';
+const EMAILJS_PUBLIC_KEY = process.env.REACT_APP_EMAILJS_PUBLIC_KEY || '';
+const EMAILJS_STAFF_TEMPLATE_ID = String(process.env.REACT_APP_EMAILJS_STAFF_TEMPLATE_ID || '').trim() || '';
 
 const ADMIN_WARD_ROOM_PLAN = [
   { id: 'icu', name: 'ICU', total: 5, color: '#ef4444', shortCode: 'ICU', aliases: ['icu'] },
@@ -7505,23 +7503,13 @@ function AdminDashboard() {
 
   return (
     
-      <div className="admin-dashboard-container" style={{ paddingTop: backendHealth.checked && !backendHealth.ok ? 44 : 0 }}>
+      <div className={`admin-dashboard-container ${backendHealth.checked && !backendHealth.ok ? 'has-error-banner' : ''}`}>
       {backendHealth.checked && !backendHealth.ok ? (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            zIndex: 9999,
-            background: '#fee2e2',
-            color: '#991b1b',
-            padding: '10px 12px',
-            fontWeight: 800,
-            borderBottom: '1px solid #fecaca'
-          }}
-        >
-          Backend offline: {backendHealth.error}
+        <div className="admin-error-banner">
+          <div className="admin-error-banner-content">
+            <span className="admin-error-icon">⚠️</span>
+            Backend connection error: {backendHealth.error}
+          </div>
         </div>
       ) : null}
       {/* SIDEBAR */}
