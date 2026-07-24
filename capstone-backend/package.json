@@ -4,6 +4,7 @@
   "description": "Capstone Backend",
   "main": "server.js",
   "scripts": {
+    "build": "prisma generate",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "start": "node server.js",
