@@ -154,8 +154,8 @@ function HomePage() {
       source: 'doh.gov.ph',
       title: 'DOH Launches Nationwide Vaccination Drive for Children',
       summary: 'The Department of Health intensifies its immunization campaign across various regions to protect children from vaccine-preventable diseases.',
-      url: 'https://doh.gov.ph/',
-      imageUrl: 'https://images.unsplash.com/photo-1633458925586-4f40f0653d9e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'
+      url: 'https://doh.gov.ph/doh-press-release',
+      imageUrl: 'https://images.unsplash.com/photo-1584515933487-779824d29309?auto=format&fit=crop&w=900&q=80'
     },
     {
       id: 'news-2',
@@ -164,7 +164,7 @@ function HomePage() {
       source: 'philhealth.gov.ph',
       title: 'PhilHealth Expands Konsulta Package Benefits',
       summary: 'PhilHealth has officially expanded its primary care benefits to include more diagnostic tests and essential medicines for all Filipinos.',
-      url: 'https://www.philhealth.gov.ph/benefits/konsulta/',
+      url: 'https://www.philhealth.gov.ph/news/',
       imageUrl: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'
     },
     {
