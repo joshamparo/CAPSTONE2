@@ -194,9 +194,9 @@ async function syncWardCapacitiesFromRooms(roomRows) {
 
 async function getAdmittedPatients() {
   const admitted = await prisma.$queryRawUnsafe(`
-    SELECT id, ward_number 
+    SELECT id, ward_number, first_name, last_name 
     FROM public.patients 
-    WHERE admission_status = 'Admitted' AND ward_number IS NOT NULL AND ward_number != ''
+    WHERE admission_status IN ('Admitted', 'Inpatient') AND ward_number IS NOT NULL AND ward_number != ''
   `);
   return Array.isArray(admitted) ? admitted : [];
 }
