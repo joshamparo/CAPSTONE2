@@ -4087,6 +4087,53 @@ function AdminDashboard() {
                 ) : null}
               </div>
 
+              <div className="dashboard-section-card admin-panel-card" style={{ margin: 0 }}>
+                <div className="dashboard-section-header">
+                  <h3 className="dashboard-section-title">
+                    <Bell size={20} className="text-orange-600" /> Operational Snapshot
+                  </h3>
+                  <span className="text-xs text-slate-500 font-medium">{pendingIncidentsCount + pendingRestockCount + lowStockCount} items to monitor</span>
+                </div>
+                <div className="cmd-list">
+                  <div className="cmd-item">
+                    <div className="cmd-item-main">
+                      <div className="cmd-item-top">
+                        <div className="cmd-item-title">Pending approvals and escalations</div>
+                        <div className="cmd-badge">{pendingIncidentsCount}</div>
+                      </div>
+                      <div className="cmd-item-sub">Incident items still require admin attention.</div>
+                    </div>
+                    <div className="cmd-item-actions">
+                      <button type="button" className="cmd-btn" onClick={() => setView('incidents')}>Open</button>
+                    </div>
+                  </div>
+                  <div className="cmd-item">
+                    <div className="cmd-item-main">
+                      <div className="cmd-item-top">
+                        <div className="cmd-item-title">Restock queue</div>
+                        <div className="cmd-badge">{pendingRestockCount}</div>
+                      </div>
+                      <div className="cmd-item-sub">Pharmacy-submitted stock requests waiting for review.</div>
+                    </div>
+                    <div className="cmd-item-actions">
+                      <button type="button" className="cmd-btn" onClick={() => document.getElementById('admin-inventory')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Review</button>
+                    </div>
+                  </div>
+                  <div className="cmd-item">
+                    <div className="cmd-item-main">
+                      <div className="cmd-item-top">
+                        <div className="cmd-item-title">Care activity this period</div>
+                        <div className="cmd-badge">{totalAppointments}</div>
+                      </div>
+                      <div className="cmd-item-sub">Appointments, registrations, and patient movement in the current dataset.</div>
+                    </div>
+                    <div className="cmd-item-actions">
+                      <button type="button" className="cmd-btn" onClick={() => setView('reports')}>View reports</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="dashboard-section-card admin-panel-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
                 <div className="dashboard-section-header">
                   <h3 className="dashboard-section-title">
@@ -4138,53 +4185,6 @@ function AdminDashboard() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
               {renderAnnouncementsPanel('admin-panel-card admin-dashboard-announcements')}
-
-              <div className="dashboard-section-card admin-panel-card" style={{ margin: 0 }}>
-                <div className="dashboard-section-header">
-                  <h3 className="dashboard-section-title">
-                    <Bell size={20} className="text-orange-600" /> Operational Snapshot
-                  </h3>
-                  <span className="text-xs text-slate-500 font-medium">{pendingIncidentsCount + pendingRestockCount + lowStockCount} items to monitor</span>
-                </div>
-                <div className="cmd-list">
-                  <div className="cmd-item">
-                    <div className="cmd-item-main">
-                      <div className="cmd-item-top">
-                        <div className="cmd-item-title">Pending approvals and escalations</div>
-                        <div className="cmd-badge">{pendingIncidentsCount}</div>
-                      </div>
-                      <div className="cmd-item-sub">Incident items still require admin attention.</div>
-                    </div>
-                    <div className="cmd-item-actions">
-                      <button type="button" className="cmd-btn" onClick={() => setView('incidents')}>Open</button>
-                    </div>
-                  </div>
-                  <div className="cmd-item">
-                    <div className="cmd-item-main">
-                      <div className="cmd-item-top">
-                        <div className="cmd-item-title">Restock queue</div>
-                        <div className="cmd-badge">{pendingRestockCount}</div>
-                      </div>
-                      <div className="cmd-item-sub">Pharmacy-submitted stock requests waiting for review.</div>
-                    </div>
-                    <div className="cmd-item-actions">
-                      <button type="button" className="cmd-btn" onClick={() => document.getElementById('admin-inventory')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Review</button>
-                    </div>
-                  </div>
-                  <div className="cmd-item">
-                    <div className="cmd-item-main">
-                      <div className="cmd-item-top">
-                        <div className="cmd-item-title">Care activity this period</div>
-                        <div className="cmd-badge">{totalAppointments}</div>
-                      </div>
-                      <div className="cmd-item-sub">Appointments, registrations, and patient movement in the current dataset.</div>
-                    </div>
-                    <div className="cmd-item-actions">
-                      <button type="button" className="cmd-btn" onClick={() => setView('reports')}>View reports</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
 
               <div className="dashboard-section-card admin-panel-card compact-activity-card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
                 <div className="dashboard-section-header">
