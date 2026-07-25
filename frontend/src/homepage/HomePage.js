@@ -1531,9 +1531,9 @@ function HomePage() {
       </section>
 
       <section className="services-section page-section" id="services">
-        <div className="mb-10 reveal-on-scroll">
+        <div className="reveal-on-scroll">
           <h2 className="section-title">Our Services</h2>
-          <p className="section-subtitle">Explore key hospital services through a clear, patient-friendly service overview.</p>
+          <p className="section-subtitle mx-auto">Explore key hospital services through a clear, patient-friendly service overview.</p>
         </div>
         <div className="services-tabs reveal-on-scroll reveal-delay-1">
           <button
@@ -1576,7 +1576,7 @@ function HomePage() {
         <div className="trust-inner">
           <div className="trust-head reveal-on-scroll">
             <h2 className="section-title">Why Families Choose Us</h2>
-            <p className="section-subtitle">A private hospital experience that stays warm, reliable, and easy to understand.</p>
+            <p className="section-subtitle mx-auto">A private hospital experience that stays warm, reliable, and easy to understand.</p>
           </div>
           <div className="trust-grid">
             {trustHighlights.map((item, index) => (
@@ -1694,7 +1694,7 @@ function HomePage() {
           <div className="news-head reveal-on-scroll">
             <div className="eyebrow">Current Updates</div>
             <h2 className="section-title">News & Health Updates</h2>
-            <p className="section-subtitle">
+            <p className="section-subtitle mx-auto">
               Live news links from legitimate online publishers, with health and public-interest stories prioritized.
             </p>
           </div>
