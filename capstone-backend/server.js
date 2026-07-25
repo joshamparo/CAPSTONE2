@@ -323,33 +323,47 @@ app.get('/api/health', (_req, res) => {
 app.post('/api/email/send-recovery', async (req, res) => {
   const { email, resetLink } = req.body;
 
-  if (!process.env.EMAILJS_SERVICE_ID || !process.env.EMAILJS_PUBLIC_KEY || !process.env.EMAILJS_PRIVATE_KEY) {
-    return res.status(500).json({ success: false, message: 'EmailJS credentials missing from backend environment variables.' });
+  const SERVICE_ID = process.env.EMAILJS_SERVICE_ID || "service_ur884qv";
+  const PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || "45tRyW8WG36pIFeBo";
+  const PRIVATE_KEY = process.env.EMAILJS_PRIVATE_KEY;
+  const TEMPLATE_ID = process.env.EMAILJS_RECOVERY_TEMPLATE_ID || "template_xyatwcf";
+
+  if (!SERVICE_ID || !PUBLIC_KEY || !PRIVATE_KEY) {
+    console.error('[Backend Recovery] Missing credentials. Private Key present:', !!PRIVATE_KEY);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'EmailJS credentials missing from backend environment.' 
+    });
   }
 
   try {
+    console.log(`[Backend Recovery] Sending reset link to ${email}...`);
     const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        service_id: process.env.EMAILJS_SERVICE_ID,
-        template_id: 'template_xyatwcf',
-        user_id: process.env.EMAILJS_PUBLIC_KEY,
-        accessToken: process.env.EMAILJS_PRIVATE_KEY,
+        service_id: SERVICE_ID,
+        template_id: TEMPLATE_ID,
+        user_id: PUBLIC_KEY,
+        accessToken: PRIVATE_KEY,
         template_params: {
           to_email: email,
-          reset_link: resetLink
+          reset_link: resetLink,
+          subject: "Password Recovery - Pascualinga"
         }
       })
     });
 
     if (response.ok) {
+      console.log('[Backend Recovery] Success!');
       return res.status(200).json({ success: true, message: 'Recovery email sent' });
     }
 
     const errorText = await response.text();
+    console.error('[Backend Recovery] EmailJS REST API failed:', errorText);
     return res.status(500).json({ success: false, message: 'EmailJS failed to send recovery email.', details: errorText });
   } catch (error) {
+    console.error('[Backend Recovery] Server error:', error);
     return res.status(500).json({ success: false, message: 'Server error while attempting to send email.' });
   }
 });
@@ -357,8 +371,17 @@ app.post('/api/email/send-recovery', async (req, res) => {
 app.post('/api/email/send-otp', async (req, res) => {
   const { email, otp } = req.body;
 
-  if (!process.env.EMAILJS_SERVICE_ID || !process.env.EMAILJS_PUBLIC_KEY || !process.env.EMAILJS_PRIVATE_KEY) {
-    return res.status(500).json({ success: false, message: 'Missing EmailJS credentials in backend environment variables.' });
+  const SERVICE_ID = process.env.EMAILJS_SERVICE_ID || "service_ur884qv";
+  const PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || "45tRyW8WG36pIFeBo";
+  const PRIVATE_KEY = process.env.EMAILJS_PRIVATE_KEY; // Backend needs this for REST API
+  const TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || "template_ir71fnn";
+
+  if (!SERVICE_ID || !PUBLIC_KEY || !PRIVATE_KEY) {
+    console.error('[Backend Email] Missing credentials. Private Key present:', !!PRIVATE_KEY);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'EmailJS credentials missing from backend environment. Please check EMAILJS_PRIVATE_KEY.' 
+    });
   }
 
   const expirationTime = new Date(Date.now() + 15 * 60000).toLocaleTimeString('en-US', {
@@ -367,14 +390,15 @@ app.post('/api/email/send-otp', async (req, res) => {
   });
 
   try {
+    console.log(`[Backend Email] Sending OTP to ${email} via REST API...`);
     const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        service_id: process.env.EMAILJS_SERVICE_ID,
-        template_id: 'template_x8k19wl',
-        user_id: process.env.EMAILJS_PUBLIC_KEY,
-        accessToken: process.env.EMAILJS_PRIVATE_KEY,
+        service_id: SERVICE_ID,
+        template_id: TEMPLATE_ID,
+        user_id: PUBLIC_KEY,
+        accessToken: PRIVATE_KEY,
         template_params: {
           to_email: email,
           otp_code: otp,
@@ -382,18 +406,23 @@ app.post('/api/email/send-otp', async (req, res) => {
           message: otp,
           code: otp,
           passcode: otp,
-          time: expirationTime
+          time: expirationTime,
+          expiration_time: expirationTime,
+          subject: "Your Login OTP - Pascualinga"
         }
       })
     });
 
     if (response.ok) {
+      console.log('[Backend Email] Success!');
       return res.status(200).json({ success: true, message: 'OTP email sent' });
     }
 
     const errorText = await response.text();
+    console.error('[Backend Email] EmailJS REST API failed:', errorText);
     return res.status(500).json({ success: false, message: 'EmailJS failed to send OTP.', details: errorText });
   } catch (error) {
+    console.error('[Backend Email] Server error:', error);
     return res.status(500).json({ success: false, message: 'Server error while attempting to send OTP.' });
   }
 });

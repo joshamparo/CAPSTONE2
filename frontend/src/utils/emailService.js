@@ -4,11 +4,13 @@ const SERVICE_ID = process.env.REACT_APP_EMAILJS_SERVICE_ID || "service_ur884qv"
 const OTP_TEMPLATE_ID =
   process.env.REACT_APP_EMAILJS_OTP_TEMPLATE_ID ||
   process.env.REACT_APP_EMAILJS_TEMPLATE_ID ||
-  "template_x8k19wl";
+  "template_ir71fnn"; // Reverted to template_ir71fnn (verified backup)
 const PUBLIC_KEY = process.env.REACT_APP_EMAILJS_PUBLIC_KEY || "45tRyW8WG36pIFeBo";
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
 export const sendOTPEmail = async (email, otp) => {
+  console.log(`[EmailService] Attempting to send OTP to ${email}...`);
+  
   try {
     const expirationTime = new Date(Date.now() + 15 * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -19,22 +21,39 @@ export const sendOTPEmail = async (email, otp) => {
       passcode: otp,
       message: otp,
       time: expirationTime,
-      expiration_time: expirationTime
+      expiration_time: expirationTime,
+      subject: "Your Login OTP - Pascualinga"
     };
 
+    console.log(`[EmailService] Sending via EmailJS Client... (Template: ${OTP_TEMPLATE_ID})`);
     const response = await emailjs.send(SERVICE_ID, OTP_TEMPLATE_ID, templateParams, PUBLIC_KEY);
-    if (response && response.status === 200) return true;
+    
+    if (response && response.status === 200) {
+      console.log("[EmailService] EmailJS Client success!");
+      return true;
+    }
+    console.warn("[EmailService] EmailJS Client returned non-200 status:", response?.status);
   } catch (err) {
+    console.error("[EmailService] EmailJS Client error:", err);
   }
 
+  console.log("[EmailService] Falling back to Backend API...");
   try {
     const response = await fetch(`${API_BASE}/api/email/send-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, otp })
     });
-    return response.ok;
-  } catch (_) {
+    
+    if (response.ok) {
+      console.log("[EmailService] Backend API success!");
+      return true;
+    }
+    const errorData = await response.json().catch(() => ({}));
+    console.error("[EmailService] Backend API failed:", errorData.message || response.statusText);
+    return false;
+  } catch (err) {
+    console.error("[EmailService] Backend API connection error:", err);
     return false;
   }
 };
