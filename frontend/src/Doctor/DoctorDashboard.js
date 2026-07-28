@@ -250,7 +250,9 @@ function DoctorDashboard() {
   }, [activeNav, allowedDoctorNav, defaultDoctorNav]);
 
   const doctorNavItems = useMemo(() => {
-    const items = [
+    const isPathoOrRadio = doctorSpecialization.toLowerCase().includes('patholog') || doctorSpecialization.toLowerCase().includes('radiolog');
+    
+    let items = [
       { key: 'dashboard', label: 'Patients Queue', icon: <User size={20} /> },
       { key: 'worklist', label: 'Worklist', icon: <Calendar size={20} /> },
       { key: 'doctor-chat', label: 'Doctor Chat', icon: <MessageSquare size={20} /> },
@@ -260,8 +262,13 @@ function DoctorDashboard() {
       { key: 'labs', label: 'Lab & Imaging', icon: <Search size={20} /> },
       { key: 'certificates', label: 'Certificates', icon: <FileText size={20} /> }
     ];
+    
+    if (isPathoOrRadio) {
+      items = items.filter(it => it.key !== 'labs' && it.key !== 'certificates');
+    }
+    
     return items.filter((it) => allowedDoctorNav.has(it.key));
-  }, [allowedDoctorNav]);
+  }, [allowedDoctorNav, doctorSpecialization]);
 
   const [doctorChatMessages, setDoctorChatMessages] = useState([]);
   const [doctorChatLoading, setDoctorChatLoading] = useState(false);
@@ -3617,14 +3624,14 @@ function DoctorDashboard() {
                       <div><span style={{color: '#64748b'}}>SpO2:</span> <strong>{selectedPatient?.vitals?.o2 || selectedPatient?.vitals?.spo2 || '—'}</strong></div>
                     </div>
 
-                    {doctorSpecialization.includes('pediatric') && (
+                    {doctorSpecialization.toLowerCase().includes('pediatric') && (
                       <div className="doc-vitals" style={{ marginTop: '10px' }}>
                         <input className="doc-input" placeholder="Vaccination History" value={noteForm.vaccinationHistory} onChange={(e) => setNoteForm(v => ({...v, vaccinationHistory: e.target.value}))} />
                         <input className="doc-input" placeholder="Developmental Milestones" value={noteForm.milestones || ''} onChange={(e) => setNoteForm(v => ({...v, milestones: e.target.value}))} />
                       </div>
                     )}
                     
-                    {doctorSpecialization.includes('cardiolog') && (
+                    {doctorSpecialization.toLowerCase().includes('cardiolog') && (
                       <div className="doc-vitals" style={{ marginTop: '10px' }}>
                         <input className="doc-input" placeholder="Heart Rate Rhythm" value={noteForm.heartRateRhythm} onChange={(e) => setNoteForm(v => ({...v, heartRateRhythm: e.target.value}))} />
                         <input className="doc-input" placeholder="ECG Notes" value={noteForm.ecgNotes} onChange={(e) => setNoteForm(v => ({...v, ecgNotes: e.target.value}))} />
@@ -3632,7 +3639,7 @@ function DoctorDashboard() {
                       </div>
                     )}
 
-                    {doctorSpecialization.includes('dermatolog') && (
+                    {doctorSpecialization.toLowerCase().includes('dermatolog') && (
                       <div className="doc-vitals" style={{ marginTop: '10px' }}>
                         <input className="doc-input" placeholder="Lesion Type" value={noteForm.lesionType} onChange={(e) => setNoteForm(v => ({...v, lesionType: e.target.value}))} />
                         <input className="doc-input" placeholder="Affected Area" value={noteForm.affectedArea} onChange={(e) => setNoteForm(v => ({...v, affectedArea: e.target.value}))} />
@@ -3640,7 +3647,7 @@ function DoctorDashboard() {
                       </div>
                     )}
 
-                    {doctorSpecialization.includes('obgyn') && (
+                    {doctorSpecialization.toLowerCase().includes('obgyn') && (
                       <div className="doc-vitals" style={{ marginTop: '10px' }}>
                         <input className="doc-input" placeholder="LMP (Last Menstrual Period)" value={noteForm.lmp || ''} onChange={(e) => setNoteForm(v => ({...v, lmp: e.target.value}))} />
                         <input className="doc-input" placeholder="Pregnancy Week" value={noteForm.pregnancyWeek || ''} onChange={(e) => setNoteForm(v => ({...v, pregnancyWeek: e.target.value}))} />
@@ -3648,7 +3655,7 @@ function DoctorDashboard() {
                       </div>
                     )}
 
-                    {doctorSpecialization.includes('surg') && (
+                    {doctorSpecialization.toLowerCase().includes('surg') && (
                       <div className="doc-vitals" style={{ marginTop: '10px' }}>
                         <input className="doc-input" placeholder="Operation Type" value={noteForm.operationType || ''} onChange={(e) => setNoteForm(v => ({...v, operationType: e.target.value}))} />
                         <input className="doc-input" placeholder="Anesthesia Type" value={noteForm.anesthesiaType || ''} onChange={(e) => setNoteForm(v => ({...v, anesthesiaType: e.target.value}))} />
@@ -3707,13 +3714,14 @@ function DoctorDashboard() {
                 )}
               </div>
 
-              <div id="doc-sec-prescriptions" className="doc-card doc-section">
-                <div className="doc-card-header">
-                  <div className="doc-card-title">
-                    <ClipboardCheck size={18} />
-                    Prescription
+              {!doctorSpecialization.toLowerCase().includes('patholog') && !doctorSpecialization.toLowerCase().includes('radiolog') && (
+                <div id="doc-sec-prescriptions" className="doc-card doc-section">
+                  <div className="doc-card-header">
+                    <div className="doc-card-title">
+                      <ClipboardCheck size={18} />
+                      Prescription
+                    </div>
                   </div>
-                </div>
 
                 {!selectedPatient ? (
                   <div className="doc-empty">Select a patient to create a prescription.</div>
@@ -3863,6 +3871,7 @@ function DoctorDashboard() {
                   </div>
                 )}
               </div>
+              )}
             </div>
           </>
         )}
@@ -4309,14 +4318,14 @@ function DoctorDashboard() {
 
         {activeNav === 'patient-records' && patientRecordsView}
 
-        {activeNav === 'labs' && (
+        {activeNav === 'labs' && !doctorSpecialization.toLowerCase().includes('patholog') && !doctorSpecialization.toLowerCase().includes('radiolog') && (
           <div className="doctor-grid doc-section">
             {patientCard}
             {labsCard}
           </div>
         )}
 
-        {activeNav === 'certificates' && (
+        {activeNav === 'certificates' && !doctorSpecialization.toLowerCase().includes('patholog') && !doctorSpecialization.toLowerCase().includes('radiolog') && (
           <div className="doctor-grid doc-section">
             {patientCard}
             {certificatesCard}
