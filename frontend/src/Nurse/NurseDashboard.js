@@ -7079,9 +7079,9 @@ function NurseDashboard() {
                                           </div>
 
                                           <button 
-                                              className="btn-primary-action" 
-                                              style={{ width: '100%', justifyContent: 'center', marginTop: 'auto' }}
-                                              onClick={() => openClinicalUpdateModal(patient)}
+                                              className="btn-orange-sm" 
+                                              style={{ width: 'fit-content', alignSelf: 'flex-start', marginTop: 'auto' }}
+                                              onClick={() => handleClinicalUpdateClick(patient)}
                                           >
                                               <Plus size={16} /> Update Vitals
                                           </button>
