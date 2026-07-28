@@ -5752,19 +5752,8 @@ function AdminDashboard() {
             </div>
             )}
 
-            <div className="form-actions-row">
-              {registrationStep > 1 && (
-                <button type="button" className="btn-gray shadow-btn" onClick={() => setRegistrationStep(prev => prev - 1)}>Back</button>
-              )}
-              {registrationStep < 3 ? (
-                <button type="button" className="btn-orange-large shadow-btn" onClick={handleNextStep}>Next</button>
-              ) : (
-                <button type="submit" className="btn-orange-large shadow-btn">Create Staff Account</button>
-              )}
-              <button type="button" className="btn-gray shadow-btn" onClick={handleReset}>Remove All</button>
-            </div>
             {createStaffError && (
-                <div className="field-notice-error" style={{ whiteSpace: 'pre-line', marginTop: '16px', fontWeight: 'bold', textAlign: 'center', background: '#fef2f2', padding: '12px', borderRadius: '8px', border: '1px solid #fecaca' }}>
+                <div className="field-notice-error" style={{ whiteSpace: 'pre-line', marginBottom: '16px', fontWeight: 'bold', textAlign: 'center', background: '#fef2f2', padding: '12px', borderRadius: '8px', border: '1px solid #fecaca' }}>
                   {createStaffError}
                   {(/already\s+registered|already\s+exists/i.test(String(createStaffError)) && String(newUser.email || '').trim()) ? (
                     <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center' }}>
@@ -5781,10 +5770,22 @@ function AdminDashboard() {
                 </div>
             )}
             {createStaffSuccess && (
-                <div style={{ color: '#16a34a', whiteSpace: 'pre-line', marginTop: '16px', fontWeight: 'bold', textAlign: 'center', background: '#dcfce7', padding: '12px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                <div style={{ color: '#16a34a', whiteSpace: 'pre-line', marginBottom: '16px', fontWeight: 'bold', textAlign: 'center', background: '#dcfce7', padding: '12px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
                   {createStaffSuccess}
                 </div>
             )}
+
+            <div className="form-actions-row">
+              {registrationStep > 1 && (
+                <button type="button" className="btn-gray shadow-btn" onClick={() => setRegistrationStep(prev => prev - 1)}>Back</button>
+              )}
+              {registrationStep < 3 ? (
+                <button type="button" className="btn-orange-large shadow-btn" onClick={handleNextStep}>Next</button>
+              ) : (
+                <button type="submit" className="btn-orange-large shadow-btn">Create Staff Account</button>
+              )}
+              <button type="button" className="btn-gray shadow-btn" onClick={handleReset}>Remove All</button>
+            </div>
           </form>
         </div>
       );
