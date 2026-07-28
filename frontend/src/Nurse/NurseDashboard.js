@@ -5256,11 +5256,16 @@ function NurseDashboard() {
             <span>Appointments</span>
           </button>
 
-          <div className="sidebar-section-label">CLINICAL STATIONS</div>
-          <button className={`nurse-nav-item ${view === 'er-intake' ? 'active' : ''}`} onClick={() => setView('er-intake')}>
-            <AlertCircle size={20} />
-            <span>ER Intake</span>
-          </button>
+          <div className="sidebar-section-label">CLINICAL STATIONS</div>      
+            <button className={`nurse-nav-item ${view === 'vitals' ? 'active' : ''}`} onClick={() => setView('vitals')}>
+              <Activity size={20} />
+              <span>Vitals Monitoring</span>
+            </button>
+            <button className={`nurse-nav-item ${view === 'er-intake' ?
+'active' : ''}`} onClick={() => setView('er-intake')}>
+              <AlertCircle size={20} />
+              <span>ER Intake</span>
+            </button>
 
           <button className={`nurse-nav-item ${view === 'orders' ? 'active' : ''}`} onClick={() => setView('orders')}>
             <FileText size={20} />
@@ -5285,9 +5290,9 @@ function NurseDashboard() {
           {isSchedulesOpen && (
             <div className="nurse-nav-sub-menu" style={{paddingLeft: isSidebarCollapsed ? '0' : '16px'}}>
               <button className={`nurse-nav-item sub-item ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')} style={{fontSize: '0.9rem'}}>
-                <ClipboardList size={18} />
-                <span>Tasks</span>
-              </button>
+                  <ClipboardList size={18} />
+                  <span>Tasks & e-MAR</span>
+                </button>
               <button className={`nurse-nav-item sub-item ${view === 'calendar' ? 'active' : ''}`} onClick={() => setView('calendar')} style={{fontSize: '0.9rem'}}>
                 <Calendar size={18} />
                 <span>Calendar</span>
@@ -6993,12 +6998,100 @@ function NurseDashboard() {
                 </div>
             )}
             {view === 'vitals' && (
-                <div className="placeholder-container">
-                    <Activity size={64} className="placeholder-icon" />
-                    <h3>Vitals Monitoring</h3>
-                    <p>Real-time vitals tracking interface coming soon.</p>
-                </div>
-            )}
+                  <div className="vitals-monitoring-container">
+                      <div className="view-header-stack">
+                          <div className="welcome-banner full-width">
+                              <div className="welcome-text">
+                                  <div className="workspace-badge workspace-er">Monitoring</div>
+                                  <h1>Real-time Vitals Board</h1>
+                                  <p>Monitor patient vitals and record new measurements instantly.</p>
+                              </div>
+                              <div className="header-actions">
+                                  <button className="btn-orange" onClick={refreshPatientsList} disabled={loadingPatients}>
+                                      <RotateCw size={18} className={loadingPatients ? 'animate-spin' : ''} />
+                                      <span>Refresh Vitals</span>
+                                  </button>
+                              </div>
+                          </div>
+                      </div>
+
+                      <div className="vitals-grid">
+                          {patientsList.filter(p => p.admission_status === 'Emergency' || p.admission_status === 'Inpatient' || p.admission_status === 'Admission Requested' || p.admission_status === 'Waiting').length === 0 ? (
+                              <div className="empty-state" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                  <Activity size={48} color="#94a3b8" style={{ marginBottom: '16px' }} />
+                                  <h3 style={{ color: '#334155', margin: '0 0 8px 0' }}>No Active Patients</h3>
+                                  <p style={{ color: '#64748b', margin: 0 }}>There are no patients requiring vitals monitoring at this time.</p>
+                              </div>
+                          ) : (
+                              patientsList.filter(p => p.admission_status === 'Emergency' || p.admission_status === 'Inpatient' || p.admission_status === 'Admission Requested' || p.admission_status === 'Waiting').map(patient => {
+                                  // Extract latest vitals
+                                  let latestVitals = null;
+                                  if (patient.clinical_records?.vitals_logs?.length > 0) {
+                                      latestVitals = patient.clinical_records.vitals_logs[0];
+                                  } else if (patient.vitals) {
+                                      latestVitals = patient.vitals;
+                                  } else if (patient.clinical_records?.erRegistration?.vitals) {
+                                      latestVitals = patient.clinical_records.erRegistration.vitals;
+                                  }
+
+                                  const bp = latestVitals?.blood_pressure || latestVitals?.bloodPressure || '--/--';
+                                  const hr = latestVitals?.heart_rate || latestVitals?.heartRate || '--';
+                                  const temp = latestVitals?.temperature || '--';
+                                  const spo2 = latestVitals?.spo2 || '--';
+
+                                  // Simple anomaly detection
+                                  const isHighBp = bp !== '--/--' && parseInt(bp.split('/')[0]) > 140;
+                                  const isFever = temp !== '--' && parseFloat(temp) > 37.8;
+
+                                  return (
+                                      <div key={patient._id} className="vitals-card" style={{ background: '#fff', borderRadius: '12px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                              <div>
+                                                  <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', color: '#0f172a' }}>{patient.first_name} {patient.last_name}</h3>
+                                                  <span style={{ fontSize: '0.85rem', padding: '4px 8px', borderRadius: '4px', background: patient.triage_level === 1 ? '#fee2e2' : '#f1f5f9', color: patient.triage_level === 1 ? '#ef4444' : '#475569', fontWeight: 600 }}>
+                                                      {patient.ward_number ? `Ward ${patient.ward_number} - Bed ${patient.bed_number}` : (patient.admission_status === 'Emergency' ? 'ER Walk-in' : patient.admission_status)}
+                                                  </span>
+                                              </div>
+                                              {patient.triage_level && (
+                                                  <div className={`triage-badge triage-${patient.triage_level}`} style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
+                                                      T{patient.triage_level}
+                                                  </div>
+                                              )}
+                                          </div>
+
+                                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
+                                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                  <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>BP</span>
+                                                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: isHighBp ? '#ef4444' : '#0f172a' }}>{bp}</span>
+                                              </div>
+                                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                  <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Heart Rate</span>
+                                                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>{hr} <span style={{fontSize: '0.8rem', fontWeight: 500, color: '#64748b'}}>bpm</span></span>
+                                              </div>
+                                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                  <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Temp</span>
+                                                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: isFever ? '#ef4444' : '#0f172a' }}>{temp} <span style={{fontSize: '0.8rem', fontWeight: 500, color: '#64748b'}}>°C</span></span>
+                                              </div>
+                                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                  <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>SpO2</span>
+                                                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>{spo2} <span style={{fontSize: '0.8rem', fontWeight: 500, color: '#64748b'}}>%</span></span>
+                                              </div>
+                                          </div>
+
+                                          <button 
+                                              className="btn-primary-action" 
+                                              style={{ width: '100%', justifyContent: 'center', marginTop: 'auto' }}
+                                              onClick={() => openClinicalUpdateModal(patient)}
+                                          >
+                                              <Plus size={16} /> Update Vitals
+                                          </button>
+                                      </div>
+                                  );
+                              })
+                          )}
+                      </div>
+                  </div>
+              )}
             {view === 'orders' && (
                 <div className="orders-container">
                     <div className="orders-header">
@@ -7387,11 +7480,11 @@ function NurseDashboard() {
                 </div>
             )}
             {view === 'tasks' && (
-                <div className="tasks-board-container">
-                    <div className="tasks-header">
-                        <div>
-                            <h2 className="page-title">Shift Tasks</h2>
-                            <p className="page-subtitle">Shared board for {user.departmentLabel || formatDepartmentLabel(activeDept)} • {currentShiftLabel}</p>
+                  <div className="tasks-board-container">
+                      <div className="tasks-header">
+                          <div>
+                              <h2 className="page-title">Tasks & e-MAR</h2>       
+                              <p className="page-subtitle">Shared board for {user.departmentLabel || formatDepartmentLabel(activeDept)} • {currentShiftLabel}</p>
                         </div>
                         <form onSubmit={addTask} className="quick-task-form">
                             <input 
