@@ -435,7 +435,8 @@ function DoctorDashboard() {
     const now = new Date();
     const diffMin = (now.getTime() - startAt.getTime()) / 60000;
     if (diffMin < -10) return { allowed: false, reason: 'You can start/join 10 mins before schedule' };
-    if (diffMin > 30) return { allowed: false, reason: 'Call window ended' };
+    // Increased window to 12 hours for testing purposes
+    if (diffMin > 720) return { allowed: false, reason: 'Call window ended' };
     return { allowed: true, reason: '' };
   };
 
@@ -475,9 +476,14 @@ function DoctorDashboard() {
     if (userRole) headers['x-user-role'] = userRole;
 
     // Pass the actual doctor name from the user object, fallback to doctorInboxName
-    const actualDoctorName = currentUser?.firstName 
-      ? `${currentUser.firstName} ${currentUser.lastName || ''}`.trim() 
-      : currentUser?.name || doctorInboxName;
+    let actualDoctorName = '';
+    if (currentUser?.first_name) {
+      actualDoctorName = `${currentUser.first_name} ${currentUser.last_name || ''}`.trim();
+    } else if (currentUser?.firstName) {
+      actualDoctorName = `${currentUser.firstName} ${currentUser.lastName || ''}`.trim();
+    } else {
+      actualDoctorName = currentUser?.name || doctorInboxName;
+    }
       
     if (actualDoctorName) headers['x-user-name'] = actualDoctorName;
     
