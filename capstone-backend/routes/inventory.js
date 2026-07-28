@@ -318,6 +318,27 @@ router.put('/:id', async (req, res) => {
             ).catch(() => {});
         }
         
+        if (updatedMed) {
+            let note = `Updated inventory item ${id}`;
+            if (newPrice !== undefined && newPrice !== existingMed.price) {
+                note += ` | Price changed: ₱${existingMed.price} -> ₱${newPrice}`;
+            }
+            if (newStock !== undefined && newStock !== existingMed.stock) {
+                note += ` | Stock changed: ${existingMed.stock} -> ${newStock}`;
+            }
+            if (newPrice !== undefined || newStock !== undefined || newBarcode !== undefined || newUnit !== undefined) {
+                await prisma.activity_logs.create({
+                    data: {
+                        actor_name: actorName || 'System',
+                        role: role || 'Admin',
+                        action: 'Update',
+                        target: 'Inventory',
+                        details: note.slice(0, 500)
+                    }
+                }).catch(() => {});
+            }
+        }
+        
         res.json(sanitizeMedicine(updatedMed));
     } catch (err) {
         res.status(400).json({ message: err.message });

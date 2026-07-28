@@ -603,6 +603,27 @@ router.post('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
         }
 
         const result = await prisma.$transaction(async (tx) => {
+            // Deduct stock accurately in the same transaction
+            for (const item of normalizedItems) {
+                const isMedicine = item.type === 'medicine';
+                const table = isMedicine ? tx.medicines : tx.supplies;
+                
+                // Get current stock with read lock for safety
+                const currentItem = await tx.$queryRawUnsafe(`
+                  SELECT stock FROM public.${isMedicine ? 'medicines' : 'supplies'}
+                  WHERE id = $1 FOR UPDATE
+                `, BigInt(item.id));
+                
+                const stockRow = Array.isArray(currentItem) ? currentItem[0] : null;
+                const currentStock = stockRow ? Number(stockRow.stock) : 0;
+                const newStock = Math.max(0, currentStock - item.quantity);
+
+                await table.update({
+                    where: { id: BigInt(item.id) },
+                    data: { stock: newStock }
+                });
+            }
+
             const sale = await tx.sales.create({
                 data: {
                     total_amount: totalDue,
@@ -634,6 +655,19 @@ router.post('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
 
             return { sale, invoice: null };
         });
+
+        // Add Activity Log for POS Checkout
+        try {
+            await prisma.activity_logs.create({
+                data: {
+                    actor_name: pharmacist ? String(pharmacist).slice(0, 200) : 'Pharmacist',
+                    role: 'Pharmacist',
+                    action: 'Create',
+                    target: 'Sales',
+                    details: `POS Checkout completed. Total: ₱${totalDue}. Items: ${normalizedItems.length}.`
+                }
+            });
+        } catch (e) {}
 
         const verifiedSale = await prisma.sales.findUnique({
           where: { id: BigInt(result.sale.id) }
