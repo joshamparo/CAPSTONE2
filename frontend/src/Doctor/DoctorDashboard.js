@@ -449,13 +449,18 @@ function DoctorDashboard() {
   const startVideoCall = async (apt) => {
     if (!apt?.id) return;
     try {
-      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/start`, {
+      const targetUrl = `/api/appointments/${encodeURIComponent(String(apt.id))}/video/start`;
+      // DEBUG: Remove this alert after fixing
+      alert(`DEBUG: Trying to start call with URL: ${API_BASE}${targetUrl} | ID: ${apt.id}`);
+      
+      const data = await fetchJson(targetUrl, {
         apiBase: API_BASE,
         method: 'POST',
         headers: { ...authHeaders }
       });
       openVideoMeeting(data?.url, `Video Consultation • ${apt.firstName || ''} ${apt.lastName || ''}`.trim());
     } catch (e) {
+      alert(`DEBUG ERROR: ${e?.message || 'Unknown error'}`);
       setToast({ type: 'error', message: String(e?.message || 'Unable to start call.') });
     }
   };
