@@ -1092,6 +1092,22 @@ async function reassignOfflineVideoAppointmentsForRange(startStr, endStr) {
     }
 }
 
+router.get('/debug/video-apts', async (req, res) => {
+    try {
+        const apts = await prisma.appointments.findMany({
+            where: { consultation_mode: 'video' },
+            select: { id: true, first_name: true, status: true, doctor_id: true, doctor_uuid: true }
+        });
+        const holds = await prisma.$queryRaw`SELECT id, doctor_name, status, appointment_id FROM video_booking_holds`;
+        res.json({
+            apts: apts.map(a => ({...a, id: a.id.toString()})),
+            holds: holds.map(h => ({...h, id: h.id?.toString(), appointment_id: h.appointment_id?.toString()}))
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'cashier', 'staff']), async (req, res) => {
     try {
         await ensureAppointmentsSchema();
