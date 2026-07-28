@@ -4047,3 +4047,43 @@ body.compact-mode .workspace-queue-item {
     margin-top: 20px;
     padding-bottom: 20px;
 }
+
+.vitals-table-container {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    margin-top: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.vitals-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.vitals-table th {
+    padding: 14px 16px;
+    font-size: 0.75rem;
+    color: #64748b;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+}
+
+.vitals-table td {
+    padding: 16px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: middle;
+}
+
+.vitals-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.vitals-table tbody tr:hover {
+    background: #f8fafc;
+}

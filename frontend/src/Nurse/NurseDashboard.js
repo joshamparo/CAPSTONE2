@@ -7025,86 +7025,95 @@ function NurseDashboard() {
                           </div>
                       </div>
 
-                      <div className="vitals-grid">
+                      <div className="vitals-table-container">
                           {filteredVitalsPatients.length === 0 ? (
-                              <div className="empty-state" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                              <div className="empty-state" style={{ textAlign: 'center', padding: '40px', background: '#fff' }}>
                                   <Activity size={48} color="#94a3b8" style={{ marginBottom: '16px' }} />
                                   <h3 style={{ color: '#334155', margin: '0 0 8px 0' }}>No Active Patients</h3>
                                   <p style={{ color: '#64748b', margin: 0 }}>There are no patients requiring vitals monitoring at this time.</p>
                               </div>
                           ) : (
-                              vitalsPageItems.map(patient => {
-                                  // Extract latest vitals
-                                  let latestVitals = null;
-                                  if (patient.clinical_records?.vitals_logs?.length > 0) {
-                                      latestVitals = patient.clinical_records.vitals_logs[0];
-                                  } else if (patient.vitals) {
-                                      latestVitals = patient.vitals;
-                                  } else if (patient.clinical_records?.erRegistration?.vitals) {
-                                      latestVitals = patient.clinical_records.erRegistration.vitals;
-                                  }
+                              <table className="vitals-table">
+                                  <thead>
+                                      <tr>
+                                          <th>Patient</th>
+                                          <th>Location / Triage</th>
+                                          <th>BP (mmHg)</th>
+                                          <th>HR (bpm)</th>
+                                          <th>Temp (°C)</th>
+                                          <th>SpO2 (%)</th>
+                                          <th>Action</th>
+                                      </tr>
+                                  </thead>
+                                  <tbody>
+                                      {vitalsPageItems.map(patient => {
+                                          // Extract latest vitals
+                                          let latestVitals = null;
+                                          if (patient.clinical_records?.vitals_logs?.length > 0) {
+                                              latestVitals = patient.clinical_records.vitals_logs[0];
+                                          } else if (patient.vitals) {
+                                              latestVitals = patient.vitals;
+                                          } else if (patient.clinical_records?.erRegistration?.vitals) {
+                                              latestVitals = patient.clinical_records.erRegistration.vitals;
+                                          }
 
-                                  const bp = latestVitals?.blood_pressure || latestVitals?.bloodPressure || '--/--';
-                                  const hr = latestVitals?.heart_rate || latestVitals?.heartRate || '--';
-                                  const temp = latestVitals?.temperature || '--';
-                                  const spo2 = latestVitals?.spo2 || '--';
+                                          const bp = latestVitals?.blood_pressure || latestVitals?.bloodPressure || '--/--';
+                                          const hr = latestVitals?.heart_rate || latestVitals?.heartRate || '--';
+                                          const temp = latestVitals?.temperature || '--';
+                                          const spo2 = latestVitals?.spo2 || '--';
 
-                                  // Simple anomaly detection
-                                  const isHighBp = bp !== '--/--' && parseInt(bp.split('/')[0]) > 140;
-                                  const isFever = temp !== '--' && parseFloat(temp) > 37.8;
+                                          // Simple anomaly detection
+                                          const isHighBp = bp !== '--/--' && parseInt(bp.split('/')[0]) > 140;
+                                          const isFever = temp !== '--' && parseFloat(temp) > 37.8;
 
-                                  return (
-                                      <div key={patient._id} className="vitals-card" style={{ background: '#fff', borderRadius: '12px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                              <div>
-                                                  <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', color: '#0f172a' }}>{patient.first_name} {patient.last_name}</h3>
-                                                  <span style={{ fontSize: '0.85rem', padding: '4px 8px', borderRadius: '4px', background: patient.triage_level === 1 ? '#fee2e2' : '#f1f5f9', color: patient.triage_level === 1 ? '#ef4444' : '#475569', fontWeight: 600 }}>
-                                                      {patient.ward_number ? `Ward ${patient.ward_number} - Bed ${patient.bed_number}` : (patient.admission_status === 'Emergency' ? 'ER Walk-in' : patient.admission_status)}
-                                                  </span>
-                                              </div>
-                                              {patient.triage_level && (
-                                                  <div className={`triage-badge triage-${patient.triage_level}`} style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
-                                                      T{patient.triage_level}
-                                                  </div>
-                                              )}
-                                          </div>
-
-                                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: '#f8fafc', padding: '12px', borderRadius: '8px' }}>
-                                              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                  <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>BP</span>
-                                                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: isHighBp ? '#ef4444' : '#0f172a' }}>{bp}</span>
-                                              </div>
-                                              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                  <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Heart Rate</span>
-                                                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>{hr} <span style={{fontSize: '0.8rem', fontWeight: 500, color: '#64748b'}}>bpm</span></span>
-                                              </div>
-                                              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                  <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Temp</span>
-                                                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: isFever ? '#ef4444' : '#0f172a' }}>{temp} <span style={{fontSize: '0.8rem', fontWeight: 500, color: '#64748b'}}>°C</span></span>
-                                              </div>
-                                              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                  <span style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>SpO2</span>
-                                                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>{spo2} <span style={{fontSize: '0.8rem', fontWeight: 500, color: '#64748b'}}>%</span></span>
-                                              </div>
-                                          </div>
-
-                                          <div style={{ marginTop: 'auto', paddingTop: '16px', display: 'flex', justifyContent: 'flex-start', position: 'relative', zIndex: 10 }}>
-                                              <button 
-                                                  className="btn-orange-sm" 
-                                                  style={{ width: 'auto', padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
-                                                  onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      e.preventDefault();
-                                                      handleClinicalUpdateClick(patient);
-                                                  }}
-                                                  type="button"
-                                              >
-                                                  <Plus size={16} /> Update Vitals
-                                              </button>
-                                          </div>
-                                      </div>
-                                  );
-                              })
+                                          return (
+                                              <tr key={patient._id}>
+                                                  <td>
+                                                      <div style={{ fontWeight: 700, color: '#0f172a' }}>{patient.first_name} {patient.last_name}</div>
+                                                  </td>
+                                                  <td>
+                                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                          <span style={{ fontSize: '0.8rem', padding: '4px 8px', borderRadius: '4px', background: patient.triage_level === 1 ? '#fee2e2' : '#f1f5f9', color: patient.triage_level === 1 ? '#ef4444' : '#475569', fontWeight: 600 }}>
+                                                              {patient.ward_number ? `Ward ${patient.ward_number} - Bed ${patient.bed_number}` : (patient.admission_status === 'Emergency' ? 'ER Walk-in' : patient.admission_status)}
+                                                          </span>
+                                                          {patient.triage_level && (
+                                                              <div className={`triage-badge triage-${patient.triage_level}`} style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                                                                  T{patient.triage_level}
+                                                              </div>
+                                                          )}
+                                                      </div>
+                                                  </td>
+                                                  <td>
+                                                      <span style={{ fontWeight: 700, color: isHighBp ? '#ef4444' : '#0f172a' }}>{bp}</span>
+                                                  </td>
+                                                  <td>
+                                                      <span style={{ fontWeight: 700, color: '#0f172a' }}>{hr}</span>
+                                                  </td>
+                                                  <td>
+                                                      <span style={{ fontWeight: 700, color: isFever ? '#ef4444' : '#0f172a' }}>{temp}</span>
+                                                  </td>
+                                                  <td>
+                                                      <span style={{ fontWeight: 700, color: '#0f172a' }}>{spo2}</span>
+                                                  </td>
+                                                  <td>
+                                                      <button 
+                                                          className="btn-orange-sm" 
+                                                          style={{ padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                                          onClick={(e) => {
+                                                              e.stopPropagation();
+                                                              e.preventDefault();
+                                                              handleClinicalUpdateClick(patient);
+                                                          }}
+                                                          type="button"
+                                                      >
+                                                          <Plus size={14} /> Update
+                                                      </button>
+                                                  </td>
+                                              </tr>
+                                          );
+                                      })}
+                                  </tbody>
+                              </table>
                           )}
                       </div>
                       
