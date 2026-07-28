@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, CreditCard, FileText, LogOut, Plus, RefreshCw, Search, User, Upload, Save, KeyRound, Eye, EyeOff, ShieldAlert, Menu } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, CreditCard, FileText, LogOut, Plus, RefreshCw, Search, User, Upload, Save, KeyRound, Eye, EyeOff, ShieldAlert, Menu, Mail, Briefcase, Phone, Key, Shield, Check, X } from 'lucide-react';
 import '../Admin/AdminDashboard.css';
 import './OfficeStaffDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
@@ -557,19 +557,21 @@ export default function OfficeStaffDashboard({ mode }) {
     popup.document.write(`
       <html>
         <head>
-          <title>Payment Receipt</title>
+          <title>Official Receipt - PGH</title>
           <style>
-            body { font-family: Arial, sans-serif; color: #0f172a; padding: 24px; }
-            .wrap { max-width: 360px; margin: 0 auto; }
+            @page { margin: 0; size: 80mm auto; }
+            body { font-family: 'Courier New', Courier, monospace; color: #000; padding: 12px; margin: 0; font-size: 12px; line-height: 1.4; background: #fff; width: 72mm; }
+            .wrap { width: 100%; margin: 0 auto; }
             .center { text-align: center; }
-            .title { font-size: 22px; font-weight: 800; }
-            .sub { color: #475569; font-size: 12px; line-height: 1.5; }
-            .line { border-top: 1px dashed #cbd5e1; margin: 14px 0; }
-            .row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; margin: 8px 0; }
-            .label { color: #64748b; }
-            .total { font-size: 18px; font-weight: 800; }
-            .note { margin-top: 14px; font-size: 12px; color: #475569; line-height: 1.5; }
-            .deduction { color: #dc2626; font-style: italic; }
+            .title { font-size: 14px; font-weight: 800; margin-bottom: 4px; }
+            .sub { font-size: 11px; margin-bottom: 2px; }
+            .line { border-top: 1px dashed #000; margin: 8px 0; }
+            .row { display: flex; justify-content: space-between; gap: 8px; margin: 4px 0; }
+            .label { font-weight: normal; }
+            .total { font-size: 13px; font-weight: 800; margin-top: 8px; }
+            .note { margin-top: 12px; font-size: 10px; text-align: center; font-style: italic; }
+            .print-btn-wrap { text-align: center; margin-top: 20px; }
+            @media print { .no-print { display: none !important; } }
           </style>
         </head>
         <body>
@@ -577,27 +579,29 @@ export default function OfficeStaffDashboard({ mode }) {
             <div class="center">
               <div class="title">PASCUAL GENERAL HOSPITAL</div>
               <div class="sub">Novaliches, Quezon City</div>
-              <div class="sub">0915 312 7144</div>
-              <div class="sub">System-Generated Payment Receipt</div>
+              <div class="sub">TIN: 000-000-000-000</div>
+              <div class="sub">OFFICIAL RECEIPT</div>
             </div>
             <div class="line"></div>
-            <div class="row"><span class="label">Receipt No.</span><span>${safe(receipt.receiptNumber)}</span></div>
-            <div class="row"><span class="label">Order No.</span><span>#${safe(receipt.orderId)}</span></div>
-            <div class="row"><span class="label">Date & Time</span><span>${safe(receipt.paidAtLabel)}</span></div>
-            <div class="row"><span class="label">Cashier</span><span>${safe(receipt.cashierName)}</span></div>
-            <div class="row"><span class="label">Method</span><span>${safe(receipt.method)}</span></div>
-            <div class="row"><span class="label">Reference</span><span>${safe(receipt.reference)}</span></div>
+            <div class="row"><span class="label">OR No:</span><span>${safe(receipt.receiptNumber)}</span></div>
+            <div class="row"><span class="label">Date:</span><span>${safe(receipt.paidAtLabel)}</span></div>
+            <div class="row"><span class="label">Cashier:</span><span>${safe(receipt.cashierName)}</span></div>
+            <div class="row"><span class="label">Patient:</span><span>${safe(receipt.patientName)}</span></div>
             <div class="line"></div>
-            <div class="row"><span class="label">Patient</span><span>${safe(receipt.patientName)}</span></div>
-            <div class="row"><span class="label">Service</span><span>${safe(receipt.serviceLabel)}</span></div>
+            <div style="font-weight: 800; margin: 6px 0;">ITEMS:</div>
+            <div class="row"><span class="label" style="flex: 1; word-break: break-word;">${safe(receipt.serviceLabel)}</span><span style="white-space: nowrap;">PHP ${safe(toMoney(receipt.amountDue))}</span></div>
             <div class="line"></div>
             <div class="row"><span class="label">Gross Amount</span><span>PHP ${safe(toMoney(receipt.amountDue))}</span></div>
             ${deductionRows.join('')}
-            <div class="row"><span class="label">Net Amount Due</span><span>PHP ${safe(toMoney(receipt.netAmountDue || receipt.amountDue))}</span></div>
-            <div class="row"><span class="label">Amount Received</span><span>PHP ${safe(toMoney(receipt.amountReceived))}</span></div>
-            <div class="row total"><span>Status</span><span>PAID</span></div>
+            <div class="row total"><span>Amount Due</span><span>PHP ${safe(toMoney(receipt.netAmountDue || receipt.amountDue))}</span></div>
+            <div class="row"><span class="label">Tendered (${safe(receipt.method)})</span><span>PHP ${safe(toMoney(receipt.amountReceived))}</span></div>
             <div class="row total"><span>Change</span><span>PHP ${safe(toMoney(receipt.change))}</span></div>
+            <div class="line"></div>
             <div class="note">${safe(sourceNote)}</div>
+            <div class="note">This serves as your official receipt.<br/>Thank you!</div>
+            <div class="print-btn-wrap no-print">
+              <button onclick="window.print()" style="padding: 8px 16px; cursor: pointer; font-family: inherit;">Print Receipt</button>
+            </div>
           </div>
           <script>window.onload = function () { window.print(); };</script>
         </body>
@@ -2576,7 +2580,7 @@ export default function OfficeStaffDashboard({ mode }) {
     </button>
   </div>
 
-  <div className="office-payment-field-group">
+  <div className="office-payment-field-group" style={{ display: 'none' }}>
     <div className="office-payment-field">
       <label>PhilHealth Deduction</label>
       <input

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, RefreshCw, ShieldAlert, Upload, UserRound, X, XCircle, Menu } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, RefreshCw, ShieldAlert, Upload, UserRound, X, XCircle, Menu, User, Mail, Briefcase, Phone, Key, Save, Shield, Eye, EyeOff, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import './ClinicalStaffDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
@@ -728,7 +728,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
               <span className={statusBadgeClass('Scheduled')}>Upcoming</span>
               <span>{metrics.upcoming}</span>
             </div>
-            <AccountHeaderActions user={user} onSignOut={handleLogout} />
+            <AccountHeaderActions user={user} onSignOut={handleLogout} onMyProfile={() => setActiveTab('profile')} />
           </div>
         </div>
 
@@ -1128,6 +1128,153 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
               </div>
             </div>
           </div>
+        )}
+      
+        {activeTab === 'profile' && (
+
+        <div className="admin-profile-container">
+          <div className="admin-profile-header-card">
+            <div className="profile-image-section">
+              <div className="large-avatar-circle">
+                <User size={64} color="#cbd5e1" />
+              </div>
+              <button type="button" className="btn-neutral-sm shadow-btn">Update Avatar</button>
+            </div>
+            <div className="profile-info-section">
+              <h1>{user?.name || user?.username || user?.firstName || 'Clinical Staff'}</h1>
+              <p className="admin-role-badge">Clinical Staff</p>
+            </div>
+          </div>
+
+          <form className="admin-profile-form">
+            <div className="profile-form-grid">
+              <div className="profile-column">
+                <div className="profile-card">
+                  <h3 className="column-title">
+                    <User size={20} color="#475569" />
+                    Personal Information
+                  </h3>
+                  
+                  <div className="profile-input-group">
+                    <label>Email Address</label>
+                    <div className="input-wrapper-relative">
+                      <Mail size={18} className="absolute-icon-left text-slate-400" />
+                      <input 
+                        type="email" 
+                        value={user?.email || ''}
+                        readOnly
+                        className="profile-input input-with-icon-padding input-disabled-bg"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="profile-input-group">
+                    <label>Department / Role</label>
+                    <div className="input-wrapper-relative">
+                      <Briefcase size={18} className="absolute-icon-left text-slate-400" />
+                      <input 
+                        type="text" 
+                        value="Clinical Staff"
+                        readOnly
+                        className="profile-input input-with-icon-padding input-disabled-bg"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="profile-input-group">
+                    <label>Phone Number</label>
+                    <div className="input-wrapper-relative">
+                      <Phone size={18} className="absolute-icon-left text-slate-400" />
+                      <input 
+                        type="tel" 
+                        value={user?.phone || user?.contactNumber || ''}
+                        readOnly
+                        className="profile-input input-with-icon-padding input-disabled-bg"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="profile-column">
+                <div className="profile-card">
+                  <h3 className="column-title">
+                    <Shield size={20} color="#475569" />
+                    Security & Password
+                  </h3>
+                  
+                  <div className="profile-input-group">
+                    <label>Current Password</label>
+                    <div className="input-wrapper-relative">
+                      <Key size={18} className="absolute-icon-left text-slate-400" />
+                      <input 
+                        type="password"
+                        className="profile-input input-with-icon-padding"
+                        placeholder="Enter current password"
+                      />
+                      <button type="button" className="toggle-password-btn">
+                        <Eye size={20} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="profile-input-group">
+                    <label>New Password</label>
+                    <div className="input-wrapper-relative">
+                      <Key size={18} className="absolute-icon-left text-slate-400" />
+                      <input 
+                        type="password"
+                        className="profile-input input-with-icon-padding"
+                        placeholder="Enter new password"
+                      />
+                      <button type="button" className="toggle-password-btn">
+                        <Eye size={20} />
+                      </button>
+                    </div>
+                    
+                    <div className="password-checklist">
+                      <div className="checklist-item valid">
+                        <X size={14} />
+                        <span>At least 11 characters</span>
+                      </div>
+                      <div className="checklist-item valid">
+                        <X size={14} />
+                        <span>Contains special characters</span>
+                      </div>
+                      <div className="checklist-item valid">
+                        <X size={14} />
+                        <span>Contains numbers</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="profile-input-group">
+                    <label>Confirm New Password</label>
+                    <div className="input-wrapper-relative">
+                      <Key size={18} className="absolute-icon-left text-slate-400" />
+                      <input 
+                        type="password"
+                        className="profile-input input-with-icon-padding"
+                        placeholder="Confirm new password"
+                      />
+                      <button type="button" className="toggle-password-btn">
+                        <Eye size={20} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="form-actions-row">
+              <button type="submit" className="btn-neutral-large flex-center-gap-8">
+                <Save size={18} />
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </div>
+
         )}
       </main>
 

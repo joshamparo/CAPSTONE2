@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff } from 'lucide-react';
 import './DoctorDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
@@ -2351,6 +2351,7 @@ function DoctorDashboard() {
                 const when = o.updatedAt || o.createdAt || null;
                 const whenText = when ? new Date(when).toLocaleString() : '—';
                 const st = String(o.status || 'Pending');
+                const isStat = String(o.priority || '').toUpperCase() === 'STAT';
                 const stLow = st.toLowerCase();
                 const badgeBg =
                   stLow.includes('completed') ? '#dcfce7' :
@@ -2363,14 +2364,20 @@ function DoctorDashboard() {
                   stLow.includes('cancel') || stLow.includes('reject') ? '#991b1b' :
                   '#9a3412';
                 return (
-                  <div key={String(o.id)} style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                  <div key={String(o.id)} style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', gap: '12px', background: isStat ? '#fef2f2' : 'transparent' }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {String(o.kind || 'Order')}{o.service ? `: ${String(o.service)}` : ''}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {isStat && <span style={{ padding: '2px 6px', background: '#ef4444', color: 'white', borderRadius: 4, fontSize: '0.7rem' }}>STAT</span>}
+                        <span>{String(o.kind || 'Order')}{o.service ? `: ${String(o.service)}` : ''}</span>
                       </div>
                       <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
                         {whenText}{o.assignedRole ? ` • Assigned: ${String(o.assignedRole)}` : ''}{o.orderedByName ? ` • Ordered by: ${String(o.orderedByName)}` : ''}
                       </div>
+                      {o.acknowledgedAt && (
+                        <div style={{ fontSize: '0.82rem', color: '#16a34a', fontWeight: 700, marginTop: 4 }}>
+                          <CheckCircle size={12} style={{ display: 'inline', verticalAlign: 'text-bottom' }} /> Acknowledged by {o.acknowledgedBy || 'Nurse'}
+                        </div>
+                      )}
                     </div>
                     <div style={{ flexShrink: 0, alignSelf: 'flex-start' }}>
                       <span style={{ padding: '6px 10px', borderRadius: 999, background: badgeBg, color: badgeFg, fontWeight: 900, fontSize: '0.75rem', border: `1px solid ${badgeFg}` }}>

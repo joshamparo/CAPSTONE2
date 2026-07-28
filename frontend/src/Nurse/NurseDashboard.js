@@ -1,57 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-    LogOut, 
-    User, 
-    Users, 
-    MessageSquare, 
-    ChevronDown, 
-    ChevronUp, 
-    ChevronLeft,
-    ChevronRight, 
-    Bell, 
-    Settings,
-    AlertCircle,
-    AlertOctagon,
-    Printer,
-    Search,
-    Eye,
-    BedDouble,
-    Bed,
-    LayoutDashboard,
-    Activity,
-    FileText,
-    Calendar,
-    ClipboardList,
-    ArrowLeft,
-    Stethoscope,
-    UserCheck,
-    Clipboard,
-    Check,
-    Trash2,
-    FilePenLine,
-    LogIn,
-    Pill,
-    FlaskConical,
-    Package,
-    Clock,
-    CheckCircle,
-    XCircle,
-    X,
-    Plus,
-    Phone,
-    AlertTriangle,
-    Info,
-    MapPin,
-    Copy,
-    Save,
-    Megaphone,
-    RotateCw,
-    Send,
-    Upload,
-    Menu,
-    ShieldAlert
-  } from 'lucide-react';
+import { LogOut, User, Users, MessageSquare, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Settings, AlertCircle, AlertOctagon, Printer, Search, Eye, BedDouble, Bed, LayoutDashboard, Activity, FileText, Calendar, ClipboardList, ArrowLeft, Stethoscope, UserCheck, Clipboard, Check, Trash2, FilePenLine, LogIn, Pill, FlaskConical, Package, Clock, CheckCircle, XCircle, X, Plus, Phone, AlertTriangle, Info, MapPin, Copy, Save, Megaphone, RotateCw, Send, Upload, Menu, ShieldAlert, Mail, Briefcase, Key, Shield, EyeOff } from 'lucide-react';
 import './NurseDashboard.css';
 import '../Admin/AdminDashboard.css'; 
 import { ncrCalabarzonCities, SPECIALIZATION_OPTIONS } from '../utils/constants';
@@ -8051,6 +8000,7 @@ function NurseDashboard() {
                       {(Array.isArray(patientOrders) ? patientOrders : []).map((o) => {
                         const oid = String(o.id || '');
                         const st = String(o.status || 'Pending');
+                        const isStat = String(o.priority || '').toUpperCase() === 'STAT';
                         const stLow = st.toLowerCase();
                         const badgeBg =
                           stLow.includes('completed') ? '#dcfce7' :
@@ -8068,11 +8018,12 @@ function NurseDashboard() {
                         const events = Array.isArray(details?.events) ? details.events : [];
 
                         return (
-                          <div key={oid} style={{ border: '1px solid #e2e8f0', borderRadius: 16, background: 'white', overflow: 'hidden' }}>
-                            <div style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                          <div key={oid} style={{ border: `1px solid ${isStat ? '#ef4444' : '#e2e8f0'}`, borderRadius: 16, background: 'white', overflow: 'hidden' }}>
+                            <div style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', background: isStat ? '#fef2f2' : '#f8fafc', borderBottom: `1px solid ${isStat ? '#fecaca' : '#e2e8f0'}` }}>
                               <div style={{ minWidth: 0 }}>
-                                <div style={{ fontWeight: 900, color: '#0f172a' }}>
-                                  {String(o.kind || 'Order')}{o.service ? `: ${String(o.service)}` : ''}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, color: '#0f172a' }}>
+                                  {isStat && <span style={{ padding: '2px 6px', background: '#ef4444', color: 'white', borderRadius: 4, fontSize: '0.7rem' }}>STAT</span>}
+                                  <span>{String(o.kind || 'Order')}{o.service ? `: ${String(o.service)}` : ''}</span>
                                 </div>
                                 <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
                                   {whenText}{o.orderedByName ? ` • Dr. ${String(o.orderedByName)}` : ''}
@@ -8104,6 +8055,21 @@ function NurseDashboard() {
                               </div>
 
                               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                {!o.acknowledgedAt ? (
+                                  <button
+                                    type="button"
+                                    className="btn-primary-action"
+                                    style={{ padding: '10px 12px', fontSize: '0.9rem', background: '#f59e0b', color: 'white', borderColor: '#f59e0b' }}
+                                    onClick={() => patchOrder(oid, { acknowledged: true, eventNote: 'Order acknowledged by nurse' })}
+                                    disabled={orderActionLoadingId === oid}
+                                  >
+                                    <CheckCircle size={16} /> Acknowledge
+                                  </button>
+                                ) : (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', fontSize: '0.85rem', color: '#16a34a', fontWeight: 700, background: '#dcfce7', borderRadius: 8 }}>
+                                    <CheckCircle size={16} /> Acknowledged by {o.acknowledgedBy || 'Nurse'}
+                                  </div>
+                                )}
                                 <button
                                   type="button"
                                   className="btn-primary-action"

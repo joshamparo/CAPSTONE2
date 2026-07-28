@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, BarChart3, Bell, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, FileText, LogOut, Menu, Package, Pill, QrCode, Search, ShoppingCart, Trash2, X, Plus, Minus, CreditCard, ReceiptText, Printer, RefreshCw, Upload, User } from 'lucide-react';
+import { AlertCircle, BarChart3, Bell, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, FileText, LogOut, Menu, Package, Pill, QrCode, Search, ShoppingCart, Trash2, X, Plus, Minus, CreditCard, ReceiptText, Printer, RefreshCw, Upload, User, Mail, Briefcase, Phone, Key, Save, Shield, Eye, EyeOff, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import './PharmacistDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
