@@ -221,7 +221,7 @@ function DoctorDashboard() {
   }, [doctorSpecialization]);
 
   const allowedDoctorNav = useMemo(() => {
-    const base = ['dashboard', 'worklist', 'patient-records', 'certificates', 'doctor-chat'];
+    const base = ['dashboard', 'worklist', 'patient-records', 'certificates', 'doctor-chat', 'profile'];
     const withCare = ['approval-inbox', 'patient-summary'];
     const withLabs = ['labs'];
 
@@ -276,16 +276,11 @@ function DoctorDashboard() {
   const [doctorChatText, setDoctorChatText] = useState('');
 
   const doctorChatSpecialty = useMemo(() => {
-    return doctorSpecKey;
-  }, [doctorSpecKey]);
+    return 'global_doctors'; // All doctors share the same chat room
+  }, []);
 
   const loadDoctorChatMessages = async () => {
-    const specialty = String(doctorChatSpecialty || '').trim();
-    if (!specialty) {
-      setDoctorChatMessages([]);
-      setDoctorChatError('Set your specialization to use chat.');
-      return;
-    }
+    const specialty = doctorChatSpecialty;
     if (!supabase) {
       setDoctorChatMessages([]);
       setDoctorChatError('Chat is not configured. Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY in homepage/.env, then restart the dev server and rebuild before uploading to Hostinger.');
@@ -310,14 +305,14 @@ function DoctorDashboard() {
   };
 
   const sendDoctorChatMessage = async () => {
-    const specialty = String(doctorChatSpecialty || '').trim();
+    const specialty = doctorChatSpecialty;
     const body = String(doctorChatText || '').trim();
-    if (!specialty || !body) return;
+    if (!body) return;
     if (!supabase) return;
     try {
       const { error } = await supabase
         .from('consultation_messages')
-        .insert([{ specialty, sender_role: 'doctor', body }]);
+        .insert([{ specialty, sender_role: 'doctor', body, sender_name: doctorName }]);
       if (error) throw error;
       setDoctorChatText('');
     } catch (e) {
