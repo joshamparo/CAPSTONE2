@@ -473,11 +473,18 @@ function DoctorDashboard() {
   const authHeaders = useMemo(() => {
     const headers = {};
     if (userRole) headers['x-user-role'] = userRole;
-    if (doctorInboxName) headers['x-user-name'] = doctorInboxName;
+    
+    // Pass the actual doctor name from the user object, fallback to doctorInboxName
+    const actualDoctorName = currentUser?.firstName 
+      ? `${currentUser.firstName} ${currentUser.lastName || ''}`.trim() 
+      : currentUser?.name || doctorInboxName;
+      
+    if (actualDoctorName) headers['x-user-name'] = actualDoctorName;
+    
     const email = currentUser?.email || profileForm?.email || '';
     if (email) headers['x-user-email'] = email;
     return headers;
-  }, [doctorInboxName, userRole, currentUser?.email, profileForm?.email]);
+  }, [doctorInboxName, userRole, currentUser, profileForm?.email]);
 
   const rxDraftKey = useMemo(() => {
     if (!currentUser?.email || !selectedPatient?._id) return null;

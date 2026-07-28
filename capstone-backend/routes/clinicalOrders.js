@@ -260,6 +260,8 @@ router.get('/', async (req, res) => {
         assigned_to: true,
         scheduled_at: true,
         completed_at: true,
+        acknowledged_at: true,
+        acknowledged_by: true,
         created_at: true,
         updated_at: true
       }
@@ -280,6 +282,8 @@ router.get('/', async (req, res) => {
       assignedTo: r.assigned_to || null,
       scheduledAt: r.scheduled_at || null,
       completedAt: r.completed_at || null,
+      acknowledgedAt: r.acknowledged_at || null,
+      acknowledgedBy: r.acknowledged_by || null,
       createdAt: r.created_at || null,
       updatedAt: r.updated_at || null
     }));
@@ -317,6 +321,8 @@ router.get('/:id', async (req, res) => {
         assigned_to AS "assignedTo",
         scheduled_at AS "scheduledAt",
         completed_at AS "completedAt",
+        acknowledged_at AS "acknowledgedAt",
+        acknowledged_by AS "acknowledgedBy",
         created_at AS "createdAt",
         updated_at AS "updatedAt"
       FROM public.clinical_orders
@@ -556,6 +562,8 @@ router.post('/', async (req, res) => {
         assigned_to AS "assignedTo",
         scheduled_at AS "scheduledAt",
         completed_at AS "completedAt",
+        acknowledged_at AS "acknowledgedAt",
+        acknowledged_by AS "acknowledgedBy",
         created_at AS "createdAt",
         updated_at AS "updatedAt"
       FROM public.clinical_orders
@@ -585,6 +593,7 @@ router.patch('/:id', async (req, res) => {
       assignedRole,
       assignedTo,
       scheduledAt,
+      acknowledged,
       notes,
       actorName,
       actorRole,
@@ -663,6 +672,11 @@ router.patch('/:id', async (req, res) => {
       : (scheduledAt === null ? null : undefined);
     if (sched !== undefined) data.scheduled_at = sched;
 
+    if (acknowledged === true) {
+      data.acknowledged_at = new Date();
+      data.acknowledged_by = actorName || actorFromHeaders.actorName || actorFromHeaders.actorEmail || null;
+    }
+
     data.updated_at = new Date();
 
     if (newStatus === 'Paid') {
@@ -685,6 +699,7 @@ router.patch('/:id', async (req, res) => {
     });
 
     const action =
+      acknowledged === true ? 'Acknowledge' :
       newStatus && newStatus !== current.status ? 'Status' :
       assignedRole !== undefined || assignedTo !== undefined ? 'Assign' :
       scheduledAt !== undefined ? 'Schedule' :
@@ -762,6 +777,8 @@ router.patch('/:id', async (req, res) => {
         assigned_to AS "assignedTo",
         scheduled_at AS "scheduledAt",
         completed_at AS "completedAt",
+        acknowledged_at AS "acknowledgedAt",
+        acknowledged_by AS "acknowledgedBy",
         created_at AS "createdAt",
         updated_at AS "updatedAt"
       FROM public.clinical_orders

@@ -2200,13 +2200,22 @@ router.post('/:id/video/start', requireRole(['doctor']), async (req, res) => {
         if (!doctorName) return res.status(401).json({ message: 'Missing x-user-name.' });
 
         const apt = await prisma.appointments.findUnique({ where: { id } });
-        if (!apt) return res.status(404).json({ message: 'Appointment not found.' });
+        if (!apt) {
+            console.log(`[Video Start] 404 - Appointment ${idRaw} not found in DB`);
+            return res.status(404).json({ message: `DEBUG: Appointment ID ${idRaw} not found in database.` });
+        }
 
-        if (!isVideoAppointment(apt)) return res.status(400).json({ message: 'Appointment is not a video consultation.' });
+        if (!isVideoAppointment(apt)) {
+            console.log(`[Video Start] 400 - Appointment ${idRaw} is not a video consult. Mode: ${apt.consultation_mode}, Reason: ${apt.reason}`);
+            return res.status(400).json({ message: `DEBUG: Appointment ${idRaw} is not marked as a video consultation.` });
+        }
 
         const assigned = normalizeAssignee(apt.doctor_id);
         const actor = normalizeAssignee(doctorName);
-        if (!assigned || assigned !== actor) return res.status(403).json({ message: 'Not assigned to this doctor.' });
+        if (!assigned || assigned !== actor) {
+            console.log(`[Video Start] 403 - Doctor mismatch. Assigned: ${assigned}, Actor: ${actor}`);
+            return res.status(403).json({ message: `DEBUG: Doctor mismatch. Assigned to ${assigned}, but you are logged in as ${actor}.` });
+        }
 
         if (!apt.meeting_room_id) {
             const roomId = makeRoomId(idRaw);
