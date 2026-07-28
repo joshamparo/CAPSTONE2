@@ -638,6 +638,7 @@ function NurseDashboard() {
   const [appointmentSlotsLoading, setAppointmentSlotsLoading] = useState(false);
   const [appointmentSlotsError, setAppointmentSlotsError] = useState('');
   const [walkInPatientPage, setWalkInPatientPage] = useState(1);
+  const [vitalsPage, setVitalsPage] = useState(1);
   const [addPatientData, setAddPatientData] = useState({
     patientMode: "new",
     routeType: "er_consult",
@@ -6998,7 +6999,15 @@ function NurseDashboard() {
                     </div>
                 </div>
             )}
-            {view === 'vitals' && (
+            {view === 'vitals' && (() => {
+                  const vitalsPageSize = 45;
+                  const filteredVitalsPatients = patientsList.filter(p => p.admission_status === 'Emergency' || p.admission_status === 'Inpatient' || p.admission_status === 'Admission Requested' || p.admission_status === 'Waiting');
+                  const vitalsPageCount = Math.max(1, Math.ceil(filteredVitalsPatients.length / vitalsPageSize));
+                  const currentVitalsPage = Math.min(vitalsPage, vitalsPageCount);
+                  const vitalsStartIndex = (currentVitalsPage - 1) * vitalsPageSize;
+                  const vitalsPageItems = filteredVitalsPatients.slice(vitalsStartIndex, vitalsStartIndex + vitalsPageSize);
+
+                  return (
                   <div className="vitals-monitoring-container">
                       <div className="view-header-stack">
                           <div className="welcome-banner full-width">
@@ -7017,14 +7026,14 @@ function NurseDashboard() {
                       </div>
 
                       <div className="vitals-grid">
-                          {patientsList.filter(p => p.admission_status === 'Emergency' || p.admission_status === 'Inpatient' || p.admission_status === 'Admission Requested' || p.admission_status === 'Waiting').length === 0 ? (
+                          {filteredVitalsPatients.length === 0 ? (
                               <div className="empty-state" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                                   <Activity size={48} color="#94a3b8" style={{ marginBottom: '16px' }} />
                                   <h3 style={{ color: '#334155', margin: '0 0 8px 0' }}>No Active Patients</h3>
                                   <p style={{ color: '#64748b', margin: 0 }}>There are no patients requiring vitals monitoring at this time.</p>
                               </div>
                           ) : (
-                              patientsList.filter(p => p.admission_status === 'Emergency' || p.admission_status === 'Inpatient' || p.admission_status === 'Admission Requested' || p.admission_status === 'Waiting').map(patient => {
+                              vitalsPageItems.map(patient => {
                                   // Extract latest vitals
                                   let latestVitals = null;
                                   if (patient.clinical_records?.vitals_logs?.length > 0) {
@@ -7098,8 +7107,33 @@ function NurseDashboard() {
                               })
                           )}
                       </div>
+                      
+                      {filteredVitalsPatients.length > vitalsPageSize && (
+                          <div className="walkin-pagination" style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '16px', alignItems: 'center' }}>
+                              <button
+                                  type="button"
+                                  className="walkin-page-btn"
+                                  onClick={() => setVitalsPage((page) => Math.max(1, page - 1))}
+                                  disabled={currentVitalsPage <= 1}
+                              >
+                                  Previous
+                              </button>
+                              <div className="walkin-page-status" style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 600 }}>
+                                  Page {currentVitalsPage} of {vitalsPageCount}
+                              </div>
+                              <button
+                                  type="button"
+                                  className="walkin-page-btn"
+                                  onClick={() => setVitalsPage((page) => Math.min(vitalsPageCount, page + 1))}
+                                  disabled={currentVitalsPage >= vitalsPageCount}
+                              >
+                                  Next
+                              </button>
+                          </div>
+                      )}
                   </div>
-              )}
+                  );
+              })()}
             {view === 'orders' && (
                 <div className="orders-container">
                     <div className="orders-header">
