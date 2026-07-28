@@ -7215,11 +7215,11 @@ function AdminDashboard() {
                                 </div>
                             </div>
 
-                            <div className="input-group" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-end', marginTop: '14px' }}>
                               <button
                                 type="button"
                                 className="btn-orange-sm"
-                                style={{ padding: '10px 16px' }}
+                                style={{ padding: '10px 20px', width: 'auto', marginTop: 0, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                                 onClick={() => persistSystemSettings({ opsSettings }, "Operational thresholds saved.")}
                               >
                                 <Save size={16} /> Save
@@ -7239,7 +7239,7 @@ function AdminDashboard() {
                         <div className="section-card-body" style={{ padding: '24px' }}>
                             <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
                                 <input type="text" className="settings-input flex-1" placeholder="New Department..." value={newDepartment} onChange={e => setNewDepartment(e.target.value)} onKeyDown={async e => { if (e.key === 'Enter' && newDepartment.trim()) { const next = [...departments, newDepartment.trim()]; setDepartments(next); setNewDepartment(""); const saved = await persistSystemSettings({ departments: next }, "Departments updated."); if (!saved) setDepartments(departments); } }} />
-                                <button className="btn-orange-sm" style={{ padding: '10px 16px' }} onClick={async () => {
+                                <button className="btn-orange-sm" style={{ padding: '10px 20px', width: 'auto', marginTop: 0, display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={async () => {
                                     if(newDepartment.trim()) {
                                       const next = [...departments, newDepartment.trim()];
                                       setDepartments(next);
@@ -7300,7 +7300,7 @@ function AdminDashboard() {
                                     }
                                   }
                                 }} />
-                                <button className="btn-orange-sm" style={{ padding: '10px 16px' }} onClick={async () => {
+                                <button className="btn-orange-sm" style={{ padding: '10px 20px', width: 'auto', marginTop: 0, display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={async () => {
                                     if(newWard.trim()) {
                                       try {
                                         await fetchJson(`/api/wards`, {
@@ -7407,6 +7407,7 @@ function AdminDashboard() {
                                   <button
                                     type="button"
                                     className="btn-orange-sm"
+                                    style={{ padding: '10px 20px', width: 'auto', marginTop: 0, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                                     onClick={() => persistSystemSettings({ roles }, "Role permissions saved.")}
                                     disabled={systemSettingsSaving}
                                   >
