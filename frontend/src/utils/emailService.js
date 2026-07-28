@@ -4,7 +4,7 @@ const SERVICE_ID = process.env.REACT_APP_EMAILJS_SERVICE_ID || "service_ur884qv"
 const OTP_TEMPLATE_ID =
   process.env.REACT_APP_EMAILJS_OTP_TEMPLATE_ID ||
   process.env.REACT_APP_EMAILJS_TEMPLATE_ID ||
-  "template_65mdd0e";
+  "template_ir71fnn";
 const PUBLIC_KEY = process.env.REACT_APP_EMAILJS_PUBLIC_KEY || "45tRyW8WG36pIFeBo";
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
@@ -25,13 +25,11 @@ export const sendOTPEmail = async (email, otp) => {
     to_email: email,
     otp_code: otp,
     otp: otp,
+    code: otp,
     passcode: otp,
-    message: otp,
     time: expirationTime,
     expiration_time: expirationTime,
-    subject: "Your Login OTP - Pascualinga",
-    from_name: "Pascualinga Hospital",
-    reply_to: "pascualgenhospi@gmail.com"
+    from_name: "Pascualinga Hospital"
   };
 
   try {

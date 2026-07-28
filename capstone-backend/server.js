@@ -374,7 +374,7 @@ app.post('/api/email/send-otp', async (req, res) => {
   const SERVICE_ID = process.env.EMAILJS_SERVICE_ID || "service_ur884qv";
   const PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || "45tRyW8WG36pIFeBo";
   const PRIVATE_KEY = process.env.EMAILJS_PRIVATE_KEY;
-  const TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || "template_65mdd0e";
+  const TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || "template_ir71fnn";
 
   if (!PRIVATE_KEY) {
     console.error(
@@ -416,14 +416,11 @@ app.post('/api/email/send-otp', async (req, res) => {
           to_email: email,
           otp_code: otp,
           otp: otp,
-          message: otp,
           code: otp,
           passcode: otp,
           time: expirationTime,
           expiration_time: expirationTime,
-          subject: "Your Login OTP - Pascualinga",
-          from_name: "Pascualinga Hospital",
-          reply_to: "pascualgenhospi@gmail.com"
+          from_name: "Pascualinga Hospital"
         }
       })
     });
