@@ -14,6 +14,8 @@ const OtpPage = () => {
   const [dontAskAgain, setDontAskAgain] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
   const [entryTimer, setEntryTimer] = useState(60);
+  const [otpEmailFailed, setOtpEmailFailed] = useState(false);
+  const [displayOtp, setDisplayOtp] = useState("");
   const inputRefs = useRef([]);
   const navigate = useNavigate();
 
@@ -38,6 +40,14 @@ const OtpPage = () => {
     if (email) setDisplayEmail(email);
     const role = localStorage.getItem('tempLoginRole');
     if (role) setDisplayRole(role);
+
+    // Check if previous email send failed and show the OTP on screen
+    const failed = localStorage.getItem('otpEmailFailed') === 'true';
+    const savedOtp = localStorage.getItem('displayOtpCode');
+    if (failed && savedOtp) {
+      setOtpEmailFailed(true);
+      setDisplayOtp(savedOtp);
+    }
   }, []);
 
   useEffect(() => {
@@ -80,9 +90,17 @@ const OtpPage = () => {
       setError(""); // Clear any previous errors
       setSuccess(`New code sent to ${displayEmail}`);
       setTimeout(() => setSuccess(""), 5000); // Clear success message after 5 seconds
+      setOtpEmailFailed(false);
+      setDisplayOtp("");
+      localStorage.removeItem('otpEmailFailed');
+      localStorage.removeItem('displayOtpCode');
     } else {
       setError("Failed to resend OTP. Check your connection.");
-      alert(`System Warning: Failed to resend OTP email.\n\n[Developer Bypass] Your new OTP is: ${newOtp}`);
+      setOtpEmailFailed(true);
+      setDisplayOtp(newOtp);
+      localStorage.setItem('otpEmailFailed', 'true');
+      localStorage.setItem('displayOtpCode', newOtp);
+      alert(`System Notice: OTP email could not be delivered.\n\nFor testing/demo purposes, your new one-time passcode is:\n\n    OTP: ${newOtp}`);
     }
   };
 
@@ -175,7 +193,9 @@ const OtpPage = () => {
       // Cleanup temp items
       localStorage.removeItem('tempLoginEmail');
       localStorage.removeItem('tempLoginRole');
-      localStorage.removeItem('generatedOTP'); 
+      localStorage.removeItem('generatedOTP');
+      localStorage.removeItem('otpEmailFailed');
+      localStorage.removeItem('displayOtpCode'); 
       
       // Redirect based on role
       if (role === 'admin' || role === 'staff') {
@@ -237,10 +257,49 @@ const OtpPage = () => {
         <p className="email-display">{displayEmail || "admin@pascualcare.com"}</p>
         <h1 className="title">Approve Sign in Request</h1>
 
-        <p className="instruction">
-          An OTP code has been sent to your registered device. 
-          Please enter the 6-digit code below to access the Admin Panel.
-        </p>
+        {otpEmailFailed && displayOtp ? (
+          <div style={{
+            border: '2px solid #f59e0b',
+            backgroundColor: '#fffbeb',
+            borderRadius: '12px',
+            padding: '1rem 1.25rem',
+            marginBottom: '1.25rem',
+            textAlign: 'center'
+          }}>
+            <p style={{ color: '#b45309', fontWeight: 600, marginBottom: '0.5rem' }}>
+              ⚠ Email Delivery Unavailable
+            </p>
+            <p style={{ color: '#78350f', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
+              We couldn't send the OTP to your email. For testing purposes, use the code below:
+            </p>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: '0.5rem',
+              backgroundColor: 'white',
+              border: '2px dashed #f59e0b',
+              borderRadius: '10px',
+              padding: '0.75rem 1rem',
+              fontSize: '1.75rem',
+              fontWeight: 800,
+              letterSpacing: '0.35em',
+              color: '#b45309',
+              fontFamily: 'monospace',
+              userSelect: 'all'
+            }}>
+              {displayOtp}
+            </div>
+            <p style={{ color: '#78350f', fontSize: '0.75rem', marginTop: '0.75rem' }}>
+              To fix this for production, set <code>EMAILJS_PRIVATE_KEY</code> in your Railway environment variables.
+            </p>
+          </div>
+        ) : (
+          <p className="instruction">
+            An OTP code has been sent to your registered device. 
+            Please enter the 6-digit code below to access the Admin Panel.
+          </p>
+        )}
 
         <p className="entry-timer" style={{ textAlign: 'center', color: 'black', fontWeight: 'bold', marginBottom: '1rem' }}>
           {Math.floor(entryTimer / 60)}:{String(entryTimer % 60).padStart(2, '0')}

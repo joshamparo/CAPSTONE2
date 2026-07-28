@@ -272,21 +272,29 @@ const Login = () => {
     }
 
     // Send Email
+    let emailSent = false;
     try {
       console.log(`Attempting to send OTP ${otp} to ${recipientEmail}...`);
-      let sent = await sendOTPEmail(recipientEmail, otp);
+      emailSent = await sendOTPEmail(recipientEmail, otp);
 
-      if (!sent) {
+      if (!emailSent) {
         console.log("OTP Email failed to send. Check console for details.");
         console.log("Dev OTP:", otp);
-        alert(`System Warning: Failed to send OTP email.\n\n[Developer Bypass] Your OTP is: ${otp}`);
+        // Save flag so OTP page can display the code as fallback
+        localStorage.setItem('otpEmailFailed', 'true');
+        localStorage.setItem('displayOtpCode', otp);
+        alert(`System Notice: OTP email could not be delivered.\n\nFor testing/demo purposes, your one-time passcode is:\n\n    OTP: ${otp}\n\nPlease enter this on the next screen.`);
       } else {
         console.log("OTP Email sent successfully to " + recipientEmail);
+        localStorage.removeItem('otpEmailFailed');
+        localStorage.removeItem('displayOtpCode');
       }
     } catch (error) {
       console.error("Error sending OTP:", error);
       console.log("Dev OTP:", otp);
-      alert(`System Warning: Server connection failed.\n\n[Developer Bypass] Your OTP is: ${otp}`);
+      localStorage.setItem('otpEmailFailed', 'true');
+      localStorage.setItem('displayOtpCode', otp);
+      alert(`System Notice: Server connection failed.\n\nFor testing/demo purposes, your one-time passcode is:\n\n    OTP: ${otp}\n\nPlease enter this on the next screen.`);
     }
 
       // Always redirect to OTP page, regardless of email success/failure

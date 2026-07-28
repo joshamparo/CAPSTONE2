@@ -373,14 +373,27 @@ app.post('/api/email/send-otp', async (req, res) => {
 
   const SERVICE_ID = process.env.EMAILJS_SERVICE_ID || "service_ur884qv";
   const PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || "45tRyW8WG36pIFeBo";
-  const PRIVATE_KEY = process.env.EMAILJS_PRIVATE_KEY; // Backend needs this for REST API
+  const PRIVATE_KEY = process.env.EMAILJS_PRIVATE_KEY;
   const TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || "template_ir71fnn";
 
-  if (!SERVICE_ID || !PUBLIC_KEY || !PRIVATE_KEY) {
-    console.error('[Backend Email] Missing credentials. Private Key present:', !!PRIVATE_KEY);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'EmailJS credentials missing from backend environment. Please check EMAILJS_PRIVATE_KEY.' 
+  if (!PRIVATE_KEY) {
+    console.error(
+      '[Backend Email] EMAILJS_PRIVATE_KEY is missing from environment variables.\n' +
+      '  → Local Dev: Add it to capstone-backend/.env\n' +
+      '  → Production: Set it in your Railway/Railway Variables.'
+    );
+    return res.status(500).json({
+      success: false,
+      message: 'OTP email not sent. EMAILJS_PRIVATE_KEY environment variable is missing in the backend.',
+      hint: 'Set EMAILJS_PRIVATE_KEY in your backend .env (local) or hosting platform (Railway).'
+    });
+  }
+
+  if (!SERVICE_ID || !PUBLIC_KEY) {
+    console.error('[Backend Email] Missing EmailJS SERVICE_ID or PUBLIC_KEY.');
+    return res.status(500).json({
+      success: false,
+      message: 'EmailJS configuration incomplete (SERVICE_ID or PUBLIC_KEY missing).'
     });
   }
 
@@ -390,7 +403,7 @@ app.post('/api/email/send-otp', async (req, res) => {
   });
 
   try {
-    console.log(`[Backend Email] Sending OTP to ${email} via REST API...`);
+    console.log(`[Backend Email] Sending OTP to ${email} via EmailJS REST API... (Template: ${TEMPLATE_ID})`);
     const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -408,22 +421,32 @@ app.post('/api/email/send-otp', async (req, res) => {
           passcode: otp,
           time: expirationTime,
           expiration_time: expirationTime,
-          subject: "Your Login OTP - Pascualinga"
+          subject: "Your Login OTP - Pascualinga",
+          from_name: "Pascualinga Hospital",
+          reply_to: "pascualgenhospi@gmail.com"
         }
       })
     });
 
     if (response.ok) {
-      console.log('[Backend Email] Success!');
+      console.log('[Backend Email] OTP email sent successfully to', email);
       return res.status(200).json({ success: true, message: 'OTP email sent' });
     }
 
     const errorText = await response.text();
-    console.error('[Backend Email] EmailJS REST API failed:', errorText);
-    return res.status(500).json({ success: false, message: 'EmailJS failed to send OTP.', details: errorText });
+    console.error('[Backend Email] EmailJS REST API failed:', `HTTP ${response.status}`, errorText || '(no response body)');
+    return res.status(500).json({
+      success: false,
+      message: `EmailJS rejected the request (HTTP ${response.status}).`,
+      details: errorText || 'Check your EmailJS account for rate limits, template IDs, or domain whitelisting.'
+    });
   } catch (error) {
-    console.error('[Backend Email] Server error:', error);
-    return res.status(500).json({ success: false, message: 'Server error while attempting to send OTP.' });
+    console.error('[Backend Email] Server error while sending OTP:', error?.message || error);
+    return res.status(500).json({
+      success: false,
+      message: 'Backend network error while attempting to send OTP email.',
+      details: error?.message || String(error)
+    });
   }
 });
 
