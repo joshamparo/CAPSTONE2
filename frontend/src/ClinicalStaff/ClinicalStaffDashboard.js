@@ -162,6 +162,9 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const [resultSaving, setResultSaving] = useState(false);
   const [resultError, setResultError] = useState('');
   const [resultNotice, setResultNotice] = useState('');
+  
+  // File Viewer Modal State
+  const [viewingFileUrl, setViewingFileUrl] = useState(null);
 
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -817,11 +820,15 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                 <tbody>
                   {displayedOrders.map((o) => {
                     const statusLower = String(o.status || '').toLowerCase();
+                    const isStat = String(o.priority || '').toUpperCase() === 'STAT';
                     const disableExam = statusLower !== 'paid';
                     return (
-                    <tr key={String(o.id)}>
+                    <tr key={String(o.id)} style={{ background: isStat ? '#fef2f2' : 'transparent' }}>
                       <td>{o.patientName || o.patientId || '—'}</td>
-                      <td>{o.service || o.kind || '—'}</td>
+                      <td>
+                        {isStat && <span style={{ padding: '2px 6px', background: '#ef4444', color: 'white', borderRadius: 4, fontSize: '0.7rem', marginRight: 8 }}>STAT</span>}
+                        {o.service || o.kind || '—'}
+                      </td>
                       <td><span className={statusBadgeClass(o.status)}>{o.status || '—'}</span></td>
                       <td>{o.scheduledAt ? fmtWhen(o.scheduledAt) : '—'}</td>
                       <td>
@@ -1204,7 +1211,9 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                                   </td>
                                   <td>
                                     {r.url ? (
-                                      <a href={r.url} target="_blank" rel="noreferrer">Open</a>
+                                      <button type="button" className="cs-btn secondary" onClick={() => setViewingFileUrl(r.url)}>
+                                        View Result
+                                      </button>
                                     ) : '—'}
                                   </td>
                                 </tr>
@@ -1218,6 +1227,26 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     </div>
                   </div>
                 </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingFileUrl && (
+        <div className="cs-modal-overlay" onClick={() => setViewingFileUrl(null)} style={{ zIndex: 9999 }}>
+          <div className="cs-modal" style={{ maxWidth: '900px', width: '90vw', height: '85vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+            <div className="cs-modal-head">
+              <div className="cs-modal-title">Result Viewer</div>
+              <button type="button" className="cs-btn secondary" onClick={() => setViewingFileUrl(null)}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="cs-modal-body" style={{ flex: 1, padding: 0, overflow: 'hidden', background: '#f8fafc', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              {viewingFileUrl.toLowerCase().match(/\.(jpeg|jpg|gif|png|webp)$/) ? (
+                <img src={viewingFileUrl} alt="Result" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              ) : (
+                <iframe src={viewingFileUrl} title="Result PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
               )}
             </div>
           </div>
@@ -1268,6 +1297,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     >
                       <option value="Routine">Routine</option>
                       <option value="Urgent">Urgent</option>
+                      <option value="STAT">STAT (Emergency)</option>
                     </select>
                     <input
                       className="cs-input"
