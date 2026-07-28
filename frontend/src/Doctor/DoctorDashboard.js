@@ -3658,6 +3658,41 @@ function DoctorDashboard() {
                       </div>
                     )}
 
+                    <div style={{ marginTop: '15px', marginBottom: '10px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>Quick Symptoms (Subjective)</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {["Fever", "Cough", "Headache", "Abdominal Pain", "Chest Pain", "Shortness of Breath", "Dizziness", "Vomiting", "Diarrhea"].map(chip => (
+                          <button key={chip} type="button" onClick={() => {
+                            setNoteForm(prev => {
+                              const curr = prev.subjective || '';
+                              const sep = curr ? ', ' : '';
+                              return { ...prev, subjective: curr + sep + chip };
+                            });
+                          }} style={{ padding: '4px 10px', fontSize: '0.75rem', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '12px', color: '#334155', cursor: 'pointer' }}>
+                            + {chip}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: '15px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>Quick Findings (Objective)</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {["Normal Exam", "Clear breath sounds", "Regular heart rhythm", "Soft abdomen", "No tenderness", "Alert & oriented"].map(chip => (
+                          <button key={chip} type="button" onClick={() => {
+                            setNoteForm(prev => {
+                              const curr = prev.objective || '';
+                              const sep = curr ? (curr.endsWith('.') ? ' ' : ', ') : '';
+                              const text = chip === 'Normal Exam' ? 'Alert, coherent, oriented to 3 spheres, not in cardiorespiratory distress. Vital signs stable. Clear breath sounds bilaterally. Regular heart rhythm. Soft abdomen, no tenderness.' : chip;
+                              return { ...prev, objective: curr + sep + text };
+                            });
+                          }} style={{ padding: '4px 10px', fontSize: '0.75rem', background: chip === 'Normal Exam' ? '#dcfce7' : '#f1f5f9', border: `1px solid ${chip === 'Normal Exam' ? '#86efac' : '#cbd5e1'}`, borderRadius: '12px', color: chip === 'Normal Exam' ? '#166534' : '#334155', cursor: 'pointer', fontWeight: chip === 'Normal Exam' ? 700 : 400 }}>
+                            + {chip}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     <textarea className="doc-textarea" placeholder="Subjective" value={noteForm.subjective} onChange={(e) => setNoteForm((v) => ({ ...v, subjective: e.target.value }))} />
                     <textarea className="doc-textarea" placeholder="Objective" value={noteForm.objective} onChange={(e) => setNoteForm((v) => ({ ...v, objective: e.target.value }))} />
                     <textarea className="doc-textarea" placeholder="Assessment" value={noteForm.assessment} onChange={(e) => setNoteForm((v) => ({ ...v, assessment: e.target.value }))} />
