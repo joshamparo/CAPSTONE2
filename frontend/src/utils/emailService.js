@@ -4,7 +4,7 @@ const SERVICE_ID = process.env.REACT_APP_EMAILJS_SERVICE_ID || "service_ur884qv"
 const OTP_TEMPLATE_ID =
   process.env.REACT_APP_EMAILJS_OTP_TEMPLATE_ID ||
   process.env.REACT_APP_EMAILJS_TEMPLATE_ID ||
-  "template_ir71fnn";
+  "template_zkps5b8";
 const PUBLIC_KEY = process.env.REACT_APP_EMAILJS_PUBLIC_KEY || "45tRyW8WG36pIFeBo";
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
