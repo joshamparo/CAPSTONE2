@@ -2215,7 +2215,15 @@ router.post('/:id/video/start', requireRole(['doctor']), async (req, res) => {
         const doctorName = inferName(req);
         if (!doctorName) return res.status(401).json({ message: 'Missing x-user-name.' });
 
-        const apt = await prisma.appointments.findUnique({ where: { id } });
+        let apt = await prisma.appointments.findUnique({ where: { id } });
+        if (!apt) {
+            // Fallback: Check if the provided ID is actually a video_booking_holds ID
+            const hold = await prisma.$queryRaw`SELECT appointment_id FROM video_booking_holds WHERE id = ${id}`.catch(()=>[]);
+            if (hold && hold.length > 0 && hold[0].appointment_id) {
+                apt = await prisma.appointments.findUnique({ where: { id: hold[0].appointment_id } });
+            }
+        }
+        
         if (!apt) {
             console.log(`[Video Start] 404 - Appointment ${idRaw} not found in DB`);
             return res.status(404).json({ message: `DEBUG: Appointment ID ${idRaw} not found in database.` });
@@ -2298,7 +2306,14 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor']), async (req, re
         const email = inferEmail(req);
         const name = inferName(req);
 
-        const apt = await prisma.appointments.findUnique({ where: { id } });
+        let apt = await prisma.appointments.findUnique({ where: { id } });
+        if (!apt) {
+            const hold = await prisma.$queryRaw`SELECT appointment_id FROM video_booking_holds WHERE id = ${id}`.catch(()=>[]);
+            if (hold && hold.length > 0 && hold[0].appointment_id) {
+                apt = await prisma.appointments.findUnique({ where: { id: hold[0].appointment_id } });
+            }
+        }
+        
         if (!apt) return res.status(404).json({ message: 'Appointment not found.' });
 
         if (!isVideoAppointment(apt)) return res.status(400).json({ message: 'Appointment is not a video consultation.' });
