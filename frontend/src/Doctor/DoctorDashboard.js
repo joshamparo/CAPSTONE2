@@ -3642,13 +3642,56 @@ function DoctorDashboard() {
                       </div>
                     )}
 
-                    {doctorSpecialization.toLowerCase().includes('obgyn') && (
-                      <div className="doc-vitals" style={{ marginTop: '10px' }}>
-                        <input className="doc-input" placeholder="LMP (Last Menstrual Period)" value={noteForm.lmp || ''} onChange={(e) => setNoteForm(v => ({...v, lmp: e.target.value}))} />
-                        <input className="doc-input" placeholder="Pregnancy Week" value={noteForm.pregnancyWeek || ''} onChange={(e) => setNoteForm(v => ({...v, pregnancyWeek: e.target.value}))} />
-                        <input className="doc-input" placeholder="Fetal Heart Rate" value={noteForm.fetalHeartRate || ''} onChange={(e) => setNoteForm(v => ({...v, fetalHeartRate: e.target.value}))} />
-                      </div>
-                    )}
+                    {doctorSpecialization.toLowerCase().includes('obgyn') && (() => {
+                      let edd = '';
+                      let aog = '';
+                      let trimester = '';
+                      if (noteForm.lmp) {
+                        const lmpDate = new Date(noteForm.lmp);
+                        if (!isNaN(lmpDate)) {
+                          const eddDate = new Date(lmpDate.getTime() + 280 * 24 * 60 * 60 * 1000);
+                          edd = eddDate.toLocaleDateString();
+                          const diffTime = Math.abs(new Date() - lmpDate);
+                          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                          const weeks = Math.floor(diffDays / 7);
+                          const days = diffDays % 7;
+                          aog = `${weeks} weeks, ${days} days`;
+                          if (weeks < 13) trimester = '1st Trimester';
+                          else if (weeks <= 26) trimester = '2nd Trimester';
+                          else trimester = '3rd Trimester';
+                        }
+                      }
+                      return (
+                        <div style={{ marginTop: '10px', background: '#fdf4ff', padding: '12px', borderRadius: '8px', border: '1px solid #f87171' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#be123c', marginBottom: '8px' }}>OB-GYN Calculator (LMP to EDD/AOG)</div>
+                          <div className="doc-vitals">
+                            <div>
+                              <label style={{fontSize:'0.7rem', color:'#881337', fontWeight:600}}>LMP (Last Menstrual Period)</label>
+                              <input type="date" className="doc-input" style={{ borderColor: '#fecdd3' }} value={noteForm.lmp || ''} onChange={(e) => setNoteForm(v => ({...v, lmp: e.target.value}))} />
+                            </div>
+                            <div>
+                              <label style={{fontSize:'0.7rem', color:'#881337', fontWeight:600}}>Fetal Heart Rate (bpm)</label>
+                              <input className="doc-input" placeholder="e.g. 140" style={{ borderColor: '#fecdd3' }} value={noteForm.fetalHeartRate || ''} onChange={(e) => setNoteForm(v => ({...v, fetalHeartRate: e.target.value}))} />
+                            </div>
+                          </div>
+                          {noteForm.lmp && !isNaN(new Date(noteForm.lmp)) && (
+                            <div style={{ marginTop: '10px', display: 'flex', gap: '15px', fontSize: '0.8rem', color: '#9f1239' }}>
+                              <div><strong>EDD:</strong> {edd}</div>
+                              <div><strong>AOG:</strong> {aog}</div>
+                              <div><strong>Trimester:</strong> {trimester}</div>
+                              <button type="button" onClick={() => {
+                                setNoteForm(prev => ({
+                                  ...prev,
+                                  objective: (prev.objective ? prev.objective + ' ' : '') + `AOG: ${aog}. EDD: ${edd} (${trimester}).`
+                                }));
+                              }} style={{ background: '#be123c', color: 'white', border: 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.7rem', cursor: 'pointer' }}>
+                                Copy to Notes
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {doctorSpecialization.toLowerCase().includes('surg') && (
                       <div className="doc-vitals" style={{ marginTop: '10px' }}>
@@ -3791,6 +3834,41 @@ function DoctorDashboard() {
                       value={prescriptionMeta.diagnosis}
                       onChange={(e) => setPrescriptionMeta((v) => ({ ...v, diagnosis: e.target.value }))}
                     />
+
+                    {doctorSpecialization.toLowerCase().includes('pediatric') && (() => {
+                      const weightMatch = String(selectedPatient?.vitals?.weight || '').match(/(\d+(\.\d+)?)/);
+                      const weightKg = weightMatch ? parseFloat(weightMatch[1]) : 0;
+                      return (
+                        <div style={{ background: '#f0fdfa', border: '1px solid #4ade80', padding: '12px', borderRadius: '8px', marginBottom: '15px' }}>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#166534', marginBottom: '8px' }}>Pediatric Auto-Dose Calculator</div>
+                          {!weightKg ? (
+                            <div style={{ fontSize: '0.75rem', color: '#b91c1c' }}>Weight not found in vitals. Please input weight manually in triage.</div>
+                          ) : (
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#166534', marginBottom: '8px' }}><strong>Patient Weight:</strong> {weightKg} kg</div>
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {[
+                                  { name: 'Paracetamol (250mg/5mL)', dose: '15mg/kg/dose', calc: (w) => `${((w * 15) / 250 * 5).toFixed(1)} mL every 4 hours for fever` },
+                                  { name: 'Amoxicillin (250mg/5mL)', dose: '50mg/kg/day TID', calc: (w) => `${((w * 50 / 3) / 250 * 5).toFixed(1)} mL every 8 hours for 7 days` },
+                                  { name: 'Cefuroxime (250mg/5mL)', dose: '30mg/kg/day BID', calc: (w) => `${((w * 30 / 2) / 250 * 5).toFixed(1)} mL every 12 hours for 7 days` },
+                                  { name: 'Azithromycin (200mg/5mL)', dose: '10mg/kg OD', calc: (w) => `${((w * 10) / 200 * 5).toFixed(1)} mL once a day for 3 days` }
+                                ].map(med => (
+                                  <button key={med.name} type="button" onClick={() => {
+                                    setPrescriptionMeta(prev => ({
+                                      ...prev,
+                                      instructions: (prev.instructions ? prev.instructions + '\n' : '') + `${med.name}: ${med.calc(weightKg)}`
+                                    }));
+                                  }} style={{ background: '#22c55e', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '0.75rem', cursor: 'pointer' }}>
+                                    + {med.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     <input
                       className="doc-input"
                       placeholder="General instructions (optional)"
