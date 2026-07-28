@@ -3607,13 +3607,14 @@ function DoctorDashboard() {
                   <div className="doc-empty">Select a patient to record notes.</div>
                 ) : (
                   <div className="doc-form">
-                    <div className="doc-vitals">
-                      <input className="doc-input" placeholder="BP" value={noteForm.bp} onChange={(e) => setNoteForm((v) => ({ ...v, bp: e.target.value }))} />
-                      <input className="doc-input" placeholder="HR" value={noteForm.hr} onChange={(e) => setNoteForm((v) => ({ ...v, hr: e.target.value }))} />
-                      <input className="doc-input" placeholder="Temp" value={noteForm.temp} onChange={(e) => setNoteForm((v) => ({ ...v, temp: e.target.value }))} />
-                      <input className="doc-input" placeholder="Weight" value={noteForm.weight} onChange={(e) => setNoteForm((v) => ({ ...v, weight: e.target.value }))} />
-                      <input className="doc-input" placeholder="Height" value={noteForm.height} onChange={(e) => setNoteForm((v) => ({ ...v, height: e.target.value }))} />
-                      <input className="doc-input" placeholder="O2" value={noteForm.o2} onChange={(e) => setNoteForm((v) => ({ ...v, o2: e.target.value }))} />
+                    <div className="doc-vitals-display" style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', padding: '12px', background: '#f8fafc', borderRadius: '8px', marginBottom: '15px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}>
+                      <div style={{fontWeight: 700, color: '#475569', width: '100%', marginBottom: '4px'}}><Activity size={14} style={{display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px'}}/> Vitals (Auto-Pulled from Triage)</div>
+                      <div><span style={{color: '#64748b'}}>BP:</span> <strong>{selectedPatient?.vitals?.bp || '—'}</strong></div>
+                      <div><span style={{color: '#64748b'}}>HR:</span> <strong>{selectedPatient?.vitals?.hr || '—'}</strong></div>
+                      <div><span style={{color: '#64748b'}}>Temp:</span> <strong>{selectedPatient?.vitals?.temp || '—'}</strong></div>
+                      <div><span style={{color: '#64748b'}}>Weight:</span> <strong>{selectedPatient?.vitals?.weight || '—'}</strong></div>
+                      <div><span style={{color: '#64748b'}}>Height:</span> <strong>{selectedPatient?.vitals?.height || '—'}</strong></div>
+                      <div><span style={{color: '#64748b'}}>SpO2:</span> <strong>{selectedPatient?.vitals?.o2 || selectedPatient?.vitals?.spo2 || '—'}</strong></div>
                     </div>
 
                     {doctorSpecialization.includes('pediatric') && (
@@ -3664,18 +3665,40 @@ function DoctorDashboard() {
                       Save Note
                     </button>
 
-                    <div className="doc-history">
-                      <div className="doc-history-title">Recent Notes</div>
+                    <div className="doc-history" style={{ marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '15px' }}>
+                      <div className="doc-history-title" style={{ marginBottom: '10px' }}>Recent Notes</div>
                       {notes.length === 0 ? (
                         <div className="doc-muted">No notes yet.</div>
                       ) : (
                         notes.slice(0, 5).map((n) => (
-                          <div key={n.id} className="doc-history-item">
+                          <div key={n.id} className="doc-history-item" style={{ position: 'relative', paddingRight: '80px' }}>
                             <div className="doc-history-top">
                               <span className="doc-history-doctor">{n.doctorName}</span>
                               <span className="doc-muted">{new Date(n.created_at || n.createdAt || n.timestamp || Date.now()).toLocaleString()}</span>
                             </div>
                             <div className="doc-history-sub">{n.assessment || '—'}</div>
+                            <button
+                              type="button"
+                              className="doc-btn"
+                              style={{ position: 'absolute', right: '10px', top: '10px', padding: '4px 8px', fontSize: '0.75rem' }}
+                              onClick={() => {
+                                setNoteForm(prev => ({
+                                  ...prev,
+                                  subjective: n.subjective || '',
+                                  objective: n.objective || '',
+                                  assessment: n.assessment || '',
+                                  plan: n.plan || '',
+                                  vaccinationHistory: n.vaccinationHistory || '',
+                                  heartRateRhythm: n.heartRateRhythm || '',
+                                  ecgNotes: n.ecgNotes || '',
+                                  lesionType: n.lesionType || '',
+                                  affectedArea: n.affectedArea || ''
+                                }));
+                                setToast({ type: 'success', message: 'Note copied to editor.' });
+                              }}
+                            >
+                              <FileText size={12} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px' }}/> Copy
+                            </button>
                           </div>
                         ))
                       )}
