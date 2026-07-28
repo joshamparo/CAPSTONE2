@@ -5149,6 +5149,7 @@ function NurseDashboard() {
   // Clinical Update Handlers
   const handleClinicalUpdateClick = (patient) => {
     setSelectedPatientForClinicalUpdate(patient);
+    setClinicalUpdateStatus('idle');
     setClinicalUpdateFormData({
       type: 'Vitals',
       bloodPressure: '',
@@ -7078,13 +7079,20 @@ function NurseDashboard() {
                                               </div>
                                           </div>
 
-                                          <button 
-                                              className="btn-orange-sm" 
-                                              style={{ width: 'fit-content', alignSelf: 'flex-start', marginTop: 'auto' }}
-                                              onClick={() => handleClinicalUpdateClick(patient)}
-                                          >
-                                              <Plus size={16} /> Update Vitals
-                                          </button>
+                                          <div style={{ marginTop: 'auto', paddingTop: '16px', display: 'flex', justifyContent: 'flex-start', position: 'relative', zIndex: 10 }}>
+                                              <button 
+                                                  className="btn-orange-sm" 
+                                                  style={{ width: 'auto', padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+                                                  onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      e.preventDefault();
+                                                      handleClinicalUpdateClick(patient);
+                                                  }}
+                                                  type="button"
+                                              >
+                                                  <Plus size={16} /> Update Vitals
+                                              </button>
+                                          </div>
                                       </div>
                                   );
                               })
