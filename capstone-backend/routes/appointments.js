@@ -2210,11 +2210,27 @@ router.post('/:id/video/start', requireRole(['doctor']), async (req, res) => {
             return res.status(400).json({ message: `DEBUG: Appointment ${idRaw} is not marked as a video consultation.` });
         }
 
-        const assigned = normalizeAssignee(apt.doctor_id);
-        const actor = normalizeAssignee(doctorName);
-        if (!assigned || assigned !== actor) {
-            console.log(`[Video Start] 403 - Doctor mismatch. Assigned: ${assigned}, Actor: ${actor}`);
-            return res.status(403).json({ message: `DEBUG: Doctor mismatch. Assigned to ${assigned}, but you are logged in as ${actor}.` });
+        const reqDoctorUuid = String(req.headers['x-doctor-uuid'] || '').trim();
+
+        let isAssigned = false;
+
+        // 1. Check UUID match (most reliable)
+        if (apt.doctor_uuid && reqDoctorUuid && apt.doctor_uuid === reqDoctorUuid) {
+            isAssigned = true;
+        } else {
+            // 2. Fallback to name string matching
+            const assigned = normalizeAssignee(apt.doctor_id);
+            const actor = normalizeAssignee(doctorName);
+            if (assigned && assigned === actor) {
+                isAssigned = true;
+            }
+        }
+
+        if (!isAssigned) {
+            const assigned = normalizeAssignee(apt.doctor_id);
+            const actor = normalizeAssignee(doctorName);
+            console.log(`[Video Start] 403 - Doctor mismatch. Assigned UUID: ${apt.doctor_uuid}, Req UUID: ${reqDoctorUuid}. Assigned Name: ${assigned}, Actor: ${actor}`);
+            return res.status(403).json({ message: `DEBUG: Doctor mismatch. Assigned to ${assigned || apt.doctor_uuid}, but you are logged in as ${actor || reqDoctorUuid}.` });
         }
 
         if (!apt.meeting_room_id) {
@@ -2288,9 +2304,21 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor']), async (req, re
         }
 
         if (role === 'doctor') {
-            const assigned = normalizeAssignee(apt.doctor_id);
-            const actor = normalizeAssignee(name);
-            if (!assigned || assigned !== actor) return res.status(403).json({ message: 'Not assigned to this doctor.' });
+            const reqDoctorUuid = String(req.headers['x-doctor-uuid'] || '').trim();
+            let isAssigned = false;
+            
+            if (apt.doctor_uuid && reqDoctorUuid && apt.doctor_uuid === reqDoctorUuid) {
+                isAssigned = true;
+            } else {
+                const assigned = normalizeAssignee(apt.doctor_id);
+                const actor = normalizeAssignee(name);
+                if (assigned && assigned === actor) {
+                    isAssigned = true;
+                }
+            }
+
+            if (!isAssigned) return res.status(403).json({ message: 'Not assigned to this doctor.' });
+            
             const url = buildJitsiUrl(roomId, name);
             return res.json({ roomId, url, startedAt });
         }

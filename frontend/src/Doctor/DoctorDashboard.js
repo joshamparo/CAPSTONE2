@@ -473,7 +473,7 @@ function DoctorDashboard() {
   const authHeaders = useMemo(() => {
     const headers = {};
     if (userRole) headers['x-user-role'] = userRole;
-    
+
     // Pass the actual doctor name from the user object, fallback to doctorInboxName
     const actualDoctorName = currentUser?.firstName 
       ? `${currentUser.firstName} ${currentUser.lastName || ''}`.trim() 
@@ -483,6 +483,10 @@ function DoctorDashboard() {
     
     const email = currentUser?.email || profileForm?.email || '';
     if (email) headers['x-user-email'] = email;
+
+    const doctorUuid = currentUser?.id || '';
+    if (doctorUuid) headers['x-doctor-uuid'] = doctorUuid;
+
     return headers;
   }, [doctorInboxName, userRole, currentUser, profileForm?.email]);
 
