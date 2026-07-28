@@ -157,6 +157,7 @@ function PharmacistDashboard() {
   const [requests, setRequests] = useState([]);
   const [prescriptions, setPrescriptions] = useState([]);
   const [restockRequests, setRestockRequests] = useState([]);
+  const [lowStockPage, setLowStockPage] = useState(1);
 
   // POS State
   const [cart, setCart] = useState([]);
@@ -1967,19 +1968,8 @@ function PharmacistDashboard() {
 
     setRxSaving(true); // Reuse rxSaving for checkout loading
     try {
-      for (const item of cart) {
-        const endpoint = item.type === 'medicine' ? 'inventory' : 'supplies';
-        const stockSource = item.type === 'medicine' ? medicines : supplies;
-        const originalItem = stockSource.find(s => s.id === item.id);
-        const nextStock = Math.max(0, (originalItem?.stock || 0) - item.quantity);
-        
-        await fetchJson(`/api/${endpoint}/${item.id}`, {
-          apiBase: API_BASE,
-          method: 'PUT',
-          headers: buildJsonHeaders(),
-          body: JSON.stringify({ stock: nextStock })
-        });
-      }
+      // Stock deduction is now safely handled atomically inside the /api/sales POST endpoint backend.
+      // We no longer need to manually fire individual PUT requests per item here.
 
       const receiptDraft = {
         items: [...cart],
@@ -3662,60 +3652,83 @@ function PharmacistDashboard() {
             {lowStockItems.length === 0 ? (
               <div className="pharm-empty">No low stock items detected.</div>
             ) : (
-              <div className="pharm-table-wrap">
-                <table className="pharm-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 40 }} />
-                      <th>Item</th>
-                      <th>Type</th>
-                      <th>Current Stock</th>
-                      <th>Status</th>
-                      <th className="pharm-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lowStockItems.map((item) => {
-                      const isPending = restockRequests.some(
-                        (r) => String(r.itemId || r.item_id || '') === String(item.id) && String(r.status || '') === 'Pending'
-                      );
-                      return (
-                        <tr key={`${item.type}-${item.id}`}>
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(lowStockSelected[lowStockKey(item)])}
-                              onChange={() => toggleLowStock(item)}
-                              disabled={isPending}
-                            />
-                          </td>
-                          <td className="pharm-strong">{item.name}</td>
-                          <td>{item.type}</td>
-                          <td>{item.stock} {String(item.unit || '').trim() || 'pcs'}</td>
-                          <td>
-                            <span className={`pharm-badge ${item.stock <= 0 ? 'out-of-stock' : 'low-stock'}`}>
-                              {item.stock <= 0 ? 'Out of Stock' : 'Low Stock'}
-                            </span>
-                          </td>
-                          <td className="pharm-right">
-                            {isPending ? (
-                              <span className="pharm-badge pending">Request Pending</span>
-                            ) : (
-                              <button 
-                                type="button" 
-                                className="pharm-btn primary" 
-                                onClick={() => openRestockRequest(item)}
-                              >
-                                Request Restock
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                <div className="pharm-table-wrap">
+                  <table className="pharm-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 40 }} />
+                        <th>Item</th>
+                        <th>Type</th>
+                        <th>Current Stock</th>
+                        <th>Status</th>
+                        <th className="pharm-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lowStockItems.slice((lowStockPage - 1) * 5, lowStockPage * 5).map((item) => {
+                        const isPending = restockRequests.some(
+                          (r) => String(r.itemId || r.item_id || '') === String(item.id) && String(r.status || '') === 'Pending'
+                        );
+                        return (
+                          <tr key={`${item.type}-${item.id}`}>
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(lowStockSelected[lowStockKey(item)])}
+                                onChange={() => toggleLowStock(item)}
+                                disabled={isPending}
+                              />
+                            </td>
+                            <td className="pharm-strong">{item.name}</td>
+                            <td>{item.type}</td>
+                            <td>{item.stock} {String(item.unit || '').trim() || 'pcs'}</td>
+                            <td>
+                              <span className={`pharm-badge ${item.stock <= 0 ? 'out-of-stock' : 'low-stock'}`}>
+                                {item.stock <= 0 ? 'Out of Stock' : 'Low Stock'}
+                              </span>
+                            </td>
+                            <td className="pharm-right">
+                              {isPending ? (
+                                <span className="pharm-badge pending">Request Pending</span>
+                              ) : (
+                                <button 
+                                  type="button" 
+                                  className="pharm-btn primary" 
+                                  onClick={() => openRestockRequest(item)}
+                                >
+                                  Request Restock
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="pharm-pagination" style={{ marginTop: '12px' }}>
+                  <button
+                    type="button"
+                    className="pharm-btn"
+                    disabled={lowStockPage === 1}
+                    onClick={() => setLowStockPage(Math.max(1, lowStockPage - 1))}
+                  >
+                    Previous
+                  </button>
+                  <span className="pharm-page-info">
+                    Page {lowStockPage} of {Math.max(1, Math.ceil(lowStockItems.length / 5))}
+                  </span>
+                  <button
+                    type="button"
+                    className="pharm-btn"
+                    disabled={lowStockPage >= Math.ceil(lowStockItems.length / 5)}
+                    onClick={() => setLowStockPage(lowStockPage + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </>
             )}
 
             <div className="pharm-divider" style={{ margin: '32px 0' }} />
