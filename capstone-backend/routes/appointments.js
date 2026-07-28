@@ -860,8 +860,7 @@ function getJitsiBaseUrl() {
 }
 
 function buildJitsiUrl(roomId, displayName) {
-    const base = getJitsiBaseUrl().replace(/\/+$/, '');
-    const safeRoom = encodeURIComponent(String(roomId || '').trim());
+    const rawRoom = String(roomId || '').trim();
     const name = String(displayName || '').trim();
     const hash = [
         'config.prejoinPageEnabled=false',
@@ -873,9 +872,14 @@ function buildJitsiUrl(roomId, displayName) {
         'interfaceConfig.DEFAULT_REMOTE_DISPLAY_NAME=Participant',
         'interfaceConfig.DISABLE_JOIN_LEAVE_NOTIFICATIONS=true',
         name ? `userInfo.displayName=${encodeURIComponent(name)}` : ''
-    ]
-        .filter(Boolean)
-        .join('&');
+    ].filter(Boolean).join('&');
+
+    if (rawRoom.startsWith('http://') || rawRoom.startsWith('https://')) {
+        return `${rawRoom}#${hash}`;
+    }
+
+    const base = getJitsiBaseUrl().replace(/\/+$/, '');
+    const safeRoom = encodeURIComponent(rawRoom);
     return `${base}/${safeRoom}#${hash}`;
 }
 
