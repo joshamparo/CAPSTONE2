@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown } from 'lucide-react';
 import './DoctorDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
@@ -83,6 +83,15 @@ function DoctorDashboard() {
   const [isSentToPharmacy, setIsSentToPharmacy] = useState(false);
   const [prescriptionFulfillment, setPrescriptionFulfillment] = useState('not_sent');
   const [savingPrescription, setSavingPrescription] = useState(false);
+  const [medicalProfile, setMedicalProfile] = useState({
+    allergies: '',
+    pastMedicalHistory: '',
+    familyHistory: '',
+    socialHistory: '',
+    immunizations: ''
+  });
+  const [showMedicalProfile, setShowMedicalProfile] = useState(false);
+  const [savingMedicalProfile, setSavingMedicalProfile] = useState(false);
   const [printTarget, setPrintTarget] = useState(null);
   const [labResults, setLabResults] = useState([]);
   const [labResultsError, setLabResultsError] = useState('');
@@ -660,8 +669,19 @@ function DoctorDashboard() {
         fetchJson(`/api/doctor/patients/patients/${patientId}/history`, { apiBase: API_BASE, headers: { ...authHeaders } })
       ]);
       setRecordProfile(profData || null);
-      setRecordHistory(histData || null);
-    } catch (err) {
+        setRecordHistory(histData || null);
+
+        if (profData) {
+          const mp = profData?.summary?.clinical_records?.medicalProfile || {};
+          setMedicalProfile({
+            allergies: profData.patient?.allergies || '',
+            pastMedicalHistory: mp.pastMedicalHistory || '',
+            familyHistory: mp.familyHistory || '',
+            socialHistory: mp.socialHistory || '',
+            immunizations: mp.immunizations || ''
+          });
+        }
+      } catch (err) {
       console.error(err);
       setToast({ type: 'error', message: 'Failed to load patient profile.' });
     } finally {
@@ -1536,7 +1556,50 @@ function DoctorDashboard() {
     navigate('/login');
   };
 
-  const saveNote = async () => {
+  const saveMedicalProfile = async () => {
+    if (!selectedPatient?._id) return;
+    setSavingMedicalProfile(true);
+    try {
+      const existingRaw = recordProfile?.summary?.clinical_records || {};
+      const updatedRecords = {
+        ...existingRaw,
+        medicalProfile: {
+          pastMedicalHistory: medicalProfile.pastMedicalHistory,
+          familyHistory: medicalProfile.familyHistory,
+          socialHistory: medicalProfile.socialHistory,
+          immunizations: medicalProfile.immunizations
+        }
+      };
+
+      const res = await fetchJson(`/api/patients/${selectedPatient._id}`, {
+        apiBase: API_BASE,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({
+          allergies: medicalProfile.allergies,
+          clinicalRecords: updatedRecords
+        })
+      });
+      if (res) {
+        setToast({ type: 'success', message: 'Medical Profile saved successfully.' });
+        setRecordProfile(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            patient: { ...prev.patient, allergies: medicalProfile.allergies },
+            summary: { ...prev.summary, clinical_records: updatedRecords }
+          };
+        });
+      }
+    } catch (e) {
+      console.error(e);
+      setToast({ type: 'error', message: 'Failed to save Medical Profile.' });
+    } finally {
+      setSavingMedicalProfile(false);
+    }
+  };
+
+  const saveNote = async (e) => {
     if (!selectedPatient?._id) return;
     if (!userRole) {
       setToast({ type: 'error', message: 'Session missing. Please login again.' });
@@ -3596,7 +3659,49 @@ function DoctorDashboard() {
               </div>
             )}
 
-            <div id="doc-sec-notes" className="doctor-grid doctor-grid-2 doc-section">
+            {/* MEDICAL PROFILE SECTION */}
+              {selectedPatient && (
+                <div className="doc-card" style={{ marginBottom: '15px' }}>
+                  <div className="doc-card-header" style={{ cursor: 'pointer' }} onClick={() => setShowMedicalProfile(!showMedicalProfile)}>
+                    <div className="doc-card-title">
+                      <User size={18} />
+                      Patient Medical History & Profile
+                    </div>
+                    <button className="doc-icon-btn" type="button">
+                      {showMedicalProfile ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                  </div>
+                  {showMedicalProfile && (
+                    <div className="doc-form" style={{ padding: '15px' }}>
+                      <div className="doctor-grid doctor-grid-2">
+                        <div>
+                          <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px', display: 'block' }}>Allergies & Adverse Reactions <span style={{ color: '#ef4444' }}>*</span></label>
+                          <textarea className="doc-textarea" style={{ minHeight: '60px', borderColor: medicalProfile.allergies && medicalProfile.allergies.toLowerCase() !== 'none' && medicalProfile.allergies.toLowerCase() !== 'n/a' ? '#ef4444' : '#cbd5e1' }} placeholder="e.g. Penicillin, Peanuts, None" value={medicalProfile.allergies} onChange={(e) => setMedicalProfile(v => ({...v, allergies: e.target.value}))} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px', display: 'block' }}>Past Medical & Surgical History</label>
+                          <textarea className="doc-textarea" style={{ minHeight: '60px' }} placeholder="e.g. Hypertension, Appendectomy (2015)" value={medicalProfile.pastMedicalHistory} onChange={(e) => setMedicalProfile(v => ({...v, pastMedicalHistory: e.target.value}))} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px', display: 'block' }}>Family & Social History</label>
+                          <textarea className="doc-textarea" style={{ minHeight: '60px' }} placeholder="e.g. Father: Diabetes. Smoker 10 years." value={medicalProfile.familyHistory} onChange={(e) => setMedicalProfile(v => ({...v, familyHistory: e.target.value}))} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px', display: 'block' }}>Immunization Record</label>
+                          <textarea className="doc-textarea" style={{ minHeight: '60px' }} placeholder="e.g. Fully vaccinated, Last Flu Shot 2025" value={medicalProfile.immunizations} onChange={(e) => setMedicalProfile(v => ({...v, immunizations: e.target.value}))} />
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+                        <button type="button" className="doc-btn" style={{ background: '#2563eb', color: 'white', border: 'none' }} onClick={saveMedicalProfile} disabled={savingMedicalProfile}>
+                          <Save size={14} /> {savingMedicalProfile ? 'Saving...' : 'Save Medical Profile'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div id="doc-sec-notes" className="doctor-grid doctor-grid-2 doc-section">
               <div className="doc-card">
                 <div className="doc-card-header">
                   <div className="doc-card-title">
@@ -3800,7 +3905,18 @@ function DoctorDashboard() {
                   <div className="doc-empty">Select a patient to create a prescription.</div>
                 ) : (
                   <div className="doc-form">
-                    <div className="doc-form-actions" style={{ justifyContent: 'space-between' }}>
+                      {activePatientMeta.allergies && activePatientMeta.allergies.toLowerCase() !== 'none' && activePatientMeta.allergies.toLowerCase() !== 'n/a' && (
+                        <div style={{ background: '#fef2f2', border: '1px solid #ef4444', padding: '12px', borderRadius: '8px', marginBottom: '15px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b91c1c', fontWeight: 800, fontSize: '0.9rem' }}>
+                            <AlertTriangle size={18} />
+                            PATIENT ALLERGY ALERT
+                          </div>
+                          <div style={{ color: '#991b1b', fontSize: '0.85rem', marginTop: '4px' }}>
+                            This patient is allergic to: <strong>{activePatientMeta.allergies}</strong>. Please review carefully before prescribing medications.
+                          </div>
+                        </div>
+                      )}
+                      <div className="doc-form-actions" style={{ justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                         <select className="doc-select" value={selectedRxTemplate} onChange={(e) => setSelectedRxTemplate(e.target.value)}>
                           <option value="">Templates (optional)</option>
@@ -3829,11 +3945,29 @@ function DoctorDashboard() {
                     </div>
 
                     <input
-                      className="doc-input"
-                      placeholder="Diagnosis (optional)"
-                      value={prescriptionMeta.diagnosis}
-                      onChange={(e) => setPrescriptionMeta((v) => ({ ...v, diagnosis: e.target.value }))}
-                    />
+                        className="doc-input"
+                        list="icd10-codes"
+                        placeholder="Diagnosis (ICD-10 Code or free text) e.g., J01.9"
+                        value={prescriptionMeta.diagnosis}
+                        onChange={(e) => setPrescriptionMeta((v) => ({ ...v, diagnosis: e.target.value }))}
+                      />
+                      <datalist id="icd10-codes">
+                        <option value="J01.9 Acute sinusitis, unspecified" />
+                        <option value="I10 Essential (primary) hypertension" />
+                        <option value="E11.9 Type 2 diabetes mellitus without complications" />
+                        <option value="J06.9 Acute upper respiratory infection, unspecified" />
+                        <option value="J02.9 Acute pharyngitis, unspecified" />
+                        <option value="J20.9 Acute tonsillitis, unspecified" />
+                        <option value="J40 Acute bronchitis, unspecified" />
+                        <option value="K21.9 Gastro-esophageal reflux disease without esophagitis" />
+                        <option value="N39.0 Urinary tract infection, site not specified" />
+                        <option value="A09 Infectious gastroenteritis and colitis, unspecified" />
+                        <option value="R50.9 Fever, unspecified" />
+                        <option value="R51 Headache" />
+                        <option value="M54.5 Low back pain" />
+                        <option value="J45.909 Unspecified asthma, uncomplicated" />
+                        <option value="E78.5 Hyperlipidemia, unspecified" />
+                      </datalist>
 
                     {doctorSpecialization.toLowerCase().includes('pediatric') && (() => {
                       const weightMatch = String(selectedPatient?.vitals?.weight || '').match(/(\d+(\.\d+)?)/);
