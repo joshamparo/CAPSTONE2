@@ -7,6 +7,7 @@ import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import { supabase } from '../lib/supabaseClient';
 import { checkBackendHealth, fetchJson } from '../utils/api';
 
+import { supabase } from '../lib/supabaseClient';
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
 function DoctorDashboard() {
@@ -449,18 +450,37 @@ function DoctorDashboard() {
   const startVideoCall = async (apt) => {
     if (!apt?.id) return;
     try {
-      const targetUrl = `/api/appointments/${encodeURIComponent(String(apt.id))}/video/start`;
-      // DEBUG: Remove this alert after fixing
-      alert(`DEBUG: Trying to start call with URL: ${API_BASE}${targetUrl} | ID: ${apt.id}`);
-      
-      const data = await fetchJson(targetUrl, {
-        apiBase: API_BASE,
-        method: 'POST',
-        headers: { ...authHeaders }
+      if (!supabase) {
+        throw new Error('Supabase client not initialized. Check .env configuration.');
+      }
+
+      // Call the Edge Function directly to ensure web and app use the exact same room
+      const { data, error } = await supabase.functions.invoke('daily-create-room', {
+        body: { appointmentId: Number(apt.id), sourceTable: 'appointments' }
       });
-      openVideoMeeting(data?.url, `Video Consultation • ${apt.firstName || ''} ${apt.lastName || ''}`.trim());
+
+      if (error) {
+        throw new Error(error.message || 'Error from edge function');
+      }
+
+      if (!data || !data.ok || !data.url) {
+        throw new Error(data?.error || 'Failed to retrieve video room URL');
+      }
+
+      // We still want to log the activity via the backend, but we don't strictly have to wait for it.
+      // But just to be safe, we'll hit the start endpoint but ignore its URL
+      try {
+        await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/start`, {
+          apiBase: API_BASE,
+          method: 'POST',
+          headers: { ...authHeaders }
+        });
+      } catch (backendErr) {
+        console.warn('Backend activity logging failed, continuing with edge function url:', backendErr);
+      }
+
+      openVideoMeeting(data.url, `Video Consultation • ${apt.firstName || ''} ${apt.lastName || ''}`.trim());
     } catch (e) {
-      alert(`DEBUG ERROR: ${e?.message || 'Unknown error'}`);
       setToast({ type: 'error', message: String(e?.message || 'Unable to start call.') });
     }
   };
