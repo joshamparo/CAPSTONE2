@@ -374,7 +374,7 @@ app.post('/api/email/send-otp', async (req, res) => {
   const SERVICE_ID = process.env.EMAILJS_SERVICE_ID || "service_ur884qv";
   const PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || "45tRyW8WG36pIFeBo";
   const PRIVATE_KEY = process.env.EMAILJS_PRIVATE_KEY;
-  const TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || "template_ir71fnn";
+  const TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || "template_65mdd0e";
 
   if (!PRIVATE_KEY) {
     console.error(

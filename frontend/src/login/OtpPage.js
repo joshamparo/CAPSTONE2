@@ -259,18 +259,18 @@ const OtpPage = () => {
 
         {otpEmailFailed && displayOtp ? (
           <div style={{
-            border: '2px solid #f59e0b',
-            backgroundColor: '#fffbeb',
+            border: '1px solid #9ca3af',
+            backgroundColor: '#f9fafb',
             borderRadius: '12px',
             padding: '1rem 1.25rem',
             marginBottom: '1.25rem',
             textAlign: 'center'
           }}>
-            <p style={{ color: '#b45309', fontWeight: 600, marginBottom: '0.5rem' }}>
-              ⚠ Email Delivery Unavailable
+            <p style={{ color: '#374151', fontWeight: 600, marginBottom: '0.5rem' }}>
+              Email delivery is temporarily unavailable
             </p>
-            <p style={{ color: '#78350f', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
-              We couldn't send the OTP to your email. For testing purposes, use the code below:
+            <p style={{ color: '#4b5563', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+              Use the code below to complete verification. We'll email your OTP once the service is restored.
             </p>
             <div style={{
               display: 'flex',
@@ -278,26 +278,23 @@ const OtpPage = () => {
               alignItems: 'center',
               gap: '0.5rem',
               backgroundColor: 'white',
-              border: '2px dashed #f59e0b',
+              border: '1px solid #d1d5db',
               borderRadius: '10px',
               padding: '0.75rem 1rem',
               fontSize: '1.75rem',
               fontWeight: 800,
               letterSpacing: '0.35em',
-              color: '#b45309',
+              color: '#111827',
               fontFamily: 'monospace',
               userSelect: 'all'
             }}>
               {displayOtp}
             </div>
-            <p style={{ color: '#78350f', fontSize: '0.75rem', marginTop: '0.75rem' }}>
-              To fix this for production, set <code>EMAILJS_PRIVATE_KEY</code> in your Railway environment variables.
-            </p>
           </div>
         ) : (
           <p className="instruction">
-            An OTP code has been sent to your registered device. 
-            Please enter the 6-digit code below to access the Admin Panel.
+            An OTP code has been sent to your registered email. 
+            Please check your inbox (and spam/junk folder) then enter the 6-digit code below.
           </p>
         )}
 

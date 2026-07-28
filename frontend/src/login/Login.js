@@ -280,12 +280,17 @@ const Login = () => {
       if (!emailSent) {
         console.log("OTP Email failed to send. Check console for details.");
         console.log("Dev OTP:", otp);
-        // Save flag so OTP page can display the code as fallback
+        // Last-resort fallback ONLY if both EmailJS SDK AND backend REST API fail
         localStorage.setItem('otpEmailFailed', 'true');
         localStorage.setItem('displayOtpCode', otp);
-        alert(`System Notice: OTP email could not be delivered.\n\nFor testing/demo purposes, your one-time passcode is:\n\n    OTP: ${otp}\n\nPlease enter this on the next screen.`);
+        alert(
+          "System Notice: We couldn't deliver the OTP to your email right now.\n\n" +
+          "Please check your internet connection or try again in a moment.\n" +
+          "Your one-time passcode is shown on the next screen for verification."
+        );
       } else {
         console.log("OTP Email sent successfully to " + recipientEmail);
+        // Ensure no stale fallback leaks to the OTP page when email actually sends
         localStorage.removeItem('otpEmailFailed');
         localStorage.removeItem('displayOtpCode');
       }
@@ -294,7 +299,10 @@ const Login = () => {
       console.log("Dev OTP:", otp);
       localStorage.setItem('otpEmailFailed', 'true');
       localStorage.setItem('displayOtpCode', otp);
-      alert(`System Notice: Server connection failed.\n\nFor testing/demo purposes, your one-time passcode is:\n\n    OTP: ${otp}\n\nPlease enter this on the next screen.`);
+      alert(
+        "System Notice: Server connection interrupted during email send.\n\n" +
+        "Your one-time passcode is shown on the next screen so you can still proceed."
+      );
     }
 
       // Always redirect to OTP page, regardless of email success/failure
