@@ -456,7 +456,7 @@ function DoctorDashboard() {
 
       // Call the Edge Function directly to ensure web and app use the exact same room
       const { data, error } = await supabase.functions.invoke('daily-create-room', {
-        body: { appointmentId: Number(apt.id), sourceTable: 'appointments' }
+        body: { appointmentId: Number(apt.id), sourceTable: 'appointments', action: 'start' }
       });
 
       if (error) {
