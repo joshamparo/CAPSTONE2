@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { createClient } = require('@supabase/supabase-js');
@@ -15,6 +16,25 @@ function getSupabaseAdmin() {
     }
     return supabaseAdmin;
 }
+
+// #region debug-point A:video-room-reporter
+function reportVideoRoomDebug({ runId = 'pre-fix', hypothesisId = 'A', location = 'appointments.js', msg = '[DEBUG] video room trace', data = {} }) {
+    try {
+        let url = 'http://127.0.0.1:7777/event';
+        let sessionId = 'video-room-mismatch';
+        try {
+            const env = fs.readFileSync('.dbg/video-room-mismatch.env', 'utf8');
+            url = env.match(/DEBUG_SERVER_URL=(.+)/)?.[1]?.trim() || url;
+            sessionId = env.match(/DEBUG_SESSION_ID=(.+)/)?.[1]?.trim() || sessionId;
+        } catch (_) {}
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, runId, hypothesisId, location, msg, data, ts: Date.now() })
+        }).catch(() => {});
+    } catch (_) {}
+}
+// #endregion
 
 function normalizeTimeToHHMM(value) {
     if (value == null) return '';
@@ -1214,6 +1234,7 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
         const formatted = appointments.map(apt => ({
             ...apt,
             id: apt.id.toString(),
+            sourceTable: 'appointments',
             firstName: apt.first_name,
             lastName: apt.last_name,
             middleName: apt.middle_name,
@@ -2218,6 +2239,14 @@ router.post('/:id/video/start', requireRole(['doctor']), async (req, res) => {
 
         const doctorName = inferName(req);
         if (!doctorName) return res.status(401).json({ message: 'Missing x-user-name.' });
+        // #region debug-point A:start-entry
+        reportVideoRoomDebug({
+            hypothesisId: 'A',
+            location: 'appointments.js:start-entry',
+            msg: '[DEBUG] doctor start route entered',
+            data: { appointmentId: idRaw, doctorName, reqDoctorUuid: String(req.headers['x-doctor-uuid'] || '').trim() || null }
+        });
+        // #endregion
 
         let apt = await prisma.appointments.findUnique({ where: { id } });
         if (!apt) {
@@ -2227,6 +2256,22 @@ router.post('/:id/video/start', requireRole(['doctor']), async (req, res) => {
                 apt = await prisma.appointments.findUnique({ where: { id: hold[0].appointment_id } });
             }
         }
+
+        // #region debug-point B:start-appointment
+        reportVideoRoomDebug({
+            hypothesisId: 'B',
+            location: 'appointments.js:start-appointment',
+            msg: '[DEBUG] doctor start appointment resolved',
+            data: {
+                requestAppointmentId: idRaw,
+                resolvedAppointmentId: apt?.id ? String(apt.id) : null,
+                consultationMode: apt?.consultation_mode || null,
+                meetingRoomId: apt?.meeting_room_id || null,
+                meetingStartedAt: apt?.meeting_started_at ? new Date(apt.meeting_started_at).toISOString() : null,
+                reason: apt?.reason || null
+            }
+        });
+        // #endregion
         
         if (!apt) {
             console.log(`[Video Start] 404 - Appointment ${idRaw} not found in DB`);
@@ -2257,11 +2302,49 @@ router.post('/:id/video/start', requireRole(['doctor']), async (req, res) => {
         if (!isAssigned) {
             const assigned = normalizeAssignee(apt.doctor_id);
             const actor = normalizeAssignee(doctorName);
+            // #region debug-point C:start-doctor-mismatch
+            reportVideoRoomDebug({
+                hypothesisId: 'C',
+                location: 'appointments.js:start-doctor-mismatch',
+                msg: '[DEBUG] doctor start authorization mismatch',
+                data: {
+                    appointmentId: idRaw,
+                    assignedDoctorUuid: apt.doctor_uuid || null,
+                    requestedDoctorUuid: reqDoctorUuid || null,
+                    assignedDoctorName: assigned || null,
+                    actorDoctorName: actor || null
+                }
+            });
+            // #endregion
             console.log(`[Video Start] 403 - Doctor mismatch. Assigned UUID: ${apt.doctor_uuid}, Req UUID: ${reqDoctorUuid}. Assigned Name: ${assigned}, Actor: ${actor}`);
             return res.status(403).json({ message: `DEBUG: Doctor mismatch. Assigned to ${assigned || apt.doctor_uuid}, but you are logged in as ${actor || reqDoctorUuid}.` });
         }
 
         if (!apt.meeting_room_id) {
+            const sb = getSupabaseAdmin();
+            if (sb) {
+                console.log(`[Video Start] Calling daily-create-room edge function for appointment ${idRaw}...`);
+                const { data: edgeData, error: edgeError } = await sb.functions.invoke('daily-create-room', {
+                    body: {
+                        appointmentId: Number(idRaw),
+                        action: 'start',
+                        sourceTable: 'appointments'
+                    }
+                });
+
+                if (!edgeError && edgeData?.url) {
+                    console.log(`[Video Start] Edge function success for ${idRaw}`);
+                    return res.json({
+                        success: true,
+                        url: edgeData.url,
+                        roomId: edgeData.roomId || edgeData.roomName,
+                        roomName: edgeData.roomName
+                    });
+                }
+                console.error(`[Video Start] Edge function failed:`, edgeError || edgeData?.message);
+            }
+
+            // Fallback to legacy manual generation if edge function fails or Supabase not configured
             const roomId = makeRoomId(idRaw);
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
@@ -2275,6 +2358,19 @@ router.post('/:id/video/start', requireRole(['doctor']), async (req, res) => {
                 }
             });
             const url = buildJitsiUrl(updated.meeting_room_id, doctorName);
+            // #region debug-point D:start-response-created
+            reportVideoRoomDebug({
+                hypothesisId: 'D',
+                location: 'appointments.js:start-response-created',
+                msg: '[DEBUG] doctor start returned created room',
+                data: {
+                    appointmentId: idRaw,
+                    roomId: updated.meeting_room_id || null,
+                    url,
+                    startedAt: updated.meeting_started_at ? new Date(updated.meeting_started_at).toISOString() : null
+                }
+            });
+            // #endregion
             await logAppointmentActivity(req, idRaw, 'Video Call Started', 'Doctor started the video consultation.');
             return res.json({ roomId: updated.meeting_room_id, url, startedAt: updated.meeting_started_at });
         }
@@ -2287,11 +2383,37 @@ router.post('/:id/video/start', requireRole(['doctor']), async (req, res) => {
                 data: { meeting_started_at: now, meeting_expires_at: expiresAt }
             });
             const url = buildJitsiUrl(updated.meeting_room_id, doctorName);
+            // #region debug-point D:start-response-reused
+            reportVideoRoomDebug({
+                hypothesisId: 'D',
+                location: 'appointments.js:start-response-reused',
+                msg: '[DEBUG] doctor start returned existing room after setting startedAt',
+                data: {
+                    appointmentId: idRaw,
+                    roomId: updated.meeting_room_id || null,
+                    url,
+                    startedAt: updated.meeting_started_at ? new Date(updated.meeting_started_at).toISOString() : null
+                }
+            });
+            // #endregion
             await logAppointmentActivity(req, idRaw, 'Video Call Started', 'Doctor started the video consultation.');
             return res.json({ roomId: updated.meeting_room_id, url, startedAt: updated.meeting_started_at });
         }
 
         const url = buildJitsiUrl(apt.meeting_room_id, doctorName);
+        // #region debug-point D:start-response-existing
+        reportVideoRoomDebug({
+            hypothesisId: 'D',
+            location: 'appointments.js:start-response-existing',
+            msg: '[DEBUG] doctor start returned existing active room',
+            data: {
+                appointmentId: idRaw,
+                roomId: apt.meeting_room_id || null,
+                url,
+                startedAt: apt.meeting_started_at ? new Date(apt.meeting_started_at).toISOString() : null
+            }
+        });
+        // #endregion
         await logAppointmentActivity(req, idRaw, 'Video Call Started', 'Doctor started the video consultation.');
         res.json({ roomId: apt.meeting_room_id, url, startedAt: apt.meeting_started_at });
     } catch (err) {
@@ -2309,6 +2431,14 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor']), async (req, re
         const role = inferRole(req);
         const email = inferEmail(req);
         const name = inferName(req);
+        // #region debug-point A:join-entry
+        reportVideoRoomDebug({
+            hypothesisId: 'A',
+            location: 'appointments.js:join-entry',
+            msg: '[DEBUG] join route entered',
+            data: { appointmentId: idRaw, role: role || null, email: email || null, name: name || null }
+        });
+        // #endregion
 
         let apt = await prisma.appointments.findUnique({ where: { id } });
         if (!apt) {
@@ -2323,10 +2453,57 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor']), async (req, re
         if (!isVideoAppointment(apt)) return res.status(400).json({ message: 'Appointment is not a video consultation.' });
         const roomId = apt.meeting_room_id;
         const startedAt = apt.meeting_started_at || null;
+        // #region debug-point B:join-appointment
+        reportVideoRoomDebug({
+            hypothesisId: 'B',
+            location: 'appointments.js:join-appointment',
+            msg: '[DEBUG] join appointment resolved',
+            data: {
+                requestAppointmentId: idRaw,
+                resolvedAppointmentId: apt?.id ? String(apt.id) : null,
+                role: role || null,
+                roomId: roomId || null,
+                startedAt: startedAt ? new Date(startedAt).toISOString() : null,
+                consultationMode: apt?.consultation_mode || null,
+                reason: apt?.reason || null
+            }
+        });
+        // #endregion
 
         // The doctor must explicitly start the call first so both web and app join the
         // same appointment-owned room from the backend record.
         if (!roomId || !startedAt) {
+            const sb = getSupabaseAdmin();
+            if (sb) {
+                console.log(`[Video Join] Calling daily-create-room edge function for appointment ${idRaw}...`);
+                const { data: edgeData, error: edgeError } = await sb.functions.invoke('daily-create-room', {
+                    body: {
+                        appointmentId: Number(idRaw),
+                        action: 'join',
+                        sourceTable: 'appointments'
+                    }
+                });
+
+                if (!edgeError && edgeData?.url) {
+                    console.log(`[Video Join] Edge function success for ${idRaw}`);
+                    return res.json({
+                        success: true,
+                        url: edgeData.url,
+                        roomId: edgeData.roomId || edgeData.roomName,
+                        roomName: edgeData.roomName
+                    });
+                }
+                console.error(`[Video Join] Edge function failed:`, edgeError || edgeData?.message);
+            }
+            
+            // #region debug-point D:join-blocked
+            reportVideoRoomDebug({
+                hypothesisId: 'D',
+                location: 'appointments.js:join-blocked',
+                msg: '[DEBUG] join blocked because room not started',
+                data: { appointmentId: idRaw, role: role || null, roomId: roomId || null, startedAt: startedAt ? new Date(startedAt).toISOString() : null }
+            });
+            // #endregion
             return res.status(409).json({ message: 'Doctor has not started this video consultation yet.' });
         }
 
@@ -2347,6 +2524,14 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor']), async (req, re
             if (!isAssigned) return res.status(403).json({ message: 'Not assigned to this doctor.' });
             
             const url = buildJitsiUrl(roomId, name);
+            // #region debug-point E:join-doctor-response
+            reportVideoRoomDebug({
+                hypothesisId: 'E',
+                location: 'appointments.js:join-doctor-response',
+                msg: '[DEBUG] join route returned doctor url',
+                data: { appointmentId: idRaw, role: 'doctor', roomId, url, name: name || null }
+            });
+            // #endregion
             return res.json({ roomId, url, startedAt });
         }
 
@@ -2363,6 +2548,14 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor']), async (req, re
             }
             if (!matchesEmail && !matchesPatientId) return res.status(403).json({ message: 'Not allowed to join this call.' });
             const url = buildJitsiUrl(roomId, inferName(req) || 'Patient');
+            // #region debug-point E:join-patient-response
+            reportVideoRoomDebug({
+                hypothesisId: 'E',
+                location: 'appointments.js:join-patient-response',
+                msg: '[DEBUG] join route returned patient url',
+                data: { appointmentId: idRaw, role: 'patient', roomId, url, email: email || null }
+            });
+            // #endregion
             return res.json({ roomId, url, startedAt });
         }
 

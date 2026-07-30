@@ -7,6 +7,27 @@ import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import { checkBackendHealth, fetchJson } from '../utils/api';
 import { supabase } from '../lib/supabaseClient';
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+const VIDEO_ROOM_DEBUG_URL = 'http://192.168.1.74:7777/event';
+
+// #region debug-point A:web-reporter
+const reportVideoRoomDebug = ({ runId = 'pre-fix', hypothesisId = 'A', location = 'DoctorDashboard.js', msg = '[DEBUG] web trace', data = {} }) => {
+  try {
+    fetch(VIDEO_ROOM_DEBUG_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'video-room-mismatch',
+        runId,
+        hypothesisId,
+        location,
+        msg,
+        data,
+        ts: Date.now()
+      })
+    }).catch(() => {});
+  } catch (_) {}
+};
+// #endregion
 
 function DoctorDashboard() {
   const navigate = useNavigate();
@@ -448,16 +469,64 @@ function DoctorDashboard() {
   const startVideoCall = async (apt) => {
     if (!apt?.id) return;
     try {
-      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/start`, {
-        apiBase: API_BASE,
-        method: 'POST',
-        headers: { ...authHeaders }
+      // #region debug-point D:web-start-click
+      reportVideoRoomDebug({
+        hypothesisId: 'D',
+        location: 'DoctorDashboard.js:startVideoCall:request',
+        msg: '[DEBUG] doctor web requested start call',
+        data: {
+          appointmentId: String(apt.id),
+          patientName: `${apt.firstName || ''} ${apt.lastName || ''}`.trim() || null
+        }
+      });
+      // #endregion
+      if (!supabase) {
+        throw new Error('Supabase client not initialized. Check .env configuration.');
+      }
+
+      const sourceTable = String(apt?.sourceTable || apt?.source_table || 'appointments').trim() || 'appointments';
+      const { data, error } = await supabase.functions.invoke('daily-create-room', {
+        body: {
+          appointmentId: Number(apt.id),
+          action: 'start',
+          sourceTable
+        }
       });
 
-      if (!data?.url) throw new Error(data?.message || 'Failed to retrieve video room URL');
+      if (error) {
+        throw new Error(error.message || 'Error from daily-create-room');
+      }
 
-      openVideoMeeting(data.url, `Video Consultation • ${apt.firstName || ''} ${apt.lastName || ''}`.trim());
+      const meetingUrl = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();
+      if (!meetingUrl) throw new Error(data?.message || data?.error || 'Failed to retrieve video room URL');
+      // #region debug-point A:web-start-response
+      reportVideoRoomDebug({
+        hypothesisId: 'A',
+        location: 'DoctorDashboard.js:startVideoCall:response',
+        msg: '[DEBUG] doctor web received start response',
+        data: {
+          appointmentId: String(apt.id),
+          sourceTable,
+          roomId: data?.roomId || null,
+          url: meetingUrl || null,
+          startedAt: data?.startedAt || null
+        }
+      });
+      // #endregion
+
+      openVideoMeeting(meetingUrl, `Video Consultation • ${apt.firstName || ''} ${apt.lastName || ''}`.trim());
     } catch (e) {
+      // #region debug-point C:web-start-error
+      reportVideoRoomDebug({
+        hypothesisId: 'C',
+        location: 'DoctorDashboard.js:startVideoCall:error',
+        msg: '[DEBUG] doctor web start call failed',
+        data: {
+          appointmentId: String(apt?.id || ''),
+          error: String(e?.message || 'Unable to start call.')
+        }
+      });
+      // #endregion
       setToast({ type: 'error', message: String(e?.message || 'Unable to start call.') });
     }
   };

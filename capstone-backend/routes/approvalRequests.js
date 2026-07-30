@@ -149,6 +149,7 @@ function serializeRequestRow(r) {
     : null;
   return {
     id,
+    sourceTable: 'appointment_approval_requests',
     patientId: r.patient_id || null,
     patientName: r.patient_name || null,
     doctorId: r.doctor_id || null,

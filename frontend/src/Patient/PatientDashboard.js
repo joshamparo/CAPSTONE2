@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import { checkBackendHealth, fetchJson } from '../utils/api';
+import { supabase } from '../lib/supabaseClient'; // Added Supabase import for video calls
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -507,12 +508,35 @@ function PatientDashboard() {
   const joinVideoCall = async (apt) => {
     if (!apt?.id) return;
     try {
-      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/join`, {
-        apiBase: API_BASE,
-        headers: { ...getAuthHeaders() }
+      console.log(`[PatientDashboard] Attempting to join video call for appointment ${apt.id}...`);
+      
+      if (!supabase) {
+        throw new Error('Supabase client not initialized. Please check your configuration.');
+      }
+
+      // Use the same daily-create-room edge function as the mobile app and doctor web
+      const sourceTable = String(apt?.sourceTable || apt?.source_table || 'appointments').trim() || 'appointments';
+      const { data, error } = await supabase.functions.invoke('daily-create-room', {
+        body: {
+          appointmentId: Number(apt.id),
+          action: 'join',
+          sourceTable
+        }
       });
-      openVideoMeeting(data?.url, `Video Consultation • ${apt.doctor ? `Dr. ${apt.doctor}` : 'Doctor'}`);
+
+      if (error) {
+        throw new Error(error.message || 'Error joining video room.');
+      }
+
+      const meetingUrl = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();
+      if (!meetingUrl) {
+        throw new Error(data?.message || data?.error || 'Failed to retrieve video room URL. The doctor may not have started the call yet.');
+      }
+
+      console.log(`[PatientDashboard] Successfully retrieved meeting URL: ${meetingUrl}`);
+      openVideoMeeting(meetingUrl, `Video Consultation • ${apt.doctor ? `Dr. ${apt.doctor}` : 'Doctor'}`);
     } catch (e) {
+      console.error('[PatientDashboard] joinVideoCall error:', e);
       setAppointmentsError(String(e?.message || 'Unable to join call.'));
     }
   };
