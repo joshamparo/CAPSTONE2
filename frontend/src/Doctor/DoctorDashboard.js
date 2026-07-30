@@ -4,9 +4,7 @@ import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Tr
 import './DoctorDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
-import { supabase } from '../lib/supabaseClient';
 import { checkBackendHealth, fetchJson } from '../utils/api';
-
 import { supabase } from '../lib/supabaseClient';
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
@@ -450,34 +448,13 @@ function DoctorDashboard() {
   const startVideoCall = async (apt) => {
     if (!apt?.id) return;
     try {
-      if (!supabase) {
-        throw new Error('Supabase client not initialized. Check .env configuration.');
-      }
-
-      // Call the Edge Function directly to ensure web and app use the exact same room
-      const { data, error } = await supabase.functions.invoke('daily-create-room', {
-        body: { appointmentId: Number(apt.id), sourceTable: 'appointments', action: 'start' }
+      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/start`, {
+        apiBase: API_BASE,
+        method: 'POST',
+        headers: { ...authHeaders }
       });
 
-      if (error) {
-        throw new Error(error.message || 'Error from edge function');
-      }
-
-      if (!data || !data.ok || !data.url) {
-        throw new Error(data?.error || 'Failed to retrieve video room URL');
-      }
-
-      // We still want to log the activity via the backend, but we don't strictly have to wait for it.
-      // But just to be safe, we'll hit the start endpoint but ignore its URL
-      try {
-        await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/start`, {
-          apiBase: API_BASE,
-          method: 'POST',
-          headers: { ...authHeaders }
-        });
-      } catch (backendErr) {
-        console.warn('Backend activity logging failed, continuing with edge function url:', backendErr);
-      }
+      if (!data?.url) throw new Error(data?.message || 'Failed to retrieve video room URL');
 
       openVideoMeeting(data.url, `Video Consultation • ${apt.firstName || ''} ${apt.lastName || ''}`.trim());
     } catch (e) {

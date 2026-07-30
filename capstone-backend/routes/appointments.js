@@ -2321,21 +2321,13 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor']), async (req, re
         if (!apt) return res.status(404).json({ message: 'Appointment not found.' });
 
         if (!isVideoAppointment(apt)) return res.status(400).json({ message: 'Appointment is not a video consultation.' });
-        let roomId = apt.meeting_room_id;
-        let startedAt = apt.meeting_started_at || null;
-        if (!roomId) {
-            const now = new Date();
-            const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-            const updated = await prisma.appointments.update({
-                where: { id },
-                data: {
-                    meeting_room_id: makeRoomId(idRaw),
-                    meeting_created_at: now,
-                    meeting_expires_at: expiresAt
-                }
-            });
-            roomId = updated.meeting_room_id;
-            startedAt = updated.meeting_started_at || null;
+        const roomId = apt.meeting_room_id;
+        const startedAt = apt.meeting_started_at || null;
+
+        // The doctor must explicitly start the call first so both web and app join the
+        // same appointment-owned room from the backend record.
+        if (!roomId || !startedAt) {
+            return res.status(409).json({ message: 'Doctor has not started this video consultation yet.' });
         }
 
         if (role === 'doctor') {
