@@ -4927,8 +4927,19 @@ function DoctorDashboard() {
               style={{ width: 'min(1100px, 96vw)', height: 'min(720px, 92vh)', display: 'flex', flexDirection: 'column' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div className="doc-modal-title" style={{ margin: 0 }}>
-                  {videoMeetingTitle || 'Video Consultation'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div className="doc-modal-title" style={{ margin: 0 }}>
+                    {videoMeetingTitle || 'Video Consultation'}
+                  </div>
+                  <button
+                    type="button"
+                    className="doc-icon-btn"
+                    style={{ background: '#e0f2fe', color: '#0369a1', borderColor: 'rgba(3,105,161,0.2)', padding: '6px 12px', fontSize: '12px', fontWeight: 700 }}
+                    onClick={() => window.open(videoMeetingUrl, '_blank')}
+                    title="Troubleshooting: Open in new tab"
+                  >
+                    Open in New Tab
+                  </button>
                 </div>
                 <button
                   type="button"
@@ -4948,7 +4959,7 @@ function DoctorDashboard() {
                   title="Video Consultation"
                   src={videoMeetingUrl}
                   style={{ width: '100%', height: '100%', border: 0 }}
-                  allow="camera; microphone; fullscreen; display-capture"
+                  allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
                 />
               </div>
             </div>

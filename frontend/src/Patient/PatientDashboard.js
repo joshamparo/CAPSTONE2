@@ -1335,7 +1335,26 @@ function PatientDashboard() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ fontWeight: 1000, color: '#0f172a' }}>{videoMeetingTitle || 'Video Consultation'}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ fontWeight: 1000, color: '#0f172a' }}>{videoMeetingTitle || 'Video Consultation'}</div>
+                <button
+                  type="button"
+                  onClick={() => window.open(videoMeetingUrl, '_blank')}
+                  style={{
+                    background: '#e0f2fe',
+                    color: '#0369a1',
+                    border: '1px solid rgba(3,105,161,0.2)',
+                    borderRadius: 10,
+                    padding: '6px 12px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 700
+                  }}
+                  title="Troubleshooting: Open in new tab"
+                >
+                  Open in New Tab
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -1360,7 +1379,7 @@ function PatientDashboard() {
                 title="Video Consultation"
                 src={videoMeetingUrl}
                 style={{ width: '100%', height: '100%', border: 0 }}
-                allow="camera; microphone; fullscreen; display-capture"
+                allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
               />
             </div>
           </div>

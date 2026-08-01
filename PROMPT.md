@@ -1,144 +1,142 @@
 # Welcome to the Pascualinga Capstone Prompt File!
 
 > **How to use this file:**
-> Chineck ko yung mobile code, at may mas malinaw na sagot na tayo:
-
-Hindi lang “app gumagawa ng sariling room name” ang problema.
- Ang mas likely na totoong dahilan ay hindi pare-pareho ang room source / sourceTable / backend endpoint na ginagamit ng web at app .
-
-## Ano yung nakita ko sa code
-Chineck ko yung mobile code, at may mas malinaw na sagot na tayo:
-
-Hindi lang “app gumagawa ng sariling room name” ang problema.
- Ang mas likely na totoong dahilan ay hindi pare-pareho ang room source / sourceTable / backend endpoint na ginagamit ng web at app .
-
-## Ano yung nakita ko sa code
-Sa patient main join flow, maayos na yung direksyon:
-
-- PatientSchedule.jsx:L204-L220 tumatawag sa edge function at nagpapasa ng sourceTable
-- PatientSchedule.jsx:L249-L318 ginagamit yung exact url / tokenUrl galing backend
-Pero may ibang flows na puwedeng maghiwalay:
-
-- PatientServicesScreen.jsx:L1077-L1094 tumatawag sa edge function na walang sourceTable
-- PatientServicesScreen.jsx:L4642-L4666 may fallback pa sa lumang saved room fields
-At sa doctor-side app flow na nasa repo:
-
-- NurseVideo.jsx:L39-L55 tumatawag din sa edge function na walang sourceTable
-- NurseVideo.jsx:L149-L174 ginagamit ang returned URL, pero again walang table hint
-Tapos sa backend:
-
-- daily-create-room/index.ts:L148-L163 kapag walang sourceTable , hahanapin niya ang appointment sa order na: appointments -> appointment_approval_requests -> service_appointment
-- daily-create-room/index.ts:L327-L398 dito ginagawa/re-reuse ang Jitsi room
-## Bakit ito important
-Kung ang web gumagamit ng legacy flow na pascualinga-<appointmentId> o ibang endpoint, tapos ang app gumagamit ng edge function na apt-<id>-<hash> , hindi talaga kayo magkikita .
-
-At kahit same edge function pa, kung:
-
-- web = appointments
-- app = appointment_approval_requests
-possible pa ring maghiwalay ang room source.
-
-## Recommendation ko for both web and app
-### Web side
-1. Tumigil sa manual room name generation
-   
-   - huwag gumawa ng pascualinga-<id>
-   - huwag mag-concat ng sariling Jitsi URL
-2. Tumawag sa parehong backend ng app
-   
-   - same daily-create-room
-   - same appointmentId
-   - same sourceTable
-3. Open exact url returned by backend
-   
-   - hindi providerRoomName
-   - hindi custom room name
-Suggested payload:
-
-### App side
-1. Laging dumaan sa same backend join flow
-   
-   - yung nasa PatientSchedule.jsx ang tamang pattern
-2. Iwasan yung alternate flows na walang sourceTable
-   
-   - especially yung active call banner sa PatientServicesScreen.jsx
-3. Patient should join only backend-owned room
-   
-   - no local room building
-   - no title-to-URL conversion
-## Pinaka-importanteng test ninyong gawin
-For the same appointment ID , patest niyo parehong sides:
-
-### Web start
-### App join
-{
-  "appointmentId": "90",
-  "action": "join",
-  "sourceTable": 
-  "appointment_approval_requests"
-}
-Kapag magkaiba ang url na lumabas sa dalawang yan, ayun ang bug.
-
-## Short version
-Friend mo is partly right, pero after checking the mobile code, ang mas exact diagnosis ko ay:
-
-- main patient schedule flow looks mostly correct
-- real mismatch is likely on the web/doctor integration or alternate app join paths
-- both sides must use the same backend, same appointmentId, same sourceTable, same returned url
-Kung gusto mo, next message mo lang yung doctor web Start Call code o kahit paste mo lang yung request body at yung URL na ino-open niya, tapos tutulungan kitang i-compare line by line against the app flow.
-
-## Recommendation ko for both web and app
-### Web side
-1. Tumigil sa manual room name generation
-   
-   - huwag gumawa ng pascualinga-<id>
-   - huwag mag-concat ng sariling Jitsi URL
-2. Tumawag sa parehong backend ng app
-   
-   - same daily-create-room
-   - same appointmentId
-   - same sourceTable
-3. Open exact url returned by backend
-   
-   - hindi providerRoomName
-   - hindi custom room name
-Suggested payload:
-
-### App side
-1. Laging dumaan sa same backend join flow
-   
-   - yung nasa PatientSchedule.jsx ang tamang pattern
-2. Iwasan yung alternate flows na walang sourceTable
-   
-   - especially yung active call banner sa PatientServicesScreen.jsx
-3. Patient should join only backend-owned room
-   
-   - no local room building
-   - no title-to-URL conversion
-## Pinaka-importanteng test ninyong gawin
-For the same appointment ID , patest niyo parehong sides:
-
-### Web start
-### App join
-{
-  "appointmentId": "90",
-  "action": "join",
-  "sourceTable": 
-  "appointment_approval_requests"
-}
-Kapag magkaiba ang url na lumabas sa dalawang yan, ayun ang bug.
-
-## Short version
-Friend mo is partly right, pero after checking the mobile code, ang mas exact diagnosis ko ay:
-
-- main patient schedule flow looks mostly correct
-- real mismatch is likely on the web/doctor integration or alternate app join paths
-- both sides must use the same backend, same appointmentId, same sourceTable, same returned url
-Kung gusto mo, next message mo lang yung doctor web Start Call code o kahit paste mo lang yung request body at yung URL na ino-open niya, tapos tutulungan kitang i-compare line by line against the app flow.
+> now, tell me the best plan for this to make it successful. make sure that its convenient to the hospital staff and make sure its all working as expected.
 
 ## Pinaka-likely na cause
-- Guess the problem why both video call features in app and web are working together but meeting room is not created for both.
+- Both videocall now are working and meeting room is created for both, but we need to fix the connection between the two. 
+Oo chat, may need sa web side . Since connected na kayo sa same room pero avatar lang ang nakikita at walang naririnig , hindi na ito room-name mismatch. Mas mukhang web embed / iframe permissions / browser policy issue na.
 
+Pinakaimportanteng sabihin mo sa web programmer:
+
+## 1. I-test muna nila sa direct new tab, hindi sa modal/embed
+Sabihin mo:
+
+- gamitin nila yung exact url returned by backend
+- i-open muna sa new tab
+- huwag muna sa iframe/modal
+Example:
+
+Bakit:
+ Kapag gumana ang audio/video sa new tab , ibig sabihin ang problema nasa web embed/modal , hindi sa Jitsi room mismo.
+
+## 2. Kung naka-embed sa iframe/modal, dapat may tamang permissions
+Sabihin mo ilagay ito sa iframe:
+
+Kung may sandbox , puwedeng doon nabblock. For testing, sabihin mo:
+
+- tanggalin muna ang sandbox , or
+- siguraduhing may:
+## 3. Huwag silang gagawa ng sariling room name
+Sabihin mo ulit sa kanya:
+
+- same appointmentId
+- same sourceTable
+- same daily-create-room
+- exact returned url lang ang gamitin
+Hindi:
+
+- manual Jitsi URL
+- sariling concat
+- title-to-room conversion
+## 4. Check browser/site permissions on web
+Sabihin mo i-check ito sa web side:
+
+- naka-HTTPS ang site
+- pinayagan ng browser ang camera
+- pinayagan ng browser ang microphone
+- walang browser/site permission na naka-Block
+- walang browser extension/adblock na nakikialam sa Jitsi iframe
+## 5. Possible server header issue sa web
+Kung naka-iframe kayo sa website, puwedeng may Permissions-Policy or CSP issue.
+
+Sabihin mo ipa-check nila kung may headers na nagbablock ng media sa iframe, lalo na:
+
+- Permissions-Policy
+- Content-Security-Policy
+Kung meron, dapat payagan ang Jitsi host.
+
+## Pinakamabilis na test para sa web programmer
+Sabihin mo ito exactly:
+
+1. Tawagin ang backend daily-create-room
+2. Kunin ang exact url
+3. I-open muna sa new tab
+4. Kapag gumana ang audio/video sa new tab pero hindi sa modal/embed:
+   - problem is iframe/web container
+5. Kapag hindi pa rin gumana kahit new tab:
+   - problem is Jitsi/WebRTC path , hindi UI
+## Base sa screenshots mo
+Mukhang:
+
+- same room na kayo
+- parehong may local preview
+- pero remote stream hindi nagre-render / hindi tumatawid nang maayos
+So pinakamalakas kong hinala ngayon:
+ web embed/modal permissions issue muna ang ipacheck.
+
+Kung gusto mo, pwede kitang bigyan ng exact message na isesend mo sa web programmer para copy-paste mo na lang.
+
+22:04
+Liam TDP
+
+e sa app side wala bang need gawin?
+
+Agent
+
+Thought process
+
+Meron pa chat, pero based sa screenshots, mas maliit na yung app-side issue kaysa sa web side .
+
+Bakit ko nasabi:
+
+- sa app mo, nakikita mo na yung sarili mo sa maliit na preview
+- sa web, nakikita rin ng doctor yung sarili niya
+- ibig sabihin gumagana na ang local camera capture sa both sides
+- ang hindi gumagana ngayon ay remote audio/video exchange/rendering
+So yes, may app-side checks pa , pero hindi na ito yung main blocker .
+
+## Sa app side, ito ang need ninyong siguraduhin
+1. APK ang gamitin, hindi Expo Go
+   
+   - since doon na gumana ang camera/mic access
+   - build config nasa eas.json
+2. Permissions must stay allowed
+   
+   - Camera = Allow
+   - Microphone = Allow
+   - declared already in app.json
+3. Current app Jitsi config is already in compatibility mode
+   
+   - nasa VideoCallScreen.jsx
+   - naka-disable na yung mas risky paths like p2p , simulcast-heavy behavior, etc.
+4. Update Android System WebView / Chrome sa phone
+   
+   - ito malaking factor sa embedded Jitsi video rendering
+## Pero ang pinakamalakas pa ring suspect ngayon
+Web embed/container permissions .
+
+Kasi kung local preview works on both sides pero hindi tumatawid ang media:
+
+- iframe/modal permission issue
+- browser permission issue
+- autoplay/WebRTC restriction sa web container
+- or mali ang way nila pag-embed ng Jitsi
+## So short answer
+Oo, may app-side checks pa. Pero sa code side, hindi na app ang pinakauna kong gagalawin ngayon.
+ Mas kailangan ipa-check sa web dev ang:
+
+- direct new tab test
+- iframe allow="camera; microphone; autoplay; ..."
+- no manual room building
+- same backend url
+## Practical next move
+Sabihin mo sa web programmer:
+
+1. i-open muna ang returned Jitsi url sa new tab
+2. kung gumana doon, problema ay nasa web modal/iframe
+3. kung ayaw pa rin, saka tayo babalik sa deeper app/web WebRTC tuning
+Kung gusto mo, gagawan kita ng exact copy-paste message para sa web programmer mo.
 ## Suggested setup
 - Doctor web: action: "start"
 - Patient app: action: "join"
