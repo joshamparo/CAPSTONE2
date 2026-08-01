@@ -1354,6 +1354,24 @@ function PatientDashboard() {
                 >
                   Open in New Tab
                 </button>
+                <button
+                  type="button"
+                  onClick={() => window.open('https://test.webrtc.org/', '_blank')}
+                  style={{
+                    background: '#fef2f2',
+                    color: '#dc2626',
+                    border: '1px solid rgba(220,38,38,0.2)',
+                    borderRadius: 10,
+                    padding: '6px 12px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    marginLeft: '8px'
+                  }}
+                  title="Test Camera/Mic Hardware"
+                >
+                  Test Hardware
+                </button>
               </div>
               <button
                 type="button"
@@ -1379,7 +1397,7 @@ function PatientDashboard() {
                 title="Video Consultation"
                 src={videoMeetingUrl}
                 style={{ width: '100%', height: '100%', border: 0 }}
-                allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
+                allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write; encrypted-media; speaker-selection; picture-in-picture; geolocation; midi; gyroscope; accelerometer; magnetometer"
               />
             </div>
           </div>

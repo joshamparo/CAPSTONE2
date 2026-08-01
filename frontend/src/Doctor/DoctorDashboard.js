@@ -4940,6 +4940,15 @@ function DoctorDashboard() {
                   >
                     Open in New Tab
                   </button>
+                  <button
+                    type="button"
+                    className="doc-icon-btn"
+                    style={{ background: '#fef2f2', color: '#dc2626', borderColor: 'rgba(220,38,38,0.2)', padding: '6px 12px', fontSize: '12px', fontWeight: 700 }}
+                    onClick={() => window.open('https://test.webrtc.org/', '_blank')}
+                    title="Test Camera/Mic Hardware"
+                  >
+                    Test Hardware
+                  </button>
                 </div>
                 <button
                   type="button"
@@ -4959,7 +4968,7 @@ function DoctorDashboard() {
                   title="Video Consultation"
                   src={videoMeetingUrl}
                   style={{ width: '100%', height: '100%', border: 0 }}
-                  allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
+                  allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write; encrypted-media; speaker-selection; picture-in-picture; geolocation; midi; gyroscope; accelerometer; magnetometer"
                 />
               </div>
             </div>
