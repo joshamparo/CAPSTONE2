@@ -2458,79 +2458,82 @@ export default function OfficeStaffDashboard({ mode }) {
 
       {view === 'hmo' ? (
         <>
-          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginBottom: 14, padding: '10px 14px', background: '#fff', border: '1px solid #f1f5f9', borderRadius: 12 }}>
-            {[
-              { label: 'All', count: hmoQueue.length, fg: '#0f172a' },
-              { label: 'Pending', count: hmoQueue.filter(r => String(r?.hmo_claim?.status || '') === 'Pending').length, fg: '#ea580c' },
-              { label: 'Awaiting LOA', count: hmoQueue.filter(r => String(r?.hmo_claim?.status || '') === 'Awaiting LOA').length, fg: '#dc2626' },
-              { label: 'Approved', count: hmoQueue.filter(r => { const s = String(r?.hmo_claim?.status || ''); return s === 'Approved' || s === 'Partially Approved'; }).length, fg: '#16a34a' },
-              { label: 'Rejected', count: hmoQueue.filter(r => String(r?.hmo_claim?.status || '') === 'Rejected').length, fg: '#64748b' }
-            ].map((it) => (
-              <div key={it.label} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 500 }}>{it.label}</span>
-                <span style={{ fontSize: '1.05rem', fontWeight: 800, color: it.fg }}>{it.count}</span>
-              </div>
-            ))}
-          </div>
-
           <div className="office-card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div className="office-title" style={{ fontSize: '1rem' }}>HMO Claims</div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <div className="input-wrapper-relative" style={{ minWidth: 200 }}>
-                  <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                  <input
-                    className="office-input"
-                    style={{ paddingLeft: 36, height: 40 }}
-                    value={hmoQueueQuery}
-                    onChange={(e) => setHmoQueueQuery(e.target.value)}
-                    placeholder="Search patient / provider / LOA"
-                  />
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div className="office-title" style={{ fontSize: '1.05rem' }}>HMO Monitoring</div>
+                  <div className="office-subtitle">PhilHealth and HMO Letter of Authority (LOA) queue</div>
                 </div>
-                <select className="office-select" style={{ minWidth: 150, height: 40 }} value={hmoQueueStatus} onChange={(e) => setHmoQueueStatus(e.target.value)}>
-                  <option value="All">All Statuses</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Awaiting LOA">Awaiting LOA</option>
-                  <option value="Approved">Approved</option>
-                  <option value="Partially Approved">Partially Approved</option>
-                  <option value="Rejected">Rejected</option>
-                </select>
-                <button type="button" className="office-btn ghost" onClick={refreshHmoQueue} disabled={hmoQueueLoading} style={{ height: 40 }}>
-                  <RefreshCw size={16} />
-                  Refresh
-                </button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div className="input-wrapper-relative" style={{ minWidth: 220 }}>
+                    <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input
+                      className="office-input"
+                      style={{ paddingLeft: 36, height: 40 }}
+                      value={hmoQueueQuery}
+                      onChange={(e) => setHmoQueueQuery(e.target.value)}
+                      placeholder="Search patient / provider / LOA"
+                    />
+                  </div>
+                  <select className="office-select" style={{ minWidth: 160, height: 40 }} value={hmoQueueStatus} onChange={(e) => setHmoQueueStatus(e.target.value)}>
+                    <option value="All">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Awaiting LOA">Awaiting LOA</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Partially Approved">Partially Approved</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                  <button type="button" className="office-btn ghost" onClick={refreshHmoQueue} disabled={hmoQueueLoading} style={{ height: 40 }}>
+                    <RefreshCw size={16} />
+                    {hmoQueueLoading ? 'Loading…' : 'Refresh'}
+                  </button>
+                </div>
+              </div>
+              <div style={{ marginTop: 12, display: 'flex', gap: 22, flexWrap: 'wrap', alignItems: 'center' }}>
+                {[
+                  { label: 'All Claims', count: hmoQueue.length, fg: '#0f172a' },
+                  { label: 'Pending', count: hmoQueue.filter(r => String(r?.hmo_claim?.status || '') === 'Pending').length, fg: '#ea580c' },
+                  { label: 'Awaiting LOA', count: hmoQueue.filter(r => String(r?.hmo_claim?.status || '') === 'Awaiting LOA').length, fg: '#dc2626' },
+                  { label: 'Approved / Partial', count: hmoQueue.filter(r => { const s = String(r?.hmo_claim?.status || ''); return s === 'Approved' || s === 'Partially Approved'; }).length, fg: '#16a34a' },
+                  { label: 'Rejected', count: hmoQueue.filter(r => String(r?.hmo_claim?.status || '') === 'Rejected').length, fg: '#64748b' }
+                ].map((it) => (
+                  <div key={it.label} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{it.label}</span>
+                    <span style={{ fontSize: '1.05rem', fontWeight: 800, color: it.fg }}>{it.count}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
             {hmoQueueError ? <div className="admin-alert error" style={{ margin: 12 }}>{hmoQueueError}</div> : null}
 
-            <div className="logs-table-container" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+            <div className="logs-table-container" style={{ maxHeight: 'calc(100vh - 340px)' }}>
               <table className="staff-table">
                 <thead>
                   <tr>
                     <th>Invoice</th>
                     <th>Patient</th>
-                    <th>Provider</th>
+                    <th>HMO Provider</th>
                     <th>LOA #</th>
                     <th>Status</th>
-                    <th style={{ textAlign: 'right' }}>Bill</th>
-                    <th style={{ textAlign: 'right' }}>Deducted</th>
+                    <th style={{ textAlign: 'right' }}>Total Bill</th>
+                    <th style={{ textAlign: 'right' }}>PhilHealth</th>
+                    <th style={{ textAlign: 'right' }}>HMO Covered</th>
                     <th style={{ textAlign: 'right' }}>Patient Pays</th>
-                    <th style={{ width: 1 }}></th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {hmoQueueLoading ? (
-                    <tr><td colSpan="9" className="text-center py-12 text-slate-500">Loading…</td></tr>
+                    <tr><td colSpan="10" className="text-center py-12 text-slate-500">Loading…</td></tr>
                   ) : hmoQueue.length === 0 ? (
                     <tr>
-                      <td colSpan="9" className="text-center py-12 text-slate-500">
+                      <td colSpan="10" className="text-center py-12 text-slate-500">
                         <div style={{ opacity: 0.6 }}>
                           <Shield size={32} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
-                          <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>No HMO claims</div>
-                          <div style={{ fontSize: '0.82rem', marginTop: 4, color: '#94a3b8' }}>
+                          <div style={{ fontWeight: 700 }}>No HMO claims yet</div>
+                          <div style={{ fontSize: '0.85rem', marginTop: 4, color: '#94a3b8' }}>
                             Open an invoice in Billing to add PhilHealth / HMO deductions.
                           </div>
                         </div>
@@ -2545,11 +2548,13 @@ export default function OfficeStaffDashboard({ mode }) {
                       status === 'Awaiting LOA' ? { bg: '#fee2e2', fg: '#991b1b' } :
                       status === 'Rejected' ? { bg: '#f1f5f9', fg: '#475569' } :
                       { bg: '#ffedd5', fg: '#c2410c' };
-                    const deducted = Number(claim.philhealth_deduction || 0) + Number(claim.applied_hmo_amount || 0);
                     return (
                       <tr key={String(row.id || row.invoice_id)}>
                         <td>#{String(row.invoice_id || '—')}</td>
-                        <td style={{ fontWeight: 600, color: '#0f172a' }}>{row.patient_name || '—'}</td>
+                        <td>
+                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{row.patient_name || '—'}</div>
+                          {row.contact_number ? <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{String(row.contact_number)}</div> : null}
+                        </td>
                         <td style={{ color: claim.provider ? '#0f172a' : '#cbd5e1' }}>
                           {claim.provider ? String(claim.provider) : '—'}
                         </td>
@@ -2569,31 +2574,32 @@ export default function OfficeStaffDashboard({ mode }) {
                             {status}
                           </span>
                         </td>
-                        <td style={{ textAlign: 'right', color: '#0f172a' }}>₱{toMoney(row.total_amount || 0)}</td>
-                        <td style={{ textAlign: 'right', color: '#ea580c', fontWeight: 600 }}>−₱{toMoney(deducted)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 800, color: '#f97316' }}>₱{toMoney(row.patient_due_amount || claim.patient_payable || 0)}</td>
+                        <td style={{ textAlign: 'right', color: '#0f172a' }}>₱ {toMoney(row.total_amount || 0)}</td>
+                        <td style={{ textAlign: 'right', color: '#ea580c', fontWeight: 600 }}>−₱ {toMoney(claim.philhealth_deduction || 0)}</td>
+                        <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 600 }}>−₱ {toMoney(claim.applied_hmo_amount || 0)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 800, color: '#f97316' }}>₱ {toMoney(row.patient_due_amount || claim.patient_payable || 0)}</td>
                         <td>
-                          <div style={{ display: 'flex', gap: 4 }}>
+                          <div style={{ display: 'flex', gap: 6 }}>
                             <button
                               type="button"
-                              title="Update HMO claim"
                               className="office-btn ghost"
-                              style={{ padding: '4px 8px', height: 32, borderRadius: 8 }}
+                              style={{ padding: '6px 10px', fontSize: '0.8rem', height: 34, borderRadius: 10 }}
                               onClick={() => setHmoQuickEdit(row)}
                             >
                               <Edit2 size={14} />
+                              Update
                             </button>
                             <button
                               type="button"
-                              title="Open invoice"
                               className="office-btn primary"
-                              style={{ padding: '4px 8px', height: 32, borderRadius: 8 }}
+                              style={{ padding: '6px 10px', fontSize: '0.8rem', height: 34, borderRadius: 10 }}
                               onClick={async () => {
                                 await openInvoice(String(row.invoice_id));
                                 setView('billing');
                               }}
                             >
                               <FileText size={14} />
+                              Invoice
                             </button>
                           </div>
                         </td>
