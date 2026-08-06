@@ -185,14 +185,48 @@
 .office-main {
   flex: 1;
   padding: 20px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .office-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 16px;
+  flex: 0 0 auto;
+}
+
+.office-header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.office-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-mobile-menu-btn {
+  display: none;
+}
+
+.office-billing-shell,
+.office-view-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
 }
 
 .office-title {
@@ -212,6 +246,27 @@
   border: 1px solid var(--office-border);
   border-radius: 16px;
   padding: 16px;
+}
+
+.office-card-flex {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.logs-table-container {
+  min-height: 320px;
+  max-height: none;
+  flex: 1;
+  overflow: auto;
+}
+
+.office-table-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: min(620px, 70vh);
 }
 
 .office-grid-2 {
@@ -235,28 +290,40 @@
 .office-kpi {
   background: #fff;
   border: 1px solid var(--office-border);
-  border-radius: 16px;
-  padding: 14px 16px;
+  border-radius: 20px;
+  padding: 20px 22px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.office-kpi:hover {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.03);
+  transform: translateY(-1px);
 }
 
 .office-kpi-k {
-  color: var(--office-muted);
+  color: #64748b;
   font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.6px;
 }
 
 .office-kpi-v {
-  font-size: 1.4rem;
-  font-weight: 900;
-  color: var(--office-text);
-  margin-top: 6px;
+  font-size: 1.9rem;
+  font-weight: 1000;
+  color: #0f172a;
+  margin-top: 8px;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .office-kpi-meta {
-  margin-top: 6px;
-  color: var(--office-muted);
+  margin-top: 8px;
+  color: #94a3b8;
   font-size: 0.82rem;
   font-weight: 700;
 }
@@ -264,6 +331,10 @@
 .office-kpi-accent {
   background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
   border-color: #fed7aa;
+}
+
+.office-kpi-accent .office-kpi-v {
+  color: #c2410c;
 }
 
 .office-billing-shell {

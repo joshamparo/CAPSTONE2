@@ -1374,12 +1374,7 @@ export default function OfficeStaffDashboard({ mode }) {
 
       <main className="office-main">
         <div className="office-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            {collapsed ? (
-              <button type="button" className="app-mobile-menu-btn" onClick={() => setCollapsed(false)} aria-label="Open menu">
-                <Menu size={18} />
-              </button>
-            ) : null}
+          <div className="office-header-left">
             <div>
               <div className="office-title">{roleLabel}</div>
               <div className="office-subtitle">
@@ -1392,7 +1387,7 @@ export default function OfficeStaffDashboard({ mode }) {
               </div>
             </div>
           </div>
-          <div className="office-row">
+          <div className="office-header-right">
             <button type="button" className="office-btn ghost" onClick={refreshInvoices} disabled={!user || invoiceLoading} title="Refresh">
               <RefreshCw size={16} />
               Refresh
@@ -1958,7 +1953,7 @@ export default function OfficeStaffDashboard({ mode }) {
               </div>
             )}
 
-            <div className="office-card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div className="office-card office-table-card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <div className="office-title" style={{ fontSize: '1.05rem' }}>Invoices</div>
@@ -1986,7 +1981,7 @@ export default function OfficeStaffDashboard({ mode }) {
 
               {invoiceError ? <div className="admin-alert error" style={{ margin: 12 }}>{invoiceError}</div> : null}
 
-              <div className="logs-table-container" style={{ maxHeight: '520px' }}>
+              <div className="logs-table-container">
                 <table className="staff-table">
                   <thead>
                     <tr>
@@ -2544,7 +2539,7 @@ export default function OfficeStaffDashboard({ mode }) {
             </div>
           </div>
 
-          <div className="office-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="office-card office-table-card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div className="office-title" style={{ fontSize: '1.05rem' }}>Claims Queue</div>
@@ -2568,7 +2563,7 @@ export default function OfficeStaffDashboard({ mode }) {
 
             {hmoQueueError ? <div className="admin-alert error" style={{ margin: 12 }}>{hmoQueueError}</div> : null}
 
-            <div className="logs-table-container" style={{ maxHeight: 'calc(100vh - 420px)' }}>
+            <div className="logs-table-container">
               <table className="staff-table">
                 <thead>
                   <tr>
