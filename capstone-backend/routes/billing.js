@@ -9,7 +9,8 @@ const STAFF_ROLE_SET = new Set(['doctor_secretary', 'cashier', 'admin', 'doctor'
 const billingSchemaEnsureState = {
   coreCheckedAt: 0,
   adjustmentsCheckedAt: 0,
-  doctorFeesCheckedAt: 0
+  doctorFeesCheckedAt: 0,
+  hmoClaimsCheckedAt: 0
 };
 const BILLING_SCHEMA_RECHECK_MS = 5 * 60 * 1000;
 
@@ -145,6 +146,32 @@ async function ensureBillingAdjustmentsTableExist() {
   billingSchemaEnsureState.adjustmentsCheckedAt = now;
 }
 
+async function ensureBillingHmoClaimsTableExist() {
+  const now = Date.now();
+  if (now - billingSchemaEnsureState.hmoClaimsCheckedAt < BILLING_SCHEMA_RECHECK_MS) return;
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS public.billing_hmo_claims (
+      id bigserial PRIMARY KEY,
+      invoice_id bigint NOT NULL UNIQUE REFERENCES public.billing_invoices(id) ON DELETE CASCADE,
+      provider text NULL,
+      loa_number text NULL,
+      philhealth_deduction numeric(12,2) NOT NULL DEFAULT 0,
+      loa_approved_amount numeric(12,2) NOT NULL DEFAULT 0,
+      status text NOT NULL DEFAULT 'Pending',
+      notes text NULL,
+      requested_by text NULL,
+      updated_by text NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_status ON public.billing_hmo_claims(status, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_invoice_id ON public.billing_hmo_claims(invoice_id);
+  `);
+
+  billingSchemaEnsureState.hmoClaimsCheckedAt = now;
+}
+
 function isUuid(v) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || '').trim());
 }
@@ -240,6 +267,97 @@ function buildReceiptNumber(payment, source) {
   return `PGH-${prefix}-${id}`;
 }
 
+function normalizeHmoStatus(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return 'Pending';
+  if (normalized === 'approved') return 'Approved';
+  if (normalized === 'partially approved' || normalized === 'partial' || normalized === 'partially_approved') return 'Partially Approved';
+  if (normalized === 'awaiting loa' || normalized === 'awaiting_loa') return 'Awaiting LOA';
+  if (normalized === 'rejected') return 'Rejected';
+  return 'Pending';
+}
+
+function isHmoCoverageApplied(status) {
+  const normalized = normalizeHmoStatus(status);
+  return normalized === 'Approved' || normalized === 'Partially Approved';
+}
+
+function summarizeHmoClaim(row, totalAmount) {
+  const total = Math.max(0, Number(totalAmount || 0));
+  if (!row) {
+    return {
+      id: null,
+      invoice_id: null,
+      provider: '',
+      loa_number: '',
+      philhealth_deduction: 0,
+      loa_approved_amount: 0,
+      status: 'Pending',
+      notes: '',
+      requested_by: null,
+      updated_by: null,
+      created_at: null,
+      updated_at: null,
+      applied_hmo_amount: 0,
+      patient_payable: total
+    };
+  }
+
+  const philhealthDeduction = Math.min(total, Math.max(0, Number(row.philhealth_deduction || 0)));
+  const maxAfterPhilhealth = Math.max(0, total - philhealthDeduction);
+  const approvedAmount = Math.max(0, Number(row.loa_approved_amount || 0));
+  const appliedHmoAmount = isHmoCoverageApplied(row.status)
+    ? Math.min(maxAfterPhilhealth, approvedAmount)
+    : 0;
+  const patientPayable = Math.max(0, total - philhealthDeduction - appliedHmoAmount);
+
+  return {
+    id: row.id != null ? String(row.id) : null,
+    invoice_id: row.invoice_id != null ? String(row.invoice_id) : null,
+    provider: String(row.provider || '').trim(),
+    loa_number: String(row.loa_number || '').trim(),
+    philhealth_deduction: philhealthDeduction,
+    loa_approved_amount: approvedAmount,
+    status: normalizeHmoStatus(row.status),
+    notes: String(row.notes || '').trim(),
+    requested_by: row.requested_by || null,
+    updated_by: row.updated_by || null,
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || null,
+    applied_hmo_amount: appliedHmoAmount,
+    patient_payable: patientPayable
+  };
+}
+
+async function fetchHmoClaimsByInvoiceIds(tx, invoiceIds) {
+  const ids = (Array.isArray(invoiceIds) ? invoiceIds : [])
+    .map((id) => String(id || '').trim())
+    .filter((id) => /^\d+$/.test(id));
+  if (!ids.length) return [];
+
+  return tx
+    .$queryRawUnsafe(
+      `
+        SELECT id, invoice_id, provider, loa_number, philhealth_deduction, loa_approved_amount,
+               status, notes, requested_by, updated_by, created_at, updated_at
+        FROM public.billing_hmo_claims
+        WHERE invoice_id = ANY($1::bigint[])
+      `,
+      ids
+    )
+    .catch(() => []);
+}
+
+function buildHmoSummaryMap(rows, invoiceTotals = {}) {
+  const map = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const invoiceId = String(row.invoice_id || '').trim();
+    if (!invoiceId) return;
+    map.set(invoiceId, summarizeHmoClaim(row, invoiceTotals[invoiceId] || 0));
+  });
+  return map;
+}
+
 async function computeInvoiceFinancials(tx, invoiceId) {
   const inv = await tx.billing_invoices
     .findUnique({ where: { id: invoiceId }, select: { id: true, status: true, total_amount: true } })
@@ -264,10 +382,13 @@ async function computeInvoiceFinancials(tx, invoiceId) {
     .reduce((sum, a) => sum + Number(a.amount || 0), 0);
 
   const total = Number(inv.total_amount || 0);
+  const hmoRows = await fetchHmoClaimsByInvoiceIds(tx, [invoiceId]);
+  const hmoClaim = summarizeHmoClaim(Array.isArray(hmoRows) ? hmoRows[0] : null, total);
+  const collectibleTotal = hmoClaim.patient_payable;
   const netPaid = paid - refunded;
-  const balance = Math.max(0, total - netPaid);
+  const balance = Math.max(0, collectibleTotal - netPaid);
 
-  return { inv, total, paid, refunded, netPaid, balance };
+  return { inv, total, paid, refunded, netPaid, balance, collectibleTotal, hmoClaim };
 }
 
 async function recomputeInvoiceStatus(tx, invoiceId) {
@@ -350,6 +471,7 @@ router.get('/mine/payments', requireRole(['patient']), async (req, res) => {
 router.get('/mine/invoices', requireRole(['patient']), async (req, res) => {
   try {
     await ensureBillingTablesExist();
+    await ensureBillingHmoClaimsTableExist().catch(() => {});
     const patient = await resolvePatientForRequest(req);
     const { status, take, skip } = req.query;
     const limit = parseLimit(take, { min: 1, max: 200, fallback: 50 });
@@ -369,11 +491,20 @@ router.get('/mine/invoices', requireRole(['patient']), async (req, res) => {
       skip: offset
     });
 
+    const invoiceTotals = invoices.reduce((acc, inv) => {
+      acc[String(inv.id)] = Number(inv.total_amount || 0);
+      return acc;
+    }, {});
+    const hmoRows = await fetchHmoClaimsByInvoiceIds(prisma, invoices.map((inv) => inv.id));
+    const hmoByInvoice = buildHmoSummaryMap(hmoRows, invoiceTotals);
+
     const normalized = invoices.map((inv) => {
       const paid = (inv.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
       const total = Number(inv.total_amount || 0);
+      const hmoClaim = hmoByInvoice.get(String(inv.id)) || summarizeHmoClaim(null, total);
+      const collectibleTotal = hmoClaim.patient_payable;
       const st = String(inv.status || '').trim().toLowerCase();
-      const balance = st === 'cancelled' || st === 'voided' ? 0 : Math.max(0, total - paid);
+      const balance = st === 'cancelled' || st === 'voided' ? 0 : Math.max(0, collectibleTotal - paid);
       return {
         id: inv.id,
         appointmentId: inv.appointment_id,
@@ -385,7 +516,9 @@ router.get('/mine/invoices', requireRole(['patient']), async (req, res) => {
         source: inferInvoiceSource(inv || {}),
         serviceLabel: buildServiceLabel(inv || {}),
         paidAmount: toMoney(paid),
+        patientDueAmount: toMoney(collectibleTotal),
         balanceAmount: toMoney(balance),
+        hmoClaim,
         items: inv.items || [],
         payments: (inv.payments || []).map((p) => ({
           id: p.id,
@@ -446,6 +579,7 @@ router.get('/invoices', async (req, res) => {
   try {
     await ensureBillingTablesExist();
     await ensureBillingAdjustmentsTableExist().catch(() => {});
+    await ensureBillingHmoClaimsTableExist().catch(() => {});
 
     const { status, patientId, q, take, skip } = req.query;
     const limit = parseLimit(take, { min: 1, max: 200, fallback: 50 });
@@ -548,6 +682,12 @@ router.get('/invoices', async (req, res) => {
       acc[k].push(r);
       return acc;
     }, {});
+    const invoiceTotals = invoices.reduce((acc, inv) => {
+      acc[String(inv.id)] = Number(inv.total_amount || 0);
+      return acc;
+    }, {});
+    const hmoRows = await fetchHmoClaimsByInvoiceIds(prisma, invoiceIds);
+    const hmoByInvoice = buildHmoSummaryMap(hmoRows, invoiceTotals);
 
     const normalized = invoices.map((inv) => {
       const paid = (inv.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
@@ -557,12 +697,18 @@ router.get('/invoices', async (req, res) => {
         .reduce((sum, a) => sum + Number(a.amount || 0), 0);
       const netPaid = paid - refunded;
       const total = Number(inv.total_amount || 0);
+      const hmoClaim = hmoByInvoice.get(String(inv.id)) || summarizeHmoClaim(null, total);
+      const collectibleTotal = hmoClaim.patient_payable;
       const st = String(inv.status || '').trim().toLowerCase();
-      const balance = st === 'cancelled' || st === 'voided' ? 0 : Math.max(0, total - netPaid);
+      const balance = st === 'cancelled' || st === 'voided' ? 0 : Math.max(0, collectibleTotal - netPaid);
       return {
         ...inv,
         appointment_status: inv.appointment_id != null ? (appointmentStatusById[String(inv.appointment_id)] || null) : null,
         adjustments: adjs,
+        hmo_claim: hmoClaim,
+        patient_due_amount: toMoney(collectibleTotal),
+        philhealth_deduction: toMoney(hmoClaim.philhealth_deduction),
+        hmo_coverage_amount: toMoney(hmoClaim.applied_hmo_amount),
         paid_amount: toMoney(paid),
         refunded_amount: toMoney(refunded),
         net_paid_amount: toMoney(netPaid),
@@ -583,6 +729,7 @@ router.get('/invoices/:id', async (req, res) => {
   try {
     await ensureBillingTablesExist();
     await ensureBillingAdjustmentsTableExist().catch(() => {});
+    await ensureBillingHmoClaimsTableExist().catch(() => {});
     const idRaw = String(req.params.id || '').trim();
     if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid id' });
     const id = BigInt(idRaw);
@@ -621,14 +768,21 @@ router.get('/invoices/:id', async (req, res) => {
       .reduce((sum, a) => sum + Number(a.amount || 0), 0);
     const netPaid = paid - refunded;
     const total = Number(inv.total_amount || 0);
+    const hmoRows = await fetchHmoClaimsByInvoiceIds(prisma, [id]);
+    const hmoClaim = summarizeHmoClaim(Array.isArray(hmoRows) ? hmoRows[0] : null, total);
+    const collectibleTotal = hmoClaim.patient_payable;
     const st = String(inv.status || '').trim().toLowerCase();
-    const balance = st === 'cancelled' || st === 'voided' ? 0 : Math.max(0, total - netPaid);
+    const balance = st === 'cancelled' || st === 'voided' ? 0 : Math.max(0, collectibleTotal - netPaid);
 
     res.json(
       serialize({
         ...inv,
         appointment_status: appointmentStatus,
         adjustments,
+        hmo_claim: hmoClaim,
+        patient_due_amount: toMoney(collectibleTotal),
+        philhealth_deduction: toMoney(hmoClaim.philhealth_deduction),
+        hmo_coverage_amount: toMoney(hmoClaim.applied_hmo_amount),
         paid_amount: toMoney(paid),
         refunded_amount: toMoney(refunded),
         net_paid_amount: toMoney(netPaid),
@@ -767,10 +921,203 @@ router.patch('/invoices/:id', async (req, res) => {
   }
 });
 
+router.put('/invoices/:id/hmo', async (req, res) => {
+  try {
+    await ensureBillingTablesExist();
+    await ensureBillingHmoClaimsTableExist();
+    const role = String(req.headers['x-user-role'] || '').toLowerCase();
+    if (!['cashier', 'admin', 'doctor_secretary', 'staff'].includes(role)) return res.status(401).json({ message: 'Unauthorized' });
+
+    const idRaw = String(req.params.id || '').trim();
+    if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid id' });
+    const invoiceId = BigInt(idRaw);
+
+    const invoice = await prisma.billing_invoices.findUnique({ where: { id: invoiceId } }).catch(() => null);
+    if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+
+    const total = Math.max(0, Number(invoice.total_amount || 0));
+    const provider = String(req.body?.provider || '').trim();
+    const loaNumber = String(req.body?.loaNumber || req.body?.loa_number || '').trim();
+    const notes = String(req.body?.notes || '').trim();
+    const status = normalizeHmoStatus(req.body?.status);
+    const requestedBy = normalizeEmail(req.headers['x-user-email'] || req.body?.requestedBy || '');
+    const updatedBy = normalizeEmail(req.headers['x-user-email'] || req.body?.updatedBy || '');
+    const philhealthDeduction = Math.max(0, Number(req.body?.philhealthDeduction ?? req.body?.philhealth_deduction ?? 0));
+    const loaApprovedAmount = Math.max(0, Number(req.body?.loaApprovedAmount ?? req.body?.loa_approved_amount ?? 0));
+    const hasClaimPayload = Boolean(
+      provider ||
+      loaNumber ||
+      notes ||
+      philhealthDeduction > 0 ||
+      loaApprovedAmount > 0 ||
+      status !== 'Pending'
+    );
+
+    if (!Number.isFinite(philhealthDeduction)) return res.status(400).json({ message: 'Invalid PhilHealth deduction amount' });
+    if (!Number.isFinite(loaApprovedAmount)) return res.status(400).json({ message: 'Invalid LOA approved amount' });
+    if (philhealthDeduction - total > 0.00001) return res.status(400).json({ message: 'PhilHealth deduction cannot exceed the total bill' });
+    if (loaApprovedAmount - Math.max(0, total - philhealthDeduction) > 0.00001) {
+      return res.status(400).json({ message: 'HMO approved amount cannot exceed the balance after PhilHealth deduction' });
+    }
+    if ((loaApprovedAmount > 0 || status === 'Approved' || status === 'Partially Approved' || status === 'Awaiting LOA') && !provider) {
+      return res.status(400).json({ message: 'HMO provider is required when saving an HMO claim' });
+    }
+
+    if (!hasClaimPayload) {
+      await prisma.$queryRaw`DELETE FROM public.billing_hmo_claims WHERE invoice_id = ${invoiceId}`;
+    } else {
+      await prisma.$queryRaw`
+        INSERT INTO public.billing_hmo_claims (
+          invoice_id, provider, loa_number, philhealth_deduction, loa_approved_amount, status, notes, requested_by, updated_by, created_at, updated_at
+        )
+        VALUES (
+          ${invoiceId}, ${provider || null}, ${loaNumber || null}, ${toMoney(philhealthDeduction)}::numeric, ${toMoney(loaApprovedAmount)}::numeric,
+          ${status}, ${notes || null}, ${requestedBy || null}, ${updatedBy || null}, now(), now()
+        )
+        ON CONFLICT (invoice_id)
+        DO UPDATE SET
+          provider = EXCLUDED.provider,
+          loa_number = EXCLUDED.loa_number,
+          philhealth_deduction = EXCLUDED.philhealth_deduction,
+          loa_approved_amount = EXCLUDED.loa_approved_amount,
+          status = EXCLUDED.status,
+          notes = EXCLUDED.notes,
+          requested_by = COALESCE(public.billing_hmo_claims.requested_by, EXCLUDED.requested_by),
+          updated_by = EXCLUDED.updated_by,
+          updated_at = now()
+      `;
+    }
+
+    const fin = await computeInvoiceFinancials(prisma, invoiceId);
+    const full = await prisma.billing_invoices.findUnique({
+      where: { id: invoiceId },
+      include: {
+        items: true,
+        payments: true,
+        patients: {
+          select: { id: true, first_name: true, last_name: true, email: true, contact_number: true }
+        }
+      }
+    });
+    const adjustments = await prisma.$queryRawUnsafe(
+      `
+        SELECT id, invoice_id, type, amount, reference, reason, created_by, created_at
+        FROM public.billing_adjustments
+        WHERE invoice_id = $1::bigint
+        ORDER BY created_at DESC, id DESC
+      `,
+      idRaw
+    ).catch(() => []);
+
+    res.json(
+      serialize({
+        ...full,
+        adjustments,
+        hmo_claim: fin?.hmoClaim || summarizeHmoClaim(null, total),
+        patient_due_amount: toMoney(fin?.collectibleTotal ?? total),
+        philhealth_deduction: toMoney(fin?.hmoClaim?.philhealth_deduction ?? 0),
+        hmo_coverage_amount: toMoney(fin?.hmoClaim?.applied_hmo_amount ?? 0),
+        paid_amount: toMoney(fin?.paid ?? 0),
+        refunded_amount: toMoney(fin?.refunded ?? 0),
+        net_paid_amount: toMoney(fin?.netPaid ?? 0),
+        balance_amount: toMoney(fin?.balance ?? total)
+      })
+    );
+  } catch (err) {
+    const msg = String(err?.message || '');
+    res.status(500).json({ message: msg || 'Server error' });
+  }
+});
+
+router.get('/hmo-queue', async (req, res) => {
+  try {
+    await ensureBillingTablesExist();
+    await ensureBillingHmoClaimsTableExist();
+    await ensureBillingAdjustmentsTableExist().catch(() => {});
+    const role = String(req.headers['x-user-role'] || '').toLowerCase();
+    if (!['cashier', 'admin', 'doctor_secretary', 'staff'].includes(role)) return res.status(401).json({ message: 'Unauthorized' });
+
+    const statusFilter = String(req.query.status || '').trim();
+    const query = String(req.query.q || '').trim().toLowerCase();
+    const rows = await prisma.$queryRawUnsafe(
+      `
+        SELECT
+          h.id,
+          h.invoice_id,
+          h.provider,
+          h.loa_number,
+          h.philhealth_deduction,
+          h.loa_approved_amount,
+          h.status,
+          h.notes,
+          h.requested_by,
+          h.updated_by,
+          h.created_at,
+          h.updated_at,
+          i.total_amount,
+          i.balance_amount,
+          i.status AS invoice_status,
+          p.first_name,
+          p.last_name,
+          p.email,
+          p.contact_number
+        FROM public.billing_hmo_claims h
+        JOIN (
+          SELECT bi.id, bi.patient_id, bi.status, bi.total_amount, bi.updated_at, bi.created_at, bi.notes,
+                 0::numeric AS balance_amount
+          FROM public.billing_invoices bi
+        ) i ON i.id = h.invoice_id
+        LEFT JOIN public.patients p ON p.id = i.patient_id
+        ORDER BY h.updated_at DESC, h.created_at DESC
+      `
+    ).catch(() => []);
+
+    const list = (Array.isArray(rows) ? rows : [])
+      .map((row) => {
+        const total = Number(row.total_amount || 0);
+        const claim = summarizeHmoClaim(row, total);
+        return {
+          id: claim.id,
+          invoice_id: claim.invoice_id,
+          invoice_status: row.invoice_status || null,
+          patient_name: `${String(row.first_name || '').trim()} ${String(row.last_name || '').trim()}`.trim() || 'Patient',
+          email: row.email || null,
+          contact_number: row.contact_number || null,
+          total_amount: toMoney(total),
+          patient_due_amount: toMoney(claim.patient_payable),
+          hmo_claim: claim
+        };
+      })
+      .filter((row) => !statusFilter || String(row.hmo_claim?.status || '').toLowerCase() === statusFilter.toLowerCase())
+      .filter((row) => {
+        if (!query) return true;
+        const haystack = [
+          row.patient_name,
+          row.invoice_id,
+          row.invoice_status,
+          row.email,
+          row.contact_number,
+          row.hmo_claim?.provider,
+          row.hmo_claim?.loa_number,
+          row.hmo_claim?.status
+        ]
+          .map((value) => String(value || '').toLowerCase())
+          .join(' ');
+        return haystack.includes(query);
+      });
+
+    res.json(serialize(list));
+  } catch (err) {
+    const msg = String(err?.message || '');
+    res.status(500).json({ message: msg || 'Server error' });
+  }
+});
+
 router.post('/payments', async (req, res) => {
   try {
     await ensureBillingTablesExist();
     await ensureBillingAdjustmentsTableExist().catch(() => {});
+    await ensureBillingHmoClaimsTableExist().catch(() => {});
     const role = String(req.headers['x-user-role'] || '').toLowerCase();
     if (role !== 'cashier' && role !== 'admin') return res.status(401).json({ message: 'Unauthorized' });
 
@@ -818,23 +1165,8 @@ router.post('/payments', async (req, res) => {
       }
     }
 
-    const total = Number(inv.total_amount || 0);
-    const paid = (inv.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
-    const existingAdjustments = await prisma
-      .$queryRawUnsafe(
-        `
-          SELECT type, amount
-          FROM public.billing_adjustments
-          WHERE invoice_id = $1::bigint
-        `,
-        invoiceId.toString()
-      )
-      .catch(() => []);
-    const refunded = (Array.isArray(existingAdjustments) ? existingAdjustments : [])
-      .filter((a) => String(a.type || '').toLowerCase() === 'refund')
-      .reduce((sum, a) => sum + Number(a.amount || 0), 0);
-    const netPaid = paid - refunded;
-    const balance = Math.max(0, total - netPaid);
+    const fin = await computeInvoiceFinancials(prisma, invoiceId);
+    const balance = Math.max(0, Number(fin?.balance || 0));
 
     const amountRaw = req.body?.amount != null ? Number(req.body.amount) : balance;
     if (!Number.isFinite(amountRaw) || amountRaw <= 0) return res.status(400).json({ message: 'Invalid amount' });
@@ -908,6 +1240,7 @@ router.get('/invoices/by-appointment/:appointmentId', async (req, res) => {
   try {
     await ensureBillingTablesExist();
     await ensureBillingAdjustmentsTableExist().catch(() => {});
+    await ensureBillingHmoClaimsTableExist().catch(() => {});
     const role = String(req.headers['x-user-role'] || '').toLowerCase();
     if (role !== 'doctor_secretary' && role !== 'admin' && role !== 'doctor') return res.status(401).json({ message: 'Unauthorized' });
 
@@ -941,13 +1274,20 @@ router.get('/invoices/by-appointment/:appointmentId', async (req, res) => {
       .reduce((sum, a) => sum + Number(a.amount || 0), 0);
     const netPaid = paid - refunded;
     const total = Number(inv.total_amount || 0);
+    const hmoRows = await fetchHmoClaimsByInvoiceIds(prisma, [inv.id]);
+    const hmoClaim = summarizeHmoClaim(Array.isArray(hmoRows) ? hmoRows[0] : null, total);
+    const collectibleTotal = hmoClaim.patient_payable;
     const st = String(inv.status || '').trim().toLowerCase();
-    const balance = st === 'cancelled' || st === 'voided' ? 0 : Math.max(0, total - netPaid);
+    const balance = st === 'cancelled' || st === 'voided' ? 0 : Math.max(0, collectibleTotal - netPaid);
 
     res.json(
       serialize({
         ...inv,
         adjustments,
+        hmo_claim: hmoClaim,
+        patient_due_amount: toMoney(collectibleTotal),
+        philhealth_deduction: toMoney(hmoClaim.philhealth_deduction),
+        hmo_coverage_amount: toMoney(hmoClaim.applied_hmo_amount),
         paid_amount: toMoney(paid),
         refunded_amount: toMoney(refunded),
         net_paid_amount: toMoney(netPaid),
