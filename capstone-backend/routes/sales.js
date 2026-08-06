@@ -529,7 +529,7 @@ router.post('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
         const safeItems = Array.isArray(items) ? items : [];
         if (safeItems.length === 0) return res.status(400).json({ message: 'items is required' });
         const patientIdValue = String(patientId || '').trim() || null;
-        const shouldCreateInvoice = false;
+        const shouldCreateInvoice = Boolean(createInvoice) && !!patientIdValue;
 
         const normalizedItems = safeItems.map((item) => {
             const id = parseNumericId(item?.id);
@@ -602,26 +602,36 @@ router.post('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
             });
         }
 
+        const pharmacistName = pharmacist ? String(pharmacist).slice(0, 200) : null;
+        const actorRole = String(req.headers['x-user-role'] || '').trim().toLowerCase() || 'pharmacist';
+
         const result = await prisma.$transaction(async (tx) => {
             // Deduct stock accurately in the same transaction
+            const stockDeltas = [];
             for (const item of normalizedItems) {
                 const isMedicine = item.type === 'medicine';
                 const table = isMedicine ? tx.medicines : tx.supplies;
-                
+                const tableName = isMedicine ? 'medicines' : 'supplies';
+
                 // Get current stock with read lock for safety
                 const currentItem = await tx.$queryRawUnsafe(`
-                  SELECT stock FROM public.${isMedicine ? 'medicines' : 'supplies'}
+                  SELECT stock FROM public.${tableName}
                   WHERE id = $1 FOR UPDATE
                 `, BigInt(item.id));
-                
+
                 const stockRow = Array.isArray(currentItem) ? currentItem[0] : null;
                 const currentStock = stockRow ? Number(stockRow.stock) : 0;
                 const newStock = Math.max(0, currentStock - item.quantity);
+                const delta = newStock - currentStock;
 
                 await table.update({
                     where: { id: BigInt(item.id) },
                     data: { stock: newStock }
                 });
+
+                if (delta !== 0) {
+                    stockDeltas.push({ itemType: isMedicine ? 'medicine' : 'supply', itemId: BigInt(item.id), delta });
+                }
             }
 
             const sale = await tx.sales.create({
@@ -629,7 +639,7 @@ router.post('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
                     total_amount: totalDue,
                     payment_received: paymentNum,
                     change_amount: changeNum,
-                    pharmacist_name: pharmacist ? String(pharmacist).slice(0, 200) : null,
+                    pharmacist_name: pharmacistName,
                     items: {
                         create: lineItems
                     }
@@ -639,6 +649,54 @@ router.post('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
                 }
             });
 
+            let invoiceId = null;
+            if (shouldCreateInvoice) {
+                try {
+                    ensureBillingTablesExist();
+                } catch (_) {}
+                try {
+                    const createdByStr = pharmacistName || actorRole;
+                    const notesArr = [];
+                    notesArr.push('Pharmacy POS sale');
+                    if (paymentMethod) notesArr.push(`Payment: ${String(paymentMethod)}`);
+                    if (paymentReference) notesArr.push(`Ref: ${String(paymentReference).slice(0,120)}`);
+                    notesArr.push(`Sale ID: ${sale.id.toString()}`);
+                    const inv = await tx.$queryRawUnsafe(`
+                        INSERT INTO public.billing_invoices (patient_id, status, notes, created_by, total_amount, created_at, updated_at)
+                        VALUES ($1::uuid, 'Paid', $2, $3, $4::numeric, now(), now())
+                        RETURNING id
+                    `, patientIdValue, notesArr.join(' | ').slice(0, 500), createdByStr, Number(totalDue));
+                    const invRow = Array.isArray(inv) && inv.length ? inv[0] : null;
+                    if (invRow?.id) {
+                        invoiceId = BigInt(invRow.id);
+                        let lineIdx = 0;
+                        for (const item of normalizedItems) {
+                            lineIdx += 1;
+                            const lineTotal = round2(Number(item.price || 0) * Math.max(1, Number(item.quantity || 1)));
+                            await tx.$executeRawUnsafe(`
+                                INSERT INTO public.billing_invoice_items (invoice_id, line_no, description, quantity, unit_price, line_total, created_at)
+                                VALUES ($1, $2, $3, $4, $5::numeric, $6::numeric, now())
+                            `, invoiceId, lineIdx, String(item.name || '').slice(0, 300), Math.max(1, Number(item.quantity || 1)), Number(item.price || 0), Number(lineTotal));
+                        }
+                        if (discountAmount > 0) {
+                            lineIdx += 1;
+                            const ref = String(discountRef || '').trim();
+                            const lbl = discountLabel ? `Discount (${discountLabel}${ref ? `) Ref: ${ref}` : ')'}` : 'Discount';
+                            await tx.$executeRawUnsafe(`
+                                INSERT INTO public.billing_invoice_items (invoice_id, line_no, description, quantity, unit_price, line_total, created_at)
+                                VALUES ($1, $2, $3, 1, $4::numeric, $5::numeric, now())
+                            `, invoiceId, lineIdx, String(lbl).slice(0, 300), Number(0), -Math.abs(Number(discountAmount)));
+                        }
+                        await tx.$executeRawUnsafe(`
+                            INSERT INTO public.billing_payments (invoice_id, amount, method, reference, received_by, payment_date, idempotency_key, created_at)
+                            VALUES ($1, $2::numeric, $3, $4, $5, now(), $6, now())
+                        `, invoiceId, Number(paymentNum), String(paymentMethod || 'Cash').slice(0, 50), paymentReference ? String(paymentReference).slice(0, 200) : null, pharmacistName, `pharmacy-pos-sale-${sale.id.toString()}`);
+                    }
+                } catch (invErr) {
+                    console.error('[sales] failed to create billing invoice for pharmacy POS sale', invErr);
+                }
+            }
+
             try {
               await tx.$executeRawUnsafe(
                 `UPDATE public.sales
@@ -646,14 +704,39 @@ router.post('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
                      invoice_id = $2
                  WHERE id = $3`,
                 patientIdValue,
-                null,
+                invoiceId,
                 BigInt(sale.id)
               );
             } catch (linkErr) {
               console.error('[sales] failed to link sale to patient/invoice:', linkErr);
             }
 
-            return { sale, invoice: null };
+            // Stock movements (same txn)
+            try {
+                await tx.$executeRawUnsafe(`
+                    CREATE TABLE IF NOT EXISTS public.stock_movements (
+                        id bigserial PRIMARY KEY,
+                        item_type text NOT NULL,
+                        item_id bigint NOT NULL,
+                        delta integer NOT NULL,
+                        reason text NOT NULL DEFAULT 'manual_adjust',
+                        actor_name text NULL,
+                        actor_role text NULL,
+                        note text NULL,
+                        created_at timestamptz NOT NULL DEFAULT now()
+                    )
+                `);
+            } catch (_) {}
+            for (const sm of stockDeltas) {
+                try {
+                    await tx.$executeRawUnsafe(`
+                        INSERT INTO public.stock_movements (item_type, item_id, delta, reason, actor_name, actor_role, note)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    `, sm.itemType, sm.itemId, sm.delta, 'dispense', pharmacistName, actorRole, 'POS sale');
+                } catch (_) {}
+            }
+
+            return { sale, invoice: invoiceId };
         });
 
         // Add Activity Log for POS Checkout
