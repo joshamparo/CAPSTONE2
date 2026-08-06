@@ -457,14 +457,15 @@ function normalizeAppointmentStatus(v) {
     if (!raw) return 'Pending';
     const low = raw.toLowerCase();
     if (low === 'waiting' || low === 'queue' || low === 'queued') return 'Waiting';
-    if (low === 'checkedin' || low === 'checked-in') return 'Checked-in';
+    if (low === 'checkedin' || low === 'checked-in' || low === 'checked in') return 'Checked-in';
     if (low === 'confirmed' || low === 'approved') return 'Confirmed';
     if (low === 'completed' || low === 'done') return 'Completed';
-    if (low === 'for payment' || low === 'for_payment') return 'For Payment';
+    if (low === 'for payment' || low === 'for_payment' || low === 'for-payment') return 'For Payment';
     if (low === 'paid') return 'Paid';
-    if (low === 'cancelled' || low === 'canceled') return 'Cancelled';
-    const capped = raw.length > 40 ? raw.slice(0, 40) : raw;
-    return capped.replace(/\b\w/g, (m) => m.toUpperCase());
+    if (low === 'cancelled' || low === 'canceled' || low === 'cancel') return 'Cancelled';
+    if (low === 'no show' || low === 'no-show' || low === 'noshow') return 'No-show';
+    if (low === 'pending') return 'Pending';
+    return null;
 }
 
 function parseAgeFromDob(dob) {
@@ -1530,7 +1531,56 @@ router.post('/', async (req, res) => {
             doctorId,
             assignmentStatus
         } = req.body;
-        
+
+        const errors = [];
+        const cleanStr = (v, maxLen) => {
+            const s = String(v == null ? '' : v).trim();
+            if (!maxLen) return s;
+            return s.length > maxLen ? s.slice(0, maxLen) : s;
+        };
+        const fn = cleanStr(firstName, 64);
+        const ln = cleanStr(lastName, 64);
+        if (!fn) errors.push('First name is required.');
+        else if (fn.length < 2) errors.push('First name is too short (min 2 characters).');
+        if (!ln) errors.push('Last name is required.');
+        else if (ln.length < 2) errors.push('Last name is too short (min 2 characters).');
+
+        const emailRaw = cleanStr(email || '', 254);
+        if (emailRaw) {
+            const ok = /^[A-Za-z][A-Za-z0-9._-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(emailRaw);
+            if (!ok) errors.push('Enter a valid email address (starts with a letter).');
+        } else if (!patientId) {
+            errors.push('Email or patient id is required.');
+        }
+
+        const phoneRaw = cleanStr(phone || '', 32);
+        if (phoneRaw) {
+            const digits = phoneRaw.replace(/\D/g, '');
+            if (!/^\d{7,15}$/.test(digits)) errors.push('Enter a valid contact number.');
+        } else if (!patientId) {
+            errors.push('Phone or patient id is required.');
+        }
+
+        if (!appointmentDate) errors.push('Appointment date is required.');
+        else {
+            const d = new Date(String(appointmentDate));
+            if (Number.isNaN(d.getTime())) errors.push('Invalid appointment date.');
+        }
+
+        const mcRaw = cleanStr(mainConcern || '', 1000);
+        const reasonRaw = cleanStr(reason || '', 1000);
+        const descRaw = cleanStr(description || '', 4000);
+        if (!mcRaw && !reasonRaw && !descRaw) {
+            errors.push('Main concern, reason, or description is required.');
+        }
+
+        const normalizedStatus = status !== undefined ? normalizeAppointmentStatus(status) : null;
+        if (status !== undefined && normalizedStatus == null) {
+            errors.push(`Invalid appointment status '${String(status || '').trim()}'.`);
+        }
+
+        if (errors.length) return res.status(400).json({ message: errors.join('  ') });
+
         // Basic conversion for time (Prisma Time field usually expects Date object or ISO string representing time)
         let timeObj = null;
         if (appointmentTime) {
@@ -1542,10 +1592,10 @@ router.post('/', async (req, res) => {
         }
 
         const modeRaw = String(consultationMode || mode || '').trim().toLowerCase();
-        const reasonRaw = String(reason || '').trim().toLowerCase();
+        const reasonMode = String(reason || '').trim().toLowerCase();
         const serviceRaw = String(serviceType || '').trim().toLowerCase();
         const resolvedMode =
-            modeRaw === 'video' || reasonRaw.includes('video consultation') || serviceRaw.includes('video')
+            modeRaw === 'video' || reasonMode.includes('video consultation') || serviceRaw.includes('video')
                 ? 'video'
                 : 'onsite';
 
@@ -1995,6 +2045,7 @@ router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary'
         const dataToUpdate = {};
         if (status !== undefined) {
             const nextStatus = normalizeAppointmentStatus(status);
+            if (nextStatus == null) return res.status(400).json({ message: `Invalid appointment status '${String(status || '').trim()}'. Allowed values: Waiting, Checked-in, Confirmed, Completed, For Payment, Paid, Cancelled, No-show, Pending.` });
             dataToUpdate.status = nextStatus;
             if (String(nextStatus || '').trim().toLowerCase() === 'completed') {
                 dataToUpdate.completed_at = new Date();

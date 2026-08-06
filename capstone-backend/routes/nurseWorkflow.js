@@ -550,6 +550,9 @@ router.post('/handover', async (req, res) => {
     const noteText = String(req.body?.noteText || '').trim();
     if (!department) return res.status(400).json({ message: 'department is required' });
     if (!noteText) return res.status(400).json({ message: 'noteText is required' });
+    if (noteText.length < 3) return res.status(400).json({ message: 'noteText is too short (min 3 characters)' });
+    if (noteText.length > 8000) return res.status(400).json({ message: 'noteText is too long (max 8000 characters)' });
+    if (shiftLabel && shiftLabel.length > 80) return res.status(400).json({ message: 'shiftLabel is too long (max 80 characters)' });
 
     const rows = await prisma.$queryRawUnsafe(
       `
@@ -635,11 +638,15 @@ router.post('/tasks', async (req, res) => {
     const actor = actorFromReq(req);
     const department = normalizeDeptId(req.body?.department);
     const title = String(req.body?.title || '').trim();
-    const priority = String(req.body?.priority || 'routine').trim().toLowerCase();
+    const priorityRaw = String(req.body?.priority || 'routine').trim().toLowerCase();
     const shiftLabel = String(req.body?.shiftLabel || '').trim() || null;
     const dueTime = String(req.body?.dueTime || '').trim() || null;
+    const allowedPriority = new Set(['urgent', 'routine', 'handover']);
+    const priority = allowedPriority.has(priorityRaw) ? priorityRaw : 'routine';
     if (!department) return res.status(400).json({ message: 'department is required' });
     if (!title) return res.status(400).json({ message: 'title is required' });
+    if (title.length < 3) return res.status(400).json({ message: 'title is too short (min 3 characters)' });
+    if (title.length > 240) return res.status(400).json({ message: 'title is too long (max 240 characters)' });
 
     const rows = await prisma.$queryRawUnsafe(
       `
@@ -686,20 +693,30 @@ router.patch('/tasks/:id', async (req, res) => {
     const id = String(req.params.id || '').trim();
     if (!/^\d+$/.test(id)) return res.status(400).json({ message: 'Invalid task id' });
 
+    const allowedPriority = new Set(['urgent', 'routine', 'handover']);
+    const allowedStatus = new Set(['open', 'in_progress', 'completed', 'blocked', 'cancelled']);
     const updates = [];
     const values = [id];
     let index = 2;
     if (req.body?.priority != null) {
+      const p = String(req.body.priority || 'routine').trim().toLowerCase();
+      if (!allowedPriority.has(p)) return res.status(400).json({ message: `Invalid priority '${p}'. Allowed: urgent, routine, handover.` });
       updates.push(`priority = $${index++}`);
-      values.push(String(req.body.priority || 'routine').trim().toLowerCase());
+      values.push(p);
     }
     if (req.body?.title != null) {
+      const t = String(req.body.title || '').trim();
+      if (!t) return res.status(400).json({ message: 'title cannot be empty' });
+      if (t.length < 3) return res.status(400).json({ message: 'title is too short (min 3 characters)' });
+      if (t.length > 240) return res.status(400).json({ message: 'title is too long (max 240 characters)' });
       updates.push(`title = $${index++}`);
-      values.push(String(req.body.title || '').trim());
+      values.push(t);
     }
     if (req.body?.status != null) {
+      const s = String(req.body.status || 'open').trim().toLowerCase();
+      if (!allowedStatus.has(s)) return res.status(400).json({ message: `Invalid status '${s}'.` });
       updates.push(`status = $${index++}`);
-      values.push(String(req.body.status || 'open').trim());
+      values.push(s);
     }
     if (req.body?.completed != null) {
       const completed = Boolean(req.body.completed);
@@ -811,12 +828,33 @@ router.post('/med-admin', async (req, res) => {
     const actor = actorFromReq(req);
     const department = normalizeDeptId(req.body?.department);
     const medicationName = String(req.body?.medicationName || '').trim();
-    const status = String(req.body?.status || '').trim().toLowerCase();
+    const statusRaw = String(req.body?.status || '').trim().toLowerCase();
     const patientName = String(req.body?.patientName || '').trim();
-    const quantity = Math.max(1, Number(req.body?.quantity || 1) || 1);
+    const quantityRaw = req.body?.quantity;
+    const allowedStatus = new Set(['administered', 'held', 'missed']);
+    const status = allowedStatus.has(statusRaw) ? statusRaw : null;
     if (!department) return res.status(400).json({ message: 'department is required' });
     if (!medicationName) return res.status(400).json({ message: 'medicationName is required' });
-    if (!['administered', 'held', 'missed'].includes(status)) return res.status(400).json({ message: 'Invalid status' });
+    if (medicationName.length > 200) return res.status(400).json({ message: 'medicationName is too long (max 200 characters)' });
+    if (!status) return res.status(400).json({ message: `Invalid status '${statusRaw}'. Allowed: administered, held, missed.` });
+    let quantity = 1;
+    if (quantityRaw !== undefined && quantityRaw !== null && String(quantityRaw).trim() !== '') {
+      const n = Number(quantityRaw);
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > 999) {
+        return res.status(400).json({ message: 'quantity must be a whole number from 1 to 999' });
+      }
+      quantity = n;
+    }
+    const dosage = req.body?.dosage != null ? String(req.body.dosage).slice(0, 200) : null;
+    const note = req.body?.note != null ? String(req.body.note).slice(0, 1000) : null;
+    const requestIdRaw = req.body?.requestId;
+    let requestId = null;
+    if (requestIdRaw !== undefined && requestIdRaw !== null && String(requestIdRaw).trim() !== '') {
+      const s = String(requestIdRaw).trim();
+      if (!/^\d+$/.test(s)) return res.status(400).json({ message: 'Invalid requestId.' });
+      requestId = s;
+    }
+    const patientId = req.body?.patientId || null;
 
     const result = await prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRawUnsafe(
@@ -830,21 +868,21 @@ router.post('/med-admin', async (req, res) => {
                     administered_by_name, administered_by_email, created_at
         `,
         department,
-        req.body?.patientId || null,
+        patientId,
         patientName || null,
-        req.body?.requestId || null,
+        requestId,
         medicationName,
-        req.body?.dosage ? String(req.body.dosage) : null,
+        dosage,
         quantity,
         status,
-        req.body?.note ? String(req.body.note) : null,
+        note,
         actor.name,
         actor.email
       );
 
-      if (req.body?.requestId && /^\d+$/.test(String(req.body.requestId)) && status === 'administered') {
+      if (requestId && status === 'administered') {
         await tx.requests.update({
-          where: { id: BigInt(String(req.body.requestId)) },
+          where: { id: BigInt(String(requestId)) },
           data: { status: 'Completed' }
         }).catch(() => {});
       }

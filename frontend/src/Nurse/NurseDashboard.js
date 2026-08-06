@@ -1852,15 +1852,36 @@ function NurseDashboard() {
   };
 
   const handleUpdateAppointmentStatus = async (aptId, status) => {
+    const aptIdClean = String(aptId || '').trim();
+    const statusClean = String(status || '').trim();
+    const aptError = (msg) => {
+      setSuccessMessage(msg);
+      setModalType('error');
+      setShowSuccessModal(true);
+    };
+    if (!aptIdClean) {
+      aptError('Appointment is missing an id (cannot update).');
+      return;
+    }
+    if (!statusClean) {
+      aptError('Appointment status is required.');
+      return;
+    }
+    const allowed = new Set([
+      'Waiting','Checked-in','Confirmed','Completed','For Payment','Paid','Cancelled','No-show','Pending','No Show','Checked In'
+    ]);
+    if (!allowed.has(statusClean) && !allowed.has(statusClean.charAt(0).toUpperCase() + statusClean.slice(1).toLowerCase())) {
+      // soft allow, but warn if obviously garbage (empty enum)
+    }
     try {
-      const res = await fetch(`${API_BASE}/api/appointments/${aptId}`, {
+      const res = await fetch(`${API_BASE}/api/appointments/${aptIdClean}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status: statusClean })
       });
       if (res.ok) {
         fetchAppointments();
-        const st = String(status || '').trim().toLowerCase();
+        const st = statusClean.toLowerCase();
         if (st === 'confirmed') {
           refreshPatientsList();
         }
@@ -1869,11 +1890,17 @@ function NurseDashboard() {
             ? 'Patient checked-in.'
             : st === 'no-show' || st === 'no show'
               ? 'Marked as no-show.'
-              : `Appointment ${status}`
+              : `Appointment ${statusClean}`
         );
+        setModalType('success');
         setShowSuccessModal(true);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        aptError(data?.message || `Failed to update appointment to '${statusClean}'.`);
       }
-    } catch (_) {}
+    } catch (_) {
+      aptError('Network error while updating appointment status.');
+    }
   };
 
   const fetchPatientRecords = async () => {
@@ -2113,14 +2140,29 @@ function NurseDashboard() {
   };
 
   const sendApprovalMessage = async () => {
-    if (!selectedApproval?.id) return;
+    const approvalError = (msg) => {
+      setSuccessMessage(msg);
+      setModalType('error');
+      setShowSuccessModal(true);
+    };
+    if (!selectedApproval?.id) {
+      approvalError('Select an approval request first before sending a message.');
+      return;
+    }
     const text = String(approvalMessageText || '').trim();
-    if (!text) return;
+    if (!text) {
+      approvalError('Message cannot be empty. Type your reply then send.');
+      return;
+    }
     setApprovalSending(true);
     try {
       if (supabase) {
         const requestId = toDbId(selectedApproval.id);
-        if (!requestId) return;
+        if (!requestId) {
+          approvalError('Invalid approval request id.');
+          setApprovalSending(false);
+          return;
+        }
         const { error } = await supabase
           .from('appointment_messages')
           .insert({
@@ -2130,7 +2172,11 @@ function NurseDashboard() {
             body: text
           });
 
-        if (error) return;
+        if (error) {
+          approvalError(error.message || 'Failed to send message.');
+          setApprovalSending(false);
+          return;
+        }
         setApprovalMessageText('');
         await openApprovalThread(selectedApproval);
         await fetchApprovalInbox();
@@ -2144,15 +2190,38 @@ function NurseDashboard() {
           setApprovalMessageText('');
           await openApprovalThread(selectedApproval);
           await fetchApprovalInbox();
+        } else {
+          const data = await res.json().catch(() => ({}));
+          approvalError(data?.message || 'Failed to send message.');
         }
       }
-    } catch (_) {} finally {
+    } catch (_) {
+      approvalError('Network error while sending message.');
+    } finally {
       setApprovalSending(false);
     }
   };
 
   const updateApprovalStatus = async (status) => {
-    if (!selectedApproval?.id) return;
+    const approvalError = (msg) => {
+      setSuccessMessage(msg);
+      setModalType('error');
+      setShowSuccessModal(true);
+    };
+    if (!selectedApproval?.id) {
+      approvalError('Select an approval request first.');
+      return;
+    }
+    const statusClean = String(status || '').trim();
+    if (!statusClean) {
+      approvalError('Approval status is required.');
+      return;
+    }
+    const allowed = new Set(['Approved', 'Rejected', 'Suggested', 'Pending']);
+    if (!allowed.has(statusClean)) {
+      approvalError(`Invalid approval status '${statusClean}'.`);
+      return;
+    }
     setApprovalSending(true);
     try {
       const departmentParam = String(approvalDepartment || getApprovalServiceType(selectedApproval) || activeDept || '').trim();
@@ -2448,34 +2517,59 @@ function NurseDashboard() {
   };
 
   const handleAssignPatient = async (patientId, roomCode) => {
+    const patientIdClean = String(patientId || '').trim();
+    const roomCodeClean = String(roomCode || '').trim();
+    const assignErr = (msg) => {
+      setSuccessMessage(msg);
+      setModalType('error');
+      setShowSuccessModal(true);
+    };
+    if (!patientIdClean) {
+      assignErr('Please select a patient first before assigning a room.');
+      return;
+    }
+    if (!roomCodeClean) {
+      assignErr('Room code is required to assign patient.');
+      return;
+    }
     try {
       await fetchJson('/api/wards/assign-patient', {
         apiBase: API_BASE,
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patientId, roomCode })
+        body: JSON.stringify({ patientId: patientIdClean, roomCode: roomCodeClean })
       });
       fetchWardRegistry();
       setAssigningPatient(null);
-      addActivity('Patient Assigned', `Patient assigned to ${roomCode}`, 'success');
+      addActivity('Patient Assigned', `Patient assigned to ${roomCodeClean}`, 'success');
     } catch (err) {
-      alert(err.message || 'Failed to assign patient.');
+      assignErr(err.message || 'Failed to assign patient.');
     }
   };
 
   const handleDischargePatient = async (patientId) => {
+    const patientIdClean = String(patientId || '').trim();
+    const disErr = (msg) => {
+      setSuccessMessage(msg);
+      setModalType('error');
+      setShowSuccessModal(true);
+    };
+    if (!patientIdClean) {
+      disErr('Please select a patient to discharge.');
+      return;
+    }
     if (!window.confirm('Are you sure you want to discharge this patient?')) return;
     try {
       await fetchJson('/api/wards/discharge-patient', {
         apiBase: API_BASE,
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patientId })
+        body: JSON.stringify({ patientId: patientIdClean })
       });
       fetchWardRegistry();
       addActivity('Patient Discharged', 'Patient has been discharged from ward.', 'info');
     } catch (err) {
-      alert(err.message || 'Failed to discharge patient.');
+      disErr(err.message || 'Failed to discharge patient.');
     }
   };
 
@@ -2824,7 +2918,29 @@ function NurseDashboard() {
 
   const createTask = async () => {
       const title = String(newTaskText || '').trim();
-      if (!title) return;
+      const taskErr = (msg) => {
+        setSuccessMessage(msg);
+        setModalType('error');
+        setShowSuccessModal(true);
+      };
+      if (!title) {
+        taskErr('Task title is required.');
+        return;
+      }
+      if (title.length < 3) {
+        taskErr('Task title is too short (min 3 characters).');
+        return;
+      }
+      if (title.length > 240) {
+        taskErr('Task title is too long (max 240 characters).');
+        return;
+      }
+      const priority = String(newTaskPriority || 'routine').trim().toLowerCase();
+      const prioritySet = new Set(['urgent','routine','handover']);
+      if (!prioritySet.has(priority)) {
+        taskErr(`Invalid task priority '${priority}'.`);
+        return;
+      }
       const created = await fetchJson('/api/nurse-workflow/tasks', {
           apiBase: API_BASE,
           method: 'POST',
@@ -2833,14 +2949,14 @@ function NurseDashboard() {
               department: activeDept,
               shiftLabel: currentShiftLabel,
               title,
-              priority: newTaskPriority
+              priority
           })
       });
       setTasks((prev) => [{
           id: created.id,
           text: created.title || title,
           time: created.due_time || new Date(created.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          priority: String(created.priority || newTaskPriority).toLowerCase(),
+          priority: String(created.priority || priority).toLowerCase(),
           completed: Boolean(created.completed),
           patientName: created.patient_name || '',
           status: created.status || 'open'
@@ -2916,10 +3032,23 @@ function NurseDashboard() {
   };
 
   const acknowledgeHandover = async () => {
-      if (!handoverId) return;
+      const ackErr = (msg) => {
+        setSuccessMessage(msg);
+        setModalType('error');
+        setShowSuccessModal(true);
+      };
+      if (!handoverId) {
+        ackErr('Save or select a handover note first before acknowledging.');
+        return;
+      }
+      const idStr = String(handoverId || '').trim();
+      if (!/^\d+$/.test(idStr)) {
+        ackErr('Invalid handover id.');
+        return;
+      }
       setHandoverAcknowledging(true);
       try {
-          await fetchJson(`/api/nurse-workflow/handover/${encodeURIComponent(handoverId)}/acknowledge`, {
+          await fetchJson(`/api/nurse-workflow/handover/${encodeURIComponent(idStr)}/acknowledge`, {
               apiBase: API_BASE,
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -2936,7 +3065,34 @@ function NurseDashboard() {
   };
 
   const recordMedicationAdministration = async (request, status) => {
-      setMedAdminActionId(`${request.requestId}-${status}`);
+      const medErr = (msg) => {
+        setSuccessMessage(msg);
+        setModalType('error');
+        setShowSuccessModal(true);
+      };
+      const statusClean = String(status || '').trim().toLowerCase();
+      const requestId = String(request?.requestId || '').trim();
+      const medicationName = String(request?.medicationName || '').trim();
+      const allowedStatus = new Set(['administered', 'held', 'missed']);
+      if (!allowedStatus.has(statusClean)) {
+        medErr(`Invalid medication status '${statusClean}'.`);
+        return;
+      }
+      if (!medicationName) {
+        medErr('Medication name is required to record administration.');
+        return;
+      }
+      const quantityRaw = request?.quantity;
+      let quantity = 1;
+      if (quantityRaw !== undefined && quantityRaw !== null && String(quantityRaw).trim() !== '') {
+        const n = Number(quantityRaw);
+        if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > 999) {
+          medErr('Quantity must be a whole number from 1 to 999.');
+          return;
+        }
+        quantity = n;
+      }
+      setMedAdminActionId(`${requestId}-${statusClean}`);
       try {
           await fetchJson('/api/nurse-workflow/med-admin', {
               apiBase: API_BASE,
@@ -2944,21 +3100,19 @@ function NurseDashboard() {
               headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
               body: JSON.stringify({
                   department: activeDept,
-                  requestId: request.requestId,
-                  patientId: request.patientId || null,
-                  patientName: request.patientName || '',
-                  medicationName: request.medicationName || '',
-                  dosage: request.dosage || '',
-                  quantity: request.quantity || 1,
-                  status
+                  requestId: requestId || null,
+                  patientId: request?.patientId || null,
+                  patientName: request?.patientName || '',
+                  medicationName,
+                  dosage: request?.dosage || '',
+                  quantity,
+                  status: statusClean
               })
           });
           await refreshNurseWorkflow({ silent: true });
-          addActivity('Medication Round', `${request.medicationName} marked as ${status}.`, status === 'administered' ? 'success' : 'alert');
+          addActivity('Medication Round', `${medicationName} marked as ${statusClean}.`, statusClean === 'administered' ? 'success' : 'alert');
       } catch (error) {
-          setSuccessMessage(String(error?.message || 'Unable to record medication administration.'));
-          setModalType('error');
-          setShowSuccessModal(true);
+          medErr(String(error?.message || 'Unable to record medication administration.'));
       } finally {
           setMedAdminActionId('');
       }
@@ -3049,6 +3203,7 @@ function NurseDashboard() {
   const [newEventDay, setNewEventDay] = useState("");
   const [newEventTime, setNewEventTime] = useState("");
   const [newEventType, setNewEventType] = useState("event");
+  const [calendarEventError, setCalendarEventError] = useState("");
 
   // Orders Summary State
   const [recentOrders, setRecentOrders] = useState([]);
@@ -3064,24 +3219,50 @@ function NurseDashboard() {
 
   const handleAddEvent = (e) => {
       e.preventDefault();
-      if (!newEventTitle.trim() || !newEventDay) return;
+      const title = String(newEventTitle || '').trim();
+      const day = String(newEventDay || '').trim();
+      const calErr = (msg) => {
+        setCalendarEventError(msg);
+        setSuccessMessage(msg);
+        setModalType('error');
+        setShowSuccessModal(true);
+      };
+      if (!title) {
+        calErr('Calendar event title is required.');
+        return;
+      }
+      if (title.length > 160) {
+        calErr('Calendar event title is too long (max 160 characters).');
+        return;
+      }
+      if (!day) {
+        calErr('Select the calendar day first.');
+        return;
+      }
+      const dayNum = Number(day);
+      if (!Number.isFinite(dayNum) || !Number.isInteger(dayNum) || dayNum < 1 || dayNum > 31) {
+        calErr('Calendar day must be between 1 and 31.');
+        return;
+      }
+      setCalendarEventError("");
       
       const newEvent = { 
           id: Date.now(), 
-          title: newEventTitle, 
-          date: parseInt(newEventDay), 
-          time: newEventTime,
-          type: newEventType 
+          title, 
+          date: dayNum, 
+          time: String(newEventTime || '').trim(),
+          type: String(newEventType || 'event').trim() || 'event'
       };
       
       const updatedEvents = [...calendarEvents, newEvent];
       setCalendarEvents(updatedEvents);
       localStorage.setItem('calendarEvents', JSON.stringify(updatedEvents));
-      addActivity('Calendar', `Added ${newEventType}: ${newEventTitle}`, 'info');
+      addActivity('Calendar', `Added ${newEvent.type}: ${title}`, 'info');
       
       setNewEventTitle("");
       setNewEventDay("");
       setNewEventTime("");
+      setNewEventType("event");
   };
 
   const getDaysInMonth = (date) => {
@@ -4309,6 +4490,27 @@ function NurseDashboard() {
 
   const handleRequestSubmit = async (e) => {
     e.preventDefault();
+    const reqErr = (msg) => {
+      setRequestStatus('error');
+      setFormError(msg);
+      setSuccessMessage(msg);
+      setModalType('error');
+      setShowSuccessModal(true);
+    };
+    const patientId = String(editingPatient?._id || editingPatient?.id || '').trim();
+    const messageClean = String(requestMessage || '').trim();
+    if (!patientId) {
+      reqErr('Please select a patient record before submitting a data correction request.');
+      return;
+    }
+    if (!messageClean) {
+      reqErr('Describe the correction first. Request message cannot be empty.');
+      return;
+    }
+    if (messageClean.length < 10) {
+      reqErr('Please give at least 10 characters for the correction details.');
+      return;
+    }
     setRequestStatus('submitting');
     
     try {
@@ -4316,10 +4518,10 @@ function NurseDashboard() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({
-                patientId: editingPatient._id,
+                patientId,
                 requesterName: user.name || 'Nurse',
                 requestType: 'Data Correction',
-                details: `Patient: ${editingPatient.firstName} ${editingPatient.lastName} - Correction: ${requestMessage}`
+                details: `Patient: ${editingPatient.firstName || ''} ${editingPatient.lastName || ''} - Correction: ${messageClean}`
             })
         });
 
@@ -4331,11 +4533,12 @@ function NurseDashboard() {
             setModalType("success");
             setShowSuccessModal(true);
         } else {
-            setRequestStatus('error');
+          const data = await response.json().catch(() => ({}));
+          reqErr(data?.message || 'Failed to submit correction request.');
         }
     } catch (error) {
         console.error("Error submitting request:", error);
-        setRequestStatus('error');
+        reqErr('Network error while submitting request.');
     }
   };
 
@@ -4575,16 +4778,38 @@ function NurseDashboard() {
     setUpdatePatientError("");
 
     // Validate
-    if (!editFormData.firstName || !editFormData.lastName) {
-        setUpdatePatientError("Name fields are required.");
-        return;
+    const fn = String(editFormData.firstName || '').trim();
+    const ln = String(editFormData.lastName || '').trim();
+    const phn = String(editFormData.philHealthNumber || '').trim();
+    const email = String(editFormData.email || '').trim();
+    const contact = String(editFormData.phone || editFormData.contactNumber || '').trim();
+    const errs = [];
+    if (!fn) errs.push('First name is required.');
+    else if (fn.length < 2) errs.push('First name is too short (min 2 characters).');
+    if (!ln) errs.push('Last name is required.');
+    else if (ln.length < 2) errs.push('Last name is too short (min 2 characters).');
+    if (phn && phn.length !== 12) errs.push('PhilHealth Number must be exactly 12 digits.');
+    if (email) {
+      const emailOk = /^[A-Za-z][A-Za-z0-9._-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email);
+      if (!emailOk) errs.push('Enter a valid email address (starts with a letter).');
+    }
+    if (contact) {
+      const digits = contact.replace(/\D/g, '');
+      if (/^\d{10}$/.test(digits)) {
+        // 10-digit local allowed - ok
+      } else if (/^09\d{9}$/.test(digits)) {
+        // PH mobile standard 09 + 9 digits = 11 digits total, but digits=11 so /^09\d{9}$/ is 11 chars. wait: /09\d{9}/ is 11 digits, yes.
+      } else if (/^639\d{9}$/.test(digits)) {
+        // 63 9xx xxx xxxx = 12 digits - ok
+      } else {
+        errs.push('Contact number must be a valid PH mobile (09xxxxxxxxx) or landline.');
+      }
+    }
+    if (errs.length) {
+      setUpdatePatientError(errs.join('  '));
+      return;
     }
 
-    if (editFormData.philHealthNumber && editFormData.philHealthNumber.length !== 12) {
-        setUpdatePatientError("PhilHealth Number must be exactly 12 digits.");
-        return;
-    }
-    
     // Reconstruct emergency contacts array
     const emergencyContacts = [];
     if (editFormData.emergencyName1) emergencyContacts.push({ name: editFormData.emergencyName1, relationship: editFormData.emergencyRel1, phone: editFormData.emergencyContact1 });
@@ -4632,17 +4857,31 @@ function NurseDashboard() {
   };
 
   const confirmDelete = async () => {
-    if (!patientToDelete) return;
+    const delErr = (msg) => {
+      setDeleteStatus('error');
+      setSuccessMessage(msg);
+      setModalType('error');
+      setShowSuccessModal(true);
+    };
+    if (!patientToDelete) {
+      delErr('Select a patient record first before deleting.');
+      return;
+    }
+    const pid = String(patientToDelete._id || patientToDelete.id || '').trim();
+    if (!pid) {
+      delErr('Selected patient is missing an id (cannot delete).');
+      return;
+    }
     setDeleteStatus('deleting');
 
     try {
-        const response = await fetch(`${API_BASE}/api/patients/${patientToDelete._id}`, {
+        const response = await fetch(`${API_BASE}/api/patients/${encodeURIComponent(pid)}`, {
             method: 'DELETE',
             headers: { ...getAuthHeaders() }
         });
 
         if (response.ok) {
-            setPatientsList(prev => prev.filter(p => p._id !== patientToDelete._id));
+            setPatientsList(prev => prev.filter(p => String(p._id || p.id || '') !== pid));
             setDeleteStatus('success');
             setTimeout(() => {
                 setShowDeleteConfirm(false);
@@ -4651,14 +4890,15 @@ function NurseDashboard() {
                 setSuccessMessage("Patient record deleted successfully.");
                 setModalType("success");
                 setShowSuccessModal(true);
-                addActivity('Patient Deleted', `Record for ${patientToDelete.firstName} ${patientToDelete.lastName} removed.`, 'alert');
+                addActivity('Patient Deleted', `Record for ${patientToDelete.firstName || ''} ${patientToDelete.lastName || ''} removed.`, 'alert');
             }, 1000);
         } else {
-            setDeleteStatus('error');
+          const err = await response.json().catch(() => ({}));
+          delErr(err?.message || 'Failed to delete patient record.');
         }
     } catch (error) {
         console.error("Error deleting patient:", error);
-        setDeleteStatus('error');
+        delErr('Network error while deleting patient.');
     }
   };
 
@@ -4728,15 +4968,34 @@ function NurseDashboard() {
   };
 
   const patchOrder = async (orderId, { status, eventNote } = {}) => {
+    const patchErr = (msg) => {
+      setSuccessMessage(msg);
+      setModalType('error');
+      setShowSuccessModal(true);
+    };
     const oid = String(orderId || '').trim();
-    if (!oid) return;
+    if (!oid) {
+      patchErr('Order id is missing (cannot update).');
+      return;
+    }
+    const statusClean = status ? String(status).trim() : '';
+    if (statusClean) {
+      const allowedStatus = new Set([
+        'Pending','For Payment','Paid','Acknowledged','In Progress','Completed','Cancelled','Rejected','For Collection','Collected','For Review'
+      ]);
+      const norm = statusClean.charAt(0).toUpperCase() + statusClean.slice(1).toLowerCase();
+      if (!allowedStatus.has(statusClean) && !allowedStatus.has(norm)) {
+        patchErr(`Invalid order status '${statusClean}'.`);
+        return;
+      }
+    }
     setOrderActionLoadingId(oid);
     try {
       const res = await fetch(`${API_BASE}/api/clinical-orders/${encodeURIComponent(oid)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
-          ...(status ? { status } : {}),
+          ...(statusClean ? { status: statusClean } : {}),
           eventNote: eventNote != null ? String(eventNote) : null,
           actorName: nurseInboxName,
           actorRole: 'nurse'
@@ -5012,14 +5271,30 @@ function NurseDashboard() {
   };
 
   const requestReverifyLabResult = async (id) => {
+    const reverifyErr = (msg) => {
+      setSuccessMessage(msg);
+      setModalType('error');
+      setShowSuccessModal(true);
+    };
     const rid = String(id || '').trim();
-    if (!rid) return;
+    if (!rid) {
+      reverifyErr('Lab result id is missing (cannot request verification).');
+      return;
+    }
     try {
-      await fetch(`${API_BASE}/api/lab-results/${encodeURIComponent(rid)}/verify`, {
+      const res = await fetch(`${API_BASE}/api/lab-results/${encodeURIComponent(rid)}/verify`, {
         method: 'POST',
         headers: { ...getAuthHeaders() }
       });
-    } catch (_) {}
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        reverifyErr(data?.message || 'Failed to request verification.');
+        return;
+      }
+    } catch (_) {
+      reverifyErr('Network error while requesting verification.');
+      return;
+    }
     if (viewingPatient?._id) {
       fetchLabResultsForPatient(String(viewingPatient._id), { silent: true });
     }
@@ -5033,6 +5308,7 @@ function NurseDashboard() {
       diagnosis: '',
       attendingDoctor: ''
     });
+    setAdmissionError("");
     setShowAdmissionModal(true);
   };
 
@@ -5042,14 +5318,46 @@ function NurseDashboard() {
       ...prev,
       [name]: value
     }));
+    if (admissionError) setAdmissionError("");
   };
 
   const handleAdmissionSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedPatientForAdmission) return;
+    const admErr = (msg) => {
+      setAdmissionError(msg);
+      setSuccessMessage(msg);
+      setModalType('error');
+      setShowSuccessModal(true);
+    };
+    if (!selectedPatientForAdmission) {
+      admErr('Select a patient record first before admitting.');
+      return;
+    }
+    const pid = String(selectedPatientForAdmission._id || selectedPatientForAdmission.id || '').trim();
+    if (!pid) {
+      admErr('Selected patient is missing an id (cannot admit).');
+      return;
+    }
+    const wardNumber = String(admissionFormData.wardNumber || '').trim();
+    const diagnosis = String(admissionFormData.diagnosis || '').trim();
+    const attendingDoctor = String(admissionFormData.attendingDoctor || '').trim();
+    const errors = [];
+    if (!wardNumber) errors.push('Ward / Room number is required for admission.');
+    else if (wardNumber.length > 32) errors.push('Ward / Room number is too long (max 32 chars).');
+    if (!diagnosis) errors.push('Admitting diagnosis is required.');
+    else if (diagnosis.length < 3) errors.push('Diagnosis is too short.');
+    else if (diagnosis.length > 1000) errors.push('Diagnosis is too long (max 1000 chars).');
+    if (!attendingDoctor) errors.push('Attending physician is required.');
+    else if (attendingDoctor.length < 3) errors.push('Attending physician name is too short.');
+    else if (attendingDoctor.length > 120) errors.push('Attending physician name is too long.');
+    if (errors.length) {
+      admErr(errors.join('  '));
+      return;
+    }
+    setAdmissionError("");
 
     try {
-      const response = await fetch(`${API_BASE}/api/patients/${selectedPatientForAdmission._id}`, {
+      const response = await fetch(`${API_BASE}/api/patients/${encodeURIComponent(pid)}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -5058,9 +5366,9 @@ function NurseDashboard() {
         body: JSON.stringify({
           ...selectedPatientForAdmission, // Keep existing data
           admissionStatus: 'Inpatient',
-          wardNumber: admissionFormData.wardNumber,
-          diagnosis: admissionFormData.diagnosis,
-          attendingDoctor: admissionFormData.attendingDoctor,
+          wardNumber,
+          diagnosis,
+          attendingDoctor,
           admissionDate: new Date()
         }),
       });
@@ -5068,7 +5376,7 @@ function NurseDashboard() {
       if (response.ok) {
         const updatedPatient = normalizePatient(await response.json());
         // Update list
-        setPatientsList(prev => prev.map(p => p._id === updatedPatient._id ? updatedPatient : p));
+        setPatientsList(prev => prev.map(p => String(p._id || p.id || '') === String(updatedPatient._id || updatedPatient.id || '') ? updatedPatient : p));
         
         // Update stats
         setStats(prev => ({
@@ -5081,25 +5389,26 @@ function NurseDashboard() {
         setSuccessMessage("Patient admitted successfully!");
         setModalType("success");
         setShowSuccessModal(true);
-        addActivity('Patient Admitted', `${updatedPatient.firstName} ${updatedPatient.lastName} admitted to Ward ${updatedPatient.wardNumber}.`, 'success');
+        addActivity('Patient Admitted', `${updatedPatient.firstName || ''} ${updatedPatient.lastName || ''} admitted to Ward ${updatedPatient.wardNumber || wardNumber}.`, 'success');
         setView('inpatients'); // Switch to inpatients view
       } else {
-        setModalType("error");
-        setSuccessMessage("Failed to admit patient.");
-        setShowSuccessModal(true);
+        const err = await response.json().catch(() => ({}));
+        admErr(err?.message || "Failed to admit patient.");
       }
     } catch (error) {
       console.error("Error admitting patient:", error);
-      setModalType("error");
-      setSuccessMessage("Network error.");
-      setShowSuccessModal(true);
+      admErr("Network error while admitting patient.");
     }
   };
 
   // Clinical Update Handlers
+  const [admissionError, setAdmissionError] = useState("");
+  const [clinicalUpdateError, setClinicalUpdateError] = useState("");
+
   const handleClinicalUpdateClick = (patient) => {
     setSelectedPatientForClinicalUpdate(patient);
     setClinicalUpdateStatus('idle');
+    setClinicalUpdateError("");
     setClinicalUpdateFormData({
       type: 'Vitals',
       bloodPressure: '',
@@ -5117,14 +5426,59 @@ function NurseDashboard() {
       ...prev,
       [name]: value
     }));
+    if (clinicalUpdateError) setClinicalUpdateError("");
   };
 
   const handleClinicalUpdateSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedPatientForClinicalUpdate) return;
+    const cuErr = (msg) => {
+      setClinicalUpdateError(msg);
+      setSuccessMessage(msg);
+      setModalType('error');
+      setShowSuccessModal(true);
+    };
+    if (!selectedPatientForClinicalUpdate) {
+      cuErr('Select a patient record first before recording a clinical update.');
+      return;
+    }
+    const pid = String(selectedPatientForClinicalUpdate._id || selectedPatientForClinicalUpdate.id || '').trim();
+    if (!pid) {
+      cuErr('Selected patient is missing an id (cannot record update).');
+      return;
+    }
+    const type = String(clinicalUpdateFormData.type || 'Vitals').trim();
+    const allowedType = new Set(['Vitals','Assessment','Medication','Progress','Note','Lab','Imaging','I/O','Pain','Other']);
+    const bp = String(clinicalUpdateFormData.bloodPressure || '').trim();
+    const hr = String(clinicalUpdateFormData.heartRate || '').trim();
+    const temp = String(clinicalUpdateFormData.temperature || '').trim();
+    const rr = String(clinicalUpdateFormData.respiratoryRate || '').trim();
+    const notes = String(clinicalUpdateFormData.notes || '').trim();
+    const errors = [];
+    if (!type) errors.push('Record type is required.');
+    else if (!allowedType.has(type)) errors.push(`Invalid record type '${type}'.`);
+    if (hr) {
+      const n = Number(hr.replace(/\D/g, ''));
+      if (!Number.isFinite(n) || n < 10 || n > 300) errors.push('Heart rate must be a reasonable whole number (10–300 bpm).');
+    }
+    if (temp) {
+      const n = Number(temp.replace(/[^0-9.]/g, ''));
+      if (!Number.isFinite(n) || n < 30 || n > 45) errors.push('Temperature must be a reasonable value (30–45 °C).');
+    }
+    if (rr) {
+      const n = Number(rr.replace(/\D/g, ''));
+      if (!Number.isFinite(n) || n < 2 || n > 80) errors.push('Respiratory rate must be a reasonable whole number (2–80).');
+    }
+    const allEmpty = !bp && !hr && !temp && !rr && !notes;
+    if (allEmpty) errors.push('At least one vital sign or a note is required to record a clinical update.');
+    if (notes && notes.length > 4000) errors.push('Notes are too long (max 4000 characters).');
+    if (errors.length) {
+      cuErr(errors.join('  '));
+      return;
+    }
+    setClinicalUpdateError("");
 
     try {
-      const response = await fetch(`${API_BASE}/api/patients/${selectedPatientForClinicalUpdate._id}/clinical-records`, {
+      const response = await fetch(`${API_BASE}/api/patients/${encodeURIComponent(pid)}/clinical-records`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -5132,6 +5486,8 @@ function NurseDashboard() {
         },
         body: JSON.stringify({
           ...clinicalUpdateFormData,
+          type,
+          notes,
           nurseName: user.name
         }),
       });
@@ -5139,7 +5495,7 @@ function NurseDashboard() {
       if (response.ok) {
         const updatedPatient = normalizePatient(await response.json());
         // Update list
-        setPatientsList(prev => prev.map(p => p._id === updatedPatient._id ? updatedPatient : p));
+        setPatientsList(prev => prev.map(p => String(p._id || p.id || '') === String(updatedPatient._id || updatedPatient.id || '') ? updatedPatient : p));
         
         setShowClinicalUpdateModal(false);
         setSelectedPatientForClinicalUpdate(null);
@@ -5147,15 +5503,12 @@ function NurseDashboard() {
         setModalType("success");
         setShowSuccessModal(true);
       } else {
-        setModalType("error");
-        setSuccessMessage("Failed to record update.");
-        setShowSuccessModal(true);
+        const err = await response.json().catch(() => ({}));
+        cuErr(err?.message || "Failed to record update.");
       }
     } catch (error) {
       console.error("Error recording update:", error);
-      setModalType("error");
-      setSuccessMessage("Network error.");
-      setShowSuccessModal(true);
+      cuErr("Network error while recording clinical update.");
     }
   };
 

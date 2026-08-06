@@ -2007,53 +2007,119 @@ router.post('/', requireRole(['admin']), async (req, res) => {
 // PUT update patient
 router.put('/:id', async (req, res) => {
     try {
-        const { password, address, emergencyContacts, ...updateData } = req.body;
-        
-        // If password is being updated, hash it
-        // if (password) {
-        //     const salt = await bcrypt.genSalt(10);
-        //     updateData.password = await bcrypt.hash(password, salt);
-        // }
+        const patientId = String(req.params.id || '').trim();
+        if (!patientId) return res.status(400).json({ message: 'Patient id is required.' });
+        const exists = await prisma.patients.findUnique({ where: { id: patientId }, select: { id: true, admission_status: true, ward_number: true, email: true, contact_number: true } });
+        if (!exists) return res.status(404).json({ message: 'Patient not found' });
+
+        const { password, address, emergencyContacts, ...updateData } = req.body || {};
+
+        const cleanStr = (v, maxLen) => {
+            const s = String(v == null ? '' : v).trim();
+            return maxLen && s.length > maxLen ? s.slice(0, maxLen) : s;
+        };
+        const firstName = cleanStr(updateData.firstName, 64);
+        const lastName = cleanStr(updateData.lastName, 64);
+        const middleName = updateData.middleName != null ? cleanStr(updateData.middleName, 64) : null;
+        const gender = updateData.gender != null ? cleanStr(updateData.gender, 32) : null;
+        const emailRaw = cleanStr(updateData.email, 254);
+        const contactRaw = cleanStr(updateData.phone || updateData.contactNumber, 32);
+        const bloodType = updateData.bloodType != null ? cleanStr(updateData.bloodType, 8) : null;
+        const allergies = updateData.allergies != null ? cleanStr(updateData.allergies, 1000) : null;
+        const philHealthRaw = cleanStr(updateData.philHealthNumber, 24);
+        const admissionStatusRaw = cleanStr(updateData.admissionStatus, 32);
+        const wardNumber = updateData.wardNumber != null ? cleanStr(updateData.wardNumber, 32) : null;
+        const diagnosis = updateData.diagnosis != null ? cleanStr(updateData.diagnosis, 1000) : null;
+        const attendingDoctor = updateData.attendingDoctor != null ? cleanStr(updateData.attendingDoctor, 120) : null;
+
+        const errors = [];
+        if (!firstName) errors.push('First name is required.');
+        else if (firstName.length < 2) errors.push('First name is too short (min 2 characters).');
+        if (!lastName) errors.push('Last name is required.');
+        else if (lastName.length < 2) errors.push('Last name is too short (min 2 characters).');
+        if (emailRaw) {
+            const ok = /^[A-Za-z][A-Za-z0-9._-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(emailRaw);
+            if (!ok) errors.push('Enter a valid email address (starts with a letter).');
+        }
+        if (contactRaw) {
+            const digits = contactRaw.replace(/\D/g, '');
+            if (!/^\d{7,15}$/.test(digits)) errors.push('Contact number is not a valid phone format.');
+        }
+        if (philHealthRaw) {
+            if (!/^\d{12}$/.test(philHealthRaw.replace(/\D/g, ''))) errors.push('PhilHealth Number must be exactly 12 digits.');
+        }
+        if (admissionStatusRaw) {
+            const allowedAdmission = new Set(['Outpatient','Inpatient','Discharged','ER Observation','Walk-in','Walk In','Pending Admission']);
+            if (!allowedAdmission.has(admissionStatusRaw)) {
+                return res.status(400).json({ message: `Invalid admission status '${admissionStatusRaw}'.` });
+            }
+        }
 
         // Map mongoose fields to prisma fields
         const prismaData = {
-            first_name: updateData.firstName,
-            last_name: updateData.lastName,
-            middle_name: updateData.middleName,
-            date_of_birth: updateData.dateOfBirth ? new Date(updateData.dateOfBirth) : undefined,
-            gender: updateData.gender,
-            contact_number: updateData.phone || updateData.contactNumber,
-            email: updateData.email,
-            blood_type: updateData.bloodType,
-            allergies: updateData.allergies,
-            philhealth_number: updateData.philHealthNumber,
-            admission_status: updateData.admissionStatus,
-            ward_number: updateData.wardNumber,
-            diagnosis: updateData.diagnosis,
-            attending_doctor: updateData.attendingDoctor,
-            admission_date: updateData.admissionDate ? new Date(updateData.admissionDate) : undefined,
-            clinical_records: updateData.clinicalRecords
+            first_name: firstName || undefined,
+            last_name: lastName || undefined,
+            middle_name: middleName,
+            gender: gender || undefined,
+            contact_number: contactRaw || undefined,
+            email: emailRaw.toLowerCase() || undefined,
+            blood_type: bloodType,
+            allergies: allergies,
+            philhealth_number: philHealthRaw || undefined,
+            admission_status: admissionStatusRaw || undefined,
+            ward_number: wardNumber,
+            diagnosis,
+            attending_doctor: attendingDoctor
         };
+
+        if (updateData.dateOfBirth) {
+            const d = new Date(updateData.dateOfBirth);
+            if (Number.isNaN(d.getTime())) {
+                errors.push('Invalid date of birth.');
+            } else {
+                prismaData.date_of_birth = d;
+            }
+        }
+        if (updateData.admissionDate) {
+            const d = new Date(updateData.admissionDate);
+            if (!Number.isNaN(d.getTime())) prismaData.admission_date = d;
+        }
+
+        if (errors.length) return res.status(400).json({ message: errors.join('  ') });
 
         // Handle address fields
         if (address) {
-            if (address.street) prismaData.street = address.street;
-            if (address.city) prismaData.city = address.city;
-            if (address.province) prismaData.province = address.province;
-            if (address.postalCode) prismaData.postal_code = address.postalCode;
-            if (address.country) prismaData.country = address.country;
+            if (address.street != null) prismaData.street = String(address.street).slice(0, 255);
+            if (address.city != null) prismaData.city = String(address.city).slice(0, 120);
+            if (address.province != null) prismaData.province = String(address.province).slice(0, 120);
+            if (address.postalCode != null) prismaData.postal_code = String(address.postalCode).slice(0, 16);
+            if (address.country != null) prismaData.country = String(address.country).slice(0, 80);
         }
 
         // Handle emergency contacts
-        if (emergencyContacts) {
-            prismaData.emergency_contacts = emergencyContacts;
+        if (Array.isArray(emergencyContacts)) {
+            const safe = [];
+            for (const ec of emergencyContacts) {
+                if (!ec || !ec.name) continue;
+                safe.push({
+                    name: String(ec.name).slice(0, 120),
+                    relationship: ec.relationship != null ? String(ec.relationship).slice(0, 64) : null,
+                    phone: ec.phone != null ? String(ec.phone).slice(0, 32) : null
+                });
+            }
+            prismaData.emergency_contacts = safe;
+        }
+
+        // Keep clinical_records JSON blob as-is if provided
+        if (updateData.clinicalRecords !== undefined) {
+            prismaData.clinical_records = updateData.clinicalRecords;
         }
 
         // Remove undefined fields
         Object.keys(prismaData).forEach(key => prismaData[key] === undefined && delete prismaData[key]);
-        
+
         const updatedPatient = await prisma.patients.update({
-            where: { id: req.params.id },
+            where: { id: patientId },
             data: prismaData
         });
 
@@ -2062,7 +2128,96 @@ router.put('/:id', async (req, res) => {
         if (err.code === 'P2025') {
             return res.status(404).json({ message: "Patient not found" });
         }
-        res.status(500).json({ message: "Error updating patient", error: err.message });
+        res.status(500).json({ message: "Error updating patient", error: String(err.message || '') });
+    }
+});
+
+// POST patient clinical records (nurse vitals / progress notes)
+router.post('/:id/clinical-records', requireRole(['admin','nurse','doctor']), async (req, res) => {
+    try {
+        const patientId = String(req.params.id || '').trim();
+        if (!patientId) return res.status(400).json({ message: 'Patient id is required.' });
+        const patient = await prisma.patients.findUnique({ where: { id: patientId }, select: { id: true, first_name: true, last_name: true, clinical_records: true } });
+        if (!patient) return res.status(404).json({ message: 'Patient not found.' });
+
+        const cleanStr = (v, maxLen) => {
+            const s = String(v == null ? '' : v).trim();
+            return maxLen && s.length > maxLen ? s.slice(0, maxLen) : s;
+        };
+        const allowedType = new Set(['Vitals','Assessment','Medication','Progress','Note','Lab','Imaging','I/O','Pain','Other']);
+        const typeRaw = cleanStr(req.body?.type || 'Vitals', 32);
+        const type = allowedType.has(typeRaw) ? typeRaw : 'Other';
+        const bloodPressure = req.body?.bloodPressure != null ? cleanStr(req.body.bloodPressure, 32) : null;
+        const heartRateRaw = req.body?.heartRate;
+        const temperatureRaw = req.body?.temperature;
+        const respiratoryRateRaw = req.body?.respiratoryRate;
+        const oxygenSaturation = req.body?.oxygenSaturation != null ? cleanStr(req.body.oxygenSaturation, 32) : null;
+        const notes = req.body?.notes != null ? String(req.body.notes).slice(0, 4000) : null;
+        const nurseName = req.body?.nurseName != null ? cleanStr(req.body.nurseName, 120) : null;
+        const errors = [];
+
+        let heartRate = null;
+        if (heartRateRaw !== undefined && heartRateRaw !== null && String(heartRateRaw).trim() !== '') {
+            const n = Number(String(heartRateRaw).replace(/\D/g, ''));
+            if (!Number.isFinite(n) || n < 10 || n > 300) errors.push('Heart rate must be a reasonable whole number (10–300 bpm).');
+            else heartRate = n;
+        }
+        let temperature = null;
+        if (temperatureRaw !== undefined && temperatureRaw !== null && String(temperatureRaw).trim() !== '') {
+            const n = Number(String(temperatureRaw).replace(/[^0-9.]/g, ''));
+            if (!Number.isFinite(n) || n < 30 || n > 45) errors.push('Temperature must be a reasonable value (30–45 °C).');
+            else temperature = n;
+        }
+        let respiratoryRate = null;
+        if (respiratoryRateRaw !== undefined && respiratoryRateRaw !== null && String(respiratoryRateRaw).trim() !== '') {
+            const n = Number(String(respiratoryRateRaw).replace(/\D/g, ''));
+            if (!Number.isFinite(n) || n < 2 || n > 80) errors.push('Respiratory rate must be a reasonable whole number (2–80).');
+            else respiratoryRate = n;
+        }
+        const anyFilled = bloodPressure || heartRate != null || temperature != null || respiratoryRate != null || oxygenSaturation || (notes && String(notes).trim());
+        if (!anyFilled) errors.push('At least one vital sign or a note is required.');
+
+        if (errors.length) return res.status(400).json({ message: errors.join('  ') });
+
+        const newRecord = {
+            id: `rec_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+            type,
+            bloodPressure,
+            heartRate,
+            temperature,
+            respiratoryRate,
+            oxygenSaturation,
+            notes: notes && String(notes).trim() ? String(notes).trim() : null,
+            nurseName,
+            recordedAt: new Date().toISOString()
+        };
+
+        const prev = patient.clinical_records && typeof patient.clinical_records === 'object' && Array.isArray(patient.clinical_records)
+            ? patient.clinical_records
+            : [];
+        const nextRecords = [...prev, newRecord];
+        const updated = await prisma.patients.update({
+            where: { id: patientId },
+            data: { clinical_records: nextRecords }
+        });
+
+        // Activity log (best-effort)
+        try {
+            const actor = String(req.headers['x-user-name'] || nurseName || 'Nurse').slice(0, 120);
+            await prisma.activity_logs.create({
+                data: {
+                    actor_name: actor,
+                    role: String(req.headers['x-user-role'] || 'Nurse').slice(0, 32),
+                    action: 'Clinical Record Added',
+                    target: `Patient:${patientId.slice(0, 8)}`,
+                    details: `${type} recorded for ${String(updated.first_name || '')} ${String(updated.last_name || '')}`.trim()
+                }
+            });
+        } catch (_) {}
+
+        res.json(updated);
+    } catch (err) {
+        res.status(500).json({ message: 'Error saving clinical record.', error: String(err.message || '') });
     }
 });
 

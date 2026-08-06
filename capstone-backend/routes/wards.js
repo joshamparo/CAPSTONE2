@@ -660,20 +660,49 @@ router.post('/discharge-patient', requireRole(['admin', 'nurse']), async (req, r
   try {
     const { patientId } = req.body;
     if (!patientId) return res.status(400).json({ message: 'Patient ID is required.' });
+    const pid = String(patientId).trim();
+    if (!pid) return res.status(400).json({ message: 'Patient ID is required.' });
+
+    const existing = await prisma.patients.findUnique({
+      where: { id: pid },
+      select: { id: true, ward_number: true, bed_number: true }
+    });
+    if (!existing) return res.status(404).json({ message: 'Patient not found.' });
+    const affectedWard = existing.ward_number;
 
     await prisma.patients.update({
-      where: { id: patientId },
+      where: { id: pid },
       data: {
         ward_number: null,
+        bed_number: null,
         admission_status: 'Discharged'
       }
     });
+
+    if (affectedWard) {
+      const cleanWard = String(affectedWard).trim();
+      if (cleanWard) {
+        const rooms = await prisma.bed_rooms.findMany({
+          where: { ward: cleanWard },
+          select: { room_code: true, bed_number: true, patient_id: true }
+        }).catch(() => []);
+        for (const r of rooms) {
+          if (r.patient_id && String(r.patient_id) === pid) {
+            await prisma.bed_rooms.updateMany({
+              where: { ward: cleanWard, room_code: r.room_code, bed_number: r.bed_number },
+              data: { patient_id: null, patient_name: null, is_occupied: false }
+            }).catch(() => {});
+          }
+        }
+      }
+    }
 
     // Clear cache
     buildWardRegistry._cache.payload = null;
 
     res.json({ message: 'Patient discharged successfully.' });
   } catch (err) {
+    if (err?.code === 'P2025') return res.status(404).json({ message: 'Patient not found.' });
     res.status(500).json({ message: err.message || 'Failed to discharge patient.' });
   }
 });
