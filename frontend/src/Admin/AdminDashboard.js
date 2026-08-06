@@ -268,8 +268,42 @@ function AdminDashboard() {
     ];
   });
   const [newTodo, setNewTodo] = useState("");
+  const [newTodoError, setNewTodoError] = useState("");
   useEffect(() => { localStorage.setItem('adminTodos', JSON.stringify(adminTodos)); }, [adminTodos]);
-  const handleAddTodo = (e) => { e.preventDefault(); if (!newTodo.trim()) return; setAdminTodos([...adminTodos, { id: Date.now(), text: newTodo, completed: false }]); setNewTodo(""); };
+  const handleAddTodo = (e) => {
+    e.preventDefault();
+    const trimmed = String(newTodo || "").trim();
+    if (!trimmed) {
+      setNewTodoError("Task cannot be empty. Type something you need to do.");
+      setModalType("error");
+      setSuccessMessage("Please enter a task before adding it.");
+      setShowSuccessModal(true);
+      const todoInputEl = document.querySelector('form.todo-input-group input[type="text"].todo-input');
+      if (todoInputEl) {
+        todoInputEl.classList.remove("todo-input-shake");
+        void todoInputEl.offsetWidth;
+        todoInputEl.classList.add("todo-input-shake");
+      }
+      return;
+    }
+    if (trimmed.length < 3) {
+      setNewTodoError("Task is too short. Add at least 3 characters.");
+      setModalType("error");
+      setSuccessMessage("Task is too short. Add at least 3 characters.");
+      setShowSuccessModal(true);
+      return;
+    }
+    if (trimmed.length > 220) {
+      setNewTodoError("Task is too long. Max 220 characters allowed.");
+      setModalType("error");
+      setSuccessMessage("Task is too long. Max 220 characters allowed.");
+      setShowSuccessModal(true);
+      return;
+    }
+    setNewTodoError("");
+    setAdminTodos([...adminTodos, { id: Date.now(), text: trimmed, completed: false }]);
+    setNewTodo("");
+  };
   const handleToggleTodo = (id) => setAdminTodos(adminTodos.map(todo => todo.id === id ? { ...todo, completed: !todo.completed } : todo));
   const handleDeleteTodo = (id) => setAdminTodos(adminTodos.filter(todo => todo.id !== id));
 
@@ -1212,11 +1246,55 @@ function AdminDashboard() {
   };
 
   const handleSaveRoom = async () => {
-    if (!selectedWardRoomId) return;
+    if (!selectedWardRoomId) {
+      setRoomEditorError('Select a room first.');
+      return;
+    }
+    const errors = [];
+    const clean = (v) => String(v || "").trim();
+    const roomCode = clean(roomEditor?.roomCode);
+    const wardName = clean(roomEditor?.wardName);
+    const status = clean(roomEditor?.status);
+    const bedCountRaw = Number(roomEditor?.bedCount ?? roomEditor?.bed_count ?? NaN);
+    const capacityRaw = Number(roomEditor?.capacity ?? NaN);
+
+    if (!roomCode) errors.push('Room Code is required.');
+    else if (roomCode.length > 32) errors.push('Room Code must be 32 characters or less.');
+    if (!wardName) errors.push('Ward / Ward Name is required.');
+    else if (wardName.length > 64) errors.push('Ward Name must be 64 characters or less.');
+    if (!status) errors.push('Room Status is required.');
+    else if (!['Available','Occupied','Dirty','Maintenance','Discharging'].includes(status)) {
+      errors.push('Room Status must be one of: Available, Occupied, Dirty, Maintenance, Discharging.');
+    }
+    if (roomEditor?.bedCount !== undefined && roomEditor?.bedCount !== null && String(roomEditor.bedCount).trim() !== '') {
+      if (!Number.isFinite(bedCountRaw) || !Number.isInteger(bedCountRaw) || bedCountRaw < 0) {
+        errors.push('Bed Count must be zero or a positive whole number.');
+      } else if (bedCountRaw > 999) {
+        errors.push('Bed Count cannot exceed 999.');
+      }
+    }
+    if (roomEditor?.capacity !== undefined && roomEditor?.capacity !== null && String(roomEditor.capacity).trim() !== '') {
+      if (!Number.isFinite(capacityRaw) || !Number.isInteger(capacityRaw) || capacityRaw < 0) {
+        errors.push('Capacity must be zero or a positive whole number.');
+      } else if (capacityRaw > 999) {
+        errors.push('Capacity cannot exceed 999.');
+      }
+    }
+    if (errors.length > 0) {
+      setRoomEditorError(errors.join('\n'));
+      setModalType('error');
+      setSuccessMessage(errors[0]);
+      setShowSuccessModal(true);
+      return;
+    }
+
     setRoomSaving(true);
     setRoomEditorError('');
     setRoomEditorSuccess('');
     try {
+      const payload = { ...roomEditor, roomCode, wardName, status };
+      if (Number.isInteger(bedCountRaw) && bedCountRaw >= 0) payload.bedCount = bedCountRaw;
+      if (Number.isInteger(capacityRaw) && capacityRaw >= 0) payload.capacity = capacityRaw;
       await fetchJson(`/api/wards/rooms/${selectedWardRoomId}`, {
         apiBase: API_BASE,
         method: 'PATCH',
@@ -1224,7 +1302,7 @@ function AdminDashboard() {
           ...getAuthHeaders(),
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(roomEditor)
+        body: JSON.stringify(payload)
       });
       await fetchWardRegistry();
       setRoomEditorSuccess('Room details updated.');
@@ -1236,9 +1314,54 @@ function AdminDashboard() {
   };
 
   const handleCreateRoom = async () => {
+    const errors = [];
+    const clean = (v) => String(v || "").trim();
+    const roomCode = clean(newRoomForm?.roomCode);
+    const wardName = clean(newRoomForm?.wardName);
+    const status = clean(newRoomForm?.status) || 'Available';
+    const roomType = clean(newRoomForm?.roomType);
+    const bedCountRaw = Number(newRoomForm?.bedCount ?? newRoomForm?.bed_count ?? NaN);
+    const capacityRaw = Number(newRoomForm?.capacity ?? NaN);
+    const wardId = clean(newRoomForm?.wardId || newRoomForm?.ward_id);
+
+    if (!roomCode) errors.push('Room Code is required.');
+    else if (roomCode.length > 32) errors.push('Room Code must be 32 characters or less.');
+    if (!wardName) errors.push('Ward Name is required.');
+    else if (wardName.length > 64) errors.push('Ward Name must be 64 characters or less.');
+    if (!['Available','Occupied','Dirty','Maintenance','Discharging'].includes(status)) {
+      errors.push('Room Status must be one of: Available, Occupied, Dirty, Maintenance, Discharging.');
+    }
+    if (roomType && roomType.length > 32) errors.push('Room Type must be 32 characters or less.');
+    if (String(newRoomForm?.bedCount ?? '').trim() !== '' && newRoomForm?.bedCount !== undefined && newRoomForm?.bedCount !== null) {
+      if (!Number.isFinite(bedCountRaw) || !Number.isInteger(bedCountRaw) || bedCountRaw < 0) {
+        errors.push('Bed Count must be zero or a positive whole number.');
+      } else if (bedCountRaw > 999) {
+        errors.push('Bed Count cannot exceed 999.');
+      }
+    }
+    if (String(newRoomForm?.capacity ?? '').trim() !== '' && newRoomForm?.capacity !== undefined && newRoomForm?.capacity !== null) {
+      if (!Number.isFinite(capacityRaw) || !Number.isInteger(capacityRaw) || capacityRaw < 0) {
+        errors.push('Capacity must be zero or a positive whole number.');
+      } else if (capacityRaw > 999) {
+        errors.push('Capacity cannot exceed 999.');
+      }
+    }
+    if (errors.length > 0) {
+      setNewRoomError(errors.join('\n'));
+      setModalType('error');
+      setSuccessMessage(errors[0]);
+      setShowSuccessModal(true);
+      return;
+    }
+
     setNewRoomSaving(true);
     setNewRoomError('');
     try {
+      const payload = { ...newRoomForm, roomCode, wardName, status };
+      if (Number.isInteger(bedCountRaw) && bedCountRaw >= 0) payload.bedCount = bedCountRaw;
+      if (Number.isInteger(capacityRaw) && capacityRaw >= 0) payload.capacity = capacityRaw;
+      if (wardId) payload.wardId = wardId;
+      if (roomType) payload.roomType = roomType;
       const created = await fetchJson(`/api/wards/rooms`, {
         apiBase: API_BASE,
         method: 'POST',
@@ -1246,7 +1369,7 @@ function AdminDashboard() {
           ...getAuthHeaders(),
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(newRoomForm)
+        body: JSON.stringify(payload)
       });
       const registry = await fetchWardRegistry();
       setShowAddRoomForm(false);
@@ -2615,14 +2738,49 @@ function AdminDashboard() {
   const handleSaveStaff = async (e) => {
     e.preventDefault();
 
-    // Final Validation before Saving
-    if (!editFormData.email.endsWith("@gmail.com") && !editFormData.email.endsWith("@yahoo.com")) {
-      setEmailNoticeField("edit-email");
-      setEmailNotice("Email must end with @gmail.com or @yahoo.com");
+    const errors = [];
+    const clean = (v) => String(v || "").trim();
+    const firstName = clean(editFormData.firstName);
+    const lastName = clean(editFormData.lastName);
+    const role = clean(editFormData.role || editFormData.accountType);
+    const email = clean(editFormData.email);
+    const phone = clean(editFormData.phone);
+    const isValidEmail = (v) => /^[A-Za-z][A-Za-z0-9._-]*@(gmail\.com|yahoo\.com)$/.test(v);
+    const isValidPHPhone = (v) => /^09\d{9}$/.test(v);
+
+    if (!firstName || firstName.length < 2) errors.push("First Name is required (at least 2 characters).");
+    if (!lastName || lastName.length < 2) errors.push("Last Name is required (at least 2 characters).");
+    if (!role) errors.push("Role is required.");
+    if (!email) {
+      errors.push("Email is required.");
+    } else if (!email.endsWith("@gmail.com") && !email.endsWith("@yahoo.com")) {
+      errors.push("Email must end with @gmail.com or @yahoo.com");
+    } else if (!isValidEmail(email)) {
+      errors.push("Email must start with a letter and match allowed format.");
+    }
+    if (!phone) {
+      errors.push("Phone number is required.");
+    } else if (!isValidPHPhone(phone)) {
+      errors.push("Phone number must start with 09 and be 11 digits.");
+    }
+    if (errors.length > 0) {
+      setModalType("error");
+      setSuccessMessage(errors.join(" "));
+      setShowSuccessModal(true);
       return;
     }
 
     try {
+        const payload = {
+          ...editFormData,
+          firstName,
+          lastName,
+          role,
+          email,
+          phone
+        };
+        delete payload.id;
+        delete payload._id;
         const updatedStaff = await fetchJson(`/api/staff/${editingStaff.id}`, {
           apiBase: API_BASE,
           method: 'PUT',
@@ -2630,7 +2788,7 @@ function AdminDashboard() {
             'Content-Type': 'application/json',
             ...getAuthHeaders()
           },
-          body: JSON.stringify(editFormData)
+          body: JSON.stringify(payload)
         });
             await logActivity('Update', `Updated staff details for ${updatedStaff.firstName} ${updatedStaff.lastName}`, `Staff: ${updatedStaff.email}`);
             setStaffList(staffList.map(staff => 
@@ -4200,17 +4358,47 @@ function AdminDashboard() {
                   <span className="text-xs text-slate-500 font-medium">{adminTodos.filter(t => !t.completed).length} pending</span>
                 </div>
 
-                <form onSubmit={handleAddTodo} className="todo-input-group mb-4">
-                  <input
-                    type="text"
-                    placeholder="Add a new task..."
-                    className="todo-input"
-                    value={newTodo}
-                    onChange={(e) => setNewTodo(e.target.value)}
-                  />
-                  <button type="submit" className="todo-add-btn">
-                    <Plus size={18} />
-                  </button>
+                <form onSubmit={handleAddTodo} className="todo-input-group mb-4" noValidate>
+                  {newTodoError ? (
+                    <div
+                      className="text-xs font-medium"
+                      style={{
+                        marginBottom: '8px',
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        background: '#fef2f2',
+                        color: '#b91c1c',
+                        border: '1px solid #fecaca'
+                      }}
+                    >
+                      {newTodoError}
+                    </div>
+                  ) : null}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="Add a new task..."
+                      className="todo-input"
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        transition: 'box-shadow 200ms ease, border-color 200ms ease',
+                        outline: 'none',
+                        border: newTodoError ? '1px solid #fca5a5' : undefined,
+                        boxShadow: newTodoError ? '0 0 0 3px rgba(252, 165, 165, 0.25)' : undefined
+                      }}
+                      value={newTodo}
+                      onChange={(e) => {
+                        setNewTodo(e.target.value);
+                        if (newTodoError) setNewTodoError("");
+                      }}
+                      aria-invalid={Boolean(newTodoError)}
+                      aria-describedby={newTodoError ? "todo-input-error" : undefined}
+                    />
+                    <button type="submit" className="todo-add-btn" title="Add task">
+                      <Plus size={18} />
+                    </button>
+                  </div>
                 </form>
 
                 <div className="modern-list scrollable-list-y" style={{ flex: 1, minHeight: '350px', maxHeight: '350px' }}>

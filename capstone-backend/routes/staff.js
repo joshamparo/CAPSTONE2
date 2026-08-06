@@ -637,11 +637,58 @@ router.post('/', requireRole(['admin']), async (req, res) => {
         } = req.body;
 
         const normalizedAccountType = String(accountType || 'staff').trim().toLowerCase();
+
+        // ---- Backend required + format validations (belt-and-suspenders against direct API calls) ----
+        const errors = [];
+        const cleanStr = (v) => String(v || "").trim();
+        const isValidPHPhone = (v) => /^09\d{9}$/.test(cleanStr(v));
+        const isValidEmail = (v) => /^[A-Za-z][A-Za-z0-9._-]*@(gmail\.com|yahoo\.com)$/.test(cleanStr(v));
+
+        const firstNameClean = cleanStr(firstName);
+        const lastNameClean = cleanStr(lastName);
+        const emailClean = email ? normalizeEmail(email) : '';
+        const phoneClean = cleanStr(phone);
+        const roleClean = normalizedAccountType;
+
+        if (!firstNameClean || firstNameClean.length < 2) errors.push("First Name is required (at least 2 characters).");
+        if (!lastNameClean || lastNameClean.length < 2) errors.push("Last Name is required (at least 2 characters).");
+        if (!roleClean) errors.push("Role / accountType is required.");
+        if (!password || String(password).trim().length < 6) errors.push("Password is required (min 6 chars).");
+        if (!emailClean) {
+            errors.push("Email is required.");
+        } else if (!isValidEmail(emailClean)) {
+            errors.push("Email must start with a letter and end with @gmail.com or @yahoo.com.");
+        }
+        if (!phoneClean) {
+            errors.push("Phone number is required.");
+        } else if (!isValidPHPhone(phoneClean)) {
+            errors.push("Phone number must start with 09 and be 11 digits.");
+        }
+        if (cleanStr(streetAddress).length > 0 && cleanStr(streetAddress).length < 5) errors.push("Street Address, if provided, must be at least 5 characters.");
+        if (cleanStr(city) && /\d/.test(cleanStr(city))) errors.push("City / Municipality must not contain digits.");
+
+        const medicalRoles = ['doctor', 'nurse', 'pharmacist'];
+        if (medicalRoles.includes(normalizedAccountType)) {
+            const lic = cleanStr(medicalLicenseNumber);
+            if (!/^\d{7}$/.test(lic)) errors.push("Medical License Number must be exactly 7 digits for Doctor/Nurse/Pharmacist.");
+            if (!cleanStr(specialization)) errors.push("Specialization is required for this role.");
+        }
+
+        if (normalizedAccountType === 'nurse' && !cleanStr(specialization)) errors.push("Nurse department / specialization is required.");
+
+        const isMedDoctor = normalizedAccountType === 'doctor' && cleanStr(specialization).toLowerCase() === 'medicine';
+        if (isMedDoctor && !cleanStr(department)) errors.push("Department is required for Medicine doctors (ER or OPD/Medicine).");
+
+        const isDocSec = normalizedAccountType === 'doctor_secretary';
+        if (isDocSec && !cleanStr(linkedDoctorId)) errors.push("Linked Doctor is required for Doctor Secretary.");
+
+        if (errors.length > 0) {
+            return res.status(400).json({ message: errors.join(" | "), field: errors[0].includes("Email") ? "email" : errors[0].includes("Phone") ? "phone" : undefined });
+        }
         
         // 1. Check for Duplicate Email across ALL collections
-        const normalizedEmail = email ? normalizeEmail(email) : '';
-        if (normalizedEmail) {
-            const e = normalizedEmail;
+        if (emailClean) {
+            const e = emailClean;
             const [existingStaff, existingNurse, existingDoctor, existingAccount, existingPatient] = await Promise.all([
                 prisma.staff.findFirst({ where: { email: { equals: e, mode: 'insensitive' } } }),
                 prisma.nurses.findFirst({ where: { email: { equals: e, mode: 'insensitive' } } }),
@@ -653,13 +700,9 @@ router.post('/', requireRole(['admin']), async (req, res) => {
             if (existingStaff || existingNurse || existingDoctor || existingAccount || existingPatient) {
                 return res.status(400).json({ 
                     field: "email",
-                    message: `Email "${normalizedEmail}" is already registered.` 
+                    message: `Email "${e}" is already registered.` 
                 });
             }
-        }
-
-        if (!password || String(password).trim().length < 6) {
-            return res.status(400).json({ message: "Password is required (min 6 chars)." });
         }
         
         // Backend Date Validation
@@ -2072,6 +2115,66 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         
         const { user, model } = result;
 
+        // ---- Backend update validation (required fields + email/phone format) ----
+        const bodyErrors = [];
+        const cleanStr = (v) => String(v || "").trim();
+        const isValidPHPhone = (v) => /^09\d{9}$/.test(cleanStr(v));
+        const isValidEmail = (v) => /^[A-Za-z][A-Za-z0-9._-]*@(gmail\.com|yahoo\.com)$/.test(cleanStr(v));
+
+        const firstNameIn = req.body?.firstName ?? req.body?.first_name ?? (model === 'accounts' ? undefined : user?.first_name);
+        const lastNameIn = req.body?.lastName ?? req.body?.last_name ?? (model === 'accounts' ? undefined : user?.last_name);
+        const phoneIn = req.body?.phone ?? user?.phone ?? user?.contact_number;
+        const emailIn = req.body?.email ?? user?.email;
+
+        const firstNameClean = cleanStr(firstNameIn);
+        const lastNameClean = cleanStr(lastNameIn);
+        const phoneClean = cleanStr(phoneIn);
+        const emailClean = emailIn ? normalizeEmail(emailIn) : '';
+
+        if (model !== 'accounts') {
+            if (!firstNameClean || firstNameClean.length < 2) bodyErrors.push("First Name is required (at least 2 characters).");
+            if (!lastNameClean || lastNameClean.length < 2) bodyErrors.push("Last Name is required (at least 2 characters).");
+        }
+        if (!emailClean) bodyErrors.push("Email is required.");
+        else if (!isValidEmail(emailClean)) bodyErrors.push("Email must start with a letter and end with @gmail.com or @yahoo.com.");
+
+        if (model === 'accounts') {
+            // accounts model: phone maps to contact_number BigInt string; required to be 11-digit PH 09xxxxxxxxx if provided
+            if (phoneClean) {
+                if (!isValidPHPhone(phoneClean)) bodyErrors.push("Phone number must start with 09 and be 11 digits.");
+            }
+        } else {
+            if (!phoneClean) bodyErrors.push("Phone number is required.");
+            else if (!isValidPHPhone(phoneClean)) bodyErrors.push("Phone number must start with 09 and be 11 digits.");
+        }
+        if (req.body?.streetAddress !== undefined && cleanStr(req.body.streetAddress).length > 0 && cleanStr(req.body.streetAddress).length < 5) {
+            bodyErrors.push("Street Address, if provided, must be at least 5 characters.");
+        }
+        if (req.body?.city !== undefined && cleanStr(req.body.city) && /\d/.test(cleanStr(req.body.city))) {
+            bodyErrors.push("City / Municipality must not contain digits.");
+        }
+        if (bodyErrors.length > 0) {
+            return res.status(400).json({
+                message: bodyErrors.join(" | "),
+                field: bodyErrors.some((m) => m.includes("Email")) ? "email" : bodyErrors.some((m) => m.includes("Phone")) ? "phone" : undefined
+            });
+        }
+        // If email is being changed, enforce unique across ALL models (admin self-edit + admin → staff edit)
+        const currentEmail = user?.email ? normalizeEmail(user.email) : '';
+        if (emailClean && emailClean !== currentEmail) {
+            const e = emailClean;
+            const [existingStaff, existingNurse, existingDoctor, existingAccount, existingPatient] = await Promise.all([
+                prisma.staff.findFirst({ where: { email: { equals: e, mode: 'insensitive' } } }),
+                prisma.nurses.findFirst({ where: { email: { equals: e, mode: 'insensitive' } } }),
+                prisma.doctors.findFirst({ where: { email: { equals: e, mode: 'insensitive' } } }),
+                prisma.accounts.findFirst({ where: { email: { equals: e, mode: 'insensitive' } } }),
+                prisma.patients.findFirst({ where: { email: { equals: e, mode: 'insensitive' } } })
+            ]);
+            if (existingStaff || existingNurse || existingDoctor || existingAccount || existingPatient) {
+                return res.status(400).json({ field: "email", message: `Email "${e}" is already registered.` });
+            }
+        }
+
         // Verify Current Password if provided (Required for sensitive updates)
         /*
         if (req.body.currentPassword) {
@@ -2105,23 +2208,30 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         const { currentPassword, requiresPasswordAuth, _id, id, newPassword, confirmNewPassword, profilePicture, avatarUrl, avatar_url, department, phone, ...restData } = req.body;
         
         let updateData = { ...restData };
+        if (emailClean && updateData.email !== undefined) updateData.email = emailClean;
+        if (model !== 'accounts' && firstNameClean && updateData.firstName === undefined && updateData.first_name === undefined) {
+            updateData.first_name = firstNameClean;
+        }
+        if (model !== 'accounts' && lastNameClean && updateData.lastName === undefined && updateData.last_name === undefined) {
+            updateData.last_name = lastNameClean;
+        }
         
         if (model === 'accounts') {
-            if (phone !== undefined) {
+            if (phoneClean) {
                 // contact_number is BigInt in prisma schema
-                const sanitizedPhone = phone ? phone.replace(/\D/g, '') : '';
+                const sanitizedPhone = phoneClean.replace(/\D/g, '');
                 updateData.contact_number = sanitizedPhone ? BigInt(sanitizedPhone) : null;
             }
             delete updateData.department;
             delete updateData.phone;
         } else if (model === 'doctors') {
-            if (phone !== undefined) {
-                updateData.phone = phone;
+            if (phoneClean) {
+                updateData.phone = phoneClean;
             }
             delete updateData.department;
         } else if (model === 'nurses') {
-            if (phone !== undefined) {
-                updateData.phone = phone;
+            if (phoneClean) {
+                updateData.phone = phoneClean;
             }
             if (department !== undefined) {
                 updateData.department = department;

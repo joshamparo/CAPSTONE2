@@ -344,17 +344,35 @@ async function buildWardRegistry() {
 function validateRoomPayload(body) {
   const roomCode = String(body?.roomCode || body?.room_code || '').trim();
   const wardName = String(body?.wardName || body?.ward_name || '').trim();
+  const wardIdRaw = body?.wardId ?? body?.ward_id;
+  const wardId = wardIdRaw != null && String(wardIdRaw).trim() !== '' ? String(wardIdRaw).trim() : null;
   const status = titleCaseStatus(body?.status);
   const note = String(body?.note || '').trim();
+  const roomTypeRaw = body?.roomType ?? body?.room_type;
+  const roomType = roomTypeRaw != null && String(roomTypeRaw).trim() !== '' ? String(roomTypeRaw).trim() : null;
+  const bedCountRaw = body?.bedCount ?? body?.bed_count;
+  const capacityRaw = body?.capacity;
+  let bedCount = null;
+  let capacity = null;
 
   if (!roomCode) {
     const err = new Error('Room code is required.');
     err.status = 400;
     throw err;
   }
+  if (roomCode.length > 32) {
+    const err = new Error('Room code must be 32 characters or less.');
+    err.status = 400;
+    throw err;
+  }
 
   if (!wardName) {
     const err = new Error('Ward name is required.');
+    err.status = 400;
+    throw err;
+  }
+  if (wardName.length > 64) {
+    const err = new Error('Ward name must be 64 characters or less.');
     err.status = 400;
     throw err;
   }
@@ -365,7 +383,49 @@ function validateRoomPayload(body) {
     throw err;
   }
 
-  return { roomCode, wardName, status, note };
+  if (note.length > 500) {
+    const err = new Error('Room note must be 500 characters or less.');
+    err.status = 400;
+    throw err;
+  }
+
+  if (roomType && roomType.length > 32) {
+    const err = new Error('Room type must be 32 characters or less.');
+    err.status = 400;
+    throw err;
+  }
+
+  if (bedCountRaw !== undefined && bedCountRaw !== null && String(bedCountRaw).trim() !== '') {
+    const n = Number(bedCountRaw);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+      const err = new Error('Bed count must be zero or a positive whole number.');
+      err.status = 400;
+      throw err;
+    }
+    if (n > 999) {
+      const err = new Error('Bed count cannot exceed 999.');
+      err.status = 400;
+      throw err;
+    }
+    bedCount = n;
+  }
+
+  if (capacityRaw !== undefined && capacityRaw !== null && String(capacityRaw).trim() !== '') {
+    const n = Number(capacityRaw);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+      const err = new Error('Capacity must be zero or a positive whole number.');
+      err.status = 400;
+      throw err;
+    }
+    if (n > 999) {
+      const err = new Error('Capacity cannot exceed 999.');
+      err.status = 400;
+      throw err;
+    }
+    capacity = n;
+  }
+
+  return { roomCode, wardName, wardId, status, note, roomType, bedCount, capacity };
 }
 
 router.get('/', requireRole(['admin', 'nurse', 'doctor']), async (_req, res) => {
@@ -405,10 +465,24 @@ router.post('/rooms', requireRole(['admin']), async (req, res) => {
     const payload = validateRoomPayload(req.body || {});
     await ensureWardExists(payload.wardName);
 
+    const columns = ['room_code', 'ward_name', 'status', 'note', 'updated_at'];
+    const values = [
+      payload.roomCode.replace(/'/g, "''"),
+      payload.wardName.replace(/'/g, "''"),
+      payload.status.replace(/'/g, "''"),
+      (payload.note || '').replace(/'/g, "''"),
+      'NOW()'
+    ];
+
+    if (payload.wardId) { columns.push('ward_id'); values.push(`${BigInt(payload.wardId)}`); }
+    if (payload.roomType) { columns.push('room_type'); values.push(`'${payload.roomType.replace(/'/g, "''")}'`); }
+    if (payload.bedCount !== null && payload.bedCount !== undefined) { columns.push('bed_count'); values.push(`${Number(payload.bedCount)}`); }
+    if (payload.capacity !== null && payload.capacity !== undefined) { columns.push('capacity'); values.push(`${Number(payload.capacity)}`); }
+
     await prisma.$executeRawUnsafe(
       `
-        INSERT INTO public.ward_rooms (room_code, ward_name, status, note, updated_at)
-        VALUES ('${payload.roomCode.replace(/'/g, "''")}', '${payload.wardName.replace(/'/g, "''")}', '${payload.status.replace(/'/g, "''")}', '${(payload.note || '').replace(/'/g, "''")}', NOW())
+        INSERT INTO public.ward_rooms (${columns.join(', ')})
+        VALUES (${values.join(', ')})
       `
     );
 
@@ -436,8 +510,12 @@ router.patch('/rooms/:id', requireRole(['admin']), async (req, res) => {
     const payload = validateRoomPayload({
       roomCode: req.body?.roomCode ?? existingRoom.roomCode,
       wardName: req.body?.wardName ?? existingRoom.wardName,
+      wardId: req.body?.wardId ?? existingRoom.wardId ?? existingRoom.ward_id,
       status: req.body?.status ?? existingRoom.manualStatus,
-      note: req.body?.note ?? existingRoom.note
+      note: req.body?.note ?? existingRoom.note,
+      roomType: req.body?.roomType ?? req.body?.room_type ?? existingRoom.roomType ?? existingRoom.room_type,
+      bedCount: req.body?.bedCount ?? req.body?.bed_count ?? existingRoom.bedCount ?? existingRoom.bed_count,
+      capacity: req.body?.capacity ?? existingRoom.capacity
     });
 
     if (existingRoom.occupied && normalizeText(payload.status) !== normalizeText(existingRoom.manualStatus)) {
@@ -446,10 +524,21 @@ router.patch('/rooms/:id', requireRole(['admin']), async (req, res) => {
 
     await ensureWardExists(payload.wardName);
 
+    const assignments = [];
+    assignments.push(`room_code = '${payload.roomCode.replace(/'/g, "''")}'`);
+    assignments.push(`ward_name = '${payload.wardName.replace(/'/g, "''")}'`);
+    assignments.push(`status = '${payload.status.replace(/'/g, "''")}'`);
+    assignments.push(`note = '${(payload.note || '').replace(/'/g, "''")}'`);
+    if (payload.wardId) assignments.push(`ward_id = ${BigInt(payload.wardId)}`);
+    if (payload.roomType) assignments.push(`room_type = '${payload.roomType.replace(/'/g, "''")}'`);
+    if (payload.bedCount !== null && payload.bedCount !== undefined) assignments.push(`bed_count = ${Number(payload.bedCount)}`);
+    if (payload.capacity !== null && payload.capacity !== undefined) assignments.push(`capacity = ${Number(payload.capacity)}`);
+    assignments.push(`updated_at = NOW()`);
+
     await prisma.$executeRawUnsafe(
       `
         UPDATE public.ward_rooms
-        SET room_code = '${payload.roomCode.replace(/'/g, "''")}', ward_name = '${payload.wardName.replace(/'/g, "''")}', status = '${payload.status.replace(/'/g, "''")}', note = '${(payload.note || '').replace(/'/g, "''")}', updated_at = NOW()
+        SET ${assignments.join(', ')}
         WHERE id = ${roomId}::bigint
       `
     );
@@ -467,13 +556,27 @@ router.patch('/rooms/:id', requireRole(['admin']), async (req, res) => {
 
 router.post('/', requireRole(['admin']), async (req, res) => {
   try {
-    const newWard = await prisma.wards.create({
-      data: {
-        name: req.body.name,
-        total_capacity: req.body.totalCapacity,
-        color: req.body.color || defaultColorForWard(req.body.name)
-      }
-    });
+    const errors = [];
+    const cleanStr = (v) => String(v || "").trim();
+    const name = cleanStr(req.body?.name);
+    const totalCapRaw = req.body?.totalCapacity ?? req.body?.total_capacity;
+    const color = cleanStr(req.body?.color) || null;
+    if (!name) errors.push('Ward name is required.');
+    else if (name.length > 64) errors.push('Ward name must be 64 characters or less.');
+    let totalCapacity = null;
+    if (totalCapRaw !== undefined && totalCapRaw !== null && String(totalCapRaw).trim() !== '') {
+      const n = Number(totalCapRaw);
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) errors.push('Ward total capacity must be zero or a positive whole number.');
+      else if (n > 9999) errors.push('Ward total capacity cannot exceed 9999.');
+      else totalCapacity = n;
+    }
+    if (errors.length > 0) return res.status(400).json({ message: errors.join(' | ') });
+    const data = { name };
+    if (totalCapacity !== null) data.total_capacity = totalCapacity;
+    if (color) data.color = color;
+    else data.color = defaultColorForWard(name);
+
+    const newWard = await prisma.wards.create({ data });
     res.status(201).json({ ...newWard, id: String(newWard.id) });
   } catch (err) {
     res.status(400).json({ message: err.message || 'Failed to create ward.' });

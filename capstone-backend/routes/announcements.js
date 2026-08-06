@@ -525,36 +525,66 @@ router.get('/news', async (req, res) => {
 // @route   POST api/announcements
 // @desc    Create a new announcement
 router.post('/', requireRole(['admin']), async (req, res) => {
-    const { title, content, priority, target, author, pinned, expiresAt } = req.body;
-
     try {
-        const parsedExpires = expiresAt ? new Date(expiresAt) : null;
+        const cleanStr = (v) => String(v || "").trim();
+        const titleRaw = cleanStr(req.body?.title);
+        const contentRaw = cleanStr(req.body?.content);
+        const priorityRaw = cleanStr(req.body?.priority || 'Normal') || 'Normal';
+        const targetRaw = cleanStr(req.body?.target || 'All') || 'All';
+        const authorRaw = cleanStr(req.body?.author || 'Admin') || 'Admin';
+        const pinnedRaw = req.body?.pinned === true;
+        const expiresAtRaw = req.body?.expiresAt;
+
+        if (!titleRaw) return res.status(400).json({ message: "Announcement title is required." });
+        if (titleRaw.length < 4) return res.status(400).json({ message: "Announcement title is too short (min 4 characters)." });
+        if (titleRaw.length > 160) return res.status(400).json({ message: "Announcement title is too long (max 160 characters)." });
+        if (!contentRaw) return res.status(400).json({ message: "Announcement message / content is required." });
+        if (contentRaw.length < 6) return res.status(400).json({ message: "Announcement message is too short (min 6 characters)." });
+        if (contentRaw.length > 4000) return res.status(400).json({ message: "Announcement message is too long (max 4000 characters)." });
+
+        const allowedPriority = new Set(['Low', 'Normal', 'High', 'Urgent']);
+        const priority = allowedPriority.has(priorityRaw) ? priorityRaw : 'Normal';
+
+        const parsedExpires = expiresAtRaw ? new Date(expiresAtRaw) : null;
         const expires_at = parsedExpires && !Number.isNaN(parsedExpires.getTime()) ? parsedExpires : null;
 
-        const rows = await prisma.$queryRaw`
-            INSERT INTO announcements (title, content, priority, target, author, pinned, expires_at)
-            VALUES (${title}, ${content}, ${priority}, ${target || 'All'}, ${author}, ${Boolean(pinned)}, ${expires_at})
-            RETURNING id, title, content, priority, target, author, pinned, expires_at, created_at
-        `;
+        const rows = await prisma.$queryRawUnsafe(
+            `
+                INSERT INTO public.announcements (title, content, priority, target, author, pinned, expires_at, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6::boolean, $7::timestamptz, now(), now())
+                RETURNING id, title, content, priority, target, author, pinned, expires_at, created_at, updated_at
+            `,
+            titleRaw,
+            contentRaw,
+            priority,
+            targetRaw,
+            authorRaw,
+            pinnedRaw,
+            expires_at
+        );
         const announcement = Array.isArray(rows) ? rows[0] : null;
 
         // Log Activity
         await prisma.activity_logs.create({
             data: {
-                actor_name: author || 'Admin',
+                actor_name: authorRaw,
                 role: 'Admin',
                 action: 'Create',
                 target: 'Announcement',
-                details: `Posted announcement: ${title}`
+                details: `Posted announcement: ${titleRaw}`
             }
-        });
+        }).catch(() => {});
 
-        if (!announcement) return res.status(500).send('Server Error');
+        if (!announcement) return res.status(500).json({ message: 'Server Error' });
         broadcastAnnouncement(announcement);
-        res.json({ ...announcement, id: announcement.id.toString(), createdAt: announcement.created_at, expiresAt: announcement.expires_at });
+        const normalized = { ...announcement, id: announcement.id ? announcement.id.toString() : undefined };
+        normalized.createdAt = normalized.created_at || normalized.createdAt;
+        normalized.expiresAt = normalized.expires_at || normalized.expiresAt;
+        normalized.updatedAt = normalized.updated_at || normalized.updatedAt;
+        res.json(normalized);
     } catch (err) {
         console.error(err.message);
-        res.status(500).send('Server Error');
+        res.status(500).json({ message: 'Server Error' });
     }
 });
 
