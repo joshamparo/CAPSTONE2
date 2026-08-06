@@ -11,7 +11,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
 
 const LAB_SERVICES = ["Urinalysis", "Blood Chemistry", "Complete Blood Count (CBC)", "Fecalysis", "Hepa Screening", "Dengue Duo + NS1 Antigen (Package)"];
-const IMAGING_SERVICES = ["Standard 12-Lead ECG", "Stress Test", "Holter Monitoring"];
+const IMAGING_SERVICES = ["Standard 12-Lead ECG", "Stress Test", "Holter Monitoring", "Chest X-Ray"];
 
 function NurseDashboard() {
   const navigate = useNavigate();

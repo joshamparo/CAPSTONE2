@@ -1491,6 +1491,8 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
 
             if (Array.isArray(payload.selectedLabServices) && payload.selectedLabServices.length > 0) {
                 for (const service of payload.selectedLabServices) {
+                    const pricing = resolveClinicalServicePricing({ kind: 'Laboratory', service });
+                    const status = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
                     const { ticket: labTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], 'LAB');
                     generatedExtraTickets.push(labTicket);
                     await tx.clinical_orders.create({
@@ -1500,11 +1502,13 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             kind: 'Laboratory',
                             service: service,
                             priority: 'Routine',
-                            status: 'Pending',
+                            status,
                             notes: `Auto-created from Nurse Walk-In Intake\nTicket: ${labTicket}\n${commonDetailLines.join('\n')}`,
                             ordered_by_name: requesterName,
                             ordered_by_role: 'Nurse',
-                            assigned_role: 'Medtech',
+                            assigned_role: 'medtech',
+                            assigned_to: null,
+                            scheduled_at: null,
                             updated_at: new Date()
                         }
                     });
@@ -1513,21 +1517,27 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
 
             if (Array.isArray(payload.selectedImagingServices) && payload.selectedImagingServices.length > 0) {
                 for (const service of payload.selectedImagingServices) {
-                    const isECG = service.toLowerCase().includes('ecg');
+                    const isECG = /\becg\b/i.test(service) || String(service).toLowerCase().includes('ecg');
+                    const kind = isECG ? 'ECG' : 'Radiology';
+                    const assignedRole = isECG ? 'ecg_operator' : 'radiographer';
+                    const pricing = resolveClinicalServicePricing({ kind, service });
+                    const status = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
                     const { ticket: imgTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], isECG ? 'ECG' : 'IMG');
                     generatedExtraTickets.push(imgTicket);
                     await tx.clinical_orders.create({
                         data: {
                             patient_id: patient.id,
                             patient_name: patientName,
-                            kind: 'Imaging',
+                            kind,
                             service: service,
                             priority: 'Routine',
-                            status: 'Pending',
+                            status,
                             notes: `Auto-created from Nurse Walk-In Intake\nTicket: ${imgTicket}\n${commonDetailLines.join('\n')}`,
                             ordered_by_name: requesterName,
                             ordered_by_role: 'Nurse',
-                            assigned_role: isECG ? 'ECG Operator' : 'Radiographer',
+                            assigned_role: assignedRole,
+                            assigned_to: null,
+                            scheduled_at: null,
                             updated_at: new Date()
                         }
                     });
@@ -1544,18 +1554,33 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 }
             }
 
-            // Fixed 100 pesos billing for selected services
+            // Fixed 100 pesos billing for selected services (flat: regardless of count = ₱100 total)
             const hasServices = (payload.selectedLabServices?.length > 0) || (payload.selectedImagingServices?.length > 0);
             if (hasServices) {
-                await tx.billing_invoices.create({
+                await ensureBillingTablesExist(tx).catch(() => null);
+                const totalServices = Number(payload.selectedLabServices?.length || 0) + Number(payload.selectedImagingServices?.length || 0);
+                const amountMoney = toMoney(100);
+                const description = totalServices > 1
+                    ? `Walk-In Service Fee (${totalServices} services, Flat Rate)`
+                    : `Walk-In Service Fee (${payload.selectedLabServices?.length ? payload.selectedLabServices[0] : payload.selectedImagingServices[0]})`;
+                const inv = await tx.billing_invoices.create({
                     data: {
-                        patients: { connect: { id: patient.id } },
-                        total_amount: 100,
-                        status: 'Pending',
-                        created_by: requesterName,
-                        notes: 'Nurse Walk-In Service Fee (Fixed Rate) - Registration & Service Intake Fee (Onsite)'
+                        patient_id: patient.id,
+                        status: 'For Payment',
+                        notes: 'Nurse Walk-In Service Fee (Flat ₱100 Fixed Rate) — Registration & Onsite Service Intake',
+                        created_by: getRequesterEmail(req) || requesterName || null,
+                        total_amount: amountMoney
                     }
                 });
+                await tx.billing_invoice_items.create({
+                    data: {
+                        invoice_id: inv.id,
+                        description,
+                        quantity: Math.max(1, totalServices),
+                        unit_price: amountMoney,
+                        line_total: amountMoney
+                    }
+                }).catch(() => null);
             }
 
             await tx.activity_logs.create({
