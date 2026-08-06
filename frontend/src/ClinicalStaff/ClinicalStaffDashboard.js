@@ -416,6 +416,16 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     } catch (_) {}
   };
 
+  const handleAcknowledge = async (id) => {
+    try {
+      await updateOrder(id, { acknowledged: true });
+      await refreshOrders();
+      if (viewingOrder && String(viewingOrder.id) === String(id)) {
+        await openOrder({ ...viewingOrder, acknowledgedAt: new Date().toISOString() });
+      }
+    } catch (_) {}
+  };
+
   const handleScheduleSave = async () => {
     if (!viewingOrder) return;
     setScheduleSaving(true);
@@ -822,18 +832,30 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     const statusLower = String(o.status || '').toLowerCase();
                     const isStat = String(o.priority || '').toUpperCase() === 'STAT';
                     const disableExam = statusLower !== 'paid';
+                    const acknowledged = Boolean(o.acknowledgedAt || o.acknowledged_at || o.acknowledged);
                     return (
                     <tr key={String(o.id)} style={{ background: isStat ? '#fef2f2' : 'transparent' }}>
                       <td>{o.patientName || o.patientId || '—'}</td>
                       <td>
                         {isStat && <span style={{ padding: '2px 6px', background: '#ef4444', color: 'white', borderRadius: 4, fontSize: '0.7rem', marginRight: 8 }}>STAT</span>}
                         {o.service || o.kind || '—'}
+                        {acknowledged ? (
+                          <span style={{ marginLeft: 6, padding: '2px 6px', background: '#16a34a', color: 'white', borderRadius: 4, fontSize: '0.7rem' }}>Acknowledged</span>
+                        ) : (
+                          <span style={{ marginLeft: 6, padding: '2px 6px', background: '#f59e0b', color: 'white', borderRadius: 4, fontSize: '0.7rem' }}>New</span>
+                        )}
                       </td>
                       <td><span className={statusBadgeClass(o.status)}>{o.status || '—'}</span></td>
                       <td>{o.scheduledAt ? fmtWhen(o.scheduledAt) : '—'}</td>
                       <td>
                         <div className="cs-row-actions">
                           <button type="button" className="cs-btn secondary" onClick={() => openOrder(o)}>View</button>
+                          {!acknowledged && (
+                            <button type="button" className="cs-btn secondary" onClick={() => handleAcknowledge(o.id)}>
+                              <CheckCircle2 size={14} />
+                              Ack
+                            </button>
+                          )}
                           <button type="button" className="cs-btn secondary" onClick={() => handleQuickStatus(o.id, 'Exam')} disabled={disableExam}>
                             Start Exam
                           </button>
@@ -1380,25 +1402,71 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
         </div>
       )}
 
-      {viewingFileUrl && (
-        <div className="cs-modal-overlay" onClick={() => setViewingFileUrl(null)} style={{ zIndex: 9999 }}>
-          <div className="cs-modal" style={{ maxWidth: '900px', width: '90vw', height: '85vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
-            <div className="cs-modal-head">
-              <div className="cs-modal-title">Result Viewer</div>
-              <button type="button" className="cs-btn secondary" onClick={() => setViewingFileUrl(null)}>
-                <X size={16} />
-              </button>
-            </div>
-            <div className="cs-modal-body" style={{ flex: 1, padding: 0, overflow: 'hidden', background: '#f8fafc', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              {viewingFileUrl.toLowerCase().match(/\.(jpeg|jpg|gif|png|webp)$/) ? (
-                <img src={viewingFileUrl} alt="Result" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-              ) : (
-                <iframe src={viewingFileUrl} title="Result PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
-              )}
+      {viewingFileUrl && (() => {
+        const clean = viewingFileUrl.split('?')[0].split('#')[0].toLowerCase();
+        const isImage = /\.(jpeg|jpg|gif|png|webp|bmp|svg|tif|tiff|avif)$/.test(clean);
+        const isPdf = /\.pdf$/.test(clean);
+        const filename = (() => {
+          try {
+            const u = new URL(viewingFileUrl);
+            const last = decodeURIComponent(u.pathname.split('/').pop() || 'result');
+            return last || 'result';
+          } catch (_) {
+            return 'result';
+          }
+        })();
+        return (
+          <div className="cs-modal-overlay" onClick={() => setViewingFileUrl(null)} style={{ zIndex: 9999 }}>
+            <div className="cs-modal" style={{ maxWidth: '980px', width: '94vw', height: '88vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+              <div className="cs-modal-head">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div className="cs-modal-title">Result Viewer</div>
+                  <div className="cs-muted" style={{ fontSize: '0.78rem' }}>{filename}</div>
+                </div>
+                <div className="cs-toolbar" style={{ gap: 6 }}>
+                  <a
+                    href={viewingFileUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="cs-btn secondary"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    Open
+                  </a>
+                  <a
+                    href={viewingFileUrl}
+                    download={filename}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="cs-btn secondary"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    Download
+                  </a>
+                  <button type="button" className="cs-btn secondary" onClick={() => setViewingFileUrl(null)}>
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+              <div className="cs-modal-body" style={{ flex: 1, padding: 0, overflow: 'hidden', background: '#f8fafc', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                {isImage ? (
+                  <img src={viewingFileUrl} alt="Result" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                ) : isPdf ? (
+                  <iframe src={viewingFileUrl} title="Result PDF" style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }} />
+                ) : (
+                  <div style={{ textAlign: 'center', padding: 24 }}>
+                    <div className="cs-muted" style={{ marginBottom: 12 }}>Preview is not available for this file type.</div>
+                    <div className="cs-toolbar" style={{ justifyContent: 'center', gap: 8 }}>
+                      <a href={viewingFileUrl} target="_blank" rel="noreferrer noopener" className="cs-btn">Open in New Tab</a>
+                      <a href={viewingFileUrl} download={filename} className="cs-btn secondary">Download File</a>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {orderFormOpen && !isEcgOperator && (
         <div className="cs-modal-overlay" onClick={() => setOrderFormOpen(false)}>
