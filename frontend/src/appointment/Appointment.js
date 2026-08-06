@@ -2,6 +2,30 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Appointment.css';
 
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+
+const LAB_SERVICE_LIST = [
+  'Complete Blood Count (CBC)',
+  'Urinalysis',
+  'Blood Chemistry',
+  'Fecalysis',
+  'Hepa Screening',
+  'Dengue Duo + NS1 Antigen (Package)'
+];
+
+const IMAGING_SERVICE_LIST = [
+  'Chest X-Ray',
+  'Standard 12-Lead ECG',
+  'Stress Test',
+  'Holter Monitoring'
+];
+
+const CATEGORIES = [
+  { value: 'clinic', label: 'Clinic Consultation' },
+  { value: 'laboratory', label: 'Laboratory Services (₱100 Flat)' },
+  { value: 'imaging', label: 'Imaging / ECG (₱100 Flat)' }
+];
+
 const Appointment = () => {
   const navigate = useNavigate();
   
@@ -9,6 +33,8 @@ const Appointment = () => {
   const [formData, setFormData] = useState({
     reason: '',
     specialization: '',
+    serviceCategory: 'clinic',
+    specificService: '',
     firstName: '',
     middleName: '',
     lastName: '',
@@ -167,9 +193,12 @@ const Appointment = () => {
     const clean = (v) => String(v || "").trim();
     const email = clean(formData.email);
     const phone = clean(formData.phone);
+    const isClinic = String(formData.serviceCategory || 'clinic').toLowerCase() === 'clinic';
+    const isClinical = String(formData.serviceCategory || 'clinic').toLowerCase() !== 'clinic';
 
     if (!clean(formData.reason)) next.reason = "Required";
-    if (!clean(formData.specialization)) next.specialization = "Required";
+    if (isClinic && !clean(formData.specialization)) next.specialization = "Required";
+    if (isClinical && !clean(formData.specificService)) next.specificService = "Required";
     if (!clean(formData.firstName)) next.firstName = "Required";
     if (!clean(formData.lastName)) next.lastName = "Required";
     if (!email) next.email = "Required";
@@ -196,6 +225,10 @@ const Appointment = () => {
     }
     
     try {
+      const category = String(formData.serviceCategory || 'clinic').toLowerCase();
+      const specific = String(formData.specificService || '').trim();
+      const isClinic = category === 'clinic';
+
       const payload = {
         firstName: formData.firstName,
         lastName: formData.lastName,
@@ -203,17 +236,67 @@ const Appointment = () => {
         email: formData.email,
         phone: formData.phone,
         reason: formData.reason,
-        specialization: formData.specialization,
-        mainConcern: formData.mainConcern,
-        status: 'Pending',
-        appointmentDate: todayISO, // Default to today for triage queue
-        appointmentTime: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        specialization: isClinic ? formData.specialization : null,
+        serviceCategory: category,
+        specificService: isClinic ? null : specific,
+        mainConcern: isClinic ? formData.mainConcern : specific,
+        status: isClinic ? 'Pending' : null,
+        appointmentDate: todayISO,
+        appointmentTime: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        description: [
+          formData.mainConcern ? `Concern: ${formData.mainConcern}` : null,
+          formData.description ? `Notes: ${formData.description}` : null,
+          `Severity: ${formData.severity || '—'}`
+        ].filter(Boolean).join('\n')
       };
 
-      const res = await fetch('http://localhost:5000/api/appointments', {
+      const endpoint = isClinic ? `/api/appointments` : `/api/patients/walk-in-intake`;
+      let backendPayload = payload;
+
+      if (!isClinic) {
+        backendPayload = {
+          patientMode: 'new',
+          routeType: category === 'laboratory' ? 'lab' : 'imaging',
+          existingPatientId: null,
+          doctorId: null,
+          doctorName: null,
+          selectedSpecialization: null,
+          consultTiming: null,
+          preferredDate: null,
+          preferredTime: null,
+          firstName: formData.firstName,
+          middleName: formData.middleName,
+          lastName: formData.lastName,
+          dateOfBirth: formData.dob,
+          gender: null,
+          contactNumber: formData.phone,
+          email: formData.email,
+          address: null,
+          bloodType: null,
+          temperature: null,
+          bp_systolic: null,
+          bp_diastolic: null,
+          heartRate: null,
+          respiratoryRate: null,
+          spo2: null,
+          weight: null,
+          height: null,
+          severity: null,
+          triageLevel: null,
+          triageNote: payload.description,
+          mainConcern: specific,
+          existingConditions: null,
+          routeNote: `[Public Appointment Form] ${formData.mainConcern ? 'Symptoms: ' + formData.mainConcern : ''} Severity: ${formData.severity || '—'}`,
+          painLevel: null,
+          selectedLabServices: category === 'laboratory' ? [specific] : [],
+          selectedImagingServices: category === 'imaging' ? [specific] : []
+        };
+      }
+
+      const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(backendPayload)
       });
 
       if (res.ok) {
@@ -273,35 +356,66 @@ const Appointment = () => {
                   <option value="consultation">General Consultation</option>
                   <option value="checkup">Annual Checkup</option>
                   <option value="specialist">Specialist Visit</option>
+                  <option value="laboratory">Laboratory Request</option>
+                  <option value="imaging">Imaging / ECG Request</option>
                 </select>
               </div>
               <div className="form-group">
                 <div className="label-row">
-                  <label>Department / Specialization *</label>
-                  {errors.specialization && <span className="validation-notice">{errors.specialization}</span>}
+                  <label>Service Category *</label>
                 </div>
-                <select className={`appt-input ${errors.specialization ? "input-error" : ""}`} value={formData.specialization} onChange={(e) => setField("specialization", e.target.value)}>
-                  <option value="">Select specialization</option>
-                  <option value="General Practice">General Practice</option>
-                  <option value="Pediatrics">Pediatrics</option>
-                  <option value="Cardiology">Cardiology</option>
-                  <option value="Dermatology">Dermatology</option>
-                  <option value="Orthopedics">Orthopedics</option>
-                  <option value="Obstetrics & Gynecology">Obstetrics & Gynecology</option>
-                  <option value="Ophthalmology">Ophthalmology</option>
-                  <option value="Surgery">Surgery</option>
+                <select className="appt-input" value={formData.serviceCategory} onChange={(e) => setField("specificService", "") || setField("serviceCategory", e.target.value)}>
+                  {CATEGORIES.map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
 
-            <div className="form-row three-col">
+            <div className="form-row two-col">
+              {String(formData.serviceCategory || 'clinic').toLowerCase() === 'clinic' ? (
+                <div className="form-group">
+                  <div className="label-row">
+                    <label>Department / Specialization *</label>
+                    {errors.specialization && <span className="validation-notice">{errors.specialization}</span>}
+                  </div>
+                  <select className={`appt-input ${errors.specialization ? "input-error" : ""}`} value={formData.specialization} onChange={(e) => setField("specialization", e.target.value)}>
+                    <option value="">Select specialization</option>
+                    <option value="General Practice">General Practice</option>
+                    <option value="Pediatrics">Pediatrics</option>
+                    <option value="Cardiology">Cardiology</option>
+                    <option value="Dermatology">Dermatology</option>
+                    <option value="Orthopedics">Orthopedics</option>
+                    <option value="Obstetrics & Gynecology">Obstetrics & Gynecology</option>
+                    <option value="Ophthalmology">Ophthalmology</option>
+                    <option value="Surgery">Surgery</option>
+                  </select>
+                </div>
+              ) : (
+                <div className="form-group">
+                  <div className="label-row">
+                    <label>{String(formData.serviceCategory).toLowerCase() === 'laboratory' ? 'Laboratory Test *' : 'Imaging / ECG Test *'}</label>
+                    {errors.specificService && <span className="validation-notice">{errors.specificService}</span>}
+                  </div>
+                  <select className={`appt-input ${errors.specificService ? "input-error" : ""}`} value={formData.specificService} onChange={(e) => setField("specificService", e.target.value)}>
+                    <option value="">Select a service</option>
+                    {(String(formData.serviceCategory).toLowerCase() === 'laboratory' ? LAB_SERVICE_LIST : IMAGING_SERVICE_LIST).map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="form-group">
                 <div className="label-row">
-                  <label>First Name *</label>
+                  <label>{String(formData.serviceCategory || 'clinic').toLowerCase() === 'clinic' ? 'First Name *' : 'First Name *'}</label>
                   {errors.firstName && <span className="validation-notice">{errors.firstName}</span>}
                 </div>
                 <input className={`appt-input ${errors.firstName ? "input-error" : ""}`} value={formData.firstName} onChange={(e) => setField("firstName", e.target.value)} onKeyDown={(e) => handleNameKeyDown(e, "firstName")} />
               </div>
+            </div>
+
+            <div className="form-row three-col">
               <div className="form-group">
                 <div className="label-row">
                   <label>Middle Name</label>
