@@ -140,7 +140,11 @@ async function ensureBillingAdjustmentsTableExist() {
       created_by text NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+  `);
+  await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_billing_adjustments_invoice_id ON public.billing_adjustments(invoice_id);
+  `);
+  await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_billing_adjustments_created_at ON public.billing_adjustments(created_at);
   `);
   billingSchemaEnsureState.adjustmentsCheckedAt = now;
@@ -149,6 +153,15 @@ async function ensureBillingAdjustmentsTableExist() {
 async function ensureBillingHmoClaimsTableExist() {
   const now = Date.now();
   if (now - billingSchemaEnsureState.hmoClaimsCheckedAt < BILLING_SCHEMA_RECHECK_MS) return;
+
+  const reg = await prisma.$queryRaw`
+    SELECT to_regclass('public.billing_hmo_claims')::text AS billing_hmo_claims
+  `;
+  const info = Array.isArray(reg) ? reg[0] : null;
+  if (info && info.billing_hmo_claims) {
+    billingSchemaEnsureState.hmoClaimsCheckedAt = now;
+    return;
+  }
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS public.billing_hmo_claims (
@@ -165,7 +178,11 @@ async function ensureBillingHmoClaimsTableExist() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     );
+  `);
+  await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_status ON public.billing_hmo_claims(status, updated_at DESC);
+  `);
+  await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_invoice_id ON public.billing_hmo_claims(invoice_id);
   `);
 
