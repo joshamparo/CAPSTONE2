@@ -1000,7 +1000,7 @@ router.post('/er-registration', requireRole(['admin', 'nurse']), async (req, res
             });
 
             return { patient, appointment };
-        });
+        }, { timeout: 30000 });
 
         res.status(201).json({
             patient: result.patient,
@@ -1569,7 +1569,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             }).catch(() => null);
 
             return { patient, createdRecord };
-        }, { timeout: 20000 });
+        }, { timeout: 45000 });
 
         let emailSent = false;
         if (routeMeta.type === 'onsite_consult') {

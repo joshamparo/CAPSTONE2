@@ -191,30 +191,58 @@
 }
 
 .office-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
   flex: 0 0 auto;
+  width: 100%;
 }
 
 .office-header-right {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
   flex-shrink: 0;
+  justify-self: end;
+  margin-left: 0;
+  width: fit-content;
+  min-width: 0;
+}
+
+.office-header-right > * {
+  min-width: 0;
 }
 
 .office-header-left {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   min-width: 0;
-  flex: 1;
+  flex: none;
+  width: 100%;
+  margin-right: 0;
+  padding-right: 0;
+  justify-self: start;
 }
+
+.office-header-left > :first-child {
+  display: block;
+  min-width: 0;
+  width: 100%;
+}
+
+.office-header-left .office-title,
+.office-header-left .office-subtitle {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 
 .app-mobile-menu-btn {
   display: none;
@@ -946,29 +974,29 @@
 
 .office-payment-field-group {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  background: #f8fafc;
-  padding: 16px;
-  border-radius: 16px;
-  border: 1px solid #e2e8f0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  background: #fff;
+  padding: 10px 0 0;
+  border-radius: 10px;
+  border: 0;
 }
 
 .office-receipt-preview-wrap {
-  margin-top: 14px;
-  padding: 16px;
-  background: #f1f5f9;
-  border-radius: 16px;
+  margin-top: 10px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 12px;
   border: 1px dashed #cbd5e1;
 }
 
 .office-receipt-preview-title {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 800;
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -987,18 +1015,18 @@
 .office-payment-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .office-payment-field {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 5px;
 }
 
 .office-payment-field label {
   color: #475569;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 800;
 }
 
@@ -1006,24 +1034,28 @@
 .office-payment-field .office-select {
   min-width: 0;
   width: 100%;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  border-radius: 10px;
 }
 
 .office-payment-field-wide {
-  grid-column: span 1;
+  grid-column: span 2;
 }
 
 .office-payment-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .office-payment-note {
   color: #64748b;
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   max-width: 520px;
+  line-height: 1.3;
 }
 
 .office-payment-submit {
@@ -1035,11 +1067,123 @@
   border: 1px solid #fecaca;
   background: #fef2f2;
   color: #b91c1c;
-  border-radius: 14px;
-  padding: 12px 14px;
-  font-size: 0.9rem;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+.office-hmo-card {
+  margin-top: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 12px 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.office-hmo-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.office-hmo-head-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #fff7ed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f97316;
+  flex: 0 0 auto;
+}
+
+.office-hmo-head-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #0f172a;
+  line-height: 1.15;
+}
+
+.office-hmo-head-subtitle {
+  font-size: 0.74rem;
+  color: #94a3b8;
+  line-height: 1.1;
+  margin-top: 2px;
+}
+
+.office-hmo-summary {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+
+.office-hmo-summary-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.office-hmo-summary-line strong {
+  color: #0f172a;
   font-weight: 700;
 }
+
+.office-hmo-summary-line.accent strong {
+  color: #ea580c;
+}
+
+.office-hmo-summary-line.total strong {
+  font-size: 1rem;
+  font-weight: 900;
+  color: #f97316;
+}
+
+.office-hmo-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 6px 0;
+}
+
+.office-hmo-warn {
+  font-size: 0.74rem;
+  color: #b45309;
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.office-hmo-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.office-hmo-actions .office-btn {
+  height: 38px;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-weight: 700;
+}
+
+.office-hmo-monitoring-head {
+  padding: 12px 16px !important;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
 
 @media (max-width: 980px) {
   .office-grid-2,

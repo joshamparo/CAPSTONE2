@@ -2679,7 +2679,7 @@ export default function OfficeStaffDashboard({ mode }) {
             <div className="office-modal-body">
               <div className="office-payment-field-group">
                 <div className="office-payment-field">
-                  <label style={{ color: '#475569' }}>HMO Provider</label>
+                  <label>HMO Provider</label>
                   <select
                     className="office-select"
                     value={hmoQuickEdit._provider ?? String(hmoQuickEdit?.hmo_claim?.provider || '')}
@@ -2704,7 +2704,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </select>
                 </div>
                 <div className="office-payment-field">
-                  <label style={{ color: '#475569' }}>Status</label>
+                  <label>Status</label>
                   <select
                     className="office-select"
                     value={hmoQuickEdit._status ?? String(hmoQuickEdit?.hmo_claim?.status || 'Pending')}
@@ -2718,7 +2718,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </select>
                 </div>
                 <div className="office-payment-field">
-                  <label style={{ color: '#475569' }}>LOA #</label>
+                  <label>LOA #</label>
                   <input
                     className="office-input"
                     value={hmoQuickEdit._loa ?? String(hmoQuickEdit?.hmo_claim?.loa_number || '')}
@@ -2727,7 +2727,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   />
                 </div>
                 <div className="office-payment-field">
-                  <label style={{ color: '#475569' }}>PhilHealth</label>
+                  <label>PhilHealth</label>
                   <input
                     className="office-input"
                     type="number"
@@ -2737,7 +2737,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   />
                 </div>
                 <div className="office-payment-field">
-                  <label style={{ color: '#475569' }}>HMO Covered</label>
+                  <label>HMO Covered</label>
                   <input
                     className="office-input"
                     type="number"
@@ -2747,7 +2747,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   />
                 </div>
                 <div className="office-payment-field office-payment-field-wide">
-                  <label style={{ color: '#475569' }}>Notes</label>
+                  <label>Notes</label>
                   <input
                     className="office-input"
                     value={hmoQuickEdit._notes ?? String(hmoQuickEdit?.hmo_claim?.notes || '')}
@@ -2757,7 +2757,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 </div>
               </div>
 
-              <div style={{ marginTop: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 10 }}>
+              <div className="office-hmo-summary" style={{ marginTop: 10 }}>
                 {(() => {
                   const total = Number(hmoQuickEdit.total_amount || 0);
                   const ph = Number(hmoQuickEdit._ph ?? hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? 0) || 0;
@@ -2766,11 +2766,30 @@ export default function OfficeStaffDashboard({ mode }) {
                     ? (Number(hmoQuickEdit._hmoAmt ?? hmoQuickEdit?.hmo_claim?.loa_approved_amount ?? 0) || 0)
                     : 0;
                   const net = Math.max(0, total - ph - hmoAmt);
+                  const hmoWarn = statusQ !== 'Approved' && statusQ !== 'Partially Approved' && Number(hmoQuickEdit._hmoAmt ?? hmoQuickEdit?.hmo_claim?.loa_approved_amount ?? 0) > 0;
                   return (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.88rem', color: '#475569' }}>Patient Pays</span>
-                      <span style={{ fontSize: '1.1rem', fontWeight: 900, color: '#f97316' }}>₱ {toMoney(net)}</span>
-                    </div>
+                    <>
+                      {hmoWarn ? (
+                        <div className="office-hmo-warn">
+                          ⚠ HMO amount not deducted — status is not Approved / Partial
+                        </div>
+                      ) : null}
+                      <div className="office-hmo-summary-line">
+                        <span>Total Bill</span>
+                        <strong>₱ {toMoney(total)}</strong>
+                      </div>
+                      {(ph + hmoAmt) > 0 ? (
+                        <div className="office-hmo-summary-line accent">
+                          <span>Total Deductions</span>
+                          <strong>−₱ {toMoney(ph + hmoAmt)}</strong>
+                        </div>
+                      ) : null}
+                      <div className="office-hmo-divider" />
+                      <div className="office-hmo-summary-line total">
+                        <span>Patient Pays</span>
+                        <strong>₱ {toMoney(net)}</strong>
+                      </div>
+                    </>
                   );
                 })()}
               </div>
@@ -3030,20 +3049,20 @@ export default function OfficeStaffDashboard({ mode }) {
     </button>
   </div>
 
-  <div style={{ marginTop: 14, border: '1px solid #f1f5f9', borderRadius: 14, padding: 18, background: '#fff', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-      <div style={{ width: 32, height: 32, borderRadius: 8, background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f97316' }}>
+  <div className="office-hmo-card">
+    <div className="office-hmo-head">
+      <div className="office-hmo-head-icon">
         <Shield size={16} />
       </div>
-      <div>
-        <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>PhilHealth & HMO</div>
-        <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Deductions are subtracted before payment</div>
+      <div style={{ minWidth: 0 }}>
+        <div className="office-hmo-head-title">PhilHealth & HMO</div>
+        <div className="office-hmo-head-subtitle">Deductions are subtracted before payment</div>
       </div>
     </div>
 
     <div className="office-payment-field-group">
       <div className="office-payment-field">
-        <label style={{ color: '#475569' }}>PhilHealth</label>
+        <label>PhilHealth</label>
         <input
           className="office-input"
           type="number"
@@ -3053,7 +3072,7 @@ export default function OfficeStaffDashboard({ mode }) {
         />
       </div>
       <div className="office-payment-field">
-        <label style={{ color: '#475569' }}>HMO Provider</label>
+        <label>HMO Provider</label>
         <select className="office-select" value={hmoProvider} onChange={(e) => setHmoProvider(e.target.value)}>
           <option value="">None</option>
           <option value="Maxicare">Maxicare</option>
@@ -3074,7 +3093,7 @@ export default function OfficeStaffDashboard({ mode }) {
         </select>
       </div>
       <div className="office-payment-field">
-        <label style={{ color: '#475569' }}>HMO Covered</label>
+        <label>HMO Covered</label>
         <input
           className="office-input"
           type="number"
@@ -3084,7 +3103,7 @@ export default function OfficeStaffDashboard({ mode }) {
         />
       </div>
       <div className="office-payment-field">
-        <label style={{ color: '#475569' }}>LOA #</label>
+        <label>LOA #</label>
         <input
           className="office-input"
           type="text"
@@ -3094,7 +3113,7 @@ export default function OfficeStaffDashboard({ mode }) {
         />
       </div>
       <div className="office-payment-field">
-        <label style={{ color: '#475569' }}>Status</label>
+        <label>Status</label>
         <select className="office-select" value={hmoStatus} onChange={(e) => setHmoStatus(e.target.value)}>
           <option value="Pending">Pending</option>
           <option value="Awaiting LOA">Awaiting LOA</option>
@@ -3104,7 +3123,7 @@ export default function OfficeStaffDashboard({ mode }) {
         </select>
       </div>
       <div className="office-payment-field office-payment-field-wide">
-        <label style={{ color: '#475569' }}>Notes</label>
+        <label>Notes</label>
         <input
           className="office-input"
           type="text"
@@ -3123,32 +3142,32 @@ export default function OfficeStaffDashboard({ mode }) {
       const net = Math.max(0, total - totalDed);
       const hmoWarn = hmoStatus !== 'Approved' && hmoStatus !== 'Partially Approved' && Number(hmoCoverage || 0) > 0;
       return (
-        <div style={{ marginTop: 14, padding: '12px 14px', background: '#f8fafc', borderRadius: 10 }}>
+        <div className="office-hmo-summary">
           {hmoWarn ? (
-            <div style={{ fontSize: '0.75rem', color: '#b45309', marginBottom: 8, fontWeight: 500 }}>
+            <div className="office-hmo-warn">
               ⚠ HMO amount not deducted — status is not Approved / Partial
             </div>
           ) : null}
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '0.86rem', color: '#64748b' }}>
+          <div className="office-hmo-summary-line">
             <span>Total Bill</span>
-            <span style={{ color: '#0f172a', fontWeight: 600 }}>₱ {toMoney(total)}</span>
+            <strong>₱ {toMoney(total)}</strong>
           </div>
           {totalDed > 0 ? (
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '0.86rem', color: '#64748b' }}>
+            <div className="office-hmo-summary-line accent">
               <span>Total Deductions</span>
-              <span style={{ color: '#ea580c', fontWeight: 600 }}>−₱ {toMoney(totalDed)}</span>
+              <strong>−₱ {toMoney(totalDed)}</strong>
             </div>
           ) : null}
-          <div style={{ height: 1, background: '#e2e8f0', margin: '8px 0' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a' }}>Patient Pays</span>
-            <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f97316' }}>₱ {toMoney(net)}</span>
+          <div className="office-hmo-divider" />
+          <div className="office-hmo-summary-line total">
+            <span>Patient Pays</span>
+            <strong>₱ {toMoney(net)}</strong>
           </div>
         </div>
       );
     })()}
 
-    <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
+    <div className="office-hmo-actions">
       <button
         type="button"
         className="office-btn ghost"
@@ -3166,7 +3185,7 @@ export default function OfficeStaffDashboard({ mode }) {
           }
         }}
         disabled={savingHmoClaim || !selectedInvoice?.id}
-        style={{ height: 40, borderRadius: 10, border: '1px solid #f97316', color: '#f97316', fontWeight: 600 }}
+        style={{ border: '1px solid #f97316', color: '#f97316' }}
       >
         {savingHmoClaim ? 'Saving…' : 'Save'}
       </button>
@@ -3177,7 +3196,7 @@ export default function OfficeStaffDashboard({ mode }) {
           setPhilhealthDeduction(''); setHmoCoverage(''); setHmoProvider('');
           setLoaNumber(''); setHmoStatus('Pending'); setHmoNotes('');
         }}
-        style={{ height: 40, borderRadius: 10, color: '#94a3b8', fontWeight: 500 }}
+        style={{ color: '#94a3b8' }}
       >
         Clear
       </button>
