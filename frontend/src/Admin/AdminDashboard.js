@@ -124,10 +124,53 @@ function AdminDashboard() {
       'Orthopedics'
     ],
     Pharmacist: ['Pharmacy Management'],
-    'Office Staff': ['Cashier', "Doctor's Secretary"],
-    'Clinical Staff': ['Medtechs', 'Radiographer (X-ray)', 'ECG Operator', 'Physical Therapist'],
-    Staff: ['Cashier', "Doctor's Secretary"]
+    'Office Staff': ['Cashier', 'Doctor Secretary'],
+    'Clinical Staff': ['MedTech', 'Radiographer', 'ECG Operator', 'Physical Therapist'],
+    Staff: ['Cashier', 'Doctor Secretary']
   };
+
+  const STAFF_ROLE_LABEL_BY_KEY = {
+    doctor: 'Doctor',
+    nurse: 'Nurse',
+    pharmacist: 'Pharmacist',
+    cashier: 'Cashier',
+    doctor_secretary: 'Doctor Secretary',
+    medtech: 'MedTech',
+    radiographer: 'Radiographer',
+    ecg_operator: 'ECG Operator',
+    physical_therapist: 'Physical Therapist',
+    admin: 'Admin',
+    staff: 'Staff'
+  };
+  function getStaffRoleInfo(staff) {
+    const s = staff || {};
+    let key = '';
+    const accountType = String(s.accountType || s.account_type || '').trim().toLowerCase();
+    if (accountType && STAFF_ROLE_LABEL_BY_KEY[accountType]) {
+      key = accountType;
+    }
+    if (!key) {
+      const roleRaw = String(s.role || '').trim();
+      const specRaw = String(s.specialization || '').trim();
+      if (roleRaw === 'Doctor') key = 'doctor';
+      else if (roleRaw === 'Nurse') key = 'nurse';
+      else if (roleRaw === 'Pharmacist') key = 'pharmacist';
+      else if (roleRaw === 'Admin') key = 'admin';
+      else if (roleRaw === 'Clinical Staff') {
+        if (specRaw === 'MedTech' || specRaw === 'Medtechs') key = 'medtech';
+        else if (specRaw === 'Radiographer' || specRaw === 'Radiographer (X-ray)') key = 'radiographer';
+        else if (specRaw === 'ECG Operator') key = 'ecg_operator';
+        else if (specRaw === 'Physical Therapist') key = 'physical_therapist';
+        else key = 'staff';
+      } else if (roleRaw === 'Office Staff' || roleRaw === 'Staff') {
+        if (specRaw === 'Cashier') key = 'cashier';
+        else if (specRaw === 'Doctor Secretary' || specRaw === "Doctor's Secretary") key = 'doctor_secretary';
+        else key = 'staff';
+      } else key = 'staff';
+    }
+    if (!key || !STAFF_ROLE_LABEL_BY_KEY[key]) key = 'staff';
+    return { key, label: STAFF_ROLE_LABEL_BY_KEY[key] };
+  }
 
   const fetchDashboardStats = async () => {
     setDashboardStatsLoading(true);
@@ -205,7 +248,7 @@ function AdminDashboard() {
         next.linkedDoctorId = '';
         next.department = '';
       }
-      if (name === 'specialization' && value !== "Doctor's Secretary") {
+      if (name === 'specialization' && (value !== "Doctor's Secretary" && value !== 'Doctor Secretary')) {
         next.linkedDoctorId = '';
       }
       if (name === 'specialization') {
@@ -226,8 +269,9 @@ function AdminDashboard() {
   }, [secretaryDoctors, staffFormData.linkedDoctorId]);
 
   useEffect(() => {
+    const spec = String(staffFormData.specialization || '').trim();
     const isDoctorSecretary = ['Office Staff', 'Staff'].includes(String(staffFormData.role || '').trim()) &&
-      String(staffFormData.specialization || '').trim() === "Doctor's Secretary";
+      (spec === "Doctor's Secretary" || spec === 'Doctor Secretary');
     if (!isDoctorSecretary) return;
 
     let cancelled = false;
@@ -2828,14 +2872,18 @@ function AdminDashboard() {
     else if (newUser.role === 'Pharmacist') newUser.accountType = 'pharmacist';
     else if (newUser.role === 'Clinical Staff') {
       const spec = String(newUser.specialization || '').trim();
-      if (spec === 'Medtechs') newUser.accountType = 'medtech';
-      else if (spec === 'Radiographer (X-ray)') newUser.accountType = 'radiographer';
+      if (spec === 'MedTech' || spec === 'Medtechs') newUser.accountType = 'medtech';
+      else if (spec === 'Radiographer' || spec === 'Radiographer (X-ray)') newUser.accountType = 'radiographer';
       else if (spec === 'ECG Operator') newUser.accountType = 'ecg_operator';
       else if (spec === 'Physical Therapist') newUser.accountType = 'physical_therapist';
       else newUser.accountType = 'staff';
     }
     else if (['Office Staff', 'Staff'].includes(newUser.role) && String(newUser.specialization || '').trim() === 'Cashier') newUser.accountType = 'cashier';
-    else if (['Office Staff', 'Staff'].includes(newUser.role) && String(newUser.specialization || '').trim() === "Doctor's Secretary") newUser.accountType = 'doctor_secretary';
+    else if (['Office Staff', 'Staff'].includes(newUser.role)) {
+      const spec = String(newUser.specialization || '').trim();
+      if (spec === 'Doctor Secretary' || spec === "Doctor's Secretary") newUser.accountType = 'doctor_secretary';
+      else newUser.accountType = 'staff';
+    }
     else newUser.accountType = 'staff'; // Fallback
 
     if (newUser.role === 'Nurse') {
@@ -3086,8 +3134,9 @@ function AdminDashboard() {
         if (isMedicineDoctor && !clean(staffFormData.department)) {
           errors.push("Department is required for Medicine doctors (ER or OPD/Medicine).");
         }
+        const specClean = clean(staffFormData.specialization);
         const isDoctorSecretary = ['Office Staff', 'Staff'].includes(clean(staffFormData.role)) &&
-          clean(staffFormData.specialization) === "Doctor's Secretary";
+          (specClean === "Doctor's Secretary" || specClean === 'Doctor Secretary');
         if (isDoctorSecretary && !clean(staffFormData.linkedDoctorId)) {
           errors.push("Linked Doctor is required for Doctor Secretary.");
         }
@@ -3299,7 +3348,7 @@ function AdminDashboard() {
   };
 
   const exportStaffReport = () => {
-      const data = staffList.map(s => ({ Name: `${s.firstName} ${s.lastName}`, Role: s.role, Email: s.email, Phone: s.phone, Status: s.status }));
+      const data = staffList.map(s => ({ Name: `${s.firstName} ${s.lastName}`, Role: getStaffRoleInfo(s).label, Email: s.email, Phone: s.phone, Status: s.status }));
       downloadCSV(data, `staff_roster_${new Date().toISOString().split('T')[0]}.csv`);
   };
 
@@ -5782,8 +5831,12 @@ function AdminDashboard() {
                     </div>
                   ) : null}
 
-                  {(['Office Staff', 'Staff'].includes(String(staffFormData.role || '').trim()) &&
-                    String(staffFormData.specialization || '').trim() === "Doctor's Secretary") ? (
+                  {(() => {
+                    const spec = String(staffFormData.specialization || '').trim();
+                    const show = ['Office Staff', 'Staff'].includes(String(staffFormData.role || '').trim()) &&
+                      (spec === "Doctor's Secretary" || spec === 'Doctor Secretary');
+                    if (!show) return null;
+                    return (
                     <>
                       <div className="input-group">
                         <label>Linked Doctor</label>
@@ -5818,7 +5871,8 @@ function AdminDashboard() {
                         />
                       </div>
                     </>
-                  ) : null}
+                    );
+                  })()}
 
                   <div className="input-group">
                     <label>Date Hired</label>
@@ -6238,7 +6292,9 @@ function AdminDashboard() {
       const filteredStaff = staffList.filter((s) => {
         const fullName = `${s.firstName || ""} ${s.lastName || ""}`.trim().toLowerCase();
         const email = (s.email || "").toLowerCase();
-        const role = (s.role || "").toLowerCase();
+        const roleInfo = getStaffRoleInfo(s);
+        const roleLabel = roleInfo.label.toLowerCase();
+        const roleKey = roleInfo.key.toLowerCase();
         const empId = (s.employeeId || "").toString().toLowerCase();
         const phone = (s.phone || "").toString().toLowerCase();
         const sg = String(s.gender || "").toLowerCase();
@@ -6247,13 +6303,14 @@ function AdminDashboard() {
         const matchesSearch = !q || (
           fullName.includes(q) ||
           email.includes(q) ||
-          role.includes(q) ||
+          roleLabel.includes(q) ||
+          roleKey.includes(q) ||
           empId.includes(q) ||
           phone.includes(q)
         );
 
         const matchesGender = g === 'all' ? true : sg === g;
-        const matchesRole = r === 'all' ? true : role.includes(r);
+        const matchesRole = r === 'all' ? true : roleKey === r;
         const matchesStatus = st === 'all' ? true : ss === st;
         return matchesSearch && matchesGender && matchesRole && matchesStatus;
       });
@@ -6266,8 +6323,8 @@ function AdminDashboard() {
           return an.localeCompare(bn);
         }
         if (mode === 'Role') {
-          const ar = String(a.role || '').toLowerCase();
-          const br = String(b.role || '').toLowerCase();
+          const ar = getStaffRoleInfo(a).label.toLowerCase();
+          const br = getStaffRoleInfo(b).label.toLowerCase();
           return ar.localeCompare(br);
         }
         if (mode === 'Status') {
@@ -6429,7 +6486,8 @@ function AdminDashboard() {
                     pagedStaff.map((staff) => {
                       const fullName = `${staff.firstName || ""} ${staff.lastName || ""}`.trim() || "Staff Member";
                       const email = staff.email || "No email";
-                      const roleText = staff.role || "Staff";
+                      const roleInfo = getStaffRoleInfo(staff);
+                      const roleText = roleInfo.label;
                       const linkedDoctorName = staff?.linkedDoctor?.name ? String(staff.linkedDoctor.name) : '';
                       const employeeId = staff.employeeId || "N/A";
                       const phone = staff.phone || "N/A";
@@ -6449,7 +6507,7 @@ function AdminDashboard() {
                           <td className="text-sm text-slate-600">{email}</td>
                           <td className="text-sm font-medium text-slate-700">
                             <div>{roleText}</div>
-                            {(String(roleText || '').toLowerCase() === 'doctor_secretary' && linkedDoctorName) ? (
+                            {(roleInfo.key === 'doctor_secretary' && linkedDoctorName) ? (
                               <div className="text-xs text-slate-500">{linkedDoctorName}</div>
                             ) : null}
                           </td>
@@ -8078,7 +8136,8 @@ function AdminDashboard() {
               {(() => {
                 const fullName = `${viewingStaff.firstName || ""} ${viewingStaff.lastName || ""}`.trim() || "Staff Member";
                 const email = viewingStaff.email || "";
-                const roleText = viewingStaff.role || viewingStaff.account_type || "Staff";
+                const roleInfo = getStaffRoleInfo(viewingStaff);
+                const roleText = roleInfo.label;
                 const status = viewingStaff.status || "Offline";
                 const employeeId = viewingStaff.employeeId || "N/A";
                 const phone = viewingStaff.phone || "N/A";
