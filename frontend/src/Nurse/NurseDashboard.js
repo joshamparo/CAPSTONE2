@@ -1209,6 +1209,14 @@ function NurseDashboard() {
       }
     }
 
+    if (addPatientData.patientMode === 'existing') {
+      const pid = String(addPatientData.existingPatientId || '').trim();
+      if (!pid) {
+        setAddPatientError("Select the existing patient first before submitting. If you cleared the patient, pick one again from Existing Patient list.");
+        return;
+      }
+    }
+
     setAddPatientSaving(true);
     try {
       const response = await fetchJson(`/api/patients/walk-in-intake`, {
@@ -3950,7 +3958,22 @@ function NurseDashboard() {
         if (!productId || !/^\d+$/.test(productId)) throw new Error('Select an item from inventory.');
         if (productType !== 'medicine' && productType !== 'supply') throw new Error('Invalid item type.');
         if (!Number.isFinite(unitPrice) || unitPrice < 0) throw new Error('Invalid item price.');
-        const lineTotal = (Math.round(unitPrice * 100) / 100) * Math.max(1, qty);
+        if (qty < 1) throw new Error('Quantity must be at least 1.');
+
+        const product = (Array.isArray(pharmacyCatalog) ? pharmacyCatalog : []).find((p) => String(p.id) === String(productId));
+        const currentStock = product != null ? Number(product.stock ?? 0) : null;
+        if (currentStock !== null) {
+          if (!Number.isFinite(currentStock) || currentStock <= 0) {
+            const nameText = product?.name ? ` (${product.name})` : '';
+            throw new Error(`Cannot order: no stock left${nameText}.`);
+          }
+          if (currentStock < qty) {
+            const nameText = product?.name ? ` (${product.name})` : '';
+            throw new Error(`Cannot order${nameText}: requested ${qty} but only ${currentStock} in stock.`);
+          }
+        }
+
+        const lineTotal = (Math.round(unitPrice * 100) / 100) * qty;
 
         const itemsJson = JSON.stringify([
           {
@@ -4008,8 +4031,9 @@ function NurseDashboard() {
         priority: 'Routine',
         notes: ''
       });
-    } catch (_) {
-      setSuccessMessage("Failed to submit order. Please check your connection.");
+    } catch (err) {
+      const msg = String(err?.message || 'Failed to submit order. Please check your connection.');
+      setSuccessMessage(msg);
       setModalType("error");
       setShowSuccessModal(true);
     }

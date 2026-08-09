@@ -7427,10 +7427,33 @@ function AdminDashboard() {
                         </div>
                         <div className="section-card-body" style={{ padding: '24px' }}>
                             <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-                                <input type="text" className="settings-input flex-1" placeholder="New Department..." value={newDepartment} onChange={e => setNewDepartment(e.target.value)} onKeyDown={async e => { if (e.key === 'Enter' && newDepartment.trim()) { const next = [...departments, newDepartment.trim()]; setDepartments(next); setNewDepartment(""); const saved = await persistSystemSettings({ departments: next }, "Departments updated."); if (!saved) setDepartments(departments); } }} />
+                                <input type="text" className="settings-input flex-1" placeholder="New Department..." value={newDepartment} onChange={e => setNewDepartment(e.target.value)} onKeyDown={async e => { 
+                                  if (e.key === 'Enter') {
+                                    const v = newDepartment.trim();
+                                    if (!v) {
+                                      setModalType('error'); setSuccessMessage('Department name cannot be empty.'); setShowSuccessModal(true);
+                                    } else if (v.length < 2) {
+                                      setModalType('error'); setSuccessMessage('Department name is too short (min 2 characters).'); setShowSuccessModal(true);
+                                    } else if (v.length > 64) {
+                                      setModalType('error'); setSuccessMessage('Department name is too long (max 64 characters).'); setShowSuccessModal(true);
+                                    } else {
+                                      const next = [...departments, v]; 
+                                      setDepartments(next); setNewDepartment(""); 
+                                      const saved = await persistSystemSettings({ departments: next }, "Departments updated."); 
+                                      if (!saved) setDepartments(departments); 
+                                    }
+                                  }
+                                }} />
                                 <button className="btn-orange-sm" style={{ padding: '10px 20px', width: 'auto', marginTop: 0, display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={async () => {
-                                    if(newDepartment.trim()) {
-                                      const next = [...departments, newDepartment.trim()];
+                                    const v = newDepartment.trim();
+                                    if (!v) {
+                                      setModalType('error'); setSuccessMessage('Department name cannot be empty.'); setShowSuccessModal(true);
+                                    } else if (v.length < 2) {
+                                      setModalType('error'); setSuccessMessage('Department name is too short (min 2 characters).'); setShowSuccessModal(true);
+                                    } else if (v.length > 64) {
+                                      setModalType('error'); setSuccessMessage('Department name is too long (max 64 characters).'); setShowSuccessModal(true);
+                                    } else {
+                                      const next = [...departments, v];
                                       setDepartments(next);
                                       setNewDepartment("");
                                       const saved = await persistSystemSettings({ departments: next }, "Departments updated.");
@@ -7469,34 +7492,50 @@ function AdminDashboard() {
                         <div className="section-card-body" style={{ padding: '24px' }}>
                             <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
                                 <input type="text" className="settings-input flex-1" placeholder="New Ward..." value={newWard} onChange={e => setNewWard(e.target.value)} onKeyDown={async e => {
-                                  if (e.key === 'Enter' && newWard.trim()) {
-                                    try {
-                                      await fetchJson(`/api/wards`, {
-                                        apiBase: API_BASE,
-                                        method: 'POST',
-                                        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ name: newWard.trim(), totalCapacity: 0 })
-                                      });
-                                      setNewWard("");
-                                      await fetchWardRegistry();
-                                      setModalType("success");
-                                      setSuccessMessage("Ward created.");
-                                      setShowSuccessModal(true);
-                                    } catch (error) {
-                                      setModalType("error");
-                                      setSuccessMessage(String(error?.message || "Unable to create ward."));
-                                      setShowSuccessModal(true);
-                                    }
-                                  }
-                                }} />
-                                <button className="btn-orange-sm" style={{ padding: '10px 20px', width: 'auto', marginTop: 0, display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={async () => {
-                                    if(newWard.trim()) {
+                                  if (e.key === 'Enter') {
+                                    const v = newWard.trim();
+                                    if (!v) {
+                                      setModalType("error"); setSuccessMessage("Ward name cannot be empty."); setShowSuccessModal(true);
+                                    } else if (v.length < 2) {
+                                      setModalType("error"); setSuccessMessage("Ward name is too short (min 2 characters)."); setShowSuccessModal(true);
+                                    } else if (v.length > 64) {
+                                      setModalType("error"); setSuccessMessage("Ward name is too long (max 64 characters)."); setShowSuccessModal(true);
+                                    } else {
                                       try {
                                         await fetchJson(`/api/wards`, {
                                           apiBase: API_BASE,
                                           method: 'POST',
                                           headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ name: newWard.trim(), totalCapacity: 0 })
+                                          body: JSON.stringify({ name: v, totalCapacity: 0 })
+                                        });
+                                        setNewWard("");
+                                        await fetchWardRegistry();
+                                        setModalType("success");
+                                        setSuccessMessage("Ward created.");
+                                        setShowSuccessModal(true);
+                                      } catch (error) {
+                                        setModalType("error");
+                                        setSuccessMessage(String(error?.message || "Unable to create ward."));
+                                        setShowSuccessModal(true);
+                                      }
+                                    }
+                                  }
+                                }} />
+                                <button className="btn-orange-sm" style={{ padding: '10px 20px', width: 'auto', marginTop: 0, display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={async () => {
+                                    const v = newWard.trim();
+                                    if (!v) {
+                                      setModalType("error"); setSuccessMessage("Ward name cannot be empty."); setShowSuccessModal(true);
+                                    } else if (v.length < 2) {
+                                      setModalType("error"); setSuccessMessage("Ward name is too short (min 2 characters)."); setShowSuccessModal(true);
+                                    } else if (v.length > 64) {
+                                      setModalType("error"); setSuccessMessage("Ward name is too long (max 64 characters)."); setShowSuccessModal(true);
+                                    } else {
+                                      try {
+                                        await fetchJson(`/api/wards`, {
+                                          apiBase: API_BASE,
+                                          method: 'POST',
+                                          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ name: v, totalCapacity: 0 })
                                         });
                                         setNewWard("");
                                         await fetchWardRegistry();

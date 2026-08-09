@@ -1223,15 +1223,47 @@ router.put('/doctors/:doctorId/availability/rules', requireRole(['doctor_secreta
     if (!isUuid(doctorId)) return res.status(400).json({ message: 'Invalid doctorId' });
     const mode = String(req.body?.mode || req.query.mode || 'onsite').trim().toLowerCase() || 'onsite';
     const rules = Array.isArray(req.body?.rules) ? req.body.rules : [];
+    if (mode !== 'onsite' && mode !== 'teleconsult') return res.status(400).json({ message: 'mode must be onsite or teleconsult.' });
     await ensureAvailabilityTablesOnce();
+
+    for (let i = 0; i < rules.length; i++) {
+      const r = rules[i] || {};
+      const line = i + 1;
+      const dayOfWeek = Math.trunc(Number(r?.dayOfWeek));
+      const startTime = toTimeStr(r?.startTime);
+      const endTime = toTimeStr(r?.endTime);
+      const slotMinutesRaw = Number(r?.slotMinutes || 30);
+      const maxPerSlotRaw = Number(r?.maxPerSlot || 1);
+
+      if (!Number.isFinite(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
+        return res.status(400).json({ message: `Rule ${line}: dayOfWeek must be 0 (Sun) to 6 (Sat).` });
+      }
+      if (!/^\d{2}:\d{2}$/.test(startTime)) {
+        return res.status(400).json({ message: `Rule ${line}: startTime must be HH:MM.` });
+      }
+      if (!/^\d{2}:\d{2}$/.test(endTime)) {
+        return res.status(400).json({ message: `Rule ${line}: endTime must be HH:MM.` });
+      }
+      const s = timeToMinutes(startTime);
+      const e = timeToMinutes(endTime);
+      if (s === null || e === null || e <= s) {
+        return res.status(400).json({ message: `Rule ${line}: endTime must be later than startTime.` });
+      }
+      if (!Number.isFinite(slotMinutesRaw) || !Number.isInteger(slotMinutesRaw) || slotMinutesRaw < 5 || slotMinutesRaw > 180) {
+        return res.status(400).json({ message: `Rule ${line}: slotMinutes must be 5-180 minutes.` });
+      }
+      if (!Number.isFinite(maxPerSlotRaw) || !Number.isInteger(maxPerSlotRaw) || maxPerSlotRaw < 1 || maxPerSlotRaw > 50) {
+        return res.status(400).json({ message: `Rule ${line}: maxPerSlot must be 1-50.` });
+      }
+    }
 
     const normalized = rules
       .map((r) => {
         const dayOfWeek = Math.trunc(Number(r?.dayOfWeek));
         const startTime = toTimeStr(r?.startTime);
         const endTime = toTimeStr(r?.endTime);
-        const slotMinutes = Math.max(5, Math.min(240, Math.trunc(Number(r?.slotMinutes || 30) || 30)));
-        const maxPerSlot = Math.max(1, Math.min(20, Math.trunc(Number(r?.maxPerSlot || 1) || 1)));
+        const slotMinutes = Math.max(5, Math.min(180, Math.trunc(Number(r?.slotMinutes || 30) || 30)));
+        const maxPerSlot = Math.max(1, Math.min(50, Math.trunc(Number(r?.maxPerSlot || 1) || 1)));
         const active = r?.active === undefined ? true : Boolean(r.active);
         if (!Number.isFinite(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) return null;
         if (!startTime || !endTime) return null;
@@ -1331,15 +1363,38 @@ router.post('/doctors/:doctorId/availability/exceptions', requireRole(['doctor_s
     const doctorId = String(req.params.doctorId || '').trim();
     if (!isUuid(doctorId)) return res.status(400).json({ message: 'Invalid doctorId' });
     const mode = String(req.body?.mode || 'onsite').trim().toLowerCase() || 'onsite';
+    if (mode !== 'onsite' && mode !== 'teleconsult') return res.status(400).json({ message: 'mode must be onsite or teleconsult.' });
     const dateRaw = String(req.body?.date || '').trim();
     if (!dateRaw) return res.status(400).json({ message: 'date is required' });
     const dt = new Date(dateRaw);
     if (Number.isNaN(dt.getTime())) return res.status(400).json({ message: 'Invalid date' });
     const dKey = dateKey(dt);
 
-    const startTime = toTimeStr(req.body?.startTime) || null;
-    const endTime = toTimeStr(req.body?.endTime) || null;
+    const startTimeRaw = String(req.body?.startTime || '').trim();
+    const endTimeRaw = String(req.body?.endTime || '').trim();
+    const startTime = startTimeRaw ? toTimeStr(startTimeRaw) : null;
+    const endTime = endTimeRaw ? toTimeStr(endTimeRaw) : null;
     const note = req.body?.note != null ? String(req.body.note).trim() : null;
+
+    if ((startTime && !endTime) || (!startTime && endTime)) {
+      return res.status(400).json({ message: 'startTime and endTime must both be empty (full day) or both set.' });
+    }
+    if (startTime && !/^\d{2}:\d{2}$/.test(startTime)) {
+      return res.status(400).json({ message: 'startTime must be HH:MM.' });
+    }
+    if (endTime && !/^\d{2}:\d{2}$/.test(endTime)) {
+      return res.status(400).json({ message: 'endTime must be HH:MM.' });
+    }
+    if (startTime && endTime) {
+      const s = timeToMinutes(startTime);
+      const e = timeToMinutes(endTime);
+      if (s === null || e === null || e <= s) {
+        return res.status(400).json({ message: 'endTime must be later than startTime.' });
+      }
+    }
+    if (note && note.length > 2000) {
+      return res.status(400).json({ message: 'note cannot exceed 2000 characters.' });
+    }
 
     let supaRow = null;
     try {

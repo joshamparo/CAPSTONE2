@@ -350,7 +350,7 @@ async function resolveSecretaryLinkedDoctor(hdr) {
   };
 }
 
-async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, secretaryName, department }) {
+async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, secretaryName, department, overriddenDoctorId }) {
   if (department) {
     const reqService = inferServiceKey(requestRow);
     const deptKey = normalizeServiceKey(department);
@@ -367,9 +367,25 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
     return requestRow;
   }
 
-  const { doctorUuid, doctorName } = await resolveSecretaryLinkedDoctor(hdr);
+  const overriddenClean = overriddenDoctorId && isUuid(overriddenDoctorId) ? String(overriddenDoctorId).toLowerCase() : null;
+  let doctorUuid;
+  let doctorName;
+  if (overriddenClean) {
+    doctorUuid = overriddenClean;
+    const doc = await prisma.doctors.findUnique({ where: { id: overriddenClean } }).catch(() => null);
+    if (doc) {
+      doctorName = `Dr. ${String(doc.first_name || '').trim()} ${String(doc.last_name || '').trim()}`.trim();
+    } else {
+      doctorName = requestRow.doctor_name ? String(requestRow.doctor_name).trim() : '';
+    }
+  } else {
+    const resolved = await resolveSecretaryLinkedDoctor(hdr);
+    doctorUuid = resolved.doctorUuid;
+    doctorName = resolved.doctorName;
+  }
+
   const reqDoctorId = requestRow?.doctor_id ? String(requestRow.doctor_id) : '';
-  if (reqDoctorId && reqDoctorId !== doctorUuid) {
+  if (reqDoctorId && doctorUuid && reqDoctorId !== doctorUuid) {
     throw new Error('Forbidden');
   }
 
@@ -1042,7 +1058,9 @@ router.post('/:id/messages', async (req, res) => {
 
 router.patch('/:id', async (req, res) => {
   try {
-    const id = BigInt(req.params.id);
+    const idStr = String(req.params.id || '').trim();
+    if (!/^\d+$/.test(idStr)) return res.status(400).json({ message: 'Invalid request id.' });
+    const id = BigInt(idStr);
     const hdr = inferRequester(req);
     const status = String(req.body.status || '').trim();
     const actor = String(req.body.actor || '').trim();
@@ -1050,7 +1068,21 @@ router.patch('/:id', async (req, res) => {
     const department = String(req.body.department || req.body.serviceType || '').trim();
     const suggestedDate = req.body.suggestedDate ? new Date(req.body.suggestedDate) : null;
     const suggestedTime = req.body.suggestedTime ? timeToDateObj(req.body.suggestedTime) : null;
-    const note = String(req.body.note || '').trim() || null;
+    const noteRaw = String(req.body.note || '').trim();
+    const note = noteRaw || null;
+    if (!status) return res.status(400).json({ message: 'status cannot be empty.' });
+
+    if (status === 'Suggested') {
+      if (!suggestedDate || Number.isNaN(suggestedDate.getTime())) {
+        return res.status(400).json({ message: 'suggestedDate is required when status=Suggested.' });
+      }
+    }
+    if (status === 'Rejected' && !note) {
+      // ok (note optional by schema default); guard length if present:
+    }
+    if (note && note.length > 2000) {
+      return res.status(400).json({ message: 'note cannot exceed 2000 characters.' });
+    }
 
     const reqRows = await prisma.$queryRaw`
       SELECT *
@@ -1186,9 +1218,16 @@ router.patch('/:id', async (req, res) => {
 
 router.post('/:id/secretary-finalize', async (req, res) => {
   try {
-    const id = BigInt(req.params.id);
+    const idStr = String(req.params.id || '').trim();
+    if (!/^\d+$/.test(idStr)) return res.status(400).json({ message: 'Invalid request id.' });
+    const id = BigInt(idStr);
     const hdr = inferRequester(req);
     if (hdr.role && hdr.role !== 'admin' && hdr.role !== 'doctor_secretary') return res.status(403).json({ message: 'Forbidden' });
+
+    const doctorId = String(req.body.doctorId || '').trim();
+    if (!doctorId) return res.status(400).json({ message: 'doctorId is required.' });
+    if (!isUuid(doctorId)) return res.status(400).json({ message: 'doctorId must be a valid UUID.' });
+
     const secretaryName = String(req.body.secretaryName || req.body.actor || '').trim() || null;
     const department = String(req.body.department || req.body.serviceType || '').trim();
 
@@ -1205,7 +1244,8 @@ router.post('/:id/secretary-finalize', async (req, res) => {
       hdr,
       requestRow,
       secretaryName,
-      department
+      department,
+      overriddenDoctorId: doctorId
     });
     res.json(serializeRequestRow(updated));
   } catch (err) {

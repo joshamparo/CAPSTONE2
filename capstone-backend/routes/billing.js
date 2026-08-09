@@ -1522,8 +1522,11 @@ router.put('/service-fees', async (req, res) => {
     const defaultFee = Number.isFinite(feeRaw) && feeRaw >= 0 ? toMoney(feeRaw) : null;
 
     if (!serviceKey) return res.status(400).json({ message: 'serviceKey is required' });
+    if (!/^[a-z0-9_]{1,64}$/.test(serviceKey)) return res.status(400).json({ message: 'serviceKey must be 1-64 lowercase letters, numbers, or underscores.' });
     if (!serviceName) return res.status(400).json({ message: 'serviceName is required' });
+    if (serviceName.length < 2 || serviceName.length > 120) return res.status(400).json({ message: 'serviceName must be 2-120 characters.' });
     if (defaultFee == null) return res.status(400).json({ message: 'defaultFee must be >= 0' });
+    if (Number(defaultFee) > 999999.99) return res.status(400).json({ message: 'defaultFee cannot exceed 999999.99.' });
 
     const rows = await prisma.$queryRaw`
       INSERT INTO public.doctor_service_fees (doctor_uuid, service_key, service_name, default_fee, active)
@@ -1743,6 +1746,8 @@ router.post('/charge-onsite', async (req, res) => {
 
     if (!actorEmail) return res.status(400).json({ message: 'Creator email is required' });
     if (!amountMoney) return res.status(400).json({ message: 'Invalid amount' });
+    if (serviceKey && serviceKey.length > 64) return res.status(400).json({ message: 'serviceKey too long (max 64 chars).' });
+    if (Number(amountMoney) > 999999.99) return res.status(400).json({ message: 'amount cannot exceed 999999.99.' });
 
     const appt = await prisma.appointments.findUnique({ where: { id: appointmentId } }).catch(() => null);
     if (!appt) return res.status(404).json({ message: 'Appointment not found' });

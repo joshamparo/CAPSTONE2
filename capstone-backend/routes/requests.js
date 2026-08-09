@@ -115,10 +115,51 @@ router.post('/', async (req, res) => {
 
         const hdrName = headerName(req);
         const { patientId, patientName, requesterName, requestType, details } = req.body;
-        
+
         const requestedBy = role === 'admin' ? String(requesterName || '').trim() : hdrName;
         if (!requestedBy || !requestType || !details) {
             return res.status(400).json({ message: "Requester Name, Request Type, and Details are required" });
+        }
+
+        const requestTypeClean = String(requestType || '').trim();
+        if (!requestTypeClean) return res.status(400).json({ message: 'Request Type cannot be empty.' });
+        const detailsTrim = String(details || '').trim();
+        if (!detailsTrim) return res.status(400).json({ message: 'Details cannot be empty.' });
+
+        if (requestTypeClean === 'Medication' || requestTypeClean === 'Supply') {
+          const items = parseStructuredItemsFromMessage(detailsTrim);
+          if (!items.length) return res.status(400).json({ message: `${requestTypeClean} request must include at least one item.` });
+          for (const it of items) {
+            const type = String(it?.type || it?.itemType || '').trim().toLowerCase();
+            const itemId = String(it?.itemId || it?.id || '').trim();
+            const qtyRaw = Number(it?.qty || it?.quantity || 0);
+            const qty = Number.isFinite(qtyRaw) && qtyRaw > 0 ? Math.trunc(qtyRaw) : 0;
+            if (!itemId || !/^\d+$/.test(itemId)) {
+              return res.status(400).json({ message: `Invalid item id in ${requestTypeClean.toLowerCase()} request.` });
+            }
+            if (type !== 'medicine' && type !== 'supply') {
+              return res.status(400).json({ message: `Item type must be medicine or supply (got ${type || 'empty'}).` });
+            }
+            if (qty < 1) return res.status(400).json({ message: `Quantity must be at least 1 for item ${it?.name || it?.item || itemId}.` });
+            if (type === 'medicine') {
+              const row = await prisma.medicines.findUnique({ where: { id: BigInt(itemId) } }).catch(() => null);
+              if (!row) return res.status(400).json({ message: `Medicine not found (id ${itemId}).` });
+              const stock = Number(row.stock || 0);
+              if (stock <= 0) return res.status(400).json({ message: `Cannot order: no stock left for ${row.name || 'medicine'}.` });
+              if (stock < qty) return res.status(400).json({ message: `Cannot order ${row.name || 'medicine'}: requested ${qty} but only ${stock} in stock.` });
+            } else if (type === 'supply') {
+              const row = await prisma.inventory?.findUnique?.({ where: { id: BigInt(itemId) } })
+                || await prisma.supplies?.findUnique?.({ where: { id: BigInt(itemId) } })
+                || null;
+              if (row) {
+                const stock = Number(row.stock_available ?? row.stockAvailable ?? row.stock ?? row.qty ?? row.quantity ?? 0);
+                if (Number.isFinite(stock)) {
+                  if (stock <= 0) return res.status(400).json({ message: `Cannot order: no stock left for ${row.name || row.item_name || 'supply'}.` });
+                  if (stock < qty) return res.status(400).json({ message: `Cannot order ${row.name || row.item_name || 'supply'}: requested ${qty} but only ${stock} in stock.` });
+                }
+              }
+            }
+          }
         }
 
         const safePatientName = patientName != null ? String(patientName).trim() : '';
@@ -129,7 +170,7 @@ router.post('/', async (req, res) => {
                 patient_name: safePatientName || null,
                 requested_by: requestedBy,
                 // requestType isn't in the schema, using message for details
-                message: details, 
+                message: detailsTrim,
                 status: 'Pending'
             }
         });

@@ -377,13 +377,73 @@ export default function DoctorSecretaryDashboard() {
   };
 
   const saveAvailabilityRules = async () => {
-    if (!linkedDoctorId) return;
+    if (!linkedDoctorId) {
+      const msg = 'Your account is not linked to a doctor yet. Ask admin to link your account first before saving availability.';
+      setAvailabilityError(msg);
+      setToast({ type: 'error', message: msg });
+      return;
+    }
+    const rules = (Array.isArray(availabilityRules) ? availabilityRules : []);
+    for (let i = 0; i < rules.length; i++) {
+      const r = rules[i];
+      const d = Number(r.dayOfWeek);
+      const start = String(r.startTime || '').trim();
+      const end = String(r.endTime || '').trim();
+      const slot = Number(r.slotMinutes || 0);
+      const max = Number(r.maxPerSlot || 0);
+      if (!Number.isInteger(d) || d < 0 || d > 6) {
+        const msg = `Rule #${i + 1}: Invalid day of week.`;
+        setAvailabilityError(msg);
+        setToast({ type: 'error', message: msg });
+        return;
+      }
+      if (!/^\d{2}:\d{2}$/.test(start)) {
+        const msg = `Rule #${i + 1}: Enter a valid start time (HH:MM).`;
+        setAvailabilityError(msg);
+        setToast({ type: 'error', message: msg });
+        return;
+      }
+      if (!/^\d{2}:\d{2}$/.test(end)) {
+        const msg = `Rule #${i + 1}: Enter a valid end time (HH:MM).`;
+        setAvailabilityError(msg);
+        setToast({ type: 'error', message: msg });
+        return;
+      }
+      const [sh, sm] = start.split(':').map(v => parseInt(v, 10));
+      const [eh, em] = end.split(':').map(v => parseInt(v, 10));
+      if (sh > 23 || sm > 59 || eh > 23 || em > 59) {
+        const msg = `Rule #${i + 1}: Invalid time value (hours 0-23, minutes 0-59).`;
+        setAvailabilityError(msg);
+        setToast({ type: 'error', message: msg });
+        return;
+      }
+      const startMin = sh * 60 + sm;
+      const endMin = eh * 60 + em;
+      if (endMin <= startMin) {
+        const msg = `Rule #${i + 1}: End time must be later than start time.`;
+        setAvailabilityError(msg);
+        setToast({ type: 'error', message: msg });
+        return;
+      }
+      if (!Number.isInteger(slot) || slot < 5 || slot > 180) {
+        const msg = `Rule #${i + 1}: Slot minutes must be a whole number between 5 and 180.`;
+        setAvailabilityError(msg);
+        setToast({ type: 'error', message: msg });
+        return;
+      }
+      if (!Number.isInteger(max) || max < 1 || max > 50) {
+        const msg = `Rule #${i + 1}: Max per slot must be a whole number between 1 and 50.`;
+        setAvailabilityError(msg);
+        setToast({ type: 'error', message: msg });
+        return;
+      }
+    }
     setAvailabilitySaving(true);
     setAvailabilityError('');
     try {
       const payload = {
         mode: 'onsite',
-        rules: (Array.isArray(availabilityRules) ? availabilityRules : []).map((r) => ({
+        rules: rules.map((r) => ({
           dayOfWeek: Number(r.dayOfWeek),
           startTime: String(r.startTime || '').slice(0, 5),
           endTime: String(r.endTime || '').slice(0, 5),
@@ -424,7 +484,56 @@ export default function DoctorSecretaryDashboard() {
   };
 
   const addAvailabilityException = async () => {
-    if (!linkedDoctorId) return;
+    if (!linkedDoctorId) {
+      const msg = 'Your account is not linked to a doctor yet. Ask admin to link your account first before adding availability exceptions.';
+      setAvailabilityError(msg);
+      setToast({ type: 'error', message: msg });
+      return;
+    }
+    const date = String(availabilityAddException.date || '').trim();
+    if (!date) {
+      const msg = 'Select a date for the availability exception.';
+      setAvailabilityError(msg);
+      setToast({ type: 'error', message: msg });
+      return;
+    }
+    const parsed = new Date(date);
+    if (Number.isNaN(parsed.getTime())) {
+      const msg = 'Enter a valid date for the availability exception.';
+      setAvailabilityError(msg);
+      setToast({ type: 'error', message: msg });
+      return;
+    }
+    const startTime = String(availabilityAddException.startTime || '').trim();
+    const endTime = String(availabilityAddException.endTime || '').trim();
+    if (startTime || endTime) {
+      if (!/^\d{2}:\d{2}$/.test(startTime)) {
+        const msg = 'Enter a valid start time (HH:MM) or leave both start and end times blank to block the whole day.';
+        setAvailabilityError(msg);
+        setToast({ type: 'error', message: msg });
+        return;
+      }
+      if (!/^\d{2}:\d{2}$/.test(endTime)) {
+        const msg = 'Enter a valid end time (HH:MM) or leave both start and end times blank to block the whole day.';
+        setAvailabilityError(msg);
+        setToast({ type: 'error', message: msg });
+        return;
+      }
+      const [sh, sm] = startTime.split(':').map(v => parseInt(v, 10));
+      const [eh, em] = endTime.split(':').map(v => parseInt(v, 10));
+      if (sh > 23 || sm > 59 || eh > 23 || em > 59) {
+        const msg = 'Invalid exception time value (hours 0-23, minutes 0-59).';
+        setAvailabilityError(msg);
+        setToast({ type: 'error', message: msg });
+        return;
+      }
+      if (eh * 60 + em <= sh * 60 + sm) {
+        const msg = 'Exception end time must be later than start time.';
+        setAvailabilityError(msg);
+        setToast({ type: 'error', message: msg });
+        return;
+      }
+    }
     setAvailabilitySaving(true);
     setAvailabilityError('');
     try {
@@ -434,13 +543,13 @@ export default function DoctorSecretaryDashboard() {
         headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({
           mode: 'onsite',
-          date: availabilityAddException.date,
-          startTime: availabilityAddException.startTime ? String(availabilityAddException.startTime).slice(0, 5) : '',
-          endTime: availabilityAddException.endTime ? String(availabilityAddException.endTime).slice(0, 5) : '',
+          date,
+          startTime: startTime ? String(startTime).slice(0, 5) : '',
+          endTime: endTime ? String(endTime).slice(0, 5) : '',
           note: availabilityAddException.note ? String(availabilityAddException.note).trim() : ''
         })
       });
-      setAvailabilityAddException({ date: availabilityAddException.date, startTime: '', endTime: '', note: '' });
+      setAvailabilityAddException({ date, startTime: '', endTime: '', note: '' });
       await refreshAvailability({ silent: true });
     } catch (e) {
       setAvailabilityError(String(e.message || 'Failed to add exception.'));
@@ -450,7 +559,14 @@ export default function DoctorSecretaryDashboard() {
   };
 
   const deleteAvailabilityException = async (id) => {
-    if (!linkedDoctorId || !id) return;
+    if (!linkedDoctorId || !id) {
+      const msg = !linkedDoctorId
+        ? 'Your account is not linked to a doctor yet.'
+        : 'Invalid exception id.';
+      setAvailabilityError(msg);
+      setToast({ type: 'error', message: msg });
+      return;
+    }
     setAvailabilitySaving(true);
     setAvailabilityError('');
     try {
@@ -536,7 +652,12 @@ export default function DoctorSecretaryDashboard() {
 
   const upsertServiceFee = async (fee) => {
     const key = norm(fee?.serviceKey || fee?.service_key).toLowerCase();
-    if (!key) return;
+    if (!key) {
+      const msg = 'Service key is missing. Refresh the page and try again.';
+      setServiceFeesError(msg);
+      setToast({ type: 'error', message: msg });
+      return;
+    }
     setFeesSavingKey(key);
     setServiceFeesError('');
     try {
@@ -641,12 +762,17 @@ export default function DoctorSecretaryDashboard() {
   };
 
   const submitCharge = async () => {
-    if (!chargeTarget?.id) return;
+    if (!chargeTarget?.id) {
+      const msg = 'Select a patient appointment to charge first.';
+      setChargeError(msg);
+      setToast({ type: 'error', message: msg });
+      return;
+    }
     setChargeSaving(true);
     setChargeError('');
     try {
       const amount = Number(chargeForm.amount);
-      if (!Number.isFinite(amount) || amount <= 0) throw new Error('Enter a valid amount.');
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error('Enter a valid amount greater than 0.');
       const serviceKey = String(chargeForm.serviceKey || '').trim();
       const service = serviceKey ? serviceFeeMap.get(serviceKey.toLowerCase()) : null;
 
@@ -694,12 +820,18 @@ export default function DoctorSecretaryDashboard() {
   };
 
   const submitConfirm = async () => {
-    if (!confirmTarget?.id) return;
+    if (!confirmTarget?.id) {
+      const msg = 'Select a patient appointment to confirm first.';
+      setConfirmError(msg);
+      setToast({ type: 'error', message: msg });
+      return;
+    }
     setConfirmSaving(true);
     setConfirmError('');
     try {
       const time = String(confirmForm.time || '').trim();
       if (!time) throw new Error('Select a time.');
+      if (!/^\d{2}:\d{2}$/.test(time)) throw new Error('Enter a valid time (HH:MM).');
       const status = String(confirmForm.status || '').trim() || 'Confirmed';
       await fetchJson(`/api/appointments/${encodeURIComponent(String(confirmTarget.id))}`, {
         apiBase: API_BASE,
@@ -833,7 +965,12 @@ export default function DoctorSecretaryDashboard() {
   };
 
   const submitAssign = async () => {
-    if (!assignTarget?.id) return;
+    if (!assignTarget?.id) {
+      const msg = 'Select an appointment from the inbox first to assign a doctor and time.';
+      setAssignError(msg);
+      setToast({ type: 'error', message: msg });
+      return;
+    }
     setAssignSaving(true);
     setAssignError('');
     try {
@@ -841,6 +978,7 @@ export default function DoctorSecretaryDashboard() {
       if (!doctorId) throw new Error('Select a doctor to assign.');
       const time = String(assignForm.time || '').trim();
       if (!time) throw new Error('Select a time.');
+      if (!/^\d{2}:\d{2}$/.test(time)) throw new Error('Enter a valid time (HH:MM).');
 
       await fetchJson(`/api/appointments/${encodeURIComponent(String(assignTarget.id))}`, {
         apiBase: API_BASE,
@@ -867,7 +1005,10 @@ export default function DoctorSecretaryDashboard() {
 
   const callPatientNow = async (apt) => {
     const id = String(apt?.id || '').trim();
-    if (!id) return;
+    if (!id) {
+      setToast({ type: 'error', message: 'Select a checked-in patient first before calling.' });
+      return;
+    }
     setQueueActionSavingId(id);
     try {
       const nowIso = new Date().toISOString();
@@ -891,14 +1032,22 @@ export default function DoctorSecretaryDashboard() {
 
   const updateAppointmentStatus = async ({ apt, status, clearNowServing = false }) => {
     const id = String(apt?.id || '').trim();
-    if (!id) return false;
+    if (!id) {
+      setToast({ type: 'error', message: 'Select a patient first before updating the status.' });
+      return false;
+    }
+    const statusClean = String(status || '').trim();
+    if (!statusClean) {
+      setToast({ type: 'error', message: 'Status cannot be empty.' });
+      return false;
+    }
     setQueueActionSavingId(id);
     try {
-      const payload = { status };
+      const payload = { status: statusClean };
       if (clearNowServing) {
         payload.patientWaitingAt = null;
         payload.patientWaitingName = null;
-      } else if (status && String(status).toLowerCase().includes('consult')) {
+      } else if (statusClean && statusClean.toLowerCase().includes('consult')) {
         payload.patientWaitingName = secretaryName || null;
       }
       await fetchJson(`/api/appointments/${encodeURIComponent(id)}`, {
@@ -1049,16 +1198,28 @@ export default function DoctorSecretaryDashboard() {
   };
 
   const saveProfile = async () => {
+    const fn = String(profileForm.firstName || '').trim();
+    const ln = String(profileForm.lastName || '').trim();
+    const errors = [];
+    if (!fn) errors.push('First name is required.');
+    else if (fn.length < 2) errors.push('First name is too short (min 2 characters).');
+    if (!ln) errors.push('Last name is required.');
+    else if (ln.length < 2) errors.push('Last name is too short (min 2 characters).');
+    if (profileForm.newPassword) {
+      const np = String(profileForm.newPassword);
+      if (np.length < 6) errors.push('New password is too short (min 6 characters).');
+      if (np !== profileForm.confirmPassword) errors.push('Passwords do not match.');
+    }
+    if (errors.length) {
+      setProfileMessage({ text: errors.join('  '), type: 'error' });
+      return;
+    }
     setSavingProfile(true);
     setProfileMessage({ text: '', type: '' });
     try {
-      if (profileForm.newPassword && profileForm.newPassword !== profileForm.confirmPassword) {
-        throw new Error('Passwords do not match');
-      }
-
       const payload = {
-        firstName: profileForm.firstName,
-        lastName: profileForm.lastName,
+        firstName: fn,
+        lastName: ln,
       };
 
       if (profileForm.newPassword) {
@@ -1090,7 +1251,12 @@ export default function DoctorSecretaryDashboard() {
   };
 
   const approveAndForward = async () => {
-    if (!selected?.id) return;
+    if (!selected?.id) {
+      const msg = 'Select a request from the inbox first before approving.';
+      setActionError(msg);
+      setToast({ type: 'error', message: msg });
+      return;
+    }
     setActionLoading(true);
     setActionError('');
     try {
@@ -1116,7 +1282,12 @@ export default function DoctorSecretaryDashboard() {
   };
 
   const rejectRequest = async () => {
-    if (!selected?.id) return;
+    if (!selected?.id) {
+      const msg = 'Select a request from the inbox first before rejecting.';
+      setActionError(msg);
+      setToast({ type: 'error', message: msg });
+      return;
+    }
     setActionLoading(true);
     setActionError('');
     try {
