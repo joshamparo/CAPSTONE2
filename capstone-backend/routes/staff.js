@@ -756,7 +756,7 @@ router.post('/', requireRole(['admin']), async (req, res) => {
             const savedAcc = await prisma.accounts.create({
                 data: {
                     name,
-                    email: email || null,
+                    email: emailClean || null,
                     password: hashedPassword,
                     roles: normalizedAccountType
                 }
@@ -783,7 +783,7 @@ router.post('/', requireRole(['admin']), async (req, res) => {
         const baseData = {
             first_name: firstName,
             last_name: lastName,
-            email: normalizedEmail || null,
+            email: emailClean || null,
             account_type: normalizedAccountType,
             password: hashedPassword
         };
@@ -847,7 +847,7 @@ router.post('/', requireRole(['admin']), async (req, res) => {
             await prisma.accounts.create({
                 data: {
                     name: accountName || `${normalizedAccountType}`.trim(),
-                    email: normalizedEmail || null,
+                    email: emailClean || null,
                     password: hashedPassword,
                     roles: normalizedAccountType
                 }
