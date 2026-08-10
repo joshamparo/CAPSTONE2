@@ -3844,6 +3844,28 @@ function AdminDashboard() {
 
                 return (
                   <>
+                    {totalPages > 1 && (
+                      <div className="patient-pagination" style={{ alignSelf: 'flex-end', margin: '8px 0 16px' }}>
+                        <button
+                          type="button"
+                          className="patient-page-btn"
+                          disabled={safePage === 1}
+                          onClick={() => setAnnouncementsPage(p => Math.max(1, p - 1))}
+                          aria-label="Previous page"
+                        >
+                          <ChevronLeft size={18} />
+                        </button>
+                        <button
+                          type="button"
+                          className="patient-page-btn"
+                          disabled={safePage === totalPages}
+                          onClick={() => setAnnouncementsPage(p => Math.min(totalPages, p + 1))}
+                          aria-label="Next page"
+                        >
+                          <ChevronRight size={18} />
+                        </button>
+                      </div>
+                    )}
                     {paginated.map((ann) => {
                       const id = ann.id || ann._id;
                       const priority = String(ann.priority || 'Normal');
@@ -3897,25 +3919,6 @@ function AdminDashboard() {
                         </div>
                       );
                     })}
-                    {totalPages > 1 && (
-                      <div className="announcement-pagination">
-                        <button
-                          className="ann-pin-btn"
-                          disabled={safePage === 1}
-                          onClick={() => setAnnouncementsPage(p => Math.max(1, p - 1))}
-                        >
-                          Previous
-                        </button>
-                        <span className="pagination-info">Page {safePage} of {totalPages}</span>
-                        <button
-                          className="ann-pin-btn"
-                          disabled={safePage === totalPages}
-                          onClick={() => setAnnouncementsPage(p => Math.min(totalPages, p + 1))}
-                        >
-                          Next
-                        </button>
-                      </div>
-                    )}
                   </>
                 );
               })()
@@ -6450,11 +6453,6 @@ function AdminDashboard() {
                   <ChevronLeft size={18} />
                 </button>
 
-                <div className="patient-page-indicator">
-                  <span className="patient-page-strong">{currentPage}</span>
-                  <span className="patient-page-muted">/ {totalPages}</span>
-                </div>
-
                 <button
                   type="button"
                   className="patient-page-btn"
@@ -6847,11 +6845,6 @@ function AdminDashboard() {
                                 >
                                     <ChevronLeft size={18} />
                                 </button>
-
-                                <div className="patient-page-indicator">
-                                    <span className="patient-page-strong">{currentPage}</span>
-                                    <span className="patient-page-muted">/ {totalPages}</span>
-                                </div>
 
                                 <button
                                     type="button"

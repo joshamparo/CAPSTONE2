@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronLeft, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff } from 'lucide-react';
 import './DoctorDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
@@ -3328,6 +3328,28 @@ function DoctorDashboard() {
               )}
             </div>
           )}
+          {recordsTotal > recordTake && (
+            <div className="patient-pagination" style={{ margin: 0 }}>
+              <button 
+                type="button"
+                className="patient-page-btn"
+                disabled={recordSkip === 0}
+                onClick={() => setRecordSkip(Math.max(0, recordSkip - recordTake))}
+                aria-label="Previous page"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button 
+                type="button"
+                className="patient-page-btn"
+                disabled={recordSkip + recordTake >= recordsTotal}
+                onClick={() => setRecordSkip(recordSkip + recordTake)}
+                aria-label="Next page"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -3405,28 +3427,6 @@ function DoctorDashboard() {
             </tbody>
           </table>
         </div>
-
-        {recordsTotal > recordTake && (
-          <div className="doc-pagination">
-            <button 
-              type="button"
-              className="doc-pagination-btn"
-              disabled={recordSkip === 0}
-              onClick={() => setRecordSkip(Math.max(0, recordSkip - recordTake))}
-            >
-              Prev
-            </button>
-            <span className="doc-pagination-info">Page {Math.floor(recordSkip / recordTake) + 1} of {Math.ceil(recordsTotal / recordTake)}</span>
-            <button 
-              type="button"
-              className="doc-pagination-btn"
-              disabled={recordSkip + recordTake >= recordsTotal}
-              onClick={() => setRecordSkip(recordSkip + recordTake)}
-            >
-              Next
-            </button>
-          </div>
-        )}
       </div>
 
       {selectedRecord && (

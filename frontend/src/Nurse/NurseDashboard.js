@@ -7096,7 +7096,7 @@ function NurseDashboard() {
                         </div>
                         
                         <div className="patient-list-container patient-records-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                            <div className="list-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <div className="list-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
                                 <div className="search-input-modern" style={{ width: '350px' }}>
                                     <Search size={18} className="text-slate-400" />
                                     <input 
@@ -7107,10 +7107,34 @@ function NurseDashboard() {
                                         style={{ width: '100%' }}
                                     />
                                 </div>
-                                <div className="walkin-results-count" style={{ margin: 0, fontWeight: 600, color: '#64748b' }}>
-                                  {patientRecordsMatchCount === 0
-                                    ? 'No patient records match your search.'
-                                    : `Showing ${patientRecordsRangeStart}-${patientRecordsRangeEnd} of ${patientRecordsMatchCount} patient${patientRecordsMatchCount === 1 ? '' : 's'}`}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                  <div className="walkin-results-count" style={{ margin: 0, fontWeight: 600, color: '#64748b' }}>
+                                    {patientRecordsMatchCount === 0
+                                      ? 'No patient records match your search.'
+                                      : `Showing ${patientRecordsRangeStart}-${patientRecordsRangeEnd} of ${patientRecordsMatchCount} patient${patientRecordsMatchCount === 1 ? '' : 's'}`}
+                                  </div>
+                                  {filteredPatientsForRecords.length > itemsPerPage ? (
+                                    <div className="patient-pagination" style={{ margin: 0 }}>
+                                      <button
+                                        type="button"
+                                        className="patient-page-btn"
+                                        onClick={() => setPatientPage((page) => Math.max(1, page - 1))}
+                                        disabled={patientPage <= 1}
+                                        aria-label="Previous page"
+                                      >
+                                        <ChevronLeft size={18} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="patient-page-btn"
+                                        onClick={() => setPatientPage((page) => Math.min(patientRecordsPageCount, page + 1))}
+                                        disabled={patientPage >= patientRecordsPageCount}
+                                        aria-label="Next page"
+                                      >
+                                        <ChevronRight size={18} />
+                                      </button>
+                                    </div>
+                                  ) : null}
                                 </div>
                             </div>
 
@@ -7205,33 +7229,6 @@ function NurseDashboard() {
                                     </tbody>
                                 </table>
                             </div>
-                            {filteredPatientsForRecords.length > itemsPerPage ? (
-                              <div className="walkin-pagination" style={{ padding: '16px 0 0', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '16px' }}>
-                                <div className="walkin-page-status" style={{ margin: 0, fontWeight: 600, color: '#64748b' }}>
-                                  Page {Math.min(patientPage, patientRecordsPageCount)} of {patientRecordsPageCount}
-                                </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button
-                                      type="button"
-                                      className="btn-gray"
-                                      style={{ padding: '6px 12px' }}
-                                      onClick={() => setPatientPage((page) => Math.max(1, page - 1))}
-                                      disabled={patientPage <= 1}
-                                    >
-                                      Previous
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="btn-gray"
-                                      style={{ padding: '6px 12px' }}
-                                      onClick={() => setPatientPage((page) => Math.min(patientRecordsPageCount, page + 1))}
-                                      disabled={patientPage >= patientRecordsPageCount}
-                                    >
-                                      Next
-                                    </button>
-                                </div>
-                              </div>
-                            ) : null}
                         </div>
                         </>
                     )}
@@ -7359,7 +7356,30 @@ function NurseDashboard() {
                                   <p style={{ color: '#64748b', margin: 0 }}>There are no patients requiring vitals monitoring at this time.</p>
                               </div>
                           ) : (
-                              <table className="vitals-table">
+                              <>
+                                {filteredVitalsPatients.length > vitalsPageSize && (
+                                  <div className="patient-pagination" style={{ alignSelf: 'flex-end', marginBottom: '12px', marginLeft: 'auto' }}>
+                                    <button
+                                        type="button"
+                                        className="patient-page-btn"
+                                        onClick={() => setVitalsPage((page) => Math.max(1, page - 1))}
+                                        disabled={currentVitalsPage <= 1}
+                                        aria-label="Previous page"
+                                    >
+                                        <ChevronLeft size={18} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="patient-page-btn"
+                                        onClick={() => setVitalsPage((page) => Math.min(vitalsPageCount, page + 1))}
+                                        disabled={currentVitalsPage >= vitalsPageCount}
+                                        aria-label="Next page"
+                                    >
+                                        <ChevronRight size={18} />
+                                    </button>
+                                  </div>
+                                )}
+                                <table className="vitals-table">
                                   <thead>
                                       <tr>
                                           <th>Patient</th>
@@ -7440,32 +7460,9 @@ function NurseDashboard() {
                                       })}
                                   </tbody>
                               </table>
+                              </>
                           )}
                       </div>
-                      
-                      {filteredVitalsPatients.length > vitalsPageSize && (
-                          <div className="walkin-pagination" style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '16px', alignItems: 'center' }}>
-                              <button
-                                  type="button"
-                                  className="walkin-page-btn"
-                                  onClick={() => setVitalsPage((page) => Math.max(1, page - 1))}
-                                  disabled={currentVitalsPage <= 1}
-                              >
-                                  Previous
-                              </button>
-                              <div className="walkin-page-status" style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 600 }}>
-                                  Page {currentVitalsPage} of {vitalsPageCount}
-                              </div>
-                              <button
-                                  type="button"
-                                  className="walkin-page-btn"
-                                  onClick={() => setVitalsPage((page) => Math.min(vitalsPageCount, page + 1))}
-                                  disabled={currentVitalsPage >= vitalsPageCount}
-                              >
-                                  Next
-                              </button>
-                          </div>
-                      )}
                   </div>
                   );
               })()}
@@ -9904,10 +9901,34 @@ function NurseDashboard() {
                           placeholder="Search by patient name, email, or contact number"
                         />
                       </div>
-                      <div className="walkin-results-count">
-                        {walkInPatientMatchCount === 0
-                          ? 'No matching patients found yet.'
-                          : `Showing ${walkInPatientRangeStart}-${walkInPatientRangeEnd} of ${walkInPatientMatchCount} matching patient${walkInPatientMatchCount === 1 ? '' : 's'}`}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                        <div className="walkin-results-count" style={{ margin: 0 }}>
+                          {walkInPatientMatchCount === 0
+                            ? 'No matching patients found yet.'
+                            : `Showing ${walkInPatientRangeStart}-${walkInPatientRangeEnd} of ${walkInPatientMatchCount} matching patient${walkInPatientMatchCount === 1 ? '' : 's'}`}
+                        </div>
+                        {walkInPatientMatches.length > walkInPatientPageSize ? (
+                          <div className="patient-pagination" style={{ margin: 0 }}>
+                            <button
+                              type="button"
+                              className="patient-page-btn"
+                              onClick={() => setWalkInPatientPage((page) => Math.max(1, page - 1))}
+                              disabled={walkInPatientPage <= 1}
+                              aria-label="Previous page"
+                            >
+                              <ChevronLeft size={18} />
+                            </button>
+                            <button
+                              type="button"
+                              className="patient-page-btn"
+                              onClick={() => setWalkInPatientPage((page) => Math.min(walkInPatientPageCount, page + 1))}
+                              disabled={walkInPatientPage >= walkInPatientPageCount}
+                              aria-label="Next page"
+                            >
+                              <ChevronRight size={18} />
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                       <div style={{marginTop: 12, border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', background: '#fff'}}>
                         {walkInPatientMatches.length === 0 ? (
@@ -9939,29 +9960,6 @@ function NurseDashboard() {
                           })
                         )}
                       </div>
-                      {walkInPatientMatches.length > walkInPatientPageSize ? (
-                        <div className="walkin-pagination">
-                          <button
-                            type="button"
-                            className="walkin-page-btn"
-                            onClick={() => setWalkInPatientPage((page) => Math.max(1, page - 1))}
-                            disabled={walkInPatientPage <= 1}
-                          >
-                            Previous
-                          </button>
-                          <div className="walkin-page-status">
-                            Page {Math.min(walkInPatientPage, walkInPatientPageCount)} of {walkInPatientPageCount}
-                          </div>
-                          <button
-                            type="button"
-                            className="walkin-page-btn"
-                            onClick={() => setWalkInPatientPage((page) => Math.min(walkInPatientPageCount, page + 1))}
-                            disabled={walkInPatientPage >= walkInPatientPageCount}
-                          >
-                            Next
-                          </button>
-                        </div>
-                      ) : null}
                       {selectedWalkInPatient ? (
                         <div style={{marginTop: 14, padding: 16, borderRadius: 16, background: '#f8fafc', border: '1px solid #e2e8f0'}}>
                           <div style={{fontWeight: 800, color: '#0f172a', marginBottom: 6}}>Selected Patient</div>

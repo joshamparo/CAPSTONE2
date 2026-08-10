@@ -3632,22 +3632,46 @@ function PharmacistDashboard() {
             <div className="pharm-modal-text" style={{ marginBottom: '16px' }}>
               Items below minimum level are listed here. Send a request to Admin for approval.
             </div>
-            <div className="pharm-actions" style={{ marginBottom: 12, alignItems: 'center' }}>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 900, color: '#334155' }}>
-                <input type="checkbox" checked={allLowStockSelected} onChange={toggleSelectAllLowStock} />
-                Select All
-              </label>
-              <span className="pharm-badge" style={{ background: '#f1f5f9', color: '#334155' }}>
-                Selected: {lowStockSelectedCount}
-              </span>
-              <button
-                type="button"
-                className="pharm-btn primary"
-                onClick={requestSelectedRestocks}
-                disabled={restockRequestSaving || lowStockSelectedCount === 0}
-              >
-                Request Selected
-              </button>
+            <div className="pharm-actions" style={{ marginBottom: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 900, color: '#334155' }}>
+                  <input type="checkbox" checked={allLowStockSelected} onChange={toggleSelectAllLowStock} />
+                  Select All
+                </label>
+                <span className="pharm-badge" style={{ background: '#f1f5f9', color: '#334155' }}>
+                  Selected: {lowStockSelectedCount}
+                </span>
+                <button
+                  type="button"
+                  className="pharm-btn primary"
+                  onClick={requestSelectedRestocks}
+                  disabled={restockRequestSaving || lowStockSelectedCount === 0}
+                >
+                  Request Selected
+                </button>
+              </div>
+              {lowStockItems.length > 5 ? (
+                <div className="patient-pagination" style={{ margin: 0 }}>
+                  <button
+                    type="button"
+                    className="patient-page-btn"
+                    disabled={lowStockPage === 1}
+                    onClick={() => setLowStockPage(Math.max(1, lowStockPage - 1))}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    className="patient-page-btn"
+                    disabled={lowStockPage >= Math.max(1, Math.ceil(lowStockItems.length / 5))}
+                    onClick={() => setLowStockPage(lowStockPage + 1)}
+                    aria-label="Next page"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              ) : null}
             </div>
             {lowStockItems.length === 0 ? (
               <div className="pharm-empty">No low stock items detected.</div>
@@ -3706,27 +3730,6 @@ function PharmacistDashboard() {
                       })}
                     </tbody>
                   </table>
-                </div>
-                <div className="pharm-pagination" style={{ marginTop: '12px' }}>
-                  <button
-                    type="button"
-                    className="pharm-btn"
-                    disabled={lowStockPage === 1}
-                    onClick={() => setLowStockPage(Math.max(1, lowStockPage - 1))}
-                  >
-                    Previous
-                  </button>
-                  <span className="pharm-page-info">
-                    Page {lowStockPage} of {Math.max(1, Math.ceil(lowStockItems.length / 5))}
-                  </span>
-                  <button
-                    type="button"
-                    className="pharm-btn"
-                    disabled={lowStockPage >= Math.ceil(lowStockItems.length / 5)}
-                    onClick={() => setLowStockPage(lowStockPage + 1)}
-                  >
-                    Next
-                  </button>
                 </div>
               </>
             )}
