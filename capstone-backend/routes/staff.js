@@ -2175,20 +2175,26 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             }
         }
 
-        // Verify Current Password if provided (Required for sensitive updates)
-        /*
-        if (req.body.currentPassword) {
-            const isMatch = await bcrypt.compare(req.body.currentPassword, user.password);
+        const hasPasswordUpdate = Boolean(req.body.password);
+        const providedCurrentPassword = typeof req.body.currentPassword === 'string' ? req.body.currentPassword : '';
+
+        if (hasPasswordUpdate && !user?.password) {
+            return res.status(400).json({ message: "Cannot update password for this account type" });
+        }
+
+        if (hasPasswordUpdate || (typeof req.body.requiresPasswordAuth !== 'undefined' && req.body.requiresPasswordAuth)) {
+            if (!providedCurrentPassword) {
+                return res.status(400).json({ message: "Current password is required to change password" });
+            }
+            const bcrypt = require('bcrypt');
+            const isMatch = await bcrypt.compare(providedCurrentPassword, user.password);
             if (!isMatch) {
                 return res.status(400).json({ message: "Incorrect current password" });
             }
-            // Remove currentPassword from body so it's not saved to DB
-            delete req.body.currentPassword;
-        } else if (req.body.requiresPasswordAuth) {
-            // If the operation specifically requires auth but no password provided
-            return res.status(400).json({ message: "Current password is required to save changes" });
         }
-        */
+        if (providedCurrentPassword) {
+            delete req.body.currentPassword;
+        }
 
         // If password is being updated (new password), use save() to trigger hashing
         if (req.body.password) {

@@ -98,9 +98,25 @@ function PharmacistDashboard() {
     lastName: '',
     email: '',
     profilePicture: '',
+    currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
+
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordCriteria, setPasswordCriteria] = useState({ length: false, hasNumber: false, hasSpecial: false });
+  const [updateNotice, setUpdateNotice] = useState('');
+
+  useEffect(() => {
+    const val = profileForm.newPassword || '';
+    setPasswordCriteria({
+      length: val.length >= 8,
+      hasNumber: /\d/.test(val),
+      hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(val)
+    });
+  }, [profileForm.newPassword]);
 
   useEffect(() => {
     let cancelled = false;
@@ -338,6 +354,7 @@ function PharmacistDashboard() {
       lastName: currentUser.lastName || currentUser.last_name || '',
       email: currentUser.email || '',
       profilePicture: pic,
+      currentPassword: '',
       newPassword: '',
       confirmPassword: ''
     });
@@ -1665,14 +1682,30 @@ function PharmacistDashboard() {
 
   const saveMyProfile = async () => {
     if (!currentUser?.id) return;
+    setUpdateNotice('');
 
-    if (profileForm.newPassword || profileForm.confirmPassword) {
+    const wantsPasswordChange = Boolean(String(profileForm.newPassword || '').trim()) || Boolean(String(profileForm.confirmPassword || '').trim());
+
+    if (wantsPasswordChange) {
+      if (!String(profileForm.currentPassword || '').trim()) {
+        setUpdateNotice('Current Password is required to set a new password.');
+        setToast({ type: 'error', text: 'Current Password is required.' });
+        return;
+      }
       if (profileForm.newPassword !== profileForm.confirmPassword) {
+        setUpdateNotice('New and Confirm passwords do not match.');
         setToast({ type: 'error', text: 'Passwords do not match.' });
         return;
       }
-      if (String(profileForm.newPassword || '').length < 6) {
-        setToast({ type: 'error', text: 'Password must be at least 6 characters.' });
+      const pw = String(profileForm.newPassword || '');
+      if (pw.length < 8) {
+        setUpdateNotice('New password must be at least 8 characters.');
+        setToast({ type: 'error', text: 'Password must be at least 8 characters.' });
+        return;
+      }
+      if (!/\d/.test(pw) || !/[!@#$%^&*(),.?":{}|<>]/.test(pw)) {
+        setUpdateNotice('New password must contain at least one number and one special character.');
+        setToast({ type: 'error', text: 'Password missing required number or special character.' });
         return;
       }
     }
@@ -1704,8 +1737,10 @@ function PharmacistDashboard() {
         avatar_url: avatarUrl
       };
 
-      if (profileForm.newPassword && profileForm.newPassword.trim() !== '') {
-        payload.password = profileForm.newPassword;
+      if (wantsPasswordChange) {
+        payload.currentPassword = String(profileForm.currentPassword || '');
+        payload.password = String(profileForm.newPassword || '').trim();
+        payload.requiresPasswordAuth = true;
       }
 
       const data = await fetchJson(`/api/staff/${currentUser.id}`, {
@@ -1727,10 +1762,22 @@ function PharmacistDashboard() {
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
       setProfileImage(null);
       setProfilePreview(avatarUrl || null);
+      setShowCurrentPassword(false);
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
       setToast({ type: 'success', text: 'Profile updated successfully.' });
-      setProfileForm((prev) => ({ ...prev, profilePicture: avatarUrl, newPassword: '', confirmPassword: '' }));
+      setProfileForm((prev) => ({
+        ...prev,
+        profilePicture: avatarUrl,
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      }));
+      setUpdateNotice('');
     } catch (e) {
-      setToast({ type: 'error', text: String(e?.message || 'Update failed') });
+      const msg = String(e?.message || 'Update failed');
+      setUpdateNotice(msg);
+      setToast({ type: 'error', text: msg });
     } finally {
       setSavingProfile(false);
     }
@@ -2485,113 +2532,202 @@ function PharmacistDashboard() {
           </div>
 
         {activeTab === 'profile' && (
-          <div className="pharm-card">
-            <div className="pharm-card-head">
-              <div className="pharm-card-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <User size={18} />
-                My Profile
-              </div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <button type="button" className="pharm-btn sm" onClick={() => avatarInputRef.current?.click()}>
-                  <Upload size={16} />
-                  Photo
-                </button>
-                <button type="button" className="pharm-btn primary sm" onClick={saveMyProfile} disabled={savingProfile}>
-                  {savingProfile ? 'Saving…' : 'Save'}
-                </button>
-
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 16, alignItems: 'start' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-                <div
-                  style={{
-                    width: 120,
-                    height: 120,
-                    borderRadius: 999,
-                    overflow: 'hidden',
-                    background: '#f1f5f9',
-                    border: '1px solid #e2e8f0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 900,
-                    color: '#0f172a'
-                  }}
-                >
-                  {profilePreview ? (
-                    <img src={profilePreview} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <span style={{ fontSize: 34 }}>{String(pharmacistName || 'P').trim()[0]?.toUpperCase() || 'P'}</span>
-                  )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="pharm-card">
+              <div className="pharm-card-head">
+                <div className="pharm-card-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <User size={18} />
+                  My Profile
                 </div>
-                <input
-                  ref={avatarInputRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
-                    setProfileImage(file);
-                    if (file) {
-                      const url = URL.createObjectURL(file);
-                      setProfilePreview(url);
-                    }
-                  }}
-                />
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <button type="button" className="pharm-btn sm" onClick={() => avatarInputRef.current?.click()}>
+                    <Upload size={16} />
+                    Photo
+                  </button>
+                  <button type="button" className="pharm-btn primary sm" onClick={saveMyProfile} disabled={savingProfile}>
+                    {savingProfile ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>First Name</div>
-                  <input
-                    className="pharm-input"
-                    value={profileForm.firstName}
-                    onChange={(e) => setProfileForm((p) => ({ ...p, firstName: e.target.value }))}
-                    placeholder="First name"
-                  />
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>Last Name</div>
-                  <input
-                    className="pharm-input"
-                    value={profileForm.lastName}
-                    onChange={(e) => setProfileForm((p) => ({ ...p, lastName: e.target.value }))}
-                    placeholder="Last name"
-                  />
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>Email</div>
-                  <input
-                    className="pharm-input"
-                    value={profileForm.email}
-                    onChange={(e) => setProfileForm((p) => ({ ...p, email: e.target.value }))}
-                    placeholder="Email"
-                  />
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>New Password</div>
-                  <input
-                    className="pharm-input"
-                    type="password"
-                    value={profileForm.newPassword}
-                    onChange={(e) => setProfileForm((p) => ({ ...p, newPassword: e.target.value }))}
-                    placeholder="Leave blank to keep current"
-                  />
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>Confirm Password</div>
-                  <input
-                    className="pharm-input"
-                    type="password"
-                    value={profileForm.confirmPassword}
-                    onChange={(e) => setProfileForm((p) => ({ ...p, confirmPassword: e.target.value }))}
-                    placeholder="Confirm new password"
-                  />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 20, alignItems: 'start' }}>
+                <div className="profile-column" style={{ minWidth: 0 }}>
+                  <div className="profile-card" style={{ boxShadow: 'none', border: 'none', padding: 0 }}>
+                    <h3 className="column-title">
+                      <User size={20} color="#475569" />
+                      Personal Information
+                    </h3>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 16, alignItems: 'start' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+                        <div
+                          style={{
+                            width: 120,
+                            height: 120,
+                            borderRadius: 999,
+                            overflow: 'hidden',
+                            background: '#f1f5f9',
+                            border: '1px solid #e2e8f0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 900,
+                            color: '#0f172a'
+                          }}
+                        >
+                          {profilePreview ? (
+                            <img src={profilePreview} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <span style={{ fontSize: 34 }}>{String(pharmacistName || 'P').trim()[0]?.toUpperCase() || 'P'}</span>
+                          )}
+                        </div>
+                        <input
+                          ref={avatarInputRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+                            setProfileImage(file);
+                            if (file) {
+                              const url = URL.createObjectURL(file);
+                              setProfilePreview(url);
+                            }
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div>
+                          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>First Name</div>
+                          <input
+                            className="pharm-input"
+                            value={profileForm.firstName}
+                            onChange={(e) => setProfileForm((p) => ({ ...p, firstName: e.target.value }))}
+                            placeholder="First name"
+                          />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>Last Name</div>
+                          <input
+                            className="pharm-input"
+                            value={profileForm.lastName}
+                            onChange={(e) => setProfileForm((p) => ({ ...p, lastName: e.target.value }))}
+                            placeholder="Last name"
+                          />
+                        </div>
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>Email</div>
+                          <input
+                            className="pharm-input"
+                            value={profileForm.email}
+                            onChange={(e) => setProfileForm((p) => ({ ...p, email: e.target.value }))}
+                            placeholder="Email"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
+                <div className="profile-column" style={{ minWidth: 0 }}>
+                  <div className="profile-card" style={{ boxShadow: 'none', border: 'none', padding: 0 }}>
+                    <h3 className="column-title">
+                      <Shield size={20} color="#475569" />
+                      Security & Password
+                    </h3>
+
+                    <div className="profile-input-group">
+                      <label>Current Password</label>
+                      <div className="input-wrapper-relative">
+                        <Key size={18} className="absolute-icon-left text-slate-400" />
+                        <input
+                          type={showCurrentPassword ? 'text' : 'password'}
+                          value={profileForm.currentPassword}
+                          onChange={(e) => setProfileForm((p) => ({ ...p, currentPassword: e.target.value }))}
+                          className="profile-input input-with-icon-padding"
+                          placeholder="Enter current password"
+                        />
+                        <button
+                          type="button"
+                          className="toggle-password-btn"
+                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                        >
+                          {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="profile-input-group">
+                      <label>New Password</label>
+                      <div className="input-wrapper-relative">
+                        <Key size={18} className="absolute-icon-left text-slate-400" />
+                        <input
+                          type={showNewPassword ? 'text' : 'password'}
+                          value={profileForm.newPassword}
+                          onChange={(e) => setProfileForm((p) => ({ ...p, newPassword: e.target.value }))}
+                          className="profile-input input-with-icon-padding"
+                          placeholder="Enter new password"
+                        />
+                        <button
+                          type="button"
+                          className="toggle-password-btn"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                        >
+                          {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                      </div>
+
+                      <div className="password-checklist">
+                        <div className={`checklist-item ${passwordCriteria.length ? 'valid' : ''}`}>
+                          {passwordCriteria.length ? <Check size={14} /> : <X size={14} />}
+                          <span>At least 8 characters</span>
+                        </div>
+                        <div className={`checklist-item ${passwordCriteria.hasSpecial ? 'valid' : ''}`}>
+                          {passwordCriteria.hasSpecial ? <Check size={14} /> : <X size={14} />}
+                          <span>Contains special characters</span>
+                        </div>
+                        <div className={`checklist-item ${passwordCriteria.hasNumber ? 'valid' : ''}`}>
+                          {passwordCriteria.hasNumber ? <Check size={14} /> : <X size={14} />}
+                          <span>Contains numbers</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="profile-input-group">
+                      <label>Confirm New Password</label>
+                      <div className="input-wrapper-relative">
+                        <Key size={18} className="absolute-icon-left text-slate-400" />
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          value={profileForm.confirmPassword}
+                          onChange={(e) => setProfileForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                          className="profile-input input-with-icon-padding"
+                          placeholder="Confirm new password"
+                        />
+                        <button
+                          type="button"
+                          className="toggle-password-btn"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        >
+                          {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                      </div>
+                      {profileForm.confirmPassword && (
+                        <p className={`match-indicator ${profileForm.newPassword === profileForm.confirmPassword ? 'match-success' : 'match-error'}`}>
+                          {profileForm.newPassword === profileForm.confirmPassword ? 'Passwords match' : 'Passwords do not match'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              {updateNotice && (
+                <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: '#fef2f2', color: '#b91c1c', fontSize: 13, fontWeight: 600 }}>
+                  {updateNotice}
+                </div>
+              )}
             </div>
           </div>
         )}
