@@ -81,6 +81,8 @@ const buildAuthHeaders = (user) => {
   };
 };
 
+const CLINICAL_PAGE_SIZE = 8;
+
 export default function ClinicalStaffDashboard({ forcedRole }) {
   const navigate = useNavigate();
   const user = useMemo(() => safeJson(localStorage.getItem('currentUser') || 'null') || {}, []);
@@ -96,6 +98,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const [ordersError, setOrdersError] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [orderRangeFilter, setOrderRangeFilter] = useState('All');
+  const [ordersPage, setOrdersPage] = useState(1);
 
   const [approvals, setApprovals] = useState([]);
   const [approvalsLoading, setApprovalsLoading] = useState(false);
@@ -106,6 +109,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const [approvalActionError, setApprovalActionError] = useState('');
   const [approvalRangeFilter, setApprovalRangeFilter] = useState('All');
   const [approvalStatusFilter, setApprovalStatusFilter] = useState('All');
+  const [approvalsPage, setApprovalsPage] = useState(1);
 
   const [patients, setPatients] = useState([]);
   const [patientsLoading, setPatientsLoading] = useState(false);
@@ -115,6 +119,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const [centralRecordOpen, setCentralRecordOpen] = useState(false);
   const [centralRecordPatientId, setCentralRecordPatientId] = useState(null);
   const [centralRecordPatientLabel, setCentralRecordPatientLabel] = useState('');
+  const [patientsPage, setPatientsPage] = useState(1);
 
   const [schedule, setSchedule] = useState([]);
   const [scheduleLoading, setScheduleLoading] = useState(false);
@@ -312,13 +317,34 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
   const displayedOrders = useMemo(() => {
     const list = Array.isArray(orders) ? orders : [];
+    const myKind = String(cfg.kind || '').toLowerCase();
+    const roleFiltered = list.filter((o) => {
+      const oKind = String(o.kind || o.category || o.serviceType || '').toLowerCase();
+      if (oKind && oKind === myKind) return true;
+      const service = String(o.service || '');
+      const name = String(o.serviceType || o.testName || '');
+      const hay = `${service} ${name}`.toLowerCase();
+      if (myKind === 'lab') {
+        return /(lab|cbc|urinalysis|urine|hematology|blood|chemistry|stool|microscopy|culture|gram|wbc|rbc|hba1c|fbs|creatinine|lipid|sgot|sgpt|potassium|sodium|bun|bilirubin|protein|albumin|platelet|clotting|ptt|pt|inr|t3|t4|tsh|hiv|std|urine culture|blood culture)/i.test(hay);
+      }
+      if (myKind === 'imaging') {
+        return /(imaging|xray|x-ray|radiograph|radiology|ct|mri|ultrasound|sonogram|doppler|bone scan|contrast|cervical|thoracic|lumbar|skull|abdomen|pelvis|chest|mamograph|fluoroscop)/i.test(hay);
+      }
+      if (myKind === 'ecg') {
+        return /(ecg|ekg|electrocardiograph|ecograph|12 lead|12-lead|cardio|heart rhythm|arrhythmia)/i.test(hay);
+      }
+      if (myKind === 'pt' || myKind === 'physical') {
+        return /(pt|physical therap|rehab|tens|therapy session|exercise session|modalit|therapeutic|manipulation|mobilization|stretching|massage|ultrasound therap|cold pack|hot pack|paraffin|electrical stimulation|traction)/i.test(hay);
+      }
+      return false;
+    });
     const statusFiltered =
       orderStatusFilter && orderStatusFilter !== 'All'
-        ? list.filter((o) => String(o.status || '').toLowerCase() === String(orderStatusFilter).toLowerCase())
-        : list;
+        ? roleFiltered.filter((o) => String(o.status || '').toLowerCase() === String(orderStatusFilter).toLowerCase())
+        : roleFiltered;
     if (orderRangeFilter === 'All') return statusFiltered;
     return statusFiltered.filter((o) => inRange(o.scheduledAt || o.createdAt, orderRangeFilter));
-  }, [orders, orderRangeFilter, orderStatusFilter]);
+  }, [orders, orderRangeFilter, orderStatusFilter, cfg.kind]);
 
   const displayedApprovals = useMemo(() => {
     const list = Array.isArray(approvals) ? approvals : [];
@@ -331,6 +357,35 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     }
     return out;
   }, [approvals, approvalRangeFilter, approvalStatusFilter]);
+
+  useEffect(() => { setOrdersPage(1); }, [orderStatusFilter, orderRangeFilter]);
+  useEffect(() => { setApprovalsPage(1); }, [approvalStatusFilter, approvalRangeFilter]);
+  useEffect(() => { setPatientsPage(1); }, [patientSearch]);
+
+  const paginatedOrders = useMemo(() => {
+    const total = displayedOrders.length;
+    const totalPages = Math.max(1, Math.ceil(total / CLINICAL_PAGE_SIZE));
+    const p = Math.min(Math.max(1, ordersPage), totalPages);
+    const start = (p - 1) * CLINICAL_PAGE_SIZE;
+    return { items: displayedOrders.slice(start, start + CLINICAL_PAGE_SIZE), page: p, totalPages, total };
+  }, [displayedOrders, ordersPage]);
+
+  const paginatedApprovals = useMemo(() => {
+    const total = displayedApprovals.length;
+    const totalPages = Math.max(1, Math.ceil(total / CLINICAL_PAGE_SIZE));
+    const p = Math.min(Math.max(1, approvalsPage), totalPages);
+    const start = (p - 1) * CLINICAL_PAGE_SIZE;
+    return { items: displayedApprovals.slice(start, start + CLINICAL_PAGE_SIZE), page: p, totalPages, total };
+  }, [displayedApprovals, approvalsPage]);
+
+  const paginatedPatients = useMemo(() => {
+    const list = Array.isArray(filteredPatients) ? filteredPatients : [];
+    const total = list.length;
+    const totalPages = Math.max(1, Math.ceil(total / CLINICAL_PAGE_SIZE));
+    const p = Math.min(Math.max(1, patientsPage), totalPages);
+    const start = (p - 1) * CLINICAL_PAGE_SIZE;
+    return { items: list.slice(start, start + CLINICAL_PAGE_SIZE), page: p, totalPages, total };
+  }, [filteredPatients, patientsPage]);
 
   const openOrder = async (o) => {
     setViewingOrder(o);
@@ -783,7 +838,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
         {activeTab === 'orders' && (
           <div className="cs-card">
             <div className="cs-card-title">Medical Orders</div>
-            <div className="cs-toolbar" style={{ marginBottom: 12 }}>
+            <div className="cs-toolbar" style={{ marginBottom: 12, alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <select className="cs-select" value={orderStatusFilter} onChange={(e) => setOrderStatusFilter(e.target.value)}>
                 <option value="All">All Status</option>
                 <option value="Pending">Pending</option>
@@ -810,6 +865,28 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                 </button>
               ) : null}
               {ordersError ? <span className="cs-muted">{ordersError}</span> : null}
+              {paginatedOrders.totalPages > 1 ? (
+                <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center', marginLeft: 'auto' }}>
+                  <button
+                    type="button"
+                    className="cs-btn secondary"
+                    onClick={() => setOrdersPage((p) => Math.max(1, p - 1))}
+                    disabled={paginatedOrders.page <= 1}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    className="cs-btn secondary"
+                    onClick={() => setOrdersPage((p) => Math.min(paginatedOrders.totalPages, p + 1))}
+                    disabled={paginatedOrders.page >= paginatedOrders.totalPages}
+                    aria-label="Next page"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              ) : null}
             </div>
 
             {ordersLoading ? (
@@ -828,7 +905,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {displayedOrders.map((o) => {
+                  {paginatedOrders.items.map((o) => {
                     const statusLower = String(o.status || '').toLowerCase();
                     const isStat = String(o.priority || '').toUpperCase() === 'STAT';
                     const disableExam = statusLower !== 'paid';
@@ -894,7 +971,31 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
             <div className="cs-two-col">
               <div className="cs-card" style={{ boxShadow: 'none' }}>
-                <div className="cs-card-title">Approval Inbox</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: 12, flexWrap: 'wrap' }}>
+                  <div className="cs-card-title" style={{ margin: 0 }}>Approval Inbox</div>
+                  {paginatedApprovals.totalPages > 1 ? (
+                    <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className="cs-btn secondary"
+                        onClick={() => setApprovalsPage((p) => Math.max(1, p - 1))}
+                        disabled={paginatedApprovals.page <= 1}
+                        aria-label="Previous page"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        className="cs-btn secondary"
+                        onClick={() => setApprovalsPage((p) => Math.min(paginatedApprovals.totalPages, p + 1))}
+                        disabled={paginatedApprovals.page >= paginatedApprovals.totalPages}
+                        aria-label="Next page"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
                 {approvalsLoading ? (
                   <div className="cs-muted">Loading…</div>
                 ) : displayedApprovals.length === 0 ? (
@@ -910,7 +1011,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {displayedApprovals.map((r) => (
+                      {paginatedApprovals.items.map((r) => (
                         <tr key={String(r.id)}>
                           <td>{r.patientName || 'Patient'}</td>
                           <td>{r.reason || r.serviceType || '—'}</td>
@@ -1032,7 +1133,31 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
             <div className="cs-two-col">
               <div className="cs-card" style={{ boxShadow: 'none' }}>
-                <div className="cs-card-title">Patients</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: 12, flexWrap: 'wrap' }}>
+                  <div className="cs-card-title" style={{ margin: 0 }}>Patients</div>
+                  {paginatedPatients.totalPages > 1 ? (
+                    <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className="cs-btn secondary"
+                        onClick={() => setPatientsPage((p) => Math.max(1, p - 1))}
+                        disabled={paginatedPatients.page <= 1}
+                        aria-label="Previous page"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        className="cs-btn secondary"
+                        onClick={() => setPatientsPage((p) => Math.min(paginatedPatients.totalPages, p + 1))}
+                        disabled={paginatedPatients.page >= paginatedPatients.totalPages}
+                        aria-label="Next page"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
                 {patientsLoading ? (
                   <div className="cs-muted">Loading…</div>
                 ) : filteredPatients.length === 0 ? (
@@ -1047,7 +1172,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredPatients.slice(0, 25).map((p) => {
+                      {paginatedPatients.items.map((p) => {
                         const name = `${p.first_name || p.firstName || ''} ${p.last_name || p.lastName || ''}`.trim() || 'Patient';
                         return (
                           <tr key={String(p.id || p._id)}>
