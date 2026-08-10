@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Inbox, LayoutDashboard, RefreshCw, ShieldAlert, XCircle, User, Upload, Save, Eye, EyeOff, Search, CreditCard, WalletCards, Menu } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Inbox, LayoutDashboard, RefreshCw, ShieldAlert, XCircle, User, Upload, Save, Eye, EyeOff, Search, CreditCard, WalletCards, Menu, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
@@ -310,8 +310,31 @@ export default function DoctorSecretaryDashboard() {
   const [confirmForm, setConfirmForm] = useState({ time: '', status: 'Confirmed' });
   const [confirmSaving, setConfirmSaving] = useState(false);
   const [confirmError, setConfirmError] = useState('');
-  const [toast, setToast] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const [welcomeShownKey, setWelcomeShownKey] = useState('');
   const [queueActionSavingId, setQueueActionSavingId] = useState('');
+
+  const dismissToast = (id) => {
+    setToasts((prev) => prev.filter((t) => String(t.id) !== String(id)));
+  };
+
+  const pushToast = (t) => {
+    const base = t || {};
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const payload = {
+      id,
+      type: String(base.type || 'success').toLowerCase() === 'success' ? 'success' : 'error',
+      message: String(base.message || ''),
+      durationMs: Number(base.durationMs) > 0 ? Number(base.durationMs) : 8000
+    };
+    setToasts((prev) => [...prev, payload]);
+    if (payload.durationMs > 0) {
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((x) => String(x.id) !== String(id)));
+      }, payload.durationMs);
+    }
+    return id;
+  };
 
   const [onsiteInbox, setOnsiteInbox] = useState([]);
   const [onsiteInboxLoading, setOnsiteInboxLoading] = useState(false);
@@ -380,7 +403,7 @@ export default function DoctorSecretaryDashboard() {
     if (!linkedDoctorId) {
       const msg = 'Your account is not linked to a doctor yet. Ask admin to link your account first before saving availability.';
       setAvailabilityError(msg);
-      setToast({ type: 'error', message: msg });
+      pushToast({ type: 'error', message: msg });
       return;
     }
     const rules = (Array.isArray(availabilityRules) ? availabilityRules : []);
@@ -394,19 +417,19 @@ export default function DoctorSecretaryDashboard() {
       if (!Number.isInteger(d) || d < 0 || d > 6) {
         const msg = `Rule #${i + 1}: Invalid day of week.`;
         setAvailabilityError(msg);
-        setToast({ type: 'error', message: msg });
+        pushToast({ type: 'error', message: msg });
         return;
       }
       if (!/^\d{2}:\d{2}$/.test(start)) {
         const msg = `Rule #${i + 1}: Enter a valid start time (HH:MM).`;
         setAvailabilityError(msg);
-        setToast({ type: 'error', message: msg });
+        pushToast({ type: 'error', message: msg });
         return;
       }
       if (!/^\d{2}:\d{2}$/.test(end)) {
         const msg = `Rule #${i + 1}: Enter a valid end time (HH:MM).`;
         setAvailabilityError(msg);
-        setToast({ type: 'error', message: msg });
+        pushToast({ type: 'error', message: msg });
         return;
       }
       const [sh, sm] = start.split(':').map(v => parseInt(v, 10));
@@ -414,7 +437,7 @@ export default function DoctorSecretaryDashboard() {
       if (sh > 23 || sm > 59 || eh > 23 || em > 59) {
         const msg = `Rule #${i + 1}: Invalid time value (hours 0-23, minutes 0-59).`;
         setAvailabilityError(msg);
-        setToast({ type: 'error', message: msg });
+        pushToast({ type: 'error', message: msg });
         return;
       }
       const startMin = sh * 60 + sm;
@@ -422,19 +445,19 @@ export default function DoctorSecretaryDashboard() {
       if (endMin <= startMin) {
         const msg = `Rule #${i + 1}: End time must be later than start time.`;
         setAvailabilityError(msg);
-        setToast({ type: 'error', message: msg });
+        pushToast({ type: 'error', message: msg });
         return;
       }
       if (!Number.isInteger(slot) || slot < 5 || slot > 180) {
         const msg = `Rule #${i + 1}: Slot minutes must be a whole number between 5 and 180.`;
         setAvailabilityError(msg);
-        setToast({ type: 'error', message: msg });
+        pushToast({ type: 'error', message: msg });
         return;
       }
       if (!Number.isInteger(max) || max < 1 || max > 50) {
         const msg = `Rule #${i + 1}: Max per slot must be a whole number between 1 and 50.`;
         setAvailabilityError(msg);
-        setToast({ type: 'error', message: msg });
+        pushToast({ type: 'error', message: msg });
         return;
       }
     }
@@ -487,21 +510,21 @@ export default function DoctorSecretaryDashboard() {
     if (!linkedDoctorId) {
       const msg = 'Your account is not linked to a doctor yet. Ask admin to link your account first before adding availability exceptions.';
       setAvailabilityError(msg);
-      setToast({ type: 'error', message: msg });
+      pushToast({ type: 'error', message: msg });
       return;
     }
     const date = String(availabilityAddException.date || '').trim();
     if (!date) {
       const msg = 'Select a date for the availability exception.';
       setAvailabilityError(msg);
-      setToast({ type: 'error', message: msg });
+      pushToast({ type: 'error', message: msg });
       return;
     }
     const parsed = new Date(date);
     if (Number.isNaN(parsed.getTime())) {
       const msg = 'Enter a valid date for the availability exception.';
       setAvailabilityError(msg);
-      setToast({ type: 'error', message: msg });
+      pushToast({ type: 'error', message: msg });
       return;
     }
     const startTime = String(availabilityAddException.startTime || '').trim();
@@ -510,13 +533,13 @@ export default function DoctorSecretaryDashboard() {
       if (!/^\d{2}:\d{2}$/.test(startTime)) {
         const msg = 'Enter a valid start time (HH:MM) or leave both start and end times blank to block the whole day.';
         setAvailabilityError(msg);
-        setToast({ type: 'error', message: msg });
+        pushToast({ type: 'error', message: msg });
         return;
       }
       if (!/^\d{2}:\d{2}$/.test(endTime)) {
         const msg = 'Enter a valid end time (HH:MM) or leave both start and end times blank to block the whole day.';
         setAvailabilityError(msg);
-        setToast({ type: 'error', message: msg });
+        pushToast({ type: 'error', message: msg });
         return;
       }
       const [sh, sm] = startTime.split(':').map(v => parseInt(v, 10));
@@ -524,13 +547,13 @@ export default function DoctorSecretaryDashboard() {
       if (sh > 23 || sm > 59 || eh > 23 || em > 59) {
         const msg = 'Invalid exception time value (hours 0-23, minutes 0-59).';
         setAvailabilityError(msg);
-        setToast({ type: 'error', message: msg });
+        pushToast({ type: 'error', message: msg });
         return;
       }
       if (eh * 60 + em <= sh * 60 + sm) {
         const msg = 'Exception end time must be later than start time.';
         setAvailabilityError(msg);
-        setToast({ type: 'error', message: msg });
+        pushToast({ type: 'error', message: msg });
         return;
       }
     }
@@ -564,7 +587,7 @@ export default function DoctorSecretaryDashboard() {
         ? 'Your account is not linked to a doctor yet.'
         : 'Invalid exception id.';
       setAvailabilityError(msg);
-      setToast({ type: 'error', message: msg });
+      pushToast({ type: 'error', message: msg });
       return;
     }
     setAvailabilitySaving(true);
@@ -655,7 +678,7 @@ export default function DoctorSecretaryDashboard() {
     if (!key) {
       const msg = 'Service key is missing. Refresh the page and try again.';
       setServiceFeesError(msg);
-      setToast({ type: 'error', message: msg });
+      pushToast({ type: 'error', message: msg });
       return;
     }
     setFeesSavingKey(key);
@@ -765,7 +788,7 @@ export default function DoctorSecretaryDashboard() {
     if (!chargeTarget?.id) {
       const msg = 'Select a patient appointment to charge first.';
       setChargeError(msg);
-      setToast({ type: 'error', message: msg });
+      pushToast({ type: 'error', message: msg });
       return;
     }
     setChargeSaving(true);
@@ -792,10 +815,10 @@ export default function DoctorSecretaryDashboard() {
       closeCharge();
       await refreshRecords({ silent: true });
       await refreshSales({ silent: true });
-      setToast({ type: 'success', message: 'Charge sent to cashier (Ready for payment).' });
+      pushToast({ type: 'success', message: 'Charge sent to cashier (Ready for payment).' });
     } catch (e) {
       setChargeError(String(e.message || 'Unable to set charge.'));
-      setToast({ type: 'error', message: String(e.message || 'Unable to set charge.') });
+      pushToast({ type: 'error', message: String(e.message || 'Unable to set charge.') });
     } finally {
       setChargeSaving(false);
     }
@@ -823,7 +846,7 @@ export default function DoctorSecretaryDashboard() {
     if (!confirmTarget?.id) {
       const msg = 'Select a patient appointment to confirm first.';
       setConfirmError(msg);
-      setToast({ type: 'error', message: msg });
+      pushToast({ type: 'error', message: msg });
       return;
     }
     setConfirmSaving(true);
@@ -968,7 +991,7 @@ export default function DoctorSecretaryDashboard() {
     if (!assignTarget?.id) {
       const msg = 'Select an appointment from the inbox first to assign a doctor and time.';
       setAssignError(msg);
-      setToast({ type: 'error', message: msg });
+      pushToast({ type: 'error', message: msg });
       return;
     }
     setAssignSaving(true);
@@ -1006,7 +1029,7 @@ export default function DoctorSecretaryDashboard() {
   const callPatientNow = async (apt) => {
     const id = String(apt?.id || '').trim();
     if (!id) {
-      setToast({ type: 'error', message: 'Select a checked-in patient first before calling.' });
+      pushToast({ type: 'error', message: 'Select a checked-in patient first before calling.' });
       return;
     }
     setQueueActionSavingId(id);
@@ -1022,9 +1045,9 @@ export default function DoctorSecretaryDashboard() {
         })
       });
       await refreshRecords({ silent: true });
-      setToast({ type: 'success', message: 'Patient called (Now serving).' });
+      pushToast({ type: 'success', message: 'Patient called (Now serving).' });
     } catch (e) {
-      setToast({ type: 'error', message: String(e.message || 'Failed to call patient.') });
+      pushToast({ type: 'error', message: String(e.message || 'Failed to call patient.') });
     } finally {
       setQueueActionSavingId('');
     }
@@ -1033,12 +1056,12 @@ export default function DoctorSecretaryDashboard() {
   const updateAppointmentStatus = async ({ apt, status, clearNowServing = false }) => {
     const id = String(apt?.id || '').trim();
     if (!id) {
-      setToast({ type: 'error', message: 'Select a patient first before updating the status.' });
+      pushToast({ type: 'error', message: 'Select a patient first before updating the status.' });
       return false;
     }
     const statusClean = String(status || '').trim();
     if (!statusClean) {
-      setToast({ type: 'error', message: 'Status cannot be empty.' });
+      pushToast({ type: 'error', message: 'Status cannot be empty.' });
       return false;
     }
     setQueueActionSavingId(id);
@@ -1059,7 +1082,7 @@ export default function DoctorSecretaryDashboard() {
       await refreshRecords({ silent: true });
       return true;
     } catch (e) {
-      setToast({ type: 'error', message: String(e.message || 'Failed to update appointment.') });
+      pushToast({ type: 'error', message: String(e.message || 'Failed to update appointment.') });
       return false;
     } finally {
       setQueueActionSavingId('');
@@ -1159,10 +1182,30 @@ export default function DoctorSecretaryDashboard() {
   }, [user]);
 
   useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(t);
-  }, [toast]);
+    const sessionKey = `doctor_secretary_welcome_${String(user?.id || user?.email || 'anon')}_${new Date().toDateString().replace(/\s+/g, '_')}`;
+    setWelcomeShownKey(sessionKey);
+  }, [user]);
+
+  useEffect(() => {
+    if (!welcomeShownKey) return;
+    try {
+      const shown = localStorage.getItem(welcomeShownKey);
+      if (shown) return;
+    } catch (_) {}
+    const cancelId = setTimeout(() => {
+      const name = String(secretaryName || user?.name || user?.first_name || user?.firstName || 'Secretary').trim() || 'Secretary';
+      const doctor = linkedDoctor?.name ? `Linked Doctor: ${linkedDoctor.name}${linkedDoctor?.specialization ? ` • ${linkedDoctor.specialization}` : ''}` : '⚠️ No linked doctor yet — ask your Admin to assign one.';
+      pushToast({
+        type: 'success',
+        message: `👋 Welcome back, ${name}! ${doctor}`,
+        durationMs: 18000
+      });
+      try {
+        localStorage.setItem(welcomeShownKey, '1');
+      } catch (_) {}
+    }, 900);
+    return () => clearTimeout(cancelId);
+  }, [welcomeShownKey, linkedDoctor]);
 
   const handleAvatarUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -1254,7 +1297,7 @@ export default function DoctorSecretaryDashboard() {
     if (!selected?.id) {
       const msg = 'Select a request from the inbox first before approving.';
       setActionError(msg);
-      setToast({ type: 'error', message: msg });
+      pushToast({ type: 'error', message: msg });
       return;
     }
     setActionLoading(true);
@@ -1285,7 +1328,7 @@ export default function DoctorSecretaryDashboard() {
     if (!selected?.id) {
       const msg = 'Select a request from the inbox first before rejecting.';
       setActionError(msg);
-      setToast({ type: 'error', message: msg });
+      pushToast({ type: 'error', message: msg });
       return;
     }
     setActionLoading(true);
@@ -1417,28 +1460,33 @@ export default function DoctorSecretaryDashboard() {
           </div>
 
           <nav className="sec-nav">
+            <div className="sidebar-section-label">MAIN</div>
             <button className={`sec-nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')} type="button">
-              <LayoutDashboard size={18} />
+              <LayoutDashboard size={20} />
               <span>Dashboard</span>
             </button>
             <button className={`sec-nav-btn ${activeTab === 'approvals' ? 'active' : ''}`} onClick={() => setActiveTab('approvals')} type="button">
-              <ClipboardList size={18} />
+              <ClipboardList size={20} />
               <span>Approvals</span>
             </button>
             <button className={`sec-nav-btn ${activeTab === 'onsite-inbox' ? 'active' : ''}`} onClick={() => setActiveTab('onsite-inbox')} type="button">
-              <Inbox size={18} />
+              <Inbox size={20} />
               <span>Onsite Inbox</span>
             </button>
+
+            <div className="sidebar-section-label">WORKFLOW</div>
             <button className={`sec-nav-btn ${activeTab === 'patient-records' ? 'active' : ''}`} onClick={() => setActiveTab('patient-records')} type="button">
-              <Calendar size={18} />
+              <Calendar size={20} />
               <span>Patient Records</span>
             </button>
             <button className={`sec-nav-btn ${activeTab === 'availability' ? 'active' : ''}`} onClick={() => setActiveTab('availability')} type="button">
-              <Calendar size={18} />
+              <Calendar size={20} />
               <span>Availability</span>
             </button>
+
+            <div className="sidebar-section-label">SESSION</div>
             <button className="sec-nav-btn danger" onClick={() => setShowLogoutConfirm(true)} type="button">
-              <XCircle size={18} />
+              <XCircle size={20} />
               <span>Sign Out</span>
             </button>
           </nav>
@@ -1470,10 +1518,40 @@ export default function DoctorSecretaryDashboard() {
           <AccountHeaderActions user={user} roleLabel="Doctor Secretary" onSignOut={() => setShowLogoutConfirm(true)} onMyProfile={() => setActiveTab('profile')} />
         </header>
 
-        {toast ? (
-          <div className={`sec-alert ${toast.type === 'success' ? 'success' : 'error'}`} style={{ margin: '10px 18px 0' }}>
-            <ShieldAlert size={16} />
-            <span>{toast.message}</span>
+        {Array.isArray(toasts) && toasts.length > 0 ? (
+          <div style={{ margin: '10px 18px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {toasts.map((t) => (
+              <div
+                key={String(t.id)}
+                className={`sec-alert ${t.type === 'success' ? 'success' : 'error'}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+                  <ShieldAlert size={16} />
+                  <span style={{ flex: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{t.message}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dismissToast(t.id)}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    border: 'none',
+                    background: 'rgba(15, 23, 42, 0.08)',
+                    color: t.type === 'success' ? '#166534' : '#991b1b',
+                    cursor: 'pointer',
+                    flex: '0 0 auto',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  aria-label="Dismiss notification"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
           </div>
         ) : null}
 
