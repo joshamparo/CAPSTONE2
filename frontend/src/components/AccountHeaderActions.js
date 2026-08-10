@@ -70,7 +70,8 @@ export default function AccountHeaderActions({
   onDepartmentChange,
   onMyProfile,
   onSignOut,
-  onOpenNotification
+  onOpenNotification,
+  showChangePasswordMenu = true
 }) {
   const rootRef = useRef(null);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -749,15 +750,15 @@ export default function AccountHeaderActions({
                       onMyProfile();
                       return;
                     }
-                    if (canChangePassword) setShowPasswordModal(true);
+                    if (canChangePassword && showChangePasswordMenu) setShowPasswordModal(true);
                   }}
-                  disabled={!onMyProfile && !canChangePassword}
+                  disabled={!onMyProfile && !(canChangePassword && showChangePasswordMenu)}
                 >
                   <User size={18} />
                   <span className="aha-menu-label">My Profile</span>
                 </button>
 
-                {onMyProfile && canChangePassword ? (
+                {onMyProfile && canChangePassword && showChangePasswordMenu ? (
                   <button
                     type="button"
                     className="aha-menu-item"
@@ -797,7 +798,9 @@ export default function AccountHeaderActions({
         }}
       />
 
-      <ChangePasswordModal open={showPasswordModal} user={user} onClose={() => setShowPasswordModal(false)} />
+      {showChangePasswordMenu ? (
+        <ChangePasswordModal open={showPasswordModal} user={user} onClose={() => setShowPasswordModal(false)} />
+      ) : null}
     </div>
   );
 }

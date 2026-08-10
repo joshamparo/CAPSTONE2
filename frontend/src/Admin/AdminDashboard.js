@@ -1876,6 +1876,13 @@ function AdminDashboard() {
     const { currentPassword, newPassword, confirmNewPassword } = adminProfile;
     const isChangingPassword = currentPassword || newPassword || confirmNewPassword;
 
+    const localPw = String(newPassword || '');
+    const localPwCriteria = {
+      length: localPw.length >= 11,
+      hasNumber: /\d/.test(localPw),
+      hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(localPw)
+    };
+
     if (isChangingPassword) {
         // If trying to change password, ALL fields must be filled
         if (!currentPassword || !newPassword || !confirmNewPassword) {
@@ -1889,9 +1896,9 @@ function AdminDashboard() {
             return;
         }
 
-        // Check Complexity
-        if (!passwordCriteria.length || !passwordCriteria.hasNumber || !passwordCriteria.hasSpecial) {
-            setUpdateNotice("New password does not meet all complexity requirements.");
+        // Check Complexity (min 11 chars, 1 number, 1 special
+        if (!localPwCriteria.length || !localPwCriteria.hasNumber || !localPwCriteria.hasSpecial) {
+            setUpdateNotice("New password does not meet all complexity requirements (at least 11 characters, 1 number, 1 special character).");
             return;
         }
     }
@@ -8030,6 +8037,7 @@ function AdminDashboard() {
               roleLabel="Administrator"
               onMyProfile={() => setView("admin-settings")}
               onSignOut={confirmLogout}
+              showChangePasswordMenu={false}
             />
           </div>
         </header>
