@@ -542,27 +542,31 @@ router.post('/', requireRole(['admin']), async (req, res) => {
         if (contentRaw.length < 6) return res.status(400).json({ message: "Announcement message is too short (min 6 characters)." });
         if (contentRaw.length > 4000) return res.status(400).json({ message: "Announcement message is too long (max 4000 characters)." });
 
-        const allowedPriority = new Set(['Low', 'Normal', 'High', 'Urgent']);
+        const allowedPriority = new Set(['Low', 'Normal', 'High', 'Urgent', 'Info']);
         const priority = allowedPriority.has(priorityRaw) ? priorityRaw : 'Normal';
+
+        const allowedTargets = new Set([
+            'All', 'Doctor', 'Nurse', 'Staff', 'Admin', 'Patient', 'Pharmacist', 'Cashier',
+            'Doctor Secretary', "Doctor's Secretary", 'MedTech', 'Medtechs', 'Radiographer', 'Radiographer (X-ray)',
+            'ECG Operator', 'Physical Therapist', 'Office Staff', 'Clinical Staff'
+        ]);
+        const target = allowedTargets.has(targetRaw) ? targetRaw : (targetRaw ? targetRaw : 'All');
 
         const parsedExpires = expiresAtRaw ? new Date(expiresAtRaw) : null;
         const expires_at = parsedExpires && !Number.isNaN(parsedExpires.getTime()) ? parsedExpires : null;
 
-        const rows = await prisma.$queryRawUnsafe(
-            `
-                INSERT INTO public.announcements (title, content, priority, target, author, pinned, expires_at, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6::boolean, $7::timestamptz, now(), now())
-                RETURNING id, title, content, priority, target, author, pinned, expires_at, created_at, updated_at
-            `,
-            titleRaw,
-            contentRaw,
-            priority,
-            targetRaw,
-            authorRaw,
-            pinnedRaw,
-            expires_at
-        );
-        const announcement = Array.isArray(rows) ? rows[0] : null;
+        const created = await prisma.announcements.create({
+            data: {
+                title: titleRaw,
+                content: contentRaw,
+                priority,
+                target,
+                author: authorRaw,
+                pinned: pinnedRaw,
+                expires_at
+            }
+        });
+        const announcement = created;
 
         // Log Activity
         await prisma.activity_logs.create({
@@ -580,7 +584,6 @@ router.post('/', requireRole(['admin']), async (req, res) => {
         const normalized = { ...announcement, id: announcement.id ? announcement.id.toString() : undefined };
         normalized.createdAt = normalized.created_at || normalized.createdAt;
         normalized.expiresAt = normalized.expires_at || normalized.expiresAt;
-        normalized.updatedAt = normalized.updated_at || normalized.updatedAt;
         res.json(normalized);
     } catch (err) {
         console.error(err.message);
