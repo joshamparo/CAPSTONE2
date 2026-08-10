@@ -190,11 +190,13 @@ function mapSymptom(token) {
         { keys: ['rash', 'skin rash', 'pantal'], label: 'Rash' }
     ];
     for (const p of pairs) {
-        if (p.keys.includes(t)) return { key: p.label.toLowerCase(), label: p.label };
+        if (p.keys.some((k) => t === k || t.includes(k))) {
+            return { key: p.label.toLowerCase(), label: p.label, canonical: true };
+        }
     }
     const capped = t.length > 60 ? t.slice(0, 60) : t;
     const label = capped.replace(/\b\w/g, (m) => m.toUpperCase());
-    return { key: label.toLowerCase(), label };
+    return { key: label.toLowerCase(), label, canonical: false };
 }
 
 function recommendationSections(symptomLabel) {
@@ -243,17 +245,21 @@ function recommendationSections(symptomLabel) {
     ];
 }
 
-function buildAiText({ monthKey, topSymptoms, completenessPct }) {
+function buildAiText({ monthKey, topSymptoms, completenessPct, totalAppointments }) {
     const monthLabel = monthKey;
     const names = topSymptoms.slice(0, 3).map((s) => s.symptom);
     const list = names.length ? names.join(', ') : 'no dominant symptom';
-    const summary = `For ${monthLabel}, the most commonly reported symptoms were ${list}. Data completeness is ${completenessPct}%.`;
+    const parts = [
+        `For ${monthLabel}, there were ${Number(totalAppointments || 0)} appointments.`,
+        `The most commonly reported symptoms were ${list}.`,
+        `Data completeness is ${completenessPct}%.`
+    ];
     const recommendations = topSymptoms.slice(0, 5).map((s) => {
         const sections = recommendationSections(s.symptom);
         const flatTips = sections.flatMap((sec) => Array.isArray(sec?.tips) ? sec.tips : []);
         return { symptom: s.symptom, sections, tips: flatTips };
     });
-    return { summary, recommendations };
+    return { summary: parts.join(' '), recommendations };
 }
 
 // Get Dashboard Overview Stats
@@ -602,11 +608,12 @@ router.get('/symptom-insights', requireRole(['admin']), async (req, res) => {
         const monthKeyInput = parseMonthKey(req.query.month) || { year: now.getFullYear(), month: now.getMonth() + 1, key: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` };
         const refresh = String(req.query.refresh || '').trim().toLowerCase() === 'true';
         const { start, next } = monthBounds(monthKeyInput);
+        const startKey = start.toISOString().slice(0, 10);
+        const nextKey = next.toISOString().slice(0, 10);
 
         if (!refresh) {
-            const cached = await prisma.$queryRawUnsafe(
-                `SELECT payload, generated_at FROM admin_symptom_insights WHERE month_key = $1 LIMIT 1`,
-                monthKeyInput.key
+            const cached = await prisma.$queryRaw(
+                Prisma.sql`SELECT payload, generated_at FROM admin_symptom_insights WHERE month_key = ${monthKeyInput.key}::text LIMIT 1`
             ).catch(() => []);
             const row = Array.isArray(cached) ? cached[0] : null;
             if (row?.payload) {
@@ -614,28 +621,28 @@ router.get('/symptom-insights', requireRole(['admin']), async (req, res) => {
             }
         }
 
-        const totalsRows = await prisma.$queryRawUnsafe(
-            `
+        const totalsRows = await prisma.$queryRaw(
+            Prisma.sql`
                 SELECT
                     COUNT(*)::int AS total,
                     COUNT(*) FILTER (WHERE symptoms IS NOT NULL AND array_length(symptoms, 1) > 0)::int AS with_symptoms
                 FROM public.appointments
-                WHERE appointment_date >= $1::date AND appointment_date < $2::date
-            `,
-            start,
-            next
+                WHERE appointment_date >= ${startKey}::date
+                  AND appointment_date < ${nextKey}::date
+            `
         ).catch(() => []);
         const totals = Array.isArray(totalsRows) ? totalsRows[0] : null;
         const totalAppointments = Number(totals?.total || 0) || 0;
         const appointmentsWithSymptoms = Number(totals?.with_symptoms || 0) || 0;
         const completenessPct = totalAppointments > 0 ? Math.round((appointmentsWithSymptoms / totalAppointments) * 100) : 0;
 
-        const rows = await prisma.$queryRawUnsafe(
-            `
+        const rows = await prisma.$queryRaw(
+            Prisma.sql`
                 WITH base AS (
                     SELECT id, symptoms
                     FROM public.appointments
-                    WHERE appointment_date >= $1::date AND appointment_date < $2::date
+                    WHERE appointment_date >= ${startKey}::date
+                      AND appointment_date < ${nextKey}::date
                 ),
                 expanded AS (
                     SELECT DISTINCT b.id, lower(trim(s)) AS symptom
@@ -647,10 +654,8 @@ router.get('/symptom-insights', requireRole(['admin']), async (req, res) => {
                 FROM expanded
                 GROUP BY symptom
                 ORDER BY COUNT(*) DESC, symptom ASC
-                LIMIT 40
-            `,
-            start,
-            next
+                LIMIT 60
+            `
         ).catch(() => []);
 
         const prev = (() => {
@@ -659,12 +664,16 @@ router.get('/symptom-insights', requireRole(['admin']), async (req, res) => {
             return { year: y, month: m, key: `${y}-${String(m).padStart(2, '0')}` };
         })();
         const prevBounds = monthBounds(prev);
-        const prevRows = await prisma.$queryRawUnsafe(
-            `
+        const prevStartKey = prevBounds.start.toISOString().slice(0, 10);
+        const prevNextKey = prevBounds.next.toISOString().slice(0, 10);
+
+        const prevRows = await prisma.$queryRaw(
+            Prisma.sql`
                 WITH base AS (
                     SELECT id, symptoms
                     FROM public.appointments
-                    WHERE appointment_date >= $1::date AND appointment_date < $2::date
+                    WHERE appointment_date >= ${prevStartKey}::date
+                      AND appointment_date < ${prevNextKey}::date
                 ),
                 expanded AS (
                     SELECT DISTINCT b.id, lower(trim(s)) AS symptom
@@ -675,16 +684,21 @@ router.get('/symptom-insights', requireRole(['admin']), async (req, res) => {
                 SELECT symptom, COUNT(*)::int AS count
                 FROM expanded
                 GROUP BY symptom
-            `,
-            prevBounds.start,
-            prevBounds.next
+            `
         ).catch(() => []);
 
-        const prevMap = new Map();
+        const prevRawMap = new Map();
         (Array.isArray(prevRows) ? prevRows : []).forEach((r) => {
             const k = normalizeSymptomToken(r?.symptom);
             if (!k) return;
-            prevMap.set(k, Number(r?.count || 0) || 0);
+            prevRawMap.set(k, Number(r?.count || 0) || 0);
+        });
+
+        const prevMap = new Map();
+        prevRawMap.forEach((count, rawKey) => {
+            const mapped = mapSymptom(rawKey);
+            if (!mapped) return;
+            prevMap.set(mapped.key, (prevMap.get(mapped.key) || 0) + count);
         });
 
         const map = new Map();
@@ -698,15 +712,14 @@ router.get('/symptom-insights', requireRole(['admin']), async (req, res) => {
 
         const fallbackUsed = totalAppointments > 0 && appointmentsWithSymptoms / totalAppointments < 0.7;
         if (fallbackUsed) {
-            const missing = await prisma.$queryRawUnsafe(
-                `
+            const missing = await prisma.$queryRaw(
+                Prisma.sql`
                     SELECT id, reason, main_concern, description
                     FROM public.appointments
-                    WHERE appointment_date >= $1::date AND appointment_date < $2::date
+                    WHERE appointment_date >= ${startKey}::date
+                      AND appointment_date < ${nextKey}::date
                       AND (symptoms IS NULL OR array_length(symptoms, 1) = 0)
-                `,
-                start,
-                next
+                `
             ).catch(() => []);
 
             const keywordMap = [
@@ -735,7 +748,7 @@ router.get('/symptom-insights', requireRole(['admin']), async (req, res) => {
             };
 
             (Array.isArray(missing) ? missing : []).forEach((m) => {
-                const tokens = [...hit(m.reason), ...hit(m.main_concern), ...hit(m.description)];
+                const tokens = [...new Set([...hit(m.reason), ...hit(m.main_concern), ...hit(m.description)])];
                 tokens.forEach((label) => {
                     const k = label.toLowerCase();
                     if (!map.has(k)) map.set(k, { symptom: label, count: 0 });
@@ -748,14 +761,14 @@ router.get('/symptom-insights', requireRole(['admin']), async (req, res) => {
             .sort((a, b) => b.count - a.count || a.symptom.localeCompare(b.symptom))
             .slice(0, 5)
             .map((s) => {
-                const key = normalizeSymptomToken(s.symptom);
+                const key = String(s.symptom || '').trim().toLowerCase();
                 const prevCount = prevMap.get(key) || 0;
                 const delta = s.count - prevCount;
                 const trend = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
                 return { symptom: s.symptom, count: s.count, delta, trend };
             });
 
-        const ai = buildAiText({ monthKey: monthKeyInput.key, topSymptoms, completenessPct });
+        const ai = buildAiText({ monthKey: monthKeyInput.key, topSymptoms, completenessPct, totalAppointments });
         const highlights = topSymptoms
             .slice(0, 3)
             .map((s) => {
@@ -767,7 +780,7 @@ router.get('/symptom-insights', requireRole(['admin']), async (req, res) => {
             });
         const payload = {
             month: monthKeyInput.key,
-            analysisWindow: { start: start.toISOString().slice(0, 10), endExclusive: next.toISOString().slice(0, 10) },
+            analysisWindow: { start: startKey, endExclusive: nextKey },
             totalAppointments,
             appointmentsWithSymptoms,
             completenessPct,
@@ -781,21 +794,21 @@ router.get('/symptom-insights', requireRole(['admin']), async (req, res) => {
                 : 'Insights are based on recorded symptoms.'
         };
 
-        await prisma.$queryRawUnsafe(
-            `
+        const jsonb = JSON.stringify(payload);
+        await prisma.$queryRaw(
+            Prisma.sql`
                 INSERT INTO admin_symptom_insights (month_key, payload, algorithm_version, generated_at)
-                VALUES ($1, $2::jsonb, 'v2', now())
+                VALUES (${monthKeyInput.key}::text, ${jsonb}::jsonb, 'v2.1', now())
                 ON CONFLICT (month_key) DO UPDATE
                 SET payload = EXCLUDED.payload,
                     algorithm_version = EXCLUDED.algorithm_version,
                     generated_at = now()
-            `,
-            monthKeyInput.key,
-            JSON.stringify(payload)
+            `
         ).catch(() => {});
 
         res.json({ ...payload, generatedAt: new Date().toISOString() });
     } catch (err) {
+        console.error('[stats /symptom-insights] error:', err);
         res.status(500).json({ message: err.message || 'Server Error' });
     }
 });
