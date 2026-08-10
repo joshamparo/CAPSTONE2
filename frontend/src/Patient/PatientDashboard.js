@@ -481,7 +481,8 @@ function PatientDashboard() {
     const now = new Date();
     const diffMin = (now.getTime() - startAt.getTime()) / 60000;
     if (diffMin < -10) return { allowed: false, reason: 'You can join 10 mins before schedule' };
-    if (diffMin > 30) return { allowed: false, reason: 'Join window ended' };
+    // Align join window with doctor start window (12 hours / 720 minutes) for testing flexibility
+    if (diffMin > 720) return { allowed: false, reason: 'Join window ended' };
     return { allowed: true, reason: '' };
   };
 

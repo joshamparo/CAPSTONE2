@@ -251,8 +251,14 @@ const ROLE_SERVICE_KEYS = {
 };
 
 function inferConsultationMode(reqRow) {
+  const direct = String(reqRow?.consultation_mode || reqRow?.consultationMode || '').trim().toLowerCase();
+  if (direct === 'video' || direct === 'onsite') return direct;
   const k = inferServiceKey(reqRow);
-  if (k === 'video consultation') return 'video';
+  if (k.includes('video') || k.startsWith('teleconsult')) return 'video';
+  const dept = String(reqRow?.department_key || '').trim().toLowerCase();
+  if (dept === 'video') return 'video';
+  const reason = String(reqRow?.reason || '').trim().toLowerCase();
+  if (reason.includes('(online)') || reason.startsWith('video:') || reason.includes('video consultation')) return 'video';
   return 'onsite';
 }
 

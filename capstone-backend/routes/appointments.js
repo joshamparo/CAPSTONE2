@@ -866,6 +866,10 @@ function inferEmail(req) {
     return String(req.headers['x-user-email'] || '').trim().toLowerCase();
 }
 
+function inferUserId(req) {
+    return String(req.headers['x-user-id'] || req.headers['x-patient-id'] || '').trim();
+}
+
 function inferName(req) {
     return String(req.headers['x-user-name'] || '').trim();
 }
@@ -1469,17 +1473,26 @@ router.get('/mine', requireRole(['patient']), async (req, res) => {
     try {
         await ensureAppointmentsSchema();
         const email = inferEmail(req);
-        if (!email) return res.status(401).json({ message: 'Missing user email.' });
+        const patientId = inferUserId(req);
+        if (!email && !patientId) return res.status(401).json({ message: 'Missing user email or patient id.' });
 
         const take = Number(req.query.take || 50);
         const limit = Number.isFinite(take) ? Math.max(1, Math.min(200, Math.floor(take))) : 50;
         const now = new Date();
+        const windowStart = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+        const windowEnd = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+
+        const baseWhere = {
+            appointment_date: { gte: windowStart, lte: windowEnd }
+        };
+        const orClauses = [];
+        if (email) orClauses.push({ email: { equals: email, mode: 'insensitive' } });
+        if (patientId) orClauses.push({ patient_id: patientId });
+
+        const where = orClauses.length > 1 ? { ...baseWhere, OR: orClauses } : { ...baseWhere, ...orClauses[0] };
 
         const rows = await prisma.appointments.findMany({
-            where: {
-                email: { equals: email, mode: 'insensitive' },
-                appointment_date: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30) }
-            },
+            where,
             orderBy: [{ appointment_date: 'desc' }, { created_at: 'desc' }],
             take: limit
         });
@@ -1504,7 +1517,8 @@ router.get('/mine', requireRole(['patient']), async (req, res) => {
             triagedBy: apt.triaged_by || null,
             triagedAt: apt.triaged_at ?? null,
             triageOverriddenBy: apt.triage_overridden_by || null,
-            triageOverriddenAt: apt.triage_overridden_at ?? null
+            triageOverriddenAt: apt.triage_overridden_at ?? null,
+            sourceTable: 'appointments'
         }));
 
         res.json(formatted);
