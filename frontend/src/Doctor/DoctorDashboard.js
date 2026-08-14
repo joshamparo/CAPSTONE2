@@ -4,6 +4,7 @@ import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Tr
 import './DoctorDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
+import StatusBadge from '../components/StatusBadge';
 import { checkBackendHealth, fetchJson } from '../utils/api';
 import { supabase } from '../lib/supabaseClient';
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
@@ -3905,15 +3906,21 @@ function DoctorDashboard() {
                       <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>Quick Symptoms (Subjective)</div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                         {["Fever", "Cough", "Headache", "Abdominal Pain", "Chest Pain", "Shortness of Breath", "Dizziness", "Vomiting", "Diarrhea"].map(chip => (
-                          <button key={chip} type="button" onClick={() => {
-                            setNoteForm(prev => {
-                              const curr = prev.subjective || '';
-                              const sep = curr ? ', ' : '';
-                              return { ...prev, subjective: curr + sep + chip };
-                            });
-                          }} style={{ padding: '4px 10px', fontSize: '0.75rem', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '12px', color: '#334155', cursor: 'pointer' }}>
-                            + {chip}
-                          </button>
+                          <StatusBadge
+                            key={chip}
+                            size="sm"
+                            color="#475569"
+                            uppercase={false}
+                            showDot={false}
+                            label={`+ ${chip}`}
+                            onClick={() => {
+                              setNoteForm(prev => {
+                                const curr = prev.subjective || '';
+                                const sep = curr ? ', ' : '';
+                                return { ...prev, subjective: curr + sep + chip };
+                              });
+                            }}
+                          />
                         ))}
                       </div>
                     </div>
@@ -3922,16 +3929,25 @@ function DoctorDashboard() {
                       <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', marginBottom: '6px' }}>Quick Findings (Objective)</div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                         {["Normal Exam", "Clear breath sounds", "Regular heart rhythm", "Soft abdomen", "No tenderness", "Alert & oriented"].map(chip => (
-                          <button key={chip} type="button" onClick={() => {
-                            setNoteForm(prev => {
-                              const curr = prev.objective || '';
-                              const sep = curr ? (curr.endsWith('.') ? ' ' : ', ') : '';
-                              const text = chip === 'Normal Exam' ? 'Alert, coherent, oriented to 3 spheres, not in cardiorespiratory distress. Vital signs stable. Clear breath sounds bilaterally. Regular heart rhythm. Soft abdomen, no tenderness.' : chip;
-                              return { ...prev, objective: curr + sep + text };
-                            });
-                          }} style={{ padding: '4px 10px', fontSize: '0.75rem', background: chip === 'Normal Exam' ? '#dcfce7' : '#f1f5f9', border: `1px solid ${chip === 'Normal Exam' ? '#86efac' : '#cbd5e1'}`, borderRadius: '12px', color: chip === 'Normal Exam' ? '#166534' : '#334155', cursor: 'pointer', fontWeight: chip === 'Normal Exam' ? 700 : 400 }}>
-                            + {chip}
-                          </button>
+                          <StatusBadge
+                            key={chip}
+                            size="sm"
+                            variant={chip === 'Normal Exam' ? 'duty' : 'scheduled'}
+                            tone={chip === 'Normal Exam' ? 'duty' : undefined}
+                            color={chip !== 'Normal Exam' ? '#475569' : undefined}
+                            uppercase={false}
+                            showDot={false}
+                            style={chip === 'Normal Exam' ? { fontWeight: 700 } : undefined}
+                            label={`+ ${chip}`}
+                            onClick={() => {
+                              setNoteForm(prev => {
+                                const curr = prev.objective || '';
+                                const sep = curr ? (curr.endsWith('.') ? ' ' : ', ') : '';
+                                const text = chip === 'Normal Exam' ? 'Alert, coherent, oriented to 3 spheres, not in cardiorespiratory distress. Vital signs stable. Clear breath sounds bilaterally. Regular heart rhythm. Soft abdomen, no tenderness.' : chip;
+                                return { ...prev, objective: curr + sep + text };
+                              });
+                            }}
+                          />
                         ))}
                       </div>
                     </div>

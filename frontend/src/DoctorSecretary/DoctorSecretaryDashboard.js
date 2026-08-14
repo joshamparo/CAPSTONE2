@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
+import ModalShell from '../components/ModalShell';
 import './DoctorSecretaryDashboard.css';
 import { checkBackendHealth, fetchJson } from '../utils/api';
 
@@ -2527,16 +2528,13 @@ export default function DoctorSecretaryDashboard() {
         )}
 
         {assignModalOpen && assignTarget && (
-          <div className="modal-overlay-fixed" onClick={closeAssign}>
-            <div className="modal-content-medium" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500, padding: '32px', background: '#ffffff', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                  <h3 style={{ color: '#0f172a', fontSize: '24px', fontWeight: '800', margin: 0 }}>Assign Doctor</h3>
-                  <button onClick={closeAssign} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}>
-                    <XCircle size={20} />
-                  </button>
-                </div>
-                
+          <ModalShell
+            open={assignModalOpen}
+            onClose={closeAssign}
+            title="Assign Doctor"
+            subtitle="Assign an onsite booking to a doctor"
+            maxWidth={500}
+          >
                 <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '16px', marginBottom: 24, border: '1px solid #e2e8f0' }}>
                   <div style={{ color: '#1e293b', fontSize: '16px', fontWeight: '700' }}>
                     {`${norm(assignTarget.firstName || assignTarget.first_name)} ${norm(assignTarget.lastName || assignTarget.last_name)}`.trim() || 'Patient'} • {fmtDate(assignTarget.appointmentDate || assignTarget.appointment_date)} • {fmtTime(assignTarget.appointmentTime || assignTarget.appointment_time)}
@@ -2627,14 +2625,12 @@ export default function DoctorSecretaryDashboard() {
                     type="button"
                     onClick={submitAssign} 
                     disabled={assignSaving}
-                    style={{ flex: 1, padding: '14px', borderRadius: '12px', border: 'none', background: '#f97316', color: '#ffffff', fontSize: '15px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(249, 115, 22, 0.2)' }}
+                    style={{ flex: 1, padding: '14px', borderRadius: '12px', border: 'none', background: 'var(--brand-primary-gradient)', color: '#ffffff', fontSize: '15px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(249, 115, 22, 0.2)' }}
                   >
                     {assignSaving ? 'Assigning...' : 'Confirm & Assign'}
                   </button>
                 </div>
-              </div>
-            </div>
-          </div>
+          </ModalShell>
         )}
 
         <PatientFullRecordModal

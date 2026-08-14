@@ -183,3 +183,265 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* =========== UNIFIED DATA TABLES (ALL 7 DASHBOARDS) =========== */
+.app-main table,
+.dashboard-main table,
+.cs-main table,
+.doc-main table,
+.nurse-main table,
+.nurse-main-content table,
+.pharm-main table,
+.office-main table,
+.sec-main table,
+.admin-main table,
+.admin-dashboard-main-column table,
+.dashboard-section-card table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 6px;
+  font-size: 0.88rem;
+  color: var(--slate-700, #334155);
+}
+
+.app-main table thead th,
+.dashboard-main table thead th,
+.cs-main table thead th,
+.doc-main table thead th,
+.nurse-main table thead th,
+.nurse-main-content table thead th,
+.pharm-main table thead th,
+.office-main table thead th,
+.sec-main table thead th,
+.admin-main table thead th,
+.admin-dashboard-main-column table thead th,
+.dashboard-section-card table thead th {
+  text-align: left;
+  padding: 12px 14px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--slate-500, #64748b);
+  background: var(--slate-50, #f8fafc);
+  border: 1px solid var(--slate-200, #e2e8f0);
+}
+
+.app-main table thead th:first-child,
+.dashboard-main table thead th:first-child,
+.cs-main table thead th:first-child,
+.doc-main table thead th:first-child,
+.nurse-main table thead th:first-child,
+.nurse-main-content table thead th:first-child,
+.pharm-main table thead th:first-child,
+.office-main table thead th:first-child,
+.sec-main table thead th:first-child,
+.admin-main table thead th:first-child,
+.admin-dashboard-main-column table thead th:first-child,
+.dashboard-section-card table thead th:first-child {
+  border-top-left-radius: var(--radius-md, 12px);
+  border-bottom-left-radius: var(--radius-md, 12px);
+}
+
+.app-main table thead th:last-child,
+.dashboard-main table thead th:last-child,
+.cs-main table thead th:last-child,
+.doc-main table thead th:last-child,
+.nurse-main table thead th:last-child,
+.nurse-main-content table thead th:last-child,
+.pharm-main table thead th:last-child,
+.office-main table thead th:last-child,
+.sec-main table thead th:last-child,
+.admin-main table thead th:last-child,
+.admin-dashboard-main-column table thead th:last-child,
+.dashboard-section-card table thead th:last-child {
+  border-top-right-radius: var(--radius-md, 12px);
+  border-bottom-right-radius: var(--radius-md, 12px);
+}
+
+.app-main table tbody td,
+.dashboard-main table tbody td,
+.cs-main table tbody td,
+.doc-main table tbody td,
+.nurse-main table tbody td,
+.nurse-main-content table tbody td,
+.pharm-main table tbody td,
+.office-main table tbody td,
+.sec-main table tbody td,
+.admin-main table tbody td,
+.admin-dashboard-main-column table tbody td,
+.dashboard-section-card table tbody td {
+  padding: 13px 14px;
+  background: #ffffff;
+  border-top: 1px solid var(--slate-200, #e2e8f0);
+  border-bottom: 1px solid var(--slate-200, #e2e8f0);
+  vertical-align: middle;
+}
+
+.app-main table tbody td:first-child,
+.dashboard-main table tbody td:first-child,
+.cs-main table tbody td:first-child,
+.doc-main table tbody td:first-child,
+.nurse-main table tbody td:first-child,
+.nurse-main-content table tbody td:first-child,
+.pharm-main table tbody td:first-child,
+.office-main table tbody td:first-child,
+.sec-main table tbody td:first-child,
+.admin-main table tbody td:first-child,
+.admin-dashboard-main-column table tbody td:first-child,
+.dashboard-section-card table tbody td:first-child {
+  border-left: 1px solid var(--slate-200, #e2e8f0);
+  border-top-left-radius: var(--radius-md, 12px);
+  border-bottom-left-radius: var(--radius-md, 12px);
+}
+
+.app-main table tbody td:last-child,
+.dashboard-main table tbody td:last-child,
+.cs-main table tbody td:last-child,
+.doc-main table tbody td:last-child,
+.nurse-main table tbody td:last-child,
+.nurse-main-content table tbody td:last-child,
+.pharm-main table tbody td:last-child,
+.office-main table tbody td:last-child,
+.sec-main table tbody td:last-child,
+.admin-main table tbody td:last-child,
+.admin-dashboard-main-column table tbody td:last-child,
+.dashboard-section-card table tbody td:last-child {
+  border-right: 1px solid var(--slate-200, #e2e8f0);
+  border-top-right-radius: var(--radius-md, 12px);
+  border-bottom-right-radius: var(--radius-md, 12px);
+}
+
+.app-main table tbody tr,
+.dashboard-main table tbody tr,
+.cs-main table tbody tr,
+.doc-main table tbody tr,
+.nurse-main table tbody tr,
+.nurse-main-content table tbody tr,
+.pharm-main table tbody tr,
+.office-main table tbody tr,
+.sec-main table tbody tr,
+.admin-main table tbody tr,
+.admin-dashboard-main-column table tbody tr,
+.dashboard-section-card table tbody tr {
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.app-main table tbody tr:nth-child(even) td,
+.dashboard-main table tbody tr:nth-child(even) td,
+.cs-main table tbody tr:nth-child(even) td,
+.doc-main table tbody tr:nth-child(even) td,
+.nurse-main table tbody tr:nth-child(even) td,
+.nurse-main-content table tbody tr:nth-child(even) td,
+.pharm-main table tbody tr:nth-child(even) td,
+.sec-main table tbody tr:nth-child(even) td,
+.admin-main table tbody tr:nth-child(even) td,
+.admin-dashboard-main-column table tbody tr:nth-child(even) td,
+.dashboard-section-card table tbody tr:nth-child(even) td {
+  background: var(--slate-50, #f8fafc);
+}
+
+/* ===== Hover: Orange brand wash (all dashboards) ===== */
+.app-main table tbody tr:hover td,
+.dashboard-main table tbody tr:hover td,
+.cs-main table tbody tr:hover td,
+.doc-main table tbody tr:hover td,
+.nurse-main table tbody tr:hover td,
+.nurse-main-content table tbody tr:hover td,
+.pharm-main table tbody tr:hover td,
+.sec-main table tbody tr:hover td,
+.admin-main table tbody tr:hover td,
+.admin-dashboard-main-column table tbody tr:hover td,
+.dashboard-section-card table tbody tr:hover td {
+  background: var(--brand-primary-wash, #fff7ed) !important;
+  box-shadow: inset 2px 0 0 0 var(--brand-primary, #f97316);
+}
+
+/* ===== Cashier-only (White Only Rule): Hover → slate-50 neutral, NO orange ===== */
+.office-main table tbody tr:hover td {
+  background: var(--slate-100, #f1f5f9) !important;
+  box-shadow: inset 2px 0 0 0 var(--slate-300, #cbd5e1) !important;
+}
+
+/* ===== DARK THEME TABLE PARITY ===== */
+html[data-theme='dark'] .app-main table,
+html[data-theme='dark'] .dashboard-main table,
+html[data-theme='dark'] .cs-main table,
+html[data-theme='dark'] .doc-main table,
+html[data-theme='dark'] .nurse-main table,
+html[data-theme='dark'] .nurse-main-content table,
+html[data-theme='dark'] .pharm-main table,
+html[data-theme='dark'] .office-main table,
+html[data-theme='dark'] .sec-main table,
+html[data-theme='dark'] .admin-main table,
+html[data-theme='dark'] .admin-dashboard-main-column table,
+html[data-theme='dark'] .dashboard-section-card table {
+  color: var(--slate-300, #cbd5e1);
+}
+
+html[data-theme='dark'] .app-main table thead th,
+html[data-theme='dark'] .dashboard-main table thead th,
+html[data-theme='dark'] .cs-main table thead th,
+html[data-theme='dark'] .doc-main table thead th,
+html[data-theme='dark'] .nurse-main table thead th,
+html[data-theme='dark'] .nurse-main-content table thead th,
+html[data-theme='dark'] .pharm-main table thead th,
+html[data-theme='dark'] .office-main table thead th,
+html[data-theme='dark'] .sec-main table thead th,
+html[data-theme='dark'] .admin-main table thead th,
+html[data-theme='dark'] .admin-dashboard-main-column table thead th,
+html[data-theme='dark'] .dashboard-section-card table thead th {
+  color: var(--slate-400, #94a3b8);
+  background: var(--slate-800, #1e293b);
+  border-color: var(--slate-700, #334155);
+}
+
+html[data-theme='dark'] .app-main table tbody td,
+html[data-theme='dark'] .dashboard-main table tbody td,
+html[data-theme='dark'] .cs-main table tbody td,
+html[data-theme='dark'] .doc-main table tbody td,
+html[data-theme='dark'] .nurse-main table tbody td,
+html[data-theme='dark'] .nurse-main-content table tbody td,
+html[data-theme='dark'] .pharm-main table tbody td,
+html[data-theme='dark'] .office-main table tbody td,
+html[data-theme='dark'] .sec-main table tbody td,
+html[data-theme='dark'] .admin-main table tbody td,
+html[data-theme='dark'] .admin-dashboard-main-column table tbody td,
+html[data-theme='dark'] .dashboard-section-card table tbody td {
+  background: var(--slate-900, #0f172a);
+  border-color: var(--slate-700, #334155);
+}
+
+html[data-theme='dark'] .app-main table tbody tr:nth-child(even) td,
+html[data-theme='dark'] .dashboard-main table tbody tr:nth-child(even) td,
+html[data-theme='dark'] .cs-main table tbody tr:nth-child(even) td,
+html[data-theme='dark'] .doc-main table tbody tr:nth-child(even) td,
+html[data-theme='dark'] .nurse-main table tbody tr:nth-child(even) td,
+html[data-theme='dark'] .nurse-main-content table tbody tr:nth-child(even) td,
+html[data-theme='dark'] .pharm-main table tbody tr:nth-child(even) td,
+html[data-theme='dark'] .sec-main table tbody tr:nth-child(even) td,
+html[data-theme='dark'] .admin-main table tbody tr:nth-child(even) td,
+html[data-theme='dark'] .admin-dashboard-main-column table tbody tr:nth-child(even) td,
+html[data-theme='dark'] .dashboard-section-card table tbody tr:nth-child(even) td {
+  background: var(--slate-850, #182234);
+}
+
+html[data-theme='dark'] .app-main table tbody tr:hover td,
+html[data-theme='dark'] .dashboard-main table tbody tr:hover td,
+html[data-theme='dark'] .cs-main table tbody tr:hover td,
+html[data-theme='dark'] .doc-main table tbody tr:hover td,
+html[data-theme='dark'] .nurse-main table tbody tr:hover td,
+html[data-theme='dark'] .nurse-main-content table tbody tr:hover td,
+html[data-theme='dark'] .pharm-main table tbody tr:hover td,
+html[data-theme='dark'] .sec-main table tbody tr:hover td,
+html[data-theme='dark'] .admin-main table tbody tr:hover td,
+html[data-theme='dark'] .admin-dashboard-main-column table tbody tr:hover td,
+html[data-theme='dark'] .dashboard-section-card table tbody tr:hover td {
+  background: rgba(249, 115, 22, 0.12) !important;
+  box-shadow: inset 2px 0 0 0 var(--brand-primary, #f97316);
+}
+
+html[data-theme='dark'] .office-main table tbody tr:hover td {
+  background: rgba(148, 163, 184, 0.14) !important;
+  box-shadow: inset 2px 0 0 0 var(--slate-500, #64748b) !important;
+}

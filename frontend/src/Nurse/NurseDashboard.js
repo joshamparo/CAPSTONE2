@@ -10,6 +10,8 @@ import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import ConfirmModal from '../components/ConfirmModal';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
+import StatusBadge from '../components/StatusBadge';
+import ModalShell from '../components/ModalShell';
 
 const LAB_SERVICES = ["Urinalysis", "Blood Chemistry", "Complete Blood Count (CBC)", "Fecalysis", "Hepa Screening", "Dengue Duo + NS1 Antigen (Package)"];
 const IMAGING_SERVICES = ["Standard 12-Lead ECG", "Stress Test", "Holter Monitoring", "Chest X-Ray"];
@@ -9230,13 +9232,13 @@ function NurseDashboard() {
                 </div>
                 
                 <div className="bed-modal-body">
-                    <div style={{background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: '12px', padding: '16px', marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
-                        <div style={{background: '#3b82f6', borderRadius: '50%', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0}}>
+                    <div style={{background: 'var(--status-scheduled-wash)', border: '1px solid var(--status-scheduled-ring)', borderRadius: 'var(--radius-md, 12px)', padding: '16px', marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                        <div style={{background: 'var(--status-scheduled-solid)', borderRadius: 'var(--radius-md, 12px)', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0}}>
                             <Info size={16} color="white" />
                         </div>
                         <div>
-                            <p style={{margin: '0 0 4px 0', fontSize: '0.9rem', fontWeight: '700', color: '#1e3a8a'}}>Personal Information Locked</p>
-                            <p style={{margin: 0, fontSize: '0.85rem', color: '#1e40af', lineHeight: '1.4'}}>
+                            <p style={{margin: '0 0 4px 0', fontSize: '0.9rem', fontWeight: '700', color: 'var(--status-scheduled-text)'}}>Personal Information Locked</p>
+                            <p style={{margin: 0, fontSize: '0.85rem', color: 'var(--status-scheduled-text)', lineHeight: '1.4', opacity: 0.92}}>
                                 To ensure data integrity, some fields cannot be edited directly. Please describe the necessary correction below, and an administrator will review your request.
                             </p>
                         </div>
@@ -9457,20 +9459,24 @@ function NurseDashboard() {
       )}
 
       {walkInNextStepsOpen && walkInNextSteps && (
-        <div className="modal-overlay-fixed">
-          <div className="modal-content-medium next-steps-modal" style={{ maxWidth: 500, padding: '32px', background: '#ffffff', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+        <ModalShell
+          open={walkInNextStepsOpen}
+          onClose={() => setWalkInNextStepsOpen(false)}
+          maxWidth={500}
+          showCloseButton={true}
+        >
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-              <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, border: '2px solid #bbf7d0' }}>
-                <CheckCircle size={32} color="#16a34a" />
+              <div style={{ width: 64, height: 64, borderRadius: '20px', background: 'var(--status-duty-wash, #dcfce7)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, border: '2px solid var(--status-duty-ring, #bbf7d0)' }}>
+                <CheckCircle size={32} color="var(--status-duty, #16a34a)" />
               </div>
               
               <h3 style={{ color: '#0f172a', fontSize: '24px', fontWeight: '800', marginBottom: 12, margin: 0 }}>Registration successful</h3>
               
-              <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '20px', width: '100%', marginBottom: 24, border: '2px solid #e2e8f0' }}>
+              <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '16px', width: '100%', marginBottom: 24, marginTop: 20, border: '2px solid #e2e8f0' }}>
                 {walkInNextSteps.ticket && (
                   <div style={{ marginBottom: 20 }}>
                     <div style={{ fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Your Queue Number</div>
-                    <div style={{ fontSize: '48px', fontWeight: '900', color: '#f97316', lineHeight: '1' }}>{walkInNextSteps.ticket}</div>
+                    <div style={{ fontSize: '48px', fontWeight: '900', color: 'var(--brand-primary, #f97316)', lineHeight: '1' }}>{walkInNextSteps.ticket}</div>
                   </div>
                 )}
                 
@@ -9501,14 +9507,13 @@ function NurseDashboard() {
                   type="button" 
                   className="btn-modal-confirm" 
                   onClick={() => setWalkInNextStepsOpen(false)}
-                  style={{ flex: 1, fontWeight: '700', padding: '14px', borderRadius: '12px', fontSize: '15px', backgroundColor: '#f97316', color: '#ffffff' }}
+                  style={{ flex: 1, fontWeight: '700', padding: '14px', borderRadius: '12px', fontSize: '15px', background: 'var(--brand-primary-gradient)', color: '#ffffff' }}
                 >
                   Exit
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+        </ModalShell>
       )}
 
       {showAddPatientModal && (

@@ -12,12 +12,15 @@ export default function StatusBadge({
   className = '',
   style = null,
   icon = null,
-  uppercase = true
+  uppercase = true,
+  onClick = null,
+  showDot = true
 }) {
   const resolvedVariant = tone || variant;
   const useKnown = KNOWN_VARIANTS.has(resolvedVariant);
   const classes = [
     'ui-badge',
+    onClick ? 'ui-badge-clickable' : '',
     useKnown ? `ui-badge-${resolvedVariant}` : 'ui-badge-custom',
     size === 'sm' ? 'ui-badge-sm' : size === 'lg' ? 'ui-badge-lg' : 'ui-badge-md',
     className
@@ -34,9 +37,15 @@ export default function StatusBadge({
     ? label.toUpperCase()
     : label;
 
+  const interactionProps = onClick
+    ? { onClick, role: 'button', tabIndex: 0, onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e); } } }
+    : {};
+
   return (
-    <span className={classes} style={inlineStyle}>
-      {icon ? <span className="ui-badge-icon">{icon}</span> : <span className="ui-badge-dot" aria-hidden></span>}
+    <span className={classes} style={inlineStyle} {...interactionProps}>
+      {icon
+        ? <span className="ui-badge-icon">{icon}</span>
+        : (showDot ? <span className="ui-badge-dot" aria-hidden></span> : null)}
       <span className="ui-badge-label">{renderedLabel}</span>
     </span>
   );

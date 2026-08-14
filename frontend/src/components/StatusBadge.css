@@ -85,3 +85,19 @@
   background: var(--slate-100);
   border-color: var(--slate-200);
 }
+
+.ui-badge-clickable {
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+
+.ui-badge-clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px -3px rgba(15, 23, 42, 0.18);
+  filter: saturate(1.1);
+}
+
+.ui-badge-clickable:active {
+  transform: translateY(0);
+  filter: saturate(1.25) brightness(0.96);
+}
