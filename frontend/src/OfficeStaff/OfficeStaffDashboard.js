@@ -2537,7 +2537,7 @@ export default function OfficeStaffDashboard({ mode }) {
               <div className="office-title" style={{ fontSize: '1.05rem' }}>HMO Monitoring</div>
               <div className="office-subtitle">PhilHealth and HMO Letter of Authority (LOA) queue — update statuses, LOA numbers, and covered amounts.</div>
             </div>
-            <div className="office-row">
+            <div className="office-row" style={{ gap: 10, flexWrap: 'wrap' }}>
               <div className="input-wrapper-relative office-search-wide">
                 <Search size={18} className="absolute-icon-left text-slate-400" />
                 <input
@@ -2550,33 +2550,25 @@ export default function OfficeStaffDashboard({ mode }) {
                   placeholder="Search patient, provider, LOA #, or invoice ID"
                 />
               </div>
+              <select className="office-select" value={hmoQueueStatus} onChange={(e) => setHmoQueueStatus(e.target.value)} style={{ minWidth: 170 }}>
+                <option value="All">All Statuses</option>
+                <option value="Pending">Pending</option>
+                <option value="Awaiting LOA">Awaiting LOA</option>
+                <option value="Approved">Approved</option>
+                <option value="Partially Approved">Partially Approved</option>
+                <option value="Rejected">Rejected</option>
+              </select>
               <button type="button" className="office-btn primary" onClick={refreshHmoQueue} disabled={hmoQueueLoading || !user}>
-                <Search size={16} />
-                Search
+                <RefreshCw size={16} />
+                Search & Refresh
               </button>
             </div>
           </div>
 
           <div className="office-card office-table-card office-hmo-toolbar-pro" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div className="office-title" style={{ fontSize: '1.05rem' }}>Claims Queue</div>
-                <div className="office-subtitle">Select a row to update LOA details or open the source invoice.</div>
-              </div>
-              <div className="office-row">
-                <select className="office-select" value={hmoQueueStatus} onChange={(e) => setHmoQueueStatus(e.target.value)}>
-                  <option value="All">All Statuses</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Awaiting LOA">Awaiting LOA</option>
-                  <option value="Approved">Approved</option>
-                  <option value="Partially Approved">Partially Approved</option>
-                  <option value="Rejected">Rejected</option>
-                </select>
-                <button type="button" className="office-btn" onClick={refreshHmoQueue} disabled={hmoQueueLoading || !user}>
-                  <RefreshCw size={16} />
-                  Refresh
-                </button>
-              </div>
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9' }}>
+              <div className="office-title" style={{ fontSize: '1.05rem' }}>Claims Queue</div>
+              <div className="office-subtitle">Select a row to update LOA details or open the source invoice.</div>
             </div>
 
             {hmoQueueError ? <div className="admin-alert error" style={{ margin: 12 }}>{hmoQueueError}</div> : null}
