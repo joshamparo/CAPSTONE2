@@ -9553,46 +9553,44 @@ function NurseDashboard() {
 
       {showAddPatientModal && (
         <div className="modal-overlay-fixed">
-          <div className="view-profile-card walkin-intake-modal" style={{maxWidth: '760px'}}>
-            <div className="view-profile-header">
+          <div className="view-profile-card walkin-intake-modal">
+            <div className="view-profile-header walkin-header">
               <div>
-                <h3 style={{margin: 0, fontSize: '1.25rem', fontWeight: 800}}>Register Walk-In Patient</h3>
-                <p style={{margin: '4px 0 0 0', fontSize: '0.9rem', opacity: 0.9, fontWeight: 600}}>Nurse-led intake and routing for new or existing walk-ins</p>
+                <h3 style={{margin: 0, fontSize: '1.2rem', fontWeight: 900}}>Register Walk-In Patient</h3>
+                <p style={{margin: '3px 0 0 0', fontSize: '0.82rem', opacity: 0.85, fontWeight: 600}}>Nurse-led intake and routing for new or existing walk-ins</p>
               </div>
               <button type="button" onClick={() => setShowAddPatientModal(false)} className="btn-close-modal">
-                <ChevronDown size={24} style={{transform: 'rotate(180deg)'}} />
+                <ChevronDown size={22} style={{transform: 'rotate(180deg)'}} />
               </button>
             </div>
-            
-            <div style={{padding: '24px 40px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0'}}>
-               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
-                 <div className="nurse-step-line" style={{ position: 'absolute', top: '50%', left: '0', right: '0', height: '2px', background: '#e2e8f0', zIndex: 1, transform: 'translateY(-50%)' }}>
-                   <div style={{ height: '100%', background: 'var(--nurse-primary)', width: addPatientStep === 1 ? '0%' : addPatientStep === 2 ? '50%' : '100%', transition: 'width 0.3s ease' }}></div>
-                 </div>
-                 
-                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, gap: '8px' }}>
-                   <div className={`nurse-step-dot ${addPatientStep >= 1 ? 'active' : ''}`}>1</div>
-                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: addPatientStep >= 1 ? 'var(--nurse-primary)' : '#64748b' }}>Details</span>
-                 </div>
-                 
-                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, gap: '8px' }}>
-                   <div className={`nurse-step-dot ${addPatientStep >= 2 ? 'active' : ''}`}>2</div>
-                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: addPatientStep >= 2 ? 'var(--nurse-primary)' : '#64748b' }}>Triage</span>
-                 </div>
 
-                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, gap: '8px' }}>
-                   <div className={`nurse-step-dot ${addPatientStep >= 3 ? 'active' : ''}`}>3</div>
-                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: addPatientStep >= 3 ? 'var(--nurse-primary)' : '#64748b' }}>Confirm</span>
-                 </div>
-               </div>
-               
-               <style>{`
-                 .nurse-step-dot { width: 36px; height: 36px; border-radius: 50%; background: white; color: #94a3b8; display: flex; align-items: center; justify-content: center; font-weight: 800; border: 2px solid #e2e8f0; transition: all 0.3s ease; }
-                 .nurse-step-dot.active { background: var(--nurse-primary); color: #fff; border-color: var(--nurse-primary); box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.15); }
-               `}</style>
-            </div>
+            <form onSubmit={handleAddPatientSubmit} className="bed-modal-body walkin-intake-body">
+              <div className="walkin-horizontal-grid">
+                <div className="walkin-left-col">
+                  <div className="walkin-left-inner">
+                    <div className="walkin-vertical-steps">
+                      {[
+                        { n: 1, label: 'Details & Routing', sub: 'Service selection & HMO' },
+                        { n: 2, label: 'Clinical Intake', sub: 'Triage & symptoms' },
+                        { n: 3, label: 'Review', sub: 'Final summary' }
+                      ].map((s, idx) => {
+                        const active = addPatientStep >= s.n;
+                        return (
+                          <div key={s.n} className={`walkin-vertical-step-item ${active ? 'active' : ''}`}>
+                            <div className="walkin-step-rail">
+                              <div className="walkin-step-dot">{s.n}</div>
+                              {idx < 2 && <div className={`walkin-step-line-vert ${addPatientStep > s.n ? 'done' : ''}`} />}
+                            </div>
+                            <div className="walkin-step-labels">
+                              <div className="walkin-step-main">{s.label}</div>
+                              <div className="walkin-step-sub">{s.sub}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
 
-            <form onSubmit={handleAddPatientSubmit} className="bed-modal-body walkin-intake-body" style={{padding: '20px'}}>
+                    <div className="walkin-step-pane">
               {addPatientStep === 1 ? (
                 <div className="step-content">
                   <h4 style={{marginBottom: '20px', color: '#0f172a', fontWeight: '800', textTransform: 'uppercase', fontSize: '0.85rem', letterSpacing: '0.05em'}}>Step 1: Route & Patient Lookup</h4>
@@ -10071,230 +10069,6 @@ function NurseDashboard() {
                       </div>
                     )}
                   </div>
-
-                  <div className="walkin-toggle-row" style={{display: 'flex', gap: '10px', marginBottom: '18px'}}>
-                    <button
-                      type="button"
-                      onClick={() => handleAddPatientChange({ target: { name: 'patientMode', value: 'new' } })}
-                      className="btn-gray"
-                      style={{
-                        background: addPatientData.patientMode === 'new' ? '#fff7ed' : '#fff',
-                        border: addPatientData.patientMode === 'new' ? '1px solid #fb923c' : '1px solid #e2e8f0',
-                        color: '#0f172a',
-                        fontWeight: 800
-                      }}
-                    >
-                      New Patient
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAddPatientChange({ target: { name: 'patientMode', value: 'existing' } })}
-                      className="btn-gray"
-                      style={{
-                        background: addPatientData.patientMode === 'existing' ? '#fff7ed' : '#fff',
-                        border: addPatientData.patientMode === 'existing' ? '1px solid #fb923c' : '1px solid #e2e8f0',
-                        color: '#0f172a',
-                        fontWeight: 800
-                      }}
-                    >
-                      Existing Patient
-                    </button>
-                  </div>
-                  {addPatientData.patientMode === 'existing' ? (
-                    <div>
-                      <div className="input-group">
-                        <label>Find Existing Patient <span style={{color: '#ef4444'}}>*</span></label>
-                        <input
-                          type="text"
-                          name="patientLookup"
-                          value={addPatientData.patientLookup}
-                          onChange={handleAddPatientChange}
-                          className="white-input"
-                          placeholder="Search by patient name, email, or contact number"
-                        />
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                        <div className="walkin-results-count" style={{ margin: 0 }}>
-                          {walkInPatientMatchCount === 0
-                            ? 'No matching patients found yet.'
-                            : `Showing ${walkInPatientRangeStart}-${walkInPatientRangeEnd} of ${walkInPatientMatchCount} matching patient${walkInPatientMatchCount === 1 ? '' : 's'}`}
-                        </div>
-                        {walkInPatientMatches.length > walkInPatientPageSize ? (
-                          <div className="patient-pagination" style={{ margin: 0 }}>
-                            <button
-                              type="button"
-                              className="patient-page-btn"
-                              onClick={() => setWalkInPatientPage((page) => Math.max(1, page - 1))}
-                              disabled={walkInPatientPage <= 1}
-                              aria-label="Previous page"
-                            >
-                              <ChevronLeft size={18} />
-                            </button>
-                            <button
-                              type="button"
-                              className="patient-page-btn"
-                              onClick={() => setWalkInPatientPage((page) => Math.min(walkInPatientPageCount, page + 1))}
-                              disabled={walkInPatientPage >= walkInPatientPageCount}
-                              aria-label="Next page"
-                            >
-                              <ChevronRight size={18} />
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                      <div style={{marginTop: 12, border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', background: '#fff'}}>
-                        {walkInPatientMatches.length === 0 ? (
-                          <div style={{padding: '16px 18px', color: '#64748b', fontWeight: 700}}>No matching patient found yet.</div>
-                        ) : (
-                          walkInPatientPageItems.map((patient) => {
-                            const selected = String(addPatientData.existingPatientId || '') === String(patient._id || patient.id || '');
-                            return (
-                              <button
-                                key={String(patient._id || patient.id)}
-                                type="button"
-                                onClick={() => pickExistingWalkInPatient(patient)}
-                                style={{
-                                  width: '100%',
-                                  padding: '14px 18px',
-                                  textAlign: 'left',
-                                  border: 'none',
-                                  borderBottom: '1px solid #f1f5f9',
-                                  background: selected ? '#fff7ed' : '#fff',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                <div style={{fontWeight: 800, color: '#0f172a'}}>{`${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Unnamed Patient'}</div>
-                                <div style={{fontSize: '0.82rem', color: '#64748b', marginTop: 3}}>
-                                  {[patient.email || 'No email', patient.contactNumber || 'No contact', patient.admissionStatus || 'Patient record'].filter(Boolean).join(' • ')}
-                                </div>
-                              </button>
-                            );
-                          })
-                        )}
-                      </div>
-                      {selectedWalkInPatient ? (
-                        <div style={{marginTop: 14, padding: 16, borderRadius: 16, background: '#f8fafc', border: '1px solid #e2e8f0'}}>
-                          <div style={{fontWeight: 800, color: '#0f172a', marginBottom: 6}}>Selected Patient</div>
-                          <div style={{color: '#475569', fontSize: '0.92rem', lineHeight: 1.6}}>
-                            {`${selectedWalkInPatient.firstName || ''} ${selectedWalkInPatient.lastName || ''}`.trim()}
-                            <br />
-                            {selectedWalkInPatient.email || 'No email on file'} • {selectedWalkInPatient.contactNumber || 'No contact on file'}
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="form-grid-2-col">
-                        <div className="input-group">
-                          <label>First Name <span style={{color: '#ef4444'}}>*</span></label>
-                          <input 
-                            type="text" 
-                            name="firstName" 
-                            value={addPatientData.firstName} 
-                            onChange={handleAddPatientChange} 
-                            onKeyDown={(e) => handleNameInput(e, 'add-fn')}
-                            required 
-                            className="white-input" 
-                            placeholder="e.g. Juan" 
-                          />
-                          {nameNoticeField === 'add-fn' && <span style={{color: '#ef4444', fontSize: '0.75rem', fontWeight: 600}}>{nameNotice}</span>}
-                        </div>
-                        <div className="input-group">
-                          <label>Last Name <span style={{color: '#ef4444'}}>*</span></label>
-                          <input 
-                            type="text" 
-                            name="lastName" 
-                            value={addPatientData.lastName} 
-                            onChange={handleAddPatientChange} 
-                            onKeyDown={(e) => handleNameInput(e, 'add-ln')}
-                            required 
-                            className="white-input" 
-                            placeholder="e.g. Dela Cruz" 
-                          />
-                          {nameNoticeField === 'add-ln' && <span style={{color: '#ef4444', fontSize: '0.75rem', fontWeight: 600}}>{nameNotice}</span>}
-                        </div>
-                        <div className="input-group">
-                          <label>Date of Birth <span style={{color: '#ef4444'}}>*</span></label>
-                          <input type="date" name="dateOfBirth" value={addPatientData.dateOfBirth} onChange={handleAddPatientChange} required className="white-input" max={new Date().toISOString().split('T')[0]} />
-                        </div>
-                        <div className="input-group">
-                          <label>Gender</label>
-                          <select name="gender" value={addPatientData.gender} onChange={handleAddPatientChange} className="white-input">
-                            <option value="Male">Male</option>
-                            <option value="Female">Female</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="input-group" style={{marginTop: 10}}>
-                        <label style={{fontWeight: 900}}>Duplicate check</label>
-                        <label style={{display: 'flex', alignItems: 'center', gap: 10, fontWeight: 800, color: '#334155'}}>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(addPatientData.confirmNotDuplicate)}
-                            onChange={(e) => handleAddPatientChange({ target: { name: 'confirmNotDuplicate', value: e.target.checked } })}
-                          />
-                          This is a new patient record (not a duplicate)
-                        </label>
-                      </div>
-
-                      <details style={{marginTop: 12}}>
-                        <summary style={{cursor: 'pointer', fontWeight: 900, color: '#0f172a'}}>More details (optional)</summary>
-                        <div className="form-grid-2-col" style={{marginTop: '12px'}}>
-                          <div className="input-group">
-                            <label>Middle Name</label>
-                            <input 
-                              type="text" 
-                              name="middleName" 
-                              value={addPatientData.middleName} 
-                              onChange={handleAddPatientChange} 
-                              onKeyDown={(e) => handleNameInput(e, 'add-mn')}
-                              className="white-input" 
-                              placeholder="Optional" 
-                            />
-                            {nameNoticeField === 'add-mn' && <span style={{color: '#ef4444', fontSize: '0.75rem', fontWeight: 600}}>{nameNotice}</span>}
-                          </div>
-                          <div className="input-group">
-                            <label>Blood Type</label>
-                            <select name="bloodType" value={addPatientData.bloodType} onChange={handleAddPatientChange} className="white-input">
-                              <option value="A+">A+</option><option value="A-">A-</option>
-                              <option value="B+">B+</option><option value="B-">B-</option>
-                              <option value="AB+">AB+</option><option value="AB-">AB-</option>
-                              <option value="O+">O+</option><option value="O-">O-</option>
-                              <option value="Unknown">Unknown</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="form-grid-2-col" style={{marginTop: '12px'}}>
-                          <div className="input-group">
-                            <label>Contact Number</label>
-                            <input 
-                              type="text" 
-                              name="contactNumber" 
-                              value={addPatientData.contactNumber} 
-                              onChange={handleAddPatientChange} 
-                              onKeyDown={(e) => handlePhoneInput(e, 'add-phone')}
-                              className="white-input" 
-                              placeholder="09XX XXX XXXX" 
-                            />
-                            {phoneNoticeField === 'add-phone' && <span style={{color: '#ef4444', fontSize: '0.75rem', fontWeight: 600}}>{phoneNotice}</span>}
-                          </div>
-                        </div>
-                        <div className="input-group" style={{marginTop: '12px'}}>
-                          <label>Address</label>
-                          <input
-                            type="text"
-                            name="address"
-                            value={addPatientData.address}
-                            onChange={handleAddPatientChange}
-                            className="white-input"
-                            placeholder="Street, barangay, city"
-                          />
-                        </div>
-                      </details>
-                    </>
-                  )}
                 </div>
               ) : addPatientStep === 2 ? (
                 <div className="step-content">
@@ -10712,30 +10486,258 @@ function NurseDashboard() {
                   </div>
                 </div>
               )}
+                    </div>
+                  </div>
+                </div>
 
-              {addPatientError && (
-                <div className="form-error-message" style={{marginTop: '20px'}}>{addPatientError}</div>
-              )}
+                <div className="walkin-right-col">
+                  <div className="walkin-right-inner">
+                    <div className="walkin-right-header">
+                      <User size={18} />
+                      <span>Patient Information</span>
+                    </div>
 
-              <div className="modal-actions-right walkin-intake-actions" style={{marginTop: '30px', display: 'flex', justifyContent: 'space-between', width: '100%'}}>
-                <button
-                  type="button"
-                  className="btn-modal-cancel"
-                  onClick={() => {
-                    if (addPatientStep === 1) setShowAddPatientModal(false);
-                    else if (addPatientStep === 2) setAddPatientStep(1);
-                    else setAddPatientStep(2);
-                  }}
-                >
-                  {addPatientStep === 1 ? 'Cancel' : 'Back'}
-                </button>
-                <button type="submit" className="btn-modal-submit" disabled={addPatientSaving} style={{minWidth: '180px'}}>
-                   {addPatientStep === 1
-                     ? 'Next: Clinical Intake'
-                     : addPatientStep === 2
-                       ? 'Next: Review'
-                       : (addPatientSaving ? 'Routing...' : 'Complete Intake')}
-                </button>
+                    <div className="walkin-right-toggle-row">
+                      <button
+                        type="button"
+                        onClick={() => handleAddPatientChange({ target: { name: 'patientMode', value: 'new' } })}
+                        className={`walkin-mode-pill ${addPatientData.patientMode === 'new' ? 'active' : ''}`}
+                      >
+                        {addPatientData.patientMode === 'new' ? <CheckCircle2 size={15} /> : <div className="pill-empty-box" />}
+                        <span>New Patient</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAddPatientChange({ target: { name: 'patientMode', value: 'existing' } })}
+                        className={`walkin-mode-pill ${addPatientData.patientMode === 'existing' ? 'active' : ''}`}
+                      >
+                        {addPatientData.patientMode === 'existing' ? <CheckCircle2 size={15} /> : <div className="pill-empty-box" />}
+                        <span>Existing</span>
+                      </button>
+                    </div>
+
+                    <div className="walkin-right-scroll">
+                      {addPatientData.patientMode === 'existing' ? (
+                        <div className="walkin-right-block">
+                          <div className="input-group" style={{marginBottom: 10}}>
+                            <label>Find Existing Patient <span style={{color: '#ef4444'}}>*</span></label>
+                            <input
+                              type="text"
+                              name="patientLookup"
+                              value={addPatientData.patientLookup}
+                              onChange={handleAddPatientChange}
+                              className="white-input"
+                              placeholder="Search by name, email, or contact"
+                            />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <div className="walkin-results-count" style={{ margin: 0, fontSize: '0.78rem' }}>
+                              {walkInPatientMatchCount === 0
+                                ? 'No matches yet'
+                                : `${walkInPatientRangeStart}-${walkInPatientRangeEnd} of ${walkInPatientMatchCount}`}
+                            </div>
+                            {walkInPatientMatches.length > walkInPatientPageSize ? (
+                              <div className="patient-pagination" style={{ margin: 0 }}>
+                                <button
+                                  type="button"
+                                  className="patient-page-btn"
+                                  onClick={() => setWalkInPatientPage((page) => Math.max(1, page - 1))}
+                                  disabled={walkInPatientPage <= 1}
+                                  aria-label="Previous page"
+                                >
+                                  <ChevronLeft size={16} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="patient-page-btn"
+                                  onClick={() => setWalkInPatientPage((page) => Math.min(walkInPatientPageCount, page + 1))}
+                                  disabled={walkInPatientPage >= walkInPatientPageCount}
+                                  aria-label="Next page"
+                                >
+                                  <ChevronRight size={16} />
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                          <div style={{marginTop: 10, border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: '#fff'}}>
+                            {walkInPatientMatches.length === 0 ? (
+                              <div style={{padding: '12px 14px', color: '#64748b', fontWeight: 700, fontSize: '0.82rem'}}>No matching patient.</div>
+                            ) : (
+                              walkInPatientPageItems.slice(0, 3).map((patient) => {
+                                const selected = String(addPatientData.existingPatientId || '') === String(patient._id || patient.id || '');
+                                return (
+                                  <button
+                                    key={String(patient._id || patient.id)}
+                                    type="button"
+                                    onClick={() => pickExistingWalkInPatient(patient)}
+                                    style={{
+                                      width: '100%',
+                                      padding: '10px 14px',
+                                      textAlign: 'left',
+                                      border: 'none',
+                                      borderBottom: '1px solid #f1f5f9',
+                                      background: selected ? '#fff7ed' : '#fff',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    <div style={{fontWeight: 800, color: '#0f172a', fontSize: '0.86rem'}}>{`${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Unnamed Patient'}</div>
+                                    <div style={{fontSize: '0.74rem', color: '#64748b', marginTop: 2}}>
+                                      {[patient.email || 'No email', patient.contactNumber || 'No contact'].filter(Boolean).join(' • ')}
+                                    </div>
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
+                          {selectedWalkInPatient ? (
+                            <div style={{marginTop: 10, padding: 12, borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0'}}>
+                              <div style={{fontWeight: 800, color: '#0f172a', marginBottom: 4, fontSize: '0.86rem'}}>Selected Patient</div>
+                              <div style={{color: '#475569', fontSize: '0.82rem', lineHeight: 1.55}}>
+                                {`${selectedWalkInPatient.firstName || ''} ${selectedWalkInPatient.lastName || ''}`.trim()}<br />
+                                {selectedWalkInPatient.email || 'No email'} • {selectedWalkInPatient.contactNumber || 'No contact'}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="walkin-right-block">
+                          <div className="form-grid-2-col" style={{gap: 10}}>
+                            <div className="input-group">
+                              <label style={{fontSize: '0.76rem'}}>First Name <span style={{color: '#ef4444'}}>*</span></label>
+                              <input
+                                type="text"
+                                name="firstName"
+                                value={addPatientData.firstName}
+                                onChange={handleAddPatientChange}
+                                onKeyDown={(e) => handleNameInput(e, 'add-fn')}
+                                required
+                                className="white-input"
+                                placeholder="Juan"
+                              />
+                              {nameNoticeField === 'add-fn' && <span style={{color: '#ef4444', fontSize: '0.72rem', fontWeight: 600}}>{nameNotice}</span>}
+                            </div>
+                            <div className="input-group">
+                              <label style={{fontSize: '0.76rem'}}>Last Name <span style={{color: '#ef4444'}}>*</span></label>
+                              <input
+                                type="text"
+                                name="lastName"
+                                value={addPatientData.lastName}
+                                onChange={handleAddPatientChange}
+                                onKeyDown={(e) => handleNameInput(e, 'add-ln')}
+                                required
+                                className="white-input"
+                                placeholder="Dela Cruz"
+                              />
+                              {nameNoticeField === 'add-ln' && <span style={{color: '#ef4444', fontSize: '0.72rem', fontWeight: 600}}>{nameNotice}</span>}
+                            </div>
+                            <div className="input-group">
+                              <label style={{fontSize: '0.76rem'}}>DOB <span style={{color: '#ef4444'}}>*</span></label>
+                              <input type="date" name="dateOfBirth" value={addPatientData.dateOfBirth} onChange={handleAddPatientChange} required className="white-input" max={new Date().toISOString().split('T')[0]} />
+                            </div>
+                            <div className="input-group">
+                              <label style={{fontSize: '0.76rem'}}>Gender</label>
+                              <select name="gender" value={addPatientData.gender} onChange={handleAddPatientChange} className="white-input">
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div style={{marginTop: 8}}>
+                            <label style={{display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#334155', fontSize: '0.78rem'}}>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(addPatientData.confirmNotDuplicate)}
+                                onChange={(e) => handleAddPatientChange({ target: { name: 'confirmNotDuplicate', value: e.target.checked } })}
+                              />
+                              Not a duplicate record
+                            </label>
+                          </div>
+
+                          <details style={{marginTop: 10}}>
+                            <summary style={{cursor: 'pointer', fontWeight: 800, color: '#0f172a', fontSize: '0.8rem'}}>More details (optional)</summary>
+                            <div className="form-grid-2-col" style={{marginTop: 10, gap: 10}}>
+                              <div className="input-group">
+                                <label style={{fontSize: '0.76rem'}}>Middle Name</label>
+                                <input
+                                  type="text"
+                                  name="middleName"
+                                  value={addPatientData.middleName}
+                                  onChange={handleAddPatientChange}
+                                  onKeyDown={(e) => handleNameInput(e, 'add-mn')}
+                                  className="white-input"
+                                  placeholder="Optional"
+                                />
+                                {nameNoticeField === 'add-mn' && <span style={{color: '#ef4444', fontSize: '0.72rem', fontWeight: 600}}>{nameNotice}</span>}
+                              </div>
+                              <div className="input-group">
+                                <label style={{fontSize: '0.76rem'}}>Blood Type</label>
+                                <select name="bloodType" value={addPatientData.bloodType} onChange={handleAddPatientChange} className="white-input">
+                                  <option value="A+">A+</option><option value="A-">A-</option>
+                                  <option value="B+">B+</option><option value="B-">B-</option>
+                                  <option value="AB+">AB+</option><option value="AB-">AB-</option>
+                                  <option value="O+">O+</option><option value="O-">O-</option>
+                                  <option value="Unknown">Unknown</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div className="form-grid-2-col" style={{marginTop: 10, gap: 10}}>
+                              <div className="input-group" style={{gridColumn: '1 / -1'}}>
+                                <label style={{fontSize: '0.76rem'}}>Contact Number</label>
+                                <input
+                                  type="text"
+                                  name="contactNumber"
+                                  value={addPatientData.contactNumber}
+                                  onChange={handleAddPatientChange}
+                                  onKeyDown={(e) => handlePhoneInput(e, 'add-phone')}
+                                  className="white-input"
+                                  placeholder="09XX XXX XXXX"
+                                />
+                                {phoneNoticeField === 'add-phone' && <span style={{color: '#ef4444', fontSize: '0.72rem', fontWeight: 600}}>{phoneNotice}</span>}
+                              </div>
+                            </div>
+                            <div className="input-group" style={{marginTop: 10}}>
+                              <label style={{fontSize: '0.76rem'}}>Address</label>
+                              <input
+                                type="text"
+                                name="address"
+                                value={addPatientData.address}
+                                onChange={handleAddPatientChange}
+                                className="white-input"
+                                placeholder="Street, barangay, city"
+                              />
+                            </div>
+                          </details>
+                        </div>
+                      )}
+                    </div>
+
+                    {addPatientError && (
+                      <div className="form-error-message" style={{marginTop: 10, marginBottom: 0}}>{addPatientError}</div>
+                    )}
+
+                    <div className="walkin-right-actions">
+                      <button
+                        type="button"
+                        className="btn-modal-cancel"
+                        onClick={() => {
+                          if (addPatientStep === 1) setShowAddPatientModal(false);
+                          else if (addPatientStep === 2) setAddPatientStep(1);
+                          else setAddPatientStep(2);
+                        }}
+                      >
+                        {addPatientStep === 1 ? 'Cancel' : 'Back'}
+                      </button>
+                      <button type="submit" className="btn-modal-submit" disabled={addPatientSaving}>
+                        {addPatientStep === 1
+                          ? 'Next: Clinical Intake'
+                          : addPatientStep === 2
+                            ? 'Next: Review'
+                            : (addPatientSaving ? 'Routing...' : 'Complete Intake')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </form>
           </div>
