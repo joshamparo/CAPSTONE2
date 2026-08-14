@@ -15,19 +15,21 @@
 }
 
 .office-sidebar {
-  width: 280px;
-  background: var(--office-card);
+  width: 248px;
+  background: var(--office-card, #ffffff);
   border-right: 1px solid var(--office-border);
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
+  transition: width 0.28s cubic-bezier(.22,.61,.36,1), padding 0.28s ease;
 }
 
 .office-sidebar.collapsed {
-  width: 82px;
+  width: 72px;
 }
 
 .office-sidebar-top {
-  padding: 18px 16px;
+  padding: 18px 18px;
   border-bottom: 1px solid var(--office-border);
   display: flex;
   align-items: center;
@@ -70,6 +72,7 @@
 
 .office-sidebar.collapsed .office-sidebar-top {
   padding: 18px 12px;
+  justify-content: center;
 }
 
 .office-profile {
@@ -121,11 +124,21 @@
   background: #fff;
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: var(--radius-md, 12px);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  color: var(--slate-600);
+  box-shadow: var(--shadow-sm);
+}
+
+.office-collapse-btn:hover {
+  background: var(--brand-primary-wash);
+  border-color: var(--brand-primary-ring);
+  color: var(--brand-primary);
+  transform: translateY(-1px);
 }
 
 .office-nav {
@@ -141,20 +154,45 @@
   width: 100%;
   border: 1px solid transparent;
   background: transparent;
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md, 12px);
   display: flex;
   align-items: center;
   gap: 10px;
   color: var(--office-muted);
   cursor: pointer;
   font-weight: 700;
+  position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
 .office-nav-btn.active {
-  background: #fff7ed;
-  border-color: #fed7aa;
-  color: var(--office-primary);
+  background: var(--brand-primary-wash, #fff7ed);
+  border-color: var(--brand-primary-ring, #fed7aa);
+  color: var(--brand-primary, #ea580c);
+  box-shadow: var(--shadow-sm);
+  font-weight: 700;
+}
+
+.office-nav-btn.active::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 26px;
+  background: var(--brand-primary);
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--brand-primary-wash);
+}
+
+.office-sidebar.collapsed .office-nav-btn.active::before {
+  left: 50%;
+  transform: translate(-50%, -50%);
+  top: -4px;
+  height: 4px;
+  width: 26px;
 }
 
 .office-nav-label {

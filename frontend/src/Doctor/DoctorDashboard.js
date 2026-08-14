@@ -3787,7 +3787,7 @@ function DoctorDashboard() {
                         </div>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-                        <button type="button" className="doc-btn" style={{ background: '#2563eb', color: 'white', border: 'none' }} onClick={saveMedicalProfile} disabled={savingMedicalProfile}>
+                        <button type="button" className="doc-btn" style={{ background: 'var(--brand-primary-gradient)', color: 'white', border: 'none' }} onClick={saveMedicalProfile} disabled={savingMedicalProfile}>
                           <Save size={14} /> {savingMedicalProfile ? 'Saving...' : 'Save Medical Profile'}
                         </button>
                       </div>

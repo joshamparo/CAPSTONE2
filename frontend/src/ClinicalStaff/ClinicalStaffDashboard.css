@@ -11,27 +11,28 @@
 }
 
 .cs-layout {
-  display: grid;
-  grid-template-columns: 280px 1fr;
+  display: flex;
   min-height: 100vh;
   background: var(--bg-light);
 }
 
 .cs-sidebar {
-  background: var(--primary);
+  width: 248px;
+  background: linear-gradient(180deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
   color: #ffffff;
-  padding: 24px;
+  padding: 22px 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 4px 0 24px -10px rgba(2,6,23,0.18);
+  transition: width 0.28s cubic-bezier(.22,.61,.36,1), padding 0.28s ease;
 }
 
 .cs-sidebar.collapsed {
-  padding: 18px 12px;
-}
-
-.cs-layout:has(.cs-sidebar.collapsed) {
-  grid-template-columns: 88px 1fr;
+  width: 72px;
+  padding: 22px 10px;
 }
 
 .cs-brand {
@@ -71,12 +72,19 @@
 }
 
 .cs-collapse-btn {
-  background: rgba(255,255,255,0.14);
-  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
   color: #ffffff;
-  border-radius: 12px;
-  padding: 8px;
+  border-radius: var(--radius-md, 12px);
+  padding: 0;
+  width: 34px;
+  height: 34px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 2px 6px -2px rgba(2,6,23,0.18);
   flex: 0 0 auto;
 }
 
@@ -116,8 +124,8 @@
   border: none;
   background: transparent;
   color: rgba(255,255,255,0.86);
-  padding: 14px 16px;
-  border-radius: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md, 12px);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -126,16 +134,41 @@
   font-family: inherit;
   font-size: 0.95rem;
   text-align: left;
+  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .cs-nav-btn:hover {
-  background: rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.12);
   color: #ffffff;
 }
 
 .cs-nav-btn.active {
-  background: rgba(255,255,255,0.18);
-  color: #ffffff;
+  position: relative;
+  background: white;
+  color: var(--brand-primary);
+  box-shadow: var(--shadow-md, 0 4px 12px -4px rgba(2,6,23,0.15));
+  font-weight: 700;
+}
+
+.cs-nav-btn.active::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 26px;
+  background: white;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.32);
+}
+
+.cs-sidebar.collapsed .cs-nav-btn.active::before {
+  left: 50%;
+  transform: translate(-50%, -50%);
+  top: -6px;
+  height: 4px;
+  width: 26px;
 }
 
 .cs-sidebar.collapsed .cs-brand-sub {

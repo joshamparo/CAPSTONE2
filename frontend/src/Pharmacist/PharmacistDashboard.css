@@ -26,10 +26,10 @@
   position: sticky;
   top: 0;
   align-self: flex-start;
-  width: 260px;
-  background: linear-gradient(180deg, #ea580c 0%, #c2410c 100%);
+  width: 248px;
+  background: linear-gradient(180deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
   color: white;
-  padding: 10px 8px;
+  padding: 22px 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -37,11 +37,14 @@
   height: 100vh;
   overflow: auto;
   z-index: 5;
+  border-right: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 4px 0 24px -10px rgba(2,6,23,0.18);
+  transition: width 0.28s cubic-bezier(.22,.61,.36,1), padding 0.28s ease;
 }
 
 .pharm-sidebar.collapsed {
   width: 72px;
-  padding: 12px 8px;
+  padding: 22px 8px;
 }
 
 .pharm-sidebar-head {
@@ -49,7 +52,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 4px 8px;
+  padding: 4px 8px 16px;
+  margin: 0 4px 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
 }
 
 .pharm-brand {
@@ -107,9 +112,9 @@
 }
 
 .pharm-sidebar-toggle {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md, 12px);
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: rgba(255, 255, 255, 0.12);
   color: white;
@@ -117,7 +122,8 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 2px 6px -2px rgba(2,6,23,0.18);
 }
 
 .pharm-sidebar-toggle:hover {
@@ -156,26 +162,26 @@
   border: none;
   background: transparent;
   color: rgba(255, 255, 255, 0.9);
-  padding: 6px 8px;
-  border-radius: 12px;
+  padding: 12px 12px;
+  border-radius: var(--radius-md, 12px);
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 900;
+  gap: 10px;
+  font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   text-align: left;
 }
 
 .pharm-nav-item:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.12);
   color: white;
   transform: translateX(2px);
 }
 
 .pharm-sidebar.collapsed .pharm-nav-item {
   justify-content: center;
-  padding: 10px 10px;
+  padding: 12px 10px;
 }
 
 .pharm-sidebar.collapsed .pharm-nav-item:hover {
@@ -183,9 +189,32 @@
 }
 
 .pharm-nav-item.active {
+  position: relative;
   background: white;
-  color: #9a3412;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  color: var(--brand-primary);
+  box-shadow: var(--shadow-md, 0 4px 12px -4px rgba(2,6,23,0.15));
+  font-weight: 700;
+}
+
+.pharm-nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 26px;
+  background: white;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.32);
+}
+
+.pharm-sidebar.collapsed .pharm-nav-item.active::before {
+  left: 50%;
+  transform: translate(-50%, -50%);
+  top: -6px;
+  height: 4px;
+  width: 26px;
 }
 
 .pharm-main {

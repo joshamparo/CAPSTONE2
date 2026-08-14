@@ -1,0 +1,87 @@
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  border: 1px solid transparent;
+  vertical-align: middle;
+}
+
+.ui-badge-md {
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  padding: 5px 10px;
+  border-radius: var(--radius-md, 12px);
+}
+
+.ui-badge-sm {
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  padding: 3.5px 8px;
+  border-radius: 10px;
+}
+
+.ui-badge-lg {
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  padding: 7px 13px;
+  border-radius: var(--radius-md, 12px);
+}
+
+.ui-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 3px currentColor;
+  opacity: 0.18;
+  flex: 0 0 auto;
+}
+
+.ui-badge-sm .ui-badge-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.ui-badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ===== duty (green — approved / paid / on duty / success) ===== */
+.ui-badge-duty {
+  color: var(--status-duty, #16a34a);
+  background: var(--status-duty-wash, #dcfce7);
+  border-color: var(--status-duty-ring, #86efac);
+}
+
+/* ===== upcoming (amber — pending / upcoming / awaiting) ===== */
+.ui-badge-upcoming {
+  color: var(--status-upcoming, #f59e0b);
+  background: var(--status-upcoming-wash, #fef3c7);
+  border-color: var(--status-upcoming-ring, #fcd34d);
+}
+
+/* ===== off (red — rejected / cancelled / off / failed) ===== */
+.ui-badge-off {
+  color: var(--status-off, #dc2626);
+  background: var(--status-off-wash, #fee2e2);
+  border-color: var(--status-off-ring, #fecaca);
+}
+
+/* ===== scheduled (blue — scheduled / booked / info) ===== */
+.ui-badge-scheduled {
+  color: var(--status-scheduled, #3b82f6);
+  background: var(--status-scheduled-wash, #dbeafe);
+  border-color: var(--status-scheduled-ring, #93c5fd);
+}
+
+.ui-badge-custom {
+  color: var(--slate-600);
+  background: var(--slate-100);
+  border-color: var(--slate-200);
+}
