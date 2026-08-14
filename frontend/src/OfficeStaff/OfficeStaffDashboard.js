@@ -2502,29 +2502,37 @@ export default function OfficeStaffDashboard({ mode }) {
       {view === 'hmo' ? (
         <div className="office-billing-shell">
           <div className="office-grid-4">
-            <div className="office-kpi office-kpi-accent">
-              <div className="office-kpi-k">All Claims</div>
-              <div className="office-kpi-v">{hmoSummary.totalClaims}</div>
-              <div className="office-kpi-meta">{hmoSummary.needsAction} need follow-up</div>
+            <div className="office-kpi-pro total">
+              <div className="k">
+                <Shield size={14} /> All Claims
+              </div>
+              <div className="v">{hmoSummary.totalClaims}</div>
+              <div className="m">{hmoSummary.needsAction} need follow-up</div>
             </div>
-            <div className="office-kpi">
-              <div className="office-kpi-k">Pending Review</div>
-              <div className="office-kpi-v">{hmoSummary.needsAction}</div>
-              <div className="office-kpi-meta">{hmoSummary.pending} pending • {hmoSummary.awaitingLoa} LOA queue</div>
+            <div className="office-kpi-pro pending">
+              <div className="k">
+                <span className="pulse-dot"></span> Pending Review
+              </div>
+              <div className="v">{hmoSummary.needsAction}</div>
+              <div className="m">{hmoSummary.pending} pending • {hmoSummary.awaitingLoa} LOA queue</div>
             </div>
-            <div className="office-kpi">
-              <div className="office-kpi-k">Approved Coverage</div>
-              <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>₱ {toMoney(hmoSummary.approvedCoverage)}</div>
-              <div className="office-kpi-meta">{hmoSummary.approvedCount} approved / partial claim(s)</div>
+            <div className="office-kpi-pro approved">
+              <div className="k">
+                <Check size={14} /> Approved Coverage
+              </div>
+              <div className="v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>₱ {toMoney(hmoSummary.approvedCoverage)}</div>
+              <div className="m">{hmoSummary.approvedCount} approved / partial claim(s)</div>
             </div>
-            <div className="office-kpi">
-              <div className="office-kpi-k">Patient Payable</div>
-              <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>₱ {toMoney(hmoSummary.patientPayable)}</div>
-              <div className="office-kpi-meta">{hmoSummary.rejected} rejected claim(s)</div>
+            <div className="office-kpi-pro loa">
+              <div className="k">
+                <FileText size={14} /> LOA Queue
+              </div>
+              <div className="v">{hmoSummary.awaitingLoa}</div>
+              <div className="m">{hmoSummary.rejected} rejected claim(s)</div>
             </div>
           </div>
 
-          <div className="office-card office-billing-toolbar">
+          <div className="office-card office-billing-toolbar office-hmo-toolbar-pro">
             <div>
               <div className="office-title" style={{ fontSize: '1.05rem' }}>HMO Monitoring</div>
               <div className="office-subtitle">PhilHealth and HMO Letter of Authority (LOA) queue — update statuses, LOA numbers, and covered amounts.</div>
@@ -2549,7 +2557,7 @@ export default function OfficeStaffDashboard({ mode }) {
             </div>
           </div>
 
-          <div className="office-card office-table-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="office-card office-table-card office-hmo-toolbar-pro" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div className="office-title" style={{ fontSize: '1.05rem' }}>Claims Queue</div>
@@ -2615,11 +2623,41 @@ export default function OfficeStaffDashboard({ mode }) {
                       status === 'Awaiting LOA' ? 'status-off' :
                       status === 'Rejected' ? 'status-off' :
                       'status-upcoming';
+                    const norm = String(status || '').toLowerCase();
+                    const rowClass =
+                      norm === 'approved' ? 'office-hmo-table-row-pro approved' :
+                      norm === 'partially approved' ? 'office-hmo-table-row-pro partial' :
+                      norm === 'awaiting loa' ? 'office-hmo-table-row-pro awaiting' :
+                      norm === 'rejected' ? 'office-hmo-table-row-pro rejected' :
+                      norm === 'pending' ? 'office-hmo-table-row-pro pending' :
+                      'office-hmo-table-row-pro unknown';
+                    const hasProvider = Boolean(String(claim.provider || '').trim());
+                    const hasLoa = Boolean(String(claim.loa_number || '').trim());
+                    const missingLoa = hasProvider && (status === 'Approved' || status === 'Partially Approved') && !hasLoa;
+                    const highBill = Number(row.total_amount || 0) >= 5000;
+                    const hmoAmtNow = Number(claim.applied_hmo_amount || claim.loa_approved_amount || 0);
+                    const statusApp = status === 'Approved' || status === 'Partially Approved';
+                    const hmoDueUsed = statusApp ? hmoAmtNow : 0;
+                    const sourceType = (() => {
+                      const items = Array.isArray(row.items) ? row.items : [];
+                      const labs = items.filter((i) => /lab|laboratory/i.test(String(i?.kind || i?.category || i?.name || ''))).length;
+                      const imgs = items.filter((i) => /imaging|xray|ultrasound|ecg|radiology/i.test(String(i?.kind || i?.category || i?.name || ''))).length;
+                      const pharm = items.filter((i) => /pharmacy|medicine|prescription/i.test(String(i?.kind || i?.category || i?.name || ''))).length;
+                      if (labs > 0 && imgs === 0 && pharm === 0) return { show: true, label: 'LAB ONLY', kind: 'info' };
+                      if (labs === 0 && imgs > 0 && pharm === 0) return { show: true, label: 'IMG ONLY', kind: 'info' };
+                      if (labs === 0 && imgs === 0 && pharm > 0) return { show: true, label: 'PHARMACY', kind: 'neutral' };
+                      return { show: false, label: '', kind: 'neutral' };
+                    })();
                     return (
-                      <tr key={String(row.id || row.invoice_id)}>
+                      <tr key={String(row.id || row.invoice_id)} className={rowClass}>
                         <td className="text-sm font-medium text-slate-700">#{String(row.invoice_id || '—')}</td>
                         <td>
-                          <div className="office-billing-patient">{row.patient_name || '—'}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <div className="office-billing-patient">{row.patient_name || '—'}</div>
+                            {sourceType.show ? (
+                              <span className={`office-hmo-badge-sm ${sourceType.kind}`}>{sourceType.label}</span>
+                            ) : null}
+                          </div>
                           {row.contact_number ? <div className="office-billing-subline">{String(row.contact_number)}</div> : null}
                         </td>
                         <td className="text-sm" style={{ color: claim.provider ? '#0f172a' : '#cbd5e1' }}>
@@ -2628,6 +2666,8 @@ export default function OfficeStaffDashboard({ mode }) {
                         <td>
                           {claim.loa_number ? (
                             <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#2563eb', fontSize: '0.85rem' }}>{String(claim.loa_number)}</span>
+                          ) : missingLoa ? (
+                            <span className="office-hmo-badge-sm danger">NO LOA #</span>
                           ) : (
                             <span style={{ color: '#cbd5e1' }}>—</span>
                           )}
@@ -2635,16 +2675,21 @@ export default function OfficeStaffDashboard({ mode }) {
                         <td>
                           <span className={`status-badge-table ${statusColor}`}>{status}</span>
                         </td>
-                        <td style={{ textAlign: 'right', color: '#0f172a' }}>₱ {toMoney(row.total_amount || 0)}</td>
+                        <td style={{ textAlign: 'right', color: '#0f172a' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                            {highBill ? <span className="office-hmo-badge-sm warn">HIGH ₱5K+</span> : null}
+                            ₱ {toMoney(row.total_amount || 0)}
+                          </div>
+                        </td>
                         <td style={{ textAlign: 'right', color: '#ea580c', fontWeight: 600 }}>−₱ {toMoney(claim.philhealth_deduction || 0)}</td>
-                        <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 600 }}>−₱ {toMoney(claim.applied_hmo_amount || claim.loa_approved_amount || 0)}</td>
+                        <td style={{ textAlign: 'right', color: '#2563eb', fontWeight: 600 }}>−₱ {toMoney(hmoDueUsed)}</td>
                         <td style={{ textAlign: 'right', fontWeight: 800, color: '#f97316' }}>₱ {toMoney(row.patient_due_amount || claim.patient_payable || 0)}</td>
                         <td className="inc-right">
                           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                             <button
                               type="button"
                               className="office-btn ghost"
-                              style={{ padding: '6px 10px', fontSize: '0.8rem', height: 34, borderRadius: 10 }}
+                              style={{ padding: '6px 10px', fontSize: '0.8rem', height: 34, borderRadius: 10, width: 'auto' }}
                               onClick={() => setHmoQuickEdit(row)}
                             >
                               <Edit2 size={14} />
@@ -2653,7 +2698,7 @@ export default function OfficeStaffDashboard({ mode }) {
                             <button
                               type="button"
                               className="office-btn primary"
-                              style={{ padding: '6px 10px', fontSize: '0.8rem', height: 34, borderRadius: 10 }}
+                              style={{ padding: '6px 10px', fontSize: '0.8rem', height: 34, borderRadius: 10, width: 'auto' }}
                               onClick={async () => {
                                 await openInvoice(String(row.invoice_id));
                                 setView('billing');
@@ -2687,81 +2732,111 @@ export default function OfficeStaffDashboard({ mode }) {
               <button type="button" className="office-btn ghost" onClick={() => setHmoQuickEdit(null)}>Close</button>
             </div>
             <div className="office-modal-body">
-              <div className="office-payment-field-group">
-                <div className="office-payment-field">
-                  <label>HMO Provider</label>
-                  <select
-                    className="office-select"
-                    value={hmoQuickEdit._provider ?? String(hmoQuickEdit?.hmo_claim?.provider || '')}
-                    onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _provider: e.target.value })}
-                  >
-                    <option value="">None</option>
-                    <option value="Cocolife">Cocolife</option>
-                    <option value="Philcare">Philcare</option>
-                    <option value="Value Care">Value Care</option>
-                    <option value="Eastwest">Eastwest</option>
-                    <option value="IMS">IMS</option>
-                    <option value="Medocare">Medocare</option>
-                    <option value="Sunlife">Sunlife</option>
-                    <option value="AMAPHIL">AMAPHIL</option>
-                    <option value="Other">Other</option>
-                  </select>
+              <div className="office-hmo-fields-pro">
+                <div className="office-hmo-field-pro">
+                  <label className="office-hmo-field-label-pro">
+                    <span className="label-dot-hmo"></span> HMO Provider
+                  </label>
+                  <div className="office-hmo-input-wrap-pro">
+                    <Shield size={15} className="office-hmo-input-icon-pro" />
+                    <select
+                      className="office-hmo-select-pro"
+                      value={hmoQuickEdit._provider ?? String(hmoQuickEdit?.hmo_claim?.provider || '')}
+                      onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _provider: e.target.value })}
+                    >
+                      <option value="">None</option>
+                      <option value="Cocolife">Cocolife</option>
+                      <option value="Philcare">Philcare</option>
+                      <option value="Value Care">Value Care</option>
+                      <option value="Eastwest">Eastwest</option>
+                      <option value="IMS">IMS</option>
+                      <option value="Medocare">Medocare</option>
+                      <option value="Sunlife">Sunlife</option>
+                      <option value="AMAPHIL">AMAPHIL</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="office-payment-field">
-                  <label>Status</label>
-                  <select
-                    className="office-select"
-                    value={hmoQuickEdit._status ?? String(hmoQuickEdit?.hmo_claim?.status || 'Pending')}
-                    onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _status: e.target.value })}
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="Awaiting LOA">Awaiting LOA</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Partially Approved">Partial</option>
-                    <option value="Rejected">Rejected</option>
-                  </select>
+                <div className="office-hmo-field-pro">
+                  <label className="office-hmo-field-label-pro">
+                    <span className="label-dot-st"></span> Claim Status
+                  </label>
+                  <div className="office-hmo-input-wrap-pro">
+                    <ClipboardList size={15} className="office-hmo-input-icon-pro" />
+                    <select
+                      className="office-hmo-select-pro"
+                      value={hmoQuickEdit._status ?? String(hmoQuickEdit?.hmo_claim?.status || 'Pending')}
+                      onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _status: e.target.value })}
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Awaiting LOA">Awaiting LOA</option>
+                      <option value="Approved">Approved</option>
+                      <option value="Partially Approved">Partially Approved</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="office-payment-field">
-                  <label>LOA #</label>
-                  <input
-                    className="office-input"
-                    value={hmoQuickEdit._loa ?? String(hmoQuickEdit?.hmo_claim?.loa_number || '')}
-                    onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _loa: e.target.value })}
-                    placeholder="Reference"
-                  />
+                <div className="office-hmo-field-pro">
+                  <label className="office-hmo-field-label-pro">
+                    <span className="label-dot-loa"></span> LOA / Reference No.
+                  </label>
+                  <div className="office-hmo-input-wrap-pro">
+                    <FileText size={15} className="office-hmo-input-icon-pro" />
+                    <input
+                      className="office-hmo-input-pro"
+                      value={hmoQuickEdit._loa ?? String(hmoQuickEdit?.hmo_claim?.loa_number || '')}
+                      onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _loa: e.target.value })}
+                      placeholder="e.g. LOA-2026-00123"
+                    />
+                  </div>
                 </div>
-                <div className="office-payment-field">
-                  <label>PhilHealth</label>
-                  <input
-                    className="office-input"
-                    type="number"
-                    value={hmoQuickEdit._ph ?? (hmoQuickEdit?._ph === 0 ? 0 : String(hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? ''))}
-                    onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _ph: e.target.value })}
-                    placeholder="₱ 0"
-                  />
+                <div className="office-hmo-field-pro">
+                  <label className="office-hmo-field-label-pro">
+                    <span className="label-dot-ph"></span> PhilHealth Share
+                  </label>
+                  <div className="office-hmo-input-wrap-pro">
+                    <CreditCard size={15} className="office-hmo-input-icon-pro" />
+                    <input
+                      className="office-hmo-input-pro"
+                      type="number"
+                      value={hmoQuickEdit._ph ?? (hmoQuickEdit?._ph === 0 ? 0 : String(hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? ''))}
+                      onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _ph: e.target.value })}
+                      placeholder="₱ 0.00"
+                    />
+                  </div>
                 </div>
-                <div className="office-payment-field">
-                  <label>HMO Covered</label>
-                  <input
-                    className="office-input"
-                    type="number"
-                    value={hmoQuickEdit._hmoAmt ?? (hmoQuickEdit?._hmoAmt === 0 ? 0 : String(hmoQuickEdit?.hmo_claim?.loa_approved_amount ?? ''))}
-                    onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _hmoAmt: e.target.value })}
-                    placeholder="₱ 0"
-                  />
+                <div className="office-hmo-field-pro">
+                  <label className="office-hmo-field-label-pro">
+                    <span className="label-dot-hmo"></span> HMO Covered Amount
+                  </label>
+                  <div className="office-hmo-input-wrap-pro">
+                    <Check size={15} className="office-hmo-input-icon-pro" />
+                    <input
+                      className="office-hmo-input-pro"
+                      type="number"
+                      value={hmoQuickEdit._hmoAmt ?? (hmoQuickEdit?._hmoAmt === 0 ? 0 : String(hmoQuickEdit?.hmo_claim?.loa_approved_amount ?? ''))}
+                      onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _hmoAmt: e.target.value })}
+                      placeholder="₱ 0.00"
+                    />
+                  </div>
                 </div>
-                <div className="office-payment-field office-payment-field-wide">
-                  <label>Notes</label>
-                  <input
-                    className="office-input"
-                    value={hmoQuickEdit._notes ?? String(hmoQuickEdit?.hmo_claim?.notes || '')}
-                    onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _notes: e.target.value })}
-                    placeholder="Optional notes"
-                  />
+                <div className="office-hmo-field-pro wide">
+                  <label className="office-hmo-field-label-pro">
+                    <span className="label-dot-st" style={{ background: '#64748b' }}></span> Approval Notes
+                  </label>
+                  <div className="office-hmo-input-wrap-pro">
+                    <FileText size={15} className="office-hmo-input-icon-pro" />
+                    <input
+                      className="office-hmo-input-pro"
+                      value={hmoQuickEdit._notes ?? String(hmoQuickEdit?.hmo_claim?.notes || '')}
+                      onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _notes: e.target.value })}
+                      placeholder="Optional — HMO approval notes, contact name, budget remarks"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="office-hmo-summary" style={{ marginTop: 10 }}>
+              <div className="office-hmo-modal-summary-pro">
                 {(() => {
                   const total = Number(hmoQuickEdit.total_amount || 0);
                   const phRaw = Number(hmoQuickEdit._ph ?? hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? 0) || 0;
@@ -2776,51 +2851,56 @@ export default function OfficeStaffDashboard({ mode }) {
                   const hmoWarn = statusQ !== 'Approved' && statusQ !== 'Partially Approved' && hmoRaw > 0;
                   const providerNow = hmoQuickEdit._provider ?? String(hmoQuickEdit?.hmo_claim?.provider || '');
                   const loaNow = hmoQuickEdit._loa ?? String(hmoQuickEdit?.hmo_claim?.loa_number || '');
+                  const totalDeduct = phSafe + hmoAmt;
                   return (
                     <>
                       {phClamped ? (
-                        <div className="office-hmo-warn">
-                          ⚠ PhilHealth was clamped — it cannot exceed the total bill.
+                        <div className="office-hmo-warn-pro">
+                          <ShieldAlert size={15} />
+                          PhilHealth was clamped — it cannot exceed the total bill.
                         </div>
                       ) : null}
                       {hmoClamped ? (
-                        <div className="office-hmo-warn">
-                          ⚠ HMO amount was clamped — it cannot exceed the excess after PhilHealth.
+                        <div className="office-hmo-warn-pro">
+                          <ShieldAlert size={15} />
+                          HMO amount was clamped — it cannot exceed the excess after PhilHealth.
                         </div>
                       ) : null}
                       {hmoWarn ? (
-                        <div className="office-hmo-warn">
-                          ⚠ HMO amount not deducted — status is not Approved / Partial.
+                        <div className="office-hmo-warn-pro">
+                          <ShieldAlert size={15} />
+                          HMO amount not deducted — status is not Approved / Partially Approved.
                         </div>
                       ) : null}
-                      <div className="office-hmo-summary-line">
-                        <span>Total Bill</span>
+                      <div className="office-hmo-summary-row-pro gross" style={{ marginTop: 8 }}>
+                        <span>Gross Bill</span>
                         <strong>₱ {toMoney(total)}</strong>
                       </div>
-                      <div className="office-hmo-summary-line">
-                        <span>Less PhilHealth</span>
+                      <div className="office-hmo-summary-row-pro ph-row">
+                        <span>Less PhilHealth (Standard Share)</span>
                         <strong>−₱ {toMoney(phSafe)}</strong>
                       </div>
-                      <div className="office-hmo-summary-line">
+                      <div className="office-hmo-summary-row-pro hmo-row">
                         <span>
-                          Less HMO {providerNow ? `(${String(providerNow)})` : ''}
+                          Less HMO {providerNow ? `· ${String(providerNow)}` : ''}
                         </span>
                         <strong>−₱ {toMoney(hmoAmt)}</strong>
                       </div>
-                      {(phSafe + hmoAmt) > 0 ? (
-                        <div className="office-hmo-summary-line accent">
-                          <span>Total Deductions</span>
-                          <strong>−₱ {toMoney(phSafe + hmoAmt)}</strong>
+                      {totalDeduct > 0 ? (
+                        <div className="office-hmo-summary-row-pro deduct-total">
+                          <span>Total Deductions Applied</span>
+                          <strong>−₱ {toMoney(totalDeduct)}</strong>
                         </div>
                       ) : null}
-                      <div className="office-hmo-divider" />
-                      <div className="office-hmo-summary-line total">
+                      <div className="office-hmo-summary-divider-pro" />
+                      <div className="office-hmo-summary-row-pro total-row">
                         <span>Patient Pays</span>
                         <strong>₱ {toMoney(net)}</strong>
                       </div>
                       {loaNow ? (
-                        <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#475569' }}>
-                          LOA Reference: <span style={{ fontWeight: 600, color: '#0f172a' }}>{String(loaNow)}</span>
+                        <div className="office-hmo-loa-pro">
+                          <FileText size={12} />
+                          LOA Reference: <span style={{ fontWeight: 900, color: '#4c1d95' }}>{String(loaNow)}</span>
                         </div>
                       ) : null}
                     </>
@@ -3035,8 +3115,31 @@ export default function OfficeStaffDashboard({ mode }) {
         Record the cashier payment here. GCash is currently unavailable.
       </div>
     </div>
-    <div className="office-payment-badge">
-      {String(selectedInvoice.status || '').toLowerCase() === 'paid' ? 'Settled' : 'Ready to collect'}
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+      {(() => {
+        const claim = selectedInvoice?.hmo_claim || null;
+        if (!claim) return null;
+        const provider = String(claim.provider || '').trim();
+        if (!provider) return null;
+        const status = String(claim.status || 'Pending');
+        const ph = Number(claim.philhealth_deduction || 0);
+        const hmoAmt = Number(claim.applied_hmo_amount || claim.loa_approved_amount || 0);
+        const statusApplied = status === 'Approved' || status === 'Partially Approved';
+        const hmoSafe = statusApplied ? hmoAmt : 0;
+        const total = Number(selectedInvoice?.total_amount || 0);
+        const due = Math.max(0, total - Math.max(0, Math.min(total, ph)) - hmoSafe);
+        return (
+          <div className="office-hmo-chip-pro">
+            <Shield size={13} />
+            {provider}
+            <span style={{ fontWeight: 800, color: '#059669' }}>−₱ {toMoney(ph + hmoSafe)}</span>
+            <span className="chip-due">₱ {toMoney(due)}</span>
+          </div>
+        );
+      })()}
+      <div className="office-payment-badge">
+        {String(selectedInvoice.status || '').toLowerCase() === 'paid' ? 'Settled' : 'Ready to collect'}
+      </div>
     </div>
   </div>
 
@@ -3083,29 +3186,21 @@ export default function OfficeStaffDashboard({ mode }) {
     </button>
   </div>
 
-  <div className="office-hmo-card">
-    <div className="office-hmo-head">
-      <div className="office-hmo-head-icon">
-        <Shield size={16} />
+  <div className="office-hmo-card-pro">
+    <div className="office-hmo-head-pro">
+      <div className="office-hmo-head-icon-pro">
+        <Shield size={20} />
       </div>
       <div style={{ minWidth: 0 }}>
-        <div className="office-hmo-head-title">PhilHealth & HMO</div>
-        <div className="office-hmo-head-subtitle">PhilHealth is deducted first — HMO covers the excess per Letter of Authority.</div>
+        <div className="office-hmo-head-title-pro">PhilHealth & HMO Deductions</div>
+        <div className="office-hmo-head-subtitle-pro">Hospital Standard — PhilHealth is deducted first, then HMO covers the excess per the Letter of Authority (LOA) issued by the provider.</div>
       </div>
     </div>
 
-    <div
-      className="office-hmo-quick"
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 8,
-        marginTop: 12
-      }}
-    >
+    <div className="office-hmo-quick-pro">
       <button
         type="button"
-        className="office-btn ghost"
+        className="office-hmo-quick-btn-pro ph"
         onClick={() => {
           const total = Number(selectedInvoice?.total_amount || 0);
           if (!Number.isFinite(total) || total <= 0) return;
@@ -3113,96 +3208,139 @@ export default function OfficeStaffDashboard({ mode }) {
           setPhilhealthDeduction(String(next));
         }}
       >
-        PH 20%
+        <span style={{ fontWeight: 900 }}>PH 20%</span>
       </button>
       <button
         type="button"
-        className="office-btn ghost"
+        className="office-hmo-quick-btn-pro ph"
         onClick={() => setPhilhealthDeduction('500')}
       >
         PH ₱500
       </button>
       <button
         type="button"
-        className="office-btn ghost"
+        className="office-hmo-quick-btn-pro hmo"
         onClick={() => {
           const total = Number(selectedInvoice?.total_amount || 0);
           const ph = Number(philhealthDeduction || 0);
           const after = Math.max(0, Math.min(total, ph));
           const excess = Math.max(0, total - after);
           setHmoCoverage(String(Math.round(excess * 100) / 100));
+          if (!hmoProvider) setHmoProvider('Cocolife');
           if (!hmoStatus || hmoStatus === 'Pending') setHmoStatus('Approved');
         }}
       >
-        HMO = Excess
+        <Check size={14} />
+        HMO = EXCESS
+      </button>
+      <button
+        type="button"
+        className="office-hmo-quick-btn-pro ghost"
+        onClick={() => {
+          setPhilhealthDeduction(''); setHmoCoverage(''); setHmoProvider('');
+          setLoaNumber(''); setHmoStatus('Pending'); setHmoNotes('');
+        }}
+      >
+        <X size={14} />
+        CLEAR
       </button>
     </div>
 
-    <div className="office-payment-field-group" style={{ marginTop: 10 }}>
-      <div className="office-payment-field">
-        <label>PhilHealth</label>
-        <input
-          className="office-input"
-          type="number"
-          value={philhealthDeduction}
-          onChange={(e) => setPhilhealthDeduction(e.target.value)}
-          placeholder="₱ 0.00"
-        />
+    <div className="office-hmo-fields-pro">
+      <div className="office-hmo-field-pro">
+        <label className="office-hmo-field-label-pro">
+          <span className="label-dot-ph"></span> PhilHealth Share
+        </label>
+        <div className="office-hmo-input-wrap-pro">
+          <CreditCard size={15} className="office-hmo-input-icon-pro" />
+          <input
+            className="office-hmo-input-pro"
+            type="number"
+            value={philhealthDeduction}
+            onChange={(e) => setPhilhealthDeduction(e.target.value)}
+            placeholder="₱ 0.00"
+          />
+        </div>
       </div>
-      <div className="office-payment-field">
-        <label>HMO Provider</label>
-        <select className="office-select" value={hmoProvider} onChange={(e) => setHmoProvider(e.target.value)}>
-          <option value="">None</option>
-          <option value="Cocolife">Cocolife</option>
-          <option value="Philcare">Philcare</option>
-          <option value="Value Care">Value Care</option>
-          <option value="Eastwest">Eastwest</option>
-          <option value="IMS">IMS</option>
-          <option value="Medocare">Medocare</option>
-          <option value="Sunlife">Sunlife</option>
-          <option value="AMAPHIL">AMAPHIL</option>
-          <option value="Other">Other</option>
-        </select>
+      <div className="office-hmo-field-pro">
+        <label className="office-hmo-field-label-pro">
+          <span className="label-dot-hmo"></span> HMO Provider
+        </label>
+        <div className="office-hmo-input-wrap-pro">
+          <Shield size={15} className="office-hmo-input-icon-pro" />
+          <select className="office-hmo-select-pro" value={hmoProvider} onChange={(e) => setHmoProvider(e.target.value)}>
+            <option value="">None</option>
+            <option value="Cocolife">Cocolife</option>
+            <option value="Philcare">Philcare</option>
+            <option value="Value Care">Value Care</option>
+            <option value="Eastwest">Eastwest</option>
+            <option value="IMS">IMS</option>
+            <option value="Medocare">Medocare</option>
+            <option value="Sunlife">Sunlife</option>
+            <option value="AMAPHIL">AMAPHIL</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
       </div>
-      <div className="office-payment-field">
-        <label>HMO Covered</label>
-        <input
-          className="office-input"
-          type="number"
-          value={hmoCoverage}
-          onChange={(e) => setHmoCoverage(e.target.value)}
-          placeholder="₱ 0.00"
-        />
+      <div className="office-hmo-field-pro">
+        <label className="office-hmo-field-label-pro">
+          <span className="label-dot-hmo"></span> HMO Covered Amount
+        </label>
+        <div className="office-hmo-input-wrap-pro">
+          <Check size={15} className="office-hmo-input-icon-pro" />
+          <input
+            className="office-hmo-input-pro"
+            type="number"
+            value={hmoCoverage}
+            onChange={(e) => setHmoCoverage(e.target.value)}
+            placeholder="₱ 0.00"
+          />
+        </div>
       </div>
-      <div className="office-payment-field">
-        <label>LOA #</label>
-        <input
-          className="office-input"
-          type="text"
-          value={loaNumber}
-          onChange={(e) => setLoaNumber(e.target.value)}
-          placeholder="LOA / Reference"
-        />
+      <div className="office-hmo-field-pro">
+        <label className="office-hmo-field-label-pro">
+          <span className="label-dot-loa"></span> LOA / Reference No.
+        </label>
+        <div className="office-hmo-input-wrap-pro">
+          <FileText size={15} className="office-hmo-input-icon-pro" />
+          <input
+            className="office-hmo-input-pro"
+            type="text"
+            value={loaNumber}
+            onChange={(e) => setLoaNumber(e.target.value)}
+            placeholder="e.g. LOA-2026-00123"
+          />
+        </div>
       </div>
-      <div className="office-payment-field">
-        <label>Status</label>
-        <select className="office-select" value={hmoStatus} onChange={(e) => setHmoStatus(e.target.value)}>
-          <option value="Pending">Pending</option>
-          <option value="Awaiting LOA">Awaiting LOA</option>
-          <option value="Approved">Approved</option>
-          <option value="Partially Approved">Partial</option>
-          <option value="Rejected">Rejected</option>
-        </select>
+      <div className="office-hmo-field-pro">
+        <label className="office-hmo-field-label-pro">
+          <span className="label-dot-st"></span> Claim Status
+        </label>
+        <div className="office-hmo-input-wrap-pro">
+          <ClipboardList size={15} className="office-hmo-input-icon-pro" />
+          <select className="office-hmo-select-pro" value={hmoStatus} onChange={(e) => setHmoStatus(e.target.value)}>
+            <option value="Pending">Pending</option>
+            <option value="Awaiting LOA">Awaiting LOA</option>
+            <option value="Approved">Approved</option>
+            <option value="Partially Approved">Partially Approved</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </div>
       </div>
-      <div className="office-payment-field office-payment-field-wide">
-        <label>Notes</label>
-        <input
-          className="office-input"
-          type="text"
-          value={hmoNotes}
-          onChange={(e) => setHmoNotes(e.target.value)}
-          placeholder="Optional notes"
-        />
+      <div className="office-hmo-field-pro wide">
+        <label className="office-hmo-field-label-pro">
+          <span className="label-dot-st" style={{ background: '#64748b' }}></span> Approval Notes
+        </label>
+        <div className="office-hmo-input-wrap-pro">
+          <FileText size={15} className="office-hmo-input-icon-pro" />
+          <input
+            className="office-hmo-input-pro"
+            type="text"
+            value={hmoNotes}
+            onChange={(e) => setHmoNotes(e.target.value)}
+            placeholder="Optional — HMO approval notes, contact name, budget remarks"
+          />
+        </div>
       </div>
     </div>
 
@@ -3217,62 +3355,71 @@ export default function OfficeStaffDashboard({ mode }) {
       const hmoSafe = statusApplied ? Math.max(0, Math.min(afterPH, hmoRaw)) : 0;
       const hmoClamped = statusApplied && Number.isFinite(hmoRaw) && hmoRaw > 0 && Math.abs(hmoRaw - hmoSafe) > 0.0001;
       const hmoWarn = !statusApplied && hmoRaw > 0;
-      const net = Math.max(0, total - phSafe - hmoSafe);
+      const totalDeduct = phSafe + hmoSafe;
+      const net = Math.max(0, total - totalDeduct);
+      const providerLabel = String(hmoProvider || '').trim();
       return (
-        <div className="office-hmo-summary">
+        <div>
           {phClamped ? (
-            <div className="office-hmo-warn">
-              ⚠ PhilHealth was clamped — it cannot exceed the total bill.
+            <div className="office-hmo-warn-pro">
+              <ShieldAlert size={15} />
+              PhilHealth was clamped — it cannot exceed the total bill.
             </div>
           ) : null}
           {hmoClamped ? (
-            <div className="office-hmo-warn">
-              ⚠ HMO amount was clamped — it cannot exceed the excess after PhilHealth.
+            <div className="office-hmo-warn-pro">
+              <ShieldAlert size={15} />
+              HMO amount was clamped — it cannot exceed the excess after PhilHealth.
             </div>
           ) : null}
           {hmoWarn ? (
-            <div className="office-hmo-warn">
-              ⚠ HMO amount not deducted — status is not Approved / Partial.
+            <div className="office-hmo-warn-pro">
+              <ShieldAlert size={15} />
+              HMO amount not deducted — status is not Approved / Partially Approved.
             </div>
           ) : null}
-          <div className="office-hmo-summary-line">
-            <span>Total Bill</span>
-            <strong>₱ {toMoney(total)}</strong>
-          </div>
-          <div className="office-hmo-summary-line">
-            <span>Less PhilHealth</span>
-            <strong>−₱ {toMoney(phSafe)}</strong>
-          </div>
-          <div className="office-hmo-summary-line">
-            <span>
-              Less HMO {hmoProvider ? `(${hmoProvider})` : ''}
-            </span>
-            <strong>−₱ {toMoney(hmoSafe)}</strong>
-          </div>
-          {(phSafe + hmoSafe) > 0 ? (
-            <div className="office-hmo-summary-line accent">
-              <span>Total Deductions</span>
-              <strong>−₱ {toMoney(phSafe + hmoSafe)}</strong>
+
+          <div className="office-hmo-summary-pro">
+            <div className="office-hmo-summary-row-pro gross">
+              <span>Gross Bill</span>
+              <strong>₱ {toMoney(total)}</strong>
             </div>
-          ) : null}
-          <div className="office-hmo-divider" />
-          <div className="office-hmo-summary-line total">
-            <span>Patient Pays</span>
-            <strong>₱ {toMoney(net)}</strong>
-          </div>
-          {loaNumber ? (
-            <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#475569' }}>
-              LOA Reference: <span style={{ fontWeight: 600, color: '#0f172a' }}>{String(loaNumber)}</span>
+            <div className="office-hmo-summary-row-pro ph-row">
+              <span>Less PhilHealth (Standard Share)</span>
+              <strong>−₱ {toMoney(phSafe)}</strong>
             </div>
-          ) : null}
+            <div className="office-hmo-summary-row-pro hmo-row">
+              <span>
+                Less HMO {providerLabel ? `· ${providerLabel}` : ''}
+              </span>
+              <strong>−₱ {toMoney(hmoSafe)}</strong>
+            </div>
+            {totalDeduct > 0 ? (
+              <div className="office-hmo-summary-row-pro deduct-total">
+                <span>Total Deductions Applied</span>
+                <strong>−₱ {toMoney(totalDeduct)}</strong>
+              </div>
+            ) : null}
+            <div className="office-hmo-summary-divider-pro" />
+            <div className="office-hmo-summary-row-pro total-row">
+              <span>Patient Pays</span>
+              <strong>₱ {toMoney(net)}</strong>
+            </div>
+            {loaNumber ? (
+              <div className="office-hmo-loa-pro">
+                <FileText size={12} />
+                LOA Reference: <span style={{ fontWeight: 900, color: '#4c1d95' }}>{String(loaNumber)}</span>
+              </div>
+            ) : null}
+          </div>
         </div>
       );
     })()}
 
-    <div className="office-hmo-actions">
+    <div className="office-hmo-actions-pro">
       <button
         type="button"
-        className="office-btn ghost"
+        className="office-btn primary"
         onClick={async () => {
           if (!selectedInvoice?.id) return;
           try {
@@ -3287,20 +3434,21 @@ export default function OfficeStaffDashboard({ mode }) {
           }
         }}
         disabled={savingHmoClaim || !selectedInvoice?.id}
-        style={{ border: '1px solid #f97316', color: '#f97316' }}
       >
-        {savingHmoClaim ? 'Saving…' : 'Save'}
+        <Save size={15} />
+        {savingHmoClaim ? 'Saving…' : 'Save Deductions'}
       </button>
       <button
         type="button"
         className="office-btn ghost"
+        style={{ border: '1px solid #e2e8f0', color: '#64748b' }}
         onClick={() => {
           setPhilhealthDeduction(''); setHmoCoverage(''); setHmoProvider('');
           setLoaNumber(''); setHmoStatus('Pending'); setHmoNotes('');
         }}
-        style={{ color: '#94a3b8' }}
       >
-        Clear
+        <RefreshCw size={15} />
+        Reset
       </button>
     </div>
   </div>
