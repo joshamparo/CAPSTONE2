@@ -10503,7 +10503,7 @@ function NurseDashboard() {
                         onClick={() => handleAddPatientChange({ target: { name: 'patientMode', value: 'new' } })}
                         className={`walkin-mode-pill ${addPatientData.patientMode === 'new' ? 'active' : ''}`}
                       >
-                        {addPatientData.patientMode === 'new' ? <CheckCircle2 size={15} /> : <div className="pill-empty-box" />}
+                        {addPatientData.patientMode === 'new' ? <CheckCircle size={15} /> : <div className="pill-empty-box" />}
                         <span>New Patient</span>
                       </button>
                       <button
@@ -10511,7 +10511,7 @@ function NurseDashboard() {
                         onClick={() => handleAddPatientChange({ target: { name: 'patientMode', value: 'existing' } })}
                         className={`walkin-mode-pill ${addPatientData.patientMode === 'existing' ? 'active' : ''}`}
                       >
-                        {addPatientData.patientMode === 'existing' ? <CheckCircle2 size={15} /> : <div className="pill-empty-box" />}
+                        {addPatientData.patientMode === 'existing' ? <CheckCircle size={15} /> : <div className="pill-empty-box" />}
                         <span>Existing</span>
                       </button>
                     </div>
