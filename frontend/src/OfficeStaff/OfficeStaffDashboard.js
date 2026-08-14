@@ -159,14 +159,26 @@ export default function OfficeStaffDashboard({ mode }) {
     firstName: '',
     lastName: '',
     email: '',
+    currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
-  const [showPasswords, setShowPasswords] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [profileMessage, setProfileMessage] = useState({ text: '', type: '' });
+
+  const passwordCriteria = useMemo(() => {
+    const v = String(profileForm.newPassword || '');
+    return {
+      length: v.length >= 11,
+      hasNumber: /\d/.test(v),
+      hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(v),
+    };
+  }, [profileForm.newPassword]);
 
   const [privacyMode, setPrivacyMode] = useState(() => {
     try {
@@ -273,8 +285,18 @@ export default function OfficeStaffDashboard({ mode }) {
     setSavingProfile(true);
     setProfileMessage({ text: '', type: '' });
     try {
-      if (profileForm.newPassword && profileForm.newPassword !== profileForm.confirmPassword) {
-        throw new Error('Passwords do not match');
+      const isPasswordChange = Boolean(String(profileForm.newPassword || '').trim());
+
+      if (isPasswordChange) {
+        if (!String(profileForm.currentPassword || '').trim() || !String(profileForm.confirmPassword || '').trim()) {
+          throw new Error('To change password, please fill in Current, New, and Confirm Password fields.');
+        }
+        if (profileForm.newPassword !== profileForm.confirmPassword) {
+          throw new Error('Passwords do not match');
+        }
+        if (!passwordCriteria.length || !passwordCriteria.hasNumber || !passwordCriteria.hasSpecial) {
+          throw new Error('New password must be at least 11 characters with a number and special character.');
+        }
       }
 
       const payload = {
@@ -282,8 +304,10 @@ export default function OfficeStaffDashboard({ mode }) {
         lastName: profileForm.lastName,
       };
 
-      if (profileForm.newPassword) {
-        payload.password = profileForm.newPassword;
+      if (isPasswordChange) {
+        payload.currentPassword = String(profileForm.currentPassword || '').trim();
+        payload.password = String(profileForm.newPassword || '').trim();
+        payload.requiresPasswordAuth = true;
       }
 
       const data = await fetchJson(`/api/staff/${user.id || user._id}`, {
@@ -296,7 +320,7 @@ export default function OfficeStaffDashboard({ mode }) {
       const updatedUser = { ...user, ...data.user };
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
       setProfileMessage({ text: 'Profile updated successfully!', type: 'success' });
-      setProfileForm(prev => ({ ...prev, newPassword: '', confirmPassword: '' }));
+      setProfileForm(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
     } catch (e) {
       setProfileMessage({ text: String(e.message), type: 'error' });
     } finally {
@@ -1402,7 +1426,7 @@ export default function OfficeStaffDashboard({ mode }) {
               <RefreshCw size={16} />
               Refresh
             </button>
-            <AccountHeaderActions user={user} roleLabel={roleLabel} onSignOut={() => setShowLogoutConfirm(true)} onMyProfile={() => setView('profile')} />
+            <AccountHeaderActions user={user} roleLabel={roleLabel} showChangePasswordMenu={false} onSignOut={() => setShowLogoutConfirm(true)} onMyProfile={() => setView('profile')} />
           </div>
         </div>
 
@@ -1520,88 +1544,166 @@ export default function OfficeStaffDashboard({ mode }) {
               </div>
 
               <div className="sec-profile-right">
-                <div className="sec-profile-form-grid">
-                  <div className="sec-form-section">
-                    <h4>Personal Information</h4>
-                    <div className="sec-form-row-2">
-                      <div className="sec-field">
-                        <label>First Name</label>
-                        <input 
-                          type="text" 
-                          className="sec-input" 
-                          value={profileForm.firstName} 
-                          onChange={(e) => setProfileForm(v => ({ ...v, firstName: e.target.value }))} 
-                        />
+                <form className="admin-profile-form" onSubmit={(e) => { e.preventDefault(); saveProfile(); }}>
+                  <div className="profile-form-grid">
+                    <div className="profile-column">
+                      <div className="profile-card">
+                        <h3 className="column-title">
+                          <User size={20} color="#475569" />
+                          Personal Information
+                        </h3>
+
+                        <div className="profile-input-group">
+                          <label>First Name</label>
+                          <div className="input-wrapper-relative">
+                            <User size={18} className="absolute-icon-left text-slate-400" />
+                            <input
+                              type="text"
+                              className="profile-input input-with-icon-padding"
+                              value={profileForm.firstName}
+                              onChange={(e) => setProfileForm(v => ({ ...v, firstName: e.target.value }))}
+                              placeholder="First name"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="profile-input-group">
+                          <label>Last Name</label>
+                          <div className="input-wrapper-relative">
+                            <User size={18} className="absolute-icon-left text-slate-400" />
+                            <input
+                              type="text"
+                              className="profile-input input-with-icon-padding"
+                              value={profileForm.lastName}
+                              onChange={(e) => setProfileForm(v => ({ ...v, lastName: e.target.value }))}
+                              placeholder="Last name"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="profile-input-group">
+                          <label>Email Address (Not changeable)</label>
+                          <div className="input-wrapper-relative">
+                            <Mail size={18} className="absolute-icon-left text-slate-400" />
+                            <input
+                              type="email"
+                              className="profile-input input-with-icon-padding input-disabled-bg"
+                              value={profileForm.email}
+                              readOnly
+                            />
+                          </div>
+                        </div>
                       </div>
-                      <div className="sec-field">
-                        <label>Last Name</label>
-                        <input 
-                          type="text" 
-                          className="sec-input" 
-                          value={profileForm.lastName} 
-                          onChange={(e) => setProfileForm(v => ({ ...v, lastName: e.target.value }))} 
-                        />
+                    </div>
+
+                    <div className="profile-column">
+                      <div className="profile-card">
+                        <h3 className="column-title">
+                          <Shield size={20} color="#475569" />
+                          Security & Password
+                        </h3>
+
+                        <div className="profile-input-group">
+                          <label>Current Password</label>
+                          <div className="input-wrapper-relative">
+                            <Key size={18} className="absolute-icon-left text-slate-400" />
+                            <input
+                              type={showCurrentPassword ? "text" : "password"}
+                              className="profile-input input-with-icon-padding"
+                              value={profileForm.currentPassword}
+                              onChange={(e) => setProfileForm(v => ({ ...v, currentPassword: e.target.value }))}
+                              placeholder="Enter current password"
+                            />
+                            <button
+                              type="button"
+                              className="toggle-password-btn"
+                              onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                            >
+                              {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                            </button>
+                          </div>
+                          <p className="field-notice-error" style={{ color: '#94a3b8' }}>Required only when changing your password.</p>
+                        </div>
+
+                        <div className="profile-input-group">
+                          <label>New Password</label>
+                          <div className="input-wrapper-relative">
+                            <Key size={18} className="absolute-icon-left text-slate-400" />
+                            <input
+                              type={showNewPassword ? "text" : "password"}
+                              className="profile-input input-with-icon-padding"
+                              value={profileForm.newPassword}
+                              onChange={(e) => setProfileForm(v => ({ ...v, newPassword: e.target.value }))}
+                              placeholder="Enter new password (leave blank to keep)"
+                            />
+                            <button
+                              type="button"
+                              className="toggle-password-btn"
+                              onClick={() => setShowNewPassword(!showNewPassword)}
+                            >
+                              {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                            </button>
+                          </div>
+
+                          <div className="password-checklist">
+                            <div className={`checklist-item ${passwordCriteria.length ? 'valid' : ''}`}>
+                              {passwordCriteria.length ? <Check size={14} /> : <X size={14} />}
+                              <span>At least 11 characters</span>
+                            </div>
+                            <div className={`checklist-item ${passwordCriteria.hasSpecial ? 'valid' : ''}`}>
+                              {passwordCriteria.hasSpecial ? <Check size={14} /> : <X size={14} />}
+                              <span>Contains special characters</span>
+                            </div>
+                            <div className={`checklist-item ${passwordCriteria.hasNumber ? 'valid' : ''}`}>
+                              {passwordCriteria.hasNumber ? <Check size={14} /> : <X size={14} />}
+                              <span>Contains numbers</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="profile-input-group">
+                          <label>Confirm New Password</label>
+                          <div className="input-wrapper-relative">
+                            <Key size={18} className="absolute-icon-left text-slate-400" />
+                            <input
+                              type={showConfirmPassword ? "text" : "password"}
+                              className="profile-input input-with-icon-padding"
+                              value={profileForm.confirmPassword}
+                              onChange={(e) => setProfileForm(v => ({ ...v, confirmPassword: e.target.value }))}
+                              placeholder="Confirm new password"
+                            />
+                            <button
+                              type="button"
+                              className="toggle-password-btn"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            >
+                              {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                            </button>
+                          </div>
+                          {profileForm.confirmPassword ? (
+                            <p className={`match-indicator ${profileForm.newPassword === profileForm.confirmPassword ? 'match-success' : 'match-error'}`}>
+                              {profileForm.newPassword === profileForm.confirmPassword ? 'Passwords match' : 'Passwords do not match'}
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
-                      </div>
-                      <div className="sec-field">
-                      <label>Email Address (Not changeable)</label>
-                      <input 
-                        type="email" 
-                        className="sec-input readonly" 
-                        value={profileForm.email} 
-                        readOnly 
-                      />
                     </div>
                   </div>
 
-                  <div className="sec-form-section">
-                    <h4>Security</h4>
-                    <div className="sec-form-row-2">
-                      <div className="sec-field">
-                        <label>New Password</label>
-                        <div className="sec-password-wrap">
-                          <input 
-                            type={showPasswords ? 'text' : 'password'} 
-                            className="sec-input" 
-                            placeholder="Leave blank to keep current"
-                            value={profileForm.newPassword} 
-                            onChange={(e) => setProfileForm(v => ({ ...v, newPassword: e.target.value }))} 
-                          />
-                          <button type="button" onClick={() => setShowPasswords(!showPasswords)} className="sec-eye-btn">
-                            {showPasswords ? <EyeOff size={18} /> : <Eye size={18} />}
-                          </button>
-                        </div>
-                        <div style={{ marginTop: 10, color: '#64748b', fontSize: '0.9rem' }}>
-                          Change your password here. Leave the fields blank if you want to keep your current password.
-                        </div>
-                      </div>
-                      <div className="sec-field">
-                        <label>Confirm Password</label>
-                        <input 
-                          type={showPasswords ? 'text' : 'password'} 
-                          className="sec-input" 
-                          placeholder="Re-type new password"
-                          value={profileForm.confirmPassword} 
-                          onChange={(e) => setProfileForm(v => ({ ...v, confirmPassword: e.target.value }))} 
-                        />
-                      </div>
+                  {profileMessage.text && (
+                    <div className={`sec-profile-alert ${profileMessage.type}`}>
+                      {profileMessage.type === 'success' ? <CheckCircle2 size={16} /> : <ShieldAlert size={16} />}
+                      <span>{profileMessage.text}</span>
                     </div>
-                  </div>
-                </div>
+                  )}
 
-                {profileMessage.text && (
-                  <div className={`sec-profile-alert ${profileMessage.type}`}>
-                    {profileMessage.type === 'success' ? <CheckCircle2 size={16} /> : <ShieldAlert size={16} />}
-                    <span>{profileMessage.text}</span>
+                  <div className="form-actions-row">
+                    <button type="submit" className="btn-neutral-large flex-center-gap-8" disabled={savingProfile}>
+                      <Save size={18} />
+                      {savingProfile ? 'Saving Changes…' : 'Save Changes'}
+                    </button>
                   </div>
-                )}
-
-                <div className="sec-profile-footer">
-                  <button className="sec-btn primary" onClick={saveProfile} disabled={savingProfile}>
-                    <Save size={16} />
-                    {savingProfile ? 'Saving Changes...' : 'Save Changes'}
-                  </button>
-                </div>
+                </form>
               </div>
             </div>
           </div>

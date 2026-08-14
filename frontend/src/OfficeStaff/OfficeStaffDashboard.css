@@ -2009,7 +2009,217 @@
   max-width: 60%;
 }
 
+.admin-profile-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-profile-form .profile-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.admin-profile-form .profile-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.admin-profile-form .profile-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 18px 20px;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+}
+
+.admin-profile-form .column-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.admin-profile-form .profile-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 16px;
+}
+
+.admin-profile-form .profile-input-group:last-child {
+  margin-bottom: 0;
+}
+
+.admin-profile-form .profile-input-group label {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #334155;
+  margin: 0 0 2px;
+}
+
+.admin-profile-form .profile-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.88rem;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.admin-profile-form .profile-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  background: #ffffff;
+}
+
+.admin-profile-form .input-with-icon-padding {
+  padding-left: 40px !important;
+}
+
+.admin-profile-form .input-disabled-bg {
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+  cursor: not-allowed;
+  border-color: #e2e8f0 !important;
+  box-shadow: none !important;
+}
+
+.admin-profile-form .toggle-password-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  color: #64748b;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.admin-profile-form .toggle-password-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.admin-profile-form .password-checklist {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  padding: 0;
+}
+
+.admin-profile-form .checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.admin-profile-form .checklist-item.valid {
+  color: #059669;
+}
+
+.admin-profile-form .checklist-item svg {
+  flex-shrink: 0;
+}
+
+.admin-profile-form .match-indicator {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.admin-profile-form .match-success {
+  color: #059669;
+}
+
+.admin-profile-form .match-error {
+  color: #dc2626;
+}
+
+.admin-profile-form .form-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.admin-profile-form .form-notice-error-text {
+  flex: 1 1 320px;
+  margin: 0;
+  font-weight: 700;
+}
+
+.admin-profile-form .field-notice-error {
+  font-size: 0.78rem;
+  margin: 3px 0 0;
+  font-weight: 700;
+  color: #dc2626;
+}
+
+.admin-profile-form .btn-neutral-large {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  min-width: 150px;
+  height: 42px;
+  background: #ea580c;
+  color: #ffffff;
+  border: 1px solid #ea580c;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.06);
+  width: auto;
+}
+
+.admin-profile-form .btn-neutral-large:hover:not(:disabled) {
+  background: #c2410c;
+  border-color: #c2410c;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px 0 rgba(234, 88, 12, 0.24);
+}
+
+.admin-profile-form .btn-neutral-large:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.admin-profile-form .flex-center-gap-8 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 @media (max-width: 1080px) {
+  .admin-profile-form .profile-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .office-billing-modal {
     width: 96vw !important;
     max-width: 96vw !important;
