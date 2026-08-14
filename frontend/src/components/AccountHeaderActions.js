@@ -71,7 +71,9 @@ export default function AccountHeaderActions({
   onMyProfile,
   onSignOut,
   onOpenNotification,
-  showChangePasswordMenu = true
+  showChangePasswordMenu = true,
+  showNotificationsButton = true,
+  showSettingsButton = true
 }) {
   const rootRef = useRef(null);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -532,155 +534,161 @@ export default function AccountHeaderActions({
         </div>
       ) : null}
       <div className="aha-actions-group">
-        <div className="aha-actions">
-          <button
-            type="button"
-            className="aha-icon-btn"
-            onClick={() => {
-              setShowNotifications((v) => !v);
-              setShowSettings(false);
-              setShowProfileMenu(false);
-            }}
-            aria-label="Notifications"
-          >
-            <Bell size={20} className="aha-icon" />
-            {notifUnreadCount > 0 ? <span className="aha-badge">{notifUnreadCount > 9 ? '9+' : notifUnreadCount}</span> : null}
-            {showNotifications ? (
-              <div className="aha-dropdown" onClick={(e) => e.stopPropagation()}>
-                <div className="aha-dropdown-head">
-                  <div className="aha-dropdown-title">Notifications</div>
-                  {notifUnreadCount > 0 ? (
-                    <button type="button" className="aha-link-btn" onClick={markAllNotificationsAsRead}>
-                      Mark all as read
-                    </button>
-                  ) : null}
-                </div>
-                <div className="aha-dropdown-body">
-                  {notifLoading ? (
-                    <div className="aha-muted">Loading…</div>
-                  ) : notifError ? (
-                    <div className="aha-muted">{notifError}</div>
-                  ) : Array.isArray(notifItems) && notifItems.length ? (
-                    <div className="aha-notif-list">
-                      {notifItems.map((n) => (
-                        <button
-                          key={n.id}
-                          type="button"
-                          className={`aha-notif-item ${Number(n.unreadCount || 0) > 0 ? 'unread' : ''}`}
-                          onClick={async () => {
-                            if (typeof onOpenNotification === 'function') onOpenNotification(n);
-                            setShowNotifications(false);
-                            setShowSettings(false);
-                            setShowProfileMenu(false);
-                            await markNotificationAsRead(n.id);
-                          }}
-                        >
-                          {(() => {
-                            const severity = String(n?.meta?.severity || '').trim() || (String(n?.type || '').trim() === 'inventory' ? 'alert' : String(n?.type || '').trim() === 'lab_result' ? 'info' : 'info');
-                            const rawAt = n?.createdAt || null;
-                            const t = rawAt ? new Date(rawAt) : null;
-                            const time = t && Number.isFinite(t.getTime()) ? t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-                            return (
-                              <>
-                                <div className={`aha-notif-icon ${severity}`}>
-                                  <Bell size={16} />
-                                </div>
-                                <div className="aha-notif-content">
-                                  <div className="aha-notif-title">{n.title}</div>
-                                  <div className="aha-notif-message">{n.message}</div>
-                                  {time ? <div className="aha-notif-time">{time}</div> : null}
-                                </div>
-                              </>
-                            );
-                          })()}
+        {(showNotificationsButton || showSettingsButton) ? (
+          <div className="aha-actions">
+            {showNotificationsButton ? (
+              <button
+                type="button"
+                className="aha-icon-btn"
+                onClick={() => {
+                  setShowNotifications((v) => !v);
+                  setShowSettings(false);
+                  setShowProfileMenu(false);
+                }}
+                aria-label="Notifications"
+              >
+                <Bell size={20} className="aha-icon" />
+                {notifUnreadCount > 0 ? <span className="aha-badge">{notifUnreadCount > 9 ? '9+' : notifUnreadCount}</span> : null}
+                {showNotifications ? (
+                  <div className="aha-dropdown" onClick={(e) => e.stopPropagation()}>
+                    <div className="aha-dropdown-head">
+                      <div className="aha-dropdown-title">Notifications</div>
+                      {notifUnreadCount > 0 ? (
+                        <button type="button" className="aha-link-btn" onClick={markAllNotificationsAsRead}>
+                          Mark all as read
                         </button>
-                      ))}
+                      ) : null}
                     </div>
-                  ) : (
-                    <div className="aha-muted">No new notifications.</div>
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </button>
-
-          <button
-            type="button"
-            className="aha-icon-btn"
-            onClick={() => {
-              setShowSettings((v) => !v);
-              setShowNotifications(false);
-              setShowProfileMenu(false);
-            }}
-            aria-label="Settings"
-          >
-            <Settings size={20} className="aha-icon" />
-            {showSettings ? (
-              <div className="aha-dropdown" onClick={(e) => e.stopPropagation()}>
-                <div className="aha-dropdown-head">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Settings size={14} />
-                    <div className="aha-dropdown-title">System Settings</div>
+                    <div className="aha-dropdown-body">
+                      {notifLoading ? (
+                        <div className="aha-muted">Loading…</div>
+                      ) : notifError ? (
+                        <div className="aha-muted">{notifError}</div>
+                      ) : Array.isArray(notifItems) && notifItems.length ? (
+                        <div className="aha-notif-list">
+                          {notifItems.map((n) => (
+                            <button
+                              key={n.id}
+                              type="button"
+                              className={`aha-notif-item ${Number(n.unreadCount || 0) > 0 ? 'unread' : ''}`}
+                              onClick={async () => {
+                                if (typeof onOpenNotification === 'function') onOpenNotification(n);
+                                setShowNotifications(false);
+                                setShowSettings(false);
+                                setShowProfileMenu(false);
+                                await markNotificationAsRead(n.id);
+                              }}
+                            >
+                              {(() => {
+                                const severity = String(n?.meta?.severity || '').trim() || (String(n?.type || '').trim() === 'inventory' ? 'alert' : String(n?.type || '').trim() === 'lab_result' ? 'info' : 'info');
+                                const rawAt = n?.createdAt || null;
+                                const t = rawAt ? new Date(rawAt) : null;
+                                const time = t && Number.isFinite(t.getTime()) ? t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                                return (
+                                  <>
+                                    <div className={`aha-notif-icon ${severity}`}>
+                                      <Bell size={16} />
+                                    </div>
+                                    <div className="aha-notif-content">
+                                      <div className="aha-notif-title">{n.title}</div>
+                                      <div className="aha-notif-message">{n.message}</div>
+                                      {time ? <div className="aha-notif-time">{time}</div> : null}
+                                    </div>
+                                  </>
+                                );
+                              })()}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="aha-muted">No new notifications.</div>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="aha-dropdown-body">
-                  {settingsLoading ? (
-                    <div className="aha-muted">Loading…</div>
-                  ) : (
-                    <>
-                      {settingsError ? <div className="aha-muted">{settingsError}</div> : null}
-                      <div className="aha-settings-list">
-                        <div className="aha-setting-row">
-                          <div className="aha-setting-info">
-                            <span className="aha-setting-label">Quiet Hours</span>
-                            <span className="aha-setting-desc">Mute alerts at night</span>
-                          </div>
-                          <button
-                            type="button"
-                            className={`aha-toggle ${settingsPrefs.quietHours ? 'on' : ''}`}
-                            onClick={() => togglePreference('quietHours')}
-                          >
-                            <div className="aha-toggle-thumb" />
-                          </button>
-                        </div>
-
-                        <div className="aha-setting-row">
-                          <div className="aha-setting-info">
-                            <span className="aha-setting-label">Privacy Mode</span>
-                            <span className="aha-setting-desc">Blur sensitive amounts</span>
-                          </div>
-                          <button
-                            type="button"
-                            className={`aha-toggle ${settingsPrefs.privacyMode ? 'on' : ''}`}
-                            onClick={() => togglePreference('privacyMode')}
-                          >
-                            <div className="aha-toggle-thumb" />
-                          </button>
-                        </div>
-
-                        <div className="aha-setting-row">
-                          <div className="aha-setting-info">
-                            <span className="aha-setting-label">Auto Print</span>
-                            <span className="aha-setting-desc">Print receipt after payment</span>
-                          </div>
-                          <button
-                            type="button"
-                            className={`aha-toggle ${settingsPrefs.autoPrint ? 'on' : ''}`}
-                            onClick={() => togglePreference('autoPrint')}
-                          >
-                            <div className="aha-toggle-thumb" />
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
+                ) : null}
+              </button>
             ) : null}
-          </button>
-        </div>
 
-        <div className="aha-sep"></div>
+            {showSettingsButton ? (
+              <button
+                type="button"
+                className="aha-icon-btn"
+                onClick={() => {
+                  setShowSettings((v) => !v);
+                  setShowNotifications(false);
+                  setShowProfileMenu(false);
+                }}
+                aria-label="Settings"
+              >
+                <Settings size={20} className="aha-icon" />
+                {showSettings ? (
+                  <div className="aha-dropdown" onClick={(e) => e.stopPropagation()}>
+                    <div className="aha-dropdown-head">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Settings size={14} />
+                        <div className="aha-dropdown-title">System Settings</div>
+                      </div>
+                    </div>
+                    <div className="aha-dropdown-body">
+                      {settingsLoading ? (
+                        <div className="aha-muted">Loading…</div>
+                      ) : (
+                        <>
+                          {settingsError ? <div className="aha-muted">{settingsError}</div> : null}
+                          <div className="aha-settings-list">
+                            <div className="aha-setting-row">
+                              <div className="aha-setting-info">
+                                <span className="aha-setting-label">Quiet Hours</span>
+                                <span className="aha-setting-desc">Mute alerts at night</span>
+                              </div>
+                              <button
+                                type="button"
+                                className={`aha-toggle ${settingsPrefs.quietHours ? 'on' : ''}`}
+                                onClick={() => togglePreference('quietHours')}
+                              >
+                                <div className="aha-toggle-thumb" />
+                              </button>
+                            </div>
+
+                            <div className="aha-setting-row">
+                              <div className="aha-setting-info">
+                                <span className="aha-setting-label">Privacy Mode</span>
+                                <span className="aha-setting-desc">Blur sensitive amounts</span>
+                              </div>
+                              <button
+                                type="button"
+                                className={`aha-toggle ${settingsPrefs.privacyMode ? 'on' : ''}`}
+                                onClick={() => togglePreference('privacyMode')}
+                              >
+                                <div className="aha-toggle-thumb" />
+                              </button>
+                            </div>
+
+                            <div className="aha-setting-row">
+                              <div className="aha-setting-info">
+                                <span className="aha-setting-label">Auto Print</span>
+                                <span className="aha-setting-desc">Print receipt after payment</span>
+                              </div>
+                              <button
+                                type="button"
+                                className={`aha-toggle ${settingsPrefs.autoPrint ? 'on' : ''}`}
+                                onClick={() => togglePreference('autoPrint')}
+                              >
+                                <div className="aha-toggle-thumb" />
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {(showNotificationsButton || showSettingsButton) ? <div className="aha-sep"></div> : null}
 
         <button
           type="button"

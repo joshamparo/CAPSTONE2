@@ -5837,6 +5837,8 @@ function NurseDashboard() {
                   showDepartment={true}
                   departmentValue={activeDept}
                   departmentOptions={[{ value: activeDept, label: activeDept }]}
+                  showNotificationsButton={false}
+                  showSettingsButton={false}
                   onMyProfile={() => setView('profile')}
                   showChangePasswordMenu={false}
                   onSignOut={() => setShowLogoutConfirm(true)}
