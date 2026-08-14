@@ -959,8 +959,24 @@ router.put('/invoices/:id/hmo', async (req, res) => {
     const status = normalizeHmoStatus(req.body?.status);
     const requestedBy = normalizeEmail(req.headers['x-user-email'] || req.body?.requestedBy || '');
     const updatedBy = normalizeEmail(req.headers['x-user-email'] || req.body?.updatedBy || '');
-    const philhealthDeduction = Math.max(0, Number(req.body?.philhealthDeduction ?? req.body?.philhealth_deduction ?? 0));
-    const loaApprovedAmount = Math.max(0, Number(req.body?.loaApprovedAmount ?? req.body?.loa_approved_amount ?? 0));
+    const rawPhilhealth = Math.max(0, Number(req.body?.philhealthDeduction ?? req.body?.philhealth_deduction ?? 0));
+    const rawLoaApproved = Math.max(0, Number(req.body?.loaApprovedAmount ?? req.body?.loa_approved_amount ?? 0));
+    let philhealthDeduction = Number.isFinite(rawPhilhealth) ? Math.min(total, rawPhilhealth) : 0;
+    const maxAfterPhilhealth = Math.max(0, total - philhealthDeduction);
+    let loaApprovedAmount = Number.isFinite(rawLoaApproved) ? Math.min(maxAfterPhilhealth, rawLoaApproved) : 0;
+    const warnings = [];
+    if (!Number.isFinite(rawPhilhealth)) {
+      philhealthDeduction = 0;
+      warnings.push('Invalid PhilHealth deduction amount. Reset to 0.');
+    } else if (Math.abs(rawPhilhealth - philhealthDeduction) > 0.0001) {
+      warnings.push('PhilHealth deduction was clamped to the total bill.');
+    }
+    if (!Number.isFinite(rawLoaApproved)) {
+      loaApprovedAmount = 0;
+      warnings.push('Invalid LOA approved amount. Reset to 0.');
+    } else if (Math.abs(rawLoaApproved - loaApprovedAmount) > 0.0001) {
+      warnings.push('HMO approved amount was clamped to the balance after PhilHealth deduction.');
+    }
     const hasClaimPayload = Boolean(
       provider ||
       loaNumber ||
@@ -970,12 +986,6 @@ router.put('/invoices/:id/hmo', async (req, res) => {
       status !== 'Pending'
     );
 
-    if (!Number.isFinite(philhealthDeduction)) return res.status(400).json({ message: 'Invalid PhilHealth deduction amount' });
-    if (!Number.isFinite(loaApprovedAmount)) return res.status(400).json({ message: 'Invalid LOA approved amount' });
-    if (philhealthDeduction - total > 0.00001) return res.status(400).json({ message: 'PhilHealth deduction cannot exceed the total bill' });
-    if (loaApprovedAmount - Math.max(0, total - philhealthDeduction) > 0.00001) {
-      return res.status(400).json({ message: 'HMO approved amount cannot exceed the balance after PhilHealth deduction' });
-    }
     if ((loaApprovedAmount > 0 || status === 'Approved' || status === 'Partially Approved' || status === 'Awaiting LOA') && !provider) {
       return res.status(400).json({ message: 'HMO provider is required when saving an HMO claim' });
     }
@@ -1037,7 +1047,8 @@ router.put('/invoices/:id/hmo', async (req, res) => {
         paid_amount: toMoney(fin?.paid ?? 0),
         refunded_amount: toMoney(fin?.refunded ?? 0),
         net_paid_amount: toMoney(fin?.netPaid ?? 0),
-        balance_amount: toMoney(fin?.balance ?? total)
+        balance_amount: toMoney(fin?.balance ?? total),
+        warnings
       })
     );
   } catch (err) {

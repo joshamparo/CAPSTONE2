@@ -101,7 +101,7 @@ const inferInvoiceDepartment = (invoice) => {
   return notes.length > 54 ? `${notes.slice(0, 54)}…` : notes;
 };
 
-const buildConsultationReceipt = ({ invoice, payment, user, amountReceivedOverride, philhealthDeduction, hmoCoverage, hmoProvider }) => {
+const buildConsultationReceipt = ({ invoice, payment, user, amountReceivedOverride, philhealthDeduction, hmoCoverage, hmoProvider, loaNumber }) => {
   if (!invoice || !payment) return null;
   const source = inferInvoiceSource(invoice);
   const patientName = invoice.patients
@@ -133,6 +133,7 @@ const buildConsultationReceipt = ({ invoice, payment, user, amountReceivedOverri
     philhealthDeduction: ph,
     hmoCoverage: hmo,
     hmoProvider: hmoProvider || '',
+    loaNumber: loaNumber || '',
     netAmountDue: amountDueAfterDeductions,
     amountReceived,
     change: Math.max(0, amountReceived - amountDueAfterDeductions),
@@ -565,6 +566,9 @@ export default function OfficeStaffDashboard({ mode }) {
     if (receipt.hmoCoverage > 0) {
       deductionRows.push(`<div class="row"><span class="label">HMO (${safe(receipt.hmoProvider || 'Provider')})</span><span>- PHP ${safe(toMoney(receipt.hmoCoverage))}</span></div>`);
     }
+    if (receipt.loaNumber) {
+      deductionRows.push(`<div class="row"><span class="label">LOA Ref</span><span>${safe(receipt.loaNumber)}</span></div>`);
+    }
 
     popup.document.write(`
       <html>
@@ -739,11 +743,15 @@ export default function OfficeStaffDashboard({ mode }) {
   }, [invoiceItems]);
 
   const selectedInvoiceDue = useMemo(() => {
-    const rawBalance = Number(selectedInvoice?.balance_amount || 0);
+    const rawTotal = Number(selectedInvoice?.total_amount || selectedInvoice?.balance_amount || 0);
     const ph = Number(philhealthDeduction || 0);
+    const phSafe = Math.max(0, Math.min(rawTotal, ph));
+    const afterPH = Math.max(0, rawTotal - phSafe);
     const hmo = Number(hmoCoverage || 0);
-    return Math.max(0, rawBalance - ph - hmo);
-  }, [selectedInvoice, philhealthDeduction, hmoCoverage]);
+    const statusApplied = hmoStatus === 'Approved' || hmoStatus === 'Partially Approved';
+    const hmoSafe = statusApplied ? Math.max(0, Math.min(afterPH, hmo)) : 0;
+    return Math.max(0, rawTotal - phSafe - hmoSafe);
+  }, [selectedInvoice, philhealthDeduction, hmoCoverage, hmoStatus]);
 
   const paymentEntryValue = useMemo(() => {
     if (payMethod === 'Cash') return Number(String(cashReceived || payAmount || '').trim() || 0);
@@ -895,7 +903,8 @@ export default function OfficeStaffDashboard({ mode }) {
         amountReceivedOverride: received,
         philhealthDeduction,
         hmoCoverage,
-        hmoProvider
+        hmoProvider,
+        loaNumber
       });
       setPaymentReceipt(receipt);
       setReceiptToPrint(receipt);
@@ -945,7 +954,8 @@ export default function OfficeStaffDashboard({ mode }) {
               amountReceivedOverride: received,
               philhealthDeduction,
               hmoCoverage,
-              hmoProvider
+              hmoProvider,
+              loaNumber
             });
             setPaymentReceipt(receipt);
             setReceiptToPrint(receipt);
@@ -2686,21 +2696,15 @@ export default function OfficeStaffDashboard({ mode }) {
                     onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _provider: e.target.value })}
                   >
                     <option value="">None</option>
-                    <option value="Maxicare">Maxicare</option>
-                    <option value="Medicard">Medicard</option>
-                    <option value="Intellicare">Intellicare</option>
-                    <option value="PhilCare">PhilCare</option>
                     <option value="Cocolife">Cocolife</option>
-                    <option value="Pru Life">Pru Life</option>
-                    <option value="Sun Life">Sun Life</option>
-                    <option value="Generali">Generali</option>
-                    <option value="AIA">AIA</option>
-                    <option value="Eastwest HealthCare">Eastwest</option>
-                    <option value="Caritas">Caritas</option>
-                    <option value="Blue Cross">Blue Cross</option>
-                    <option value="Insular Life">Insular Life</option>
-                    <option value="FPG">FPG</option>
-                    <option value="Malayan">Malayan</option>
+                    <option value="Philcare">Philcare</option>
+                    <option value="Value Care">Value Care</option>
+                    <option value="Eastwest">Eastwest</option>
+                    <option value="IMS">IMS</option>
+                    <option value="Medocare">Medocare</option>
+                    <option value="Sunlife">Sunlife</option>
+                    <option value="AMAPHIL">AMAPHIL</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
                 <div className="office-payment-field">
@@ -2760,28 +2764,53 @@ export default function OfficeStaffDashboard({ mode }) {
               <div className="office-hmo-summary" style={{ marginTop: 10 }}>
                 {(() => {
                   const total = Number(hmoQuickEdit.total_amount || 0);
-                  const ph = Number(hmoQuickEdit._ph ?? hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? 0) || 0;
+                  const phRaw = Number(hmoQuickEdit._ph ?? hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? 0) || 0;
+                  const phSafe = Math.max(0, Math.min(total, phRaw));
+                  const phClamped = Number.isFinite(phRaw) && phRaw > 0 && Math.abs(phRaw - phSafe) > 0.0001;
+                  const afterPH = Math.max(0, total - phSafe);
                   const statusQ = String(hmoQuickEdit._status ?? hmoQuickEdit?.hmo_claim?.status ?? 'Pending');
-                  const hmoAmt = (statusQ === 'Approved' || statusQ === 'Partially Approved')
-                    ? (Number(hmoQuickEdit._hmoAmt ?? hmoQuickEdit?.hmo_claim?.loa_approved_amount ?? 0) || 0)
-                    : 0;
-                  const net = Math.max(0, total - ph - hmoAmt);
-                  const hmoWarn = statusQ !== 'Approved' && statusQ !== 'Partially Approved' && Number(hmoQuickEdit._hmoAmt ?? hmoQuickEdit?.hmo_claim?.loa_approved_amount ?? 0) > 0;
+                  const hmoRaw = Number(hmoQuickEdit._hmoAmt ?? hmoQuickEdit?.hmo_claim?.loa_approved_amount ?? 0) || 0;
+                  const hmoAmt = (statusQ === 'Approved' || statusQ === 'Partially Approved') ? Math.max(0, Math.min(afterPH, hmoRaw)) : 0;
+                  const hmoClamped = (statusQ === 'Approved' || statusQ === 'Partially Approved') && Number.isFinite(hmoRaw) && hmoRaw > 0 && Math.abs(hmoRaw - hmoAmt) > 0.0001;
+                  const net = Math.max(0, total - phSafe - hmoAmt);
+                  const hmoWarn = statusQ !== 'Approved' && statusQ !== 'Partially Approved' && hmoRaw > 0;
+                  const providerNow = hmoQuickEdit._provider ?? String(hmoQuickEdit?.hmo_claim?.provider || '');
+                  const loaNow = hmoQuickEdit._loa ?? String(hmoQuickEdit?.hmo_claim?.loa_number || '');
                   return (
                     <>
+                      {phClamped ? (
+                        <div className="office-hmo-warn">
+                          ⚠ PhilHealth was clamped — it cannot exceed the total bill.
+                        </div>
+                      ) : null}
+                      {hmoClamped ? (
+                        <div className="office-hmo-warn">
+                          ⚠ HMO amount was clamped — it cannot exceed the excess after PhilHealth.
+                        </div>
+                      ) : null}
                       {hmoWarn ? (
                         <div className="office-hmo-warn">
-                          ⚠ HMO amount not deducted — status is not Approved / Partial
+                          ⚠ HMO amount not deducted — status is not Approved / Partial.
                         </div>
                       ) : null}
                       <div className="office-hmo-summary-line">
                         <span>Total Bill</span>
                         <strong>₱ {toMoney(total)}</strong>
                       </div>
-                      {(ph + hmoAmt) > 0 ? (
+                      <div className="office-hmo-summary-line">
+                        <span>Less PhilHealth</span>
+                        <strong>−₱ {toMoney(phSafe)}</strong>
+                      </div>
+                      <div className="office-hmo-summary-line">
+                        <span>
+                          Less HMO {providerNow ? `(${String(providerNow)})` : ''}
+                        </span>
+                        <strong>−₱ {toMoney(hmoAmt)}</strong>
+                      </div>
+                      {(phSafe + hmoAmt) > 0 ? (
                         <div className="office-hmo-summary-line accent">
                           <span>Total Deductions</span>
-                          <strong>−₱ {toMoney(ph + hmoAmt)}</strong>
+                          <strong>−₱ {toMoney(phSafe + hmoAmt)}</strong>
                         </div>
                       ) : null}
                       <div className="office-hmo-divider" />
@@ -2789,6 +2818,11 @@ export default function OfficeStaffDashboard({ mode }) {
                         <span>Patient Pays</span>
                         <strong>₱ {toMoney(net)}</strong>
                       </div>
+                      {loaNow ? (
+                        <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#475569' }}>
+                          LOA Reference: <span style={{ fontWeight: 600, color: '#0f172a' }}>{String(loaNow)}</span>
+                        </div>
+                      ) : null}
                     </>
                   );
                 })()}
@@ -3056,11 +3090,55 @@ export default function OfficeStaffDashboard({ mode }) {
       </div>
       <div style={{ minWidth: 0 }}>
         <div className="office-hmo-head-title">PhilHealth & HMO</div>
-        <div className="office-hmo-head-subtitle">Deductions are subtracted before payment</div>
+        <div className="office-hmo-head-subtitle">PhilHealth is deducted first — HMO covers the excess per Letter of Authority.</div>
       </div>
     </div>
 
-    <div className="office-payment-field-group">
+    <div
+      className="office-hmo-quick"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginTop: 12
+      }}
+    >
+      <button
+        type="button"
+        className="office-btn ghost"
+        onClick={() => {
+          const total = Number(selectedInvoice?.total_amount || 0);
+          if (!Number.isFinite(total) || total <= 0) return;
+          const next = Math.max(0, Math.round(total * 0.2 * 100) / 100);
+          setPhilhealthDeduction(String(next));
+        }}
+      >
+        PH 20%
+      </button>
+      <button
+        type="button"
+        className="office-btn ghost"
+        onClick={() => setPhilhealthDeduction('500')}
+      >
+        PH ₱500
+      </button>
+      <button
+        type="button"
+        className="office-btn ghost"
+        onClick={() => {
+          const total = Number(selectedInvoice?.total_amount || 0);
+          const ph = Number(philhealthDeduction || 0);
+          const after = Math.max(0, Math.min(total, ph));
+          const excess = Math.max(0, total - after);
+          setHmoCoverage(String(Math.round(excess * 100) / 100));
+          if (!hmoStatus || hmoStatus === 'Pending') setHmoStatus('Approved');
+        }}
+      >
+        HMO = Excess
+      </button>
+    </div>
+
+    <div className="office-payment-field-group" style={{ marginTop: 10 }}>
       <div className="office-payment-field">
         <label>PhilHealth</label>
         <input
@@ -3075,21 +3153,15 @@ export default function OfficeStaffDashboard({ mode }) {
         <label>HMO Provider</label>
         <select className="office-select" value={hmoProvider} onChange={(e) => setHmoProvider(e.target.value)}>
           <option value="">None</option>
-          <option value="Maxicare">Maxicare</option>
-          <option value="Medicard">Medicard</option>
-          <option value="Intellicare">Intellicare</option>
-          <option value="PhilCare">PhilCare</option>
           <option value="Cocolife">Cocolife</option>
-          <option value="Pru Life">Pru Life</option>
-          <option value="Sun Life">Sun Life</option>
-          <option value="Generali">Generali</option>
-          <option value="AIA">AIA</option>
-          <option value="Eastwest HealthCare">Eastwest</option>
-          <option value="Caritas">Caritas</option>
-          <option value="Blue Cross">Blue Cross</option>
-          <option value="Insular Life">Insular Life</option>
-          <option value="FPG">FPG</option>
-          <option value="Malayan">Malayan</option>
+          <option value="Philcare">Philcare</option>
+          <option value="Value Care">Value Care</option>
+          <option value="Eastwest">Eastwest</option>
+          <option value="IMS">IMS</option>
+          <option value="Medocare">Medocare</option>
+          <option value="Sunlife">Sunlife</option>
+          <option value="AMAPHIL">AMAPHIL</option>
+          <option value="Other">Other</option>
         </select>
       </div>
       <div className="office-payment-field">
@@ -3109,7 +3181,7 @@ export default function OfficeStaffDashboard({ mode }) {
           type="text"
           value={loaNumber}
           onChange={(e) => setLoaNumber(e.target.value)}
-          placeholder="Reference"
+          placeholder="LOA / Reference"
         />
       </div>
       <div className="office-payment-field">
@@ -3136,26 +3208,51 @@ export default function OfficeStaffDashboard({ mode }) {
 
     {(() => {
       const total = Number(selectedInvoice?.total_amount || 0);
-      const ph = Number(philhealthDeduction || 0);
-      const hmoApplied = (hmoStatus === 'Approved' || hmoStatus === 'Partially Approved') ? Number(hmoCoverage || 0) : 0;
-      const totalDed = ph + hmoApplied;
-      const net = Math.max(0, total - totalDed);
-      const hmoWarn = hmoStatus !== 'Approved' && hmoStatus !== 'Partially Approved' && Number(hmoCoverage || 0) > 0;
+      const phRaw = Number(philhealthDeduction || 0);
+      const phSafe = Math.max(0, Math.min(total, phRaw));
+      const phClamped = Number.isFinite(phRaw) && phRaw > 0 && Math.abs(phRaw - phSafe) > 0.0001;
+      const afterPH = Math.max(0, total - phSafe);
+      const statusApplied = hmoStatus === 'Approved' || hmoStatus === 'Partially Approved';
+      const hmoRaw = Number(hmoCoverage || 0);
+      const hmoSafe = statusApplied ? Math.max(0, Math.min(afterPH, hmoRaw)) : 0;
+      const hmoClamped = statusApplied && Number.isFinite(hmoRaw) && hmoRaw > 0 && Math.abs(hmoRaw - hmoSafe) > 0.0001;
+      const hmoWarn = !statusApplied && hmoRaw > 0;
+      const net = Math.max(0, total - phSafe - hmoSafe);
       return (
         <div className="office-hmo-summary">
+          {phClamped ? (
+            <div className="office-hmo-warn">
+              ⚠ PhilHealth was clamped — it cannot exceed the total bill.
+            </div>
+          ) : null}
+          {hmoClamped ? (
+            <div className="office-hmo-warn">
+              ⚠ HMO amount was clamped — it cannot exceed the excess after PhilHealth.
+            </div>
+          ) : null}
           {hmoWarn ? (
             <div className="office-hmo-warn">
-              ⚠ HMO amount not deducted — status is not Approved / Partial
+              ⚠ HMO amount not deducted — status is not Approved / Partial.
             </div>
           ) : null}
           <div className="office-hmo-summary-line">
             <span>Total Bill</span>
             <strong>₱ {toMoney(total)}</strong>
           </div>
-          {totalDed > 0 ? (
+          <div className="office-hmo-summary-line">
+            <span>Less PhilHealth</span>
+            <strong>−₱ {toMoney(phSafe)}</strong>
+          </div>
+          <div className="office-hmo-summary-line">
+            <span>
+              Less HMO {hmoProvider ? `(${hmoProvider})` : ''}
+            </span>
+            <strong>−₱ {toMoney(hmoSafe)}</strong>
+          </div>
+          {(phSafe + hmoSafe) > 0 ? (
             <div className="office-hmo-summary-line accent">
               <span>Total Deductions</span>
-              <strong>−₱ {toMoney(totalDed)}</strong>
+              <strong>−₱ {toMoney(phSafe + hmoSafe)}</strong>
             </div>
           ) : null}
           <div className="office-hmo-divider" />
@@ -3163,6 +3260,11 @@ export default function OfficeStaffDashboard({ mode }) {
             <span>Patient Pays</span>
             <strong>₱ {toMoney(net)}</strong>
           </div>
+          {loaNumber ? (
+            <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#475569' }}>
+              LOA Reference: <span style={{ fontWeight: 600, color: '#0f172a' }}>{String(loaNumber)}</span>
+            </div>
+          ) : null}
         </div>
       );
     })()}
