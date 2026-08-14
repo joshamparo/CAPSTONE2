@@ -5589,7 +5589,12 @@ function NurseDashboard() {
     }
   };
 
-  return (
+  // #region debug-point nurse-top-level-crash
+  return (() => {
+    try {
+      return (
+        <>
+  // #endregion debug-point nurse-top-level-crash
     <div className="nurse-dashboard-container" style={{ paddingTop: backendHealth.checked && !backendHealth.ok ? 44 : 0 }}>
       {backendHealth.checked && !backendHealth.ok ? (
         <div
@@ -10703,7 +10708,38 @@ function NurseDashboard() {
         </div>
       )}
     </div>
-  );
+        </>
+      );
+    } catch (e) {
+      const stack = (e && e.stack) ? String(e.stack) : String(e);
+      window.__TRAE_NURSE_ERR = stack;
+      return (
+        <div style={{
+          position:'fixed', inset:0, background:'linear-gradient(135deg, #fef2f2, #fff1f2)',
+          padding:'32px 28px', zIndex:99999, overflowY:'auto', fontFamily:'system-ui, -apple-system, "Segoe UI", sans-serif'
+        }}>
+          <div style={{maxWidth:1200, margin:'0 auto'}}>
+            <div style={{background:'#fff', border:'1px solid #fecaca', borderRadius:20, padding:'20px 22px', boxShadow:'0 20px 50px -15px rgba(239,68,68,.18)'}}>
+              <div style={{display:'flex', alignItems:'center', gap:14, borderBottom:'1px solid #fee2e2', paddingBottom:16, marginBottom:18}}>
+                <div style={{width:56, height:56, borderRadius:'999px', background:'linear-gradient(135deg, #ef4444, #f87171)', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:900, fontSize:28, boxShadow:'0 8px 20px rgba(239,68,68,.25)'}}>!</div>
+                <div>
+                  <h1 style={{margin:0, fontSize:'1.35rem', fontWeight:900, color:'#b91c1c'}}>🛑 NURSE DASHBOARD RENDER CRASH (White Screen Debug)</h1>
+                  <p style={{margin:'3px 0 0 0', fontSize:'0.86rem', color:'#991b1b', fontWeight:600}}>Instead of blank white screen — instrumentation captured the EXACT runtime error below. Report this stack trace for 100% accuracy fix.</p>
+                </div>
+              </div>
+              <div style={{background:'#fef2f2', border:'1px solid #fecaca', borderRadius:14, padding:'18px 20px', maxHeight:'60vh', overflowY:'auto', fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize:12, whiteSpace:'pre-wrap', lineHeight:1.6, color:'#7f1d1d'}}>
+                {window.__TRAE_NURSE_ERR = stack}
+              </div>
+              <div style={{marginTop:20, paddingTop:16, borderTop:'1px dashed #fecaca', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:12}}>
+                <div style={{fontSize:'0.78rem', color:'#94a3b8', fontWeight:700}}>DEBUG SESSION: nurse-dashboard-whitescreen · Build hash: {new Date().toISOString().slice(0, 19).replace('T', ' ')}</div>
+                <button type="button" onClick={() => window.location.reload()} style={{padding:'10px 18px', background:'linear-gradient(135deg, #f97316, #ea580c)', border:'1px solid #ea580c', color:'#fff', borderRadius:12, fontWeight:900, cursor:'pointer', boxShadow:'0 6px 14px rgba(249,115,22,.25)'}}>🔄 Reload Dashboard</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  })();
 }
 
 export default NurseDashboard;
