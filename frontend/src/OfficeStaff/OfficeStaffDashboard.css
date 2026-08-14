@@ -1654,10 +1654,384 @@
   border-radius: 14px;
 }
 
+.office-billing-modal {
+  width: 96vw !important;
+  max-width: 1420px !important;
+  min-height: 92vh;
+  max-height: 94vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.office-billing-modal .office-modal-head {
+  padding: 10px 18px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.office-billing-modal .office-modal-body {
+  padding: 14px 18px 18px;
+  flex: 1 1 auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.office-billing-header-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 2px 2px 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.office-billing-header-patient {
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.office-billing-header-patient .office-title {
+  font-size: 1.05rem !important;
+  margin: 0 0 2px;
+}
+
+.office-billing-header-meta {
+  color: #64748b;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.office-billing-header-meta strong {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.office-billing-header-totals {
+  flex: 0 0 auto;
+  text-align: right;
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 14px;
+  row-gap: 2px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.86rem;
+}
+
+.office-billing-header-totals .lbl {
+  color: #64748b;
+  text-align: left;
+  font-weight: 600;
+}
+
+.office-billing-header-totals .val {
+  color: #0f172a;
+  font-weight: 900;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.office-billing-header-totals .val.big {
+  font-size: 1.02rem;
+  color: #ea580c;
+}
+
+.office-billing-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 14px;
+}
+
+.office-billing-left,
+.office-billing-right {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.office-billing-left {
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.office-billing-left::-webkit-scrollbar { width: 8px; }
+.office-billing-left::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+
+.office-billing-right {
+  overflow: hidden;
+}
+
+.office-billing-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.office-billing-card-head {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  font-weight: 900;
+  font-size: 0.92rem;
+  color: #0f172a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.office-billing-card-head .small-note {
+  font-weight: 500;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.office-billing-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.office-billing-card-body .logs-table-container {
+  max-height: none !important;
+}
+
+.office-billing-sec-tight {
+  padding: 10px 14px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.office-billing-refund-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 10px;
+}
+
+.office-billing-refund-grid .full {
+  grid-column: 1 / -1;
+}
+
+.office-billing-payform-grid {
+  display: grid;
+  grid-template-columns: 0.95fr 1.05fr;
+  gap: 10px;
+}
+
+.office-billing-payform-grid .full {
+  grid-column: 1 / -1;
+}
+
+.office-billing-modal .office-payment-metrics {
+  gap: 10px !important;
+  margin: 0 !important;
+}
+
+.office-billing-modal .office-payment-metric {
+  padding: 10px 12px !important;
+  border-radius: 12px !important;
+}
+
+.office-billing-modal .office-payment-metric span {
+  font-size: 0.76rem !important;
+}
+
+.office-billing-modal .office-payment-metric strong {
+  font-size: 1rem !important;
+}
+
+.office-billing-modal .office-payment-quick-cash {
+  margin: 0 !important;
+}
+
+.office-billing-modal .office-payment-quick-cash .office-btn {
+  height: 38px !important;
+  border-radius: 12px !important;
+}
+
+.office-billing-modal .office-hmo-card-pro {
+  padding: 12px 14px !important;
+  border-radius: 14px !important;
+}
+
+.office-billing-modal .office-hmo-head-pro {
+  gap: 10px !important;
+  margin-bottom: 10px !important;
+}
+
+.office-billing-modal .office-hmo-head-icon-pro {
+  width: 36px !important;
+  height: 36px !important;
+  flex-shrink: 0;
+}
+
+.office-billing-modal .office-hmo-head-icon-pro svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.office-billing-modal .office-hmo-head-title-pro {
+  font-size: 0.98rem !important;
+}
+
+.office-billing-modal .office-hmo-head-subtitle-pro {
+  font-size: 0.78rem !important;
+}
+
+.office-billing-modal .office-hmo-quick-pro {
+  margin-bottom: 10px !important;
+  gap: 8px !important;
+}
+
+.office-billing-modal .office-hmo-quick-btn-pro {
+  height: 32px !important;
+  padding: 0 12px !important;
+  font-size: 0.8rem !important;
+  border-radius: 999px !important;
+}
+
+.office-billing-modal .office-hmo-field-label-pro {
+  margin-bottom: 4px !important;
+  font-size: 0.78rem !important;
+}
+
+.office-billing-modal .office-hmo-input-wrap-pro {
+  height: 36px !important;
+}
+
+.office-billing-modal .office-hmo-input-pro,
+.office-billing-modal .office-hmo-select-pro {
+  height: 36px !important;
+  font-size: 0.86rem !important;
+  padding-left: 34px !important;
+}
+
+.office-billing-modal .office-hmo-input-icon-pro {
+  left: 10px !important;
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.office-billing-modal .office-hmo-summary-pro {
+  padding: 10px 10px 12px !important;
+  border-radius: 12px !important;
+  margin-top: 10px !important;
+}
+
+.office-billing-modal .office-hmo-summary-row-pro {
+  padding: 5px 8px !important;
+  font-size: 0.82rem !important;
+  min-height: 0 !important;
+}
+
+.office-billing-modal .office-hmo-summary-divider-pro {
+  margin: 6px 0 !important;
+}
+
+.office-billing-modal .office-hmo-loa-pro {
+  padding: 5px 10px !important;
+  margin-top: 8px !important;
+  font-size: 0.78rem !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.office-billing-modal .office-hmo-warn-pro {
+  padding: 7px 10px !important;
+  margin-top: 8px !important;
+  font-size: 0.78rem !important;
+  border-radius: 10px !important;
+  gap: 8px !important;
+}
+
+.office-billing-modal .office-hmo-actions-pro {
+  margin-top: 10px !important;
+  gap: 8px !important;
+}
+
+.office-billing-modal .office-hmo-actions-pro .office-btn {
+  height: 38px !important;
+  padding: 0 14px !important;
+  font-size: 0.84rem !important;
+  border-radius: 12px !important;
+}
+
+.office-billing-modal .office-payment-form {
+  margin-top: 0 !important;
+}
+
+.office-billing-modal .office-payment-field {
+  margin: 0 !important;
+}
+
+.office-billing-modal .office-payment-field label {
+  font-size: 0.78rem !important;
+  margin-bottom: 4px !important;
+}
+
+.office-billing-modal .office-payment-field .office-input,
+.office-billing-modal .office-payment-field .office-select {
+  height: 38px !important;
+  font-size: 0.86rem !important;
+  border-radius: 10px !important;
+}
+
+.office-billing-modal .office-payment-actions {
+  margin-top: auto !important;
+  padding-top: 8px !important;
+  flex-shrink: 0;
+}
+
+.office-billing-modal .office-payment-submit {
+  height: 46px !important;
+  padding: 0 22px !important;
+  font-size: 0.95rem !important;
+  font-weight: 900 !important;
+  border-radius: 12px !important;
+}
+
+.office-billing-modal .office-payment-note {
+  font-size: 0.78rem !important;
+  color: #64748b;
+  max-width: 60%;
+}
+
+@media (max-width: 1080px) {
+  .office-billing-modal {
+    width: 96vw !important;
+    max-width: 96vw !important;
+    min-height: auto;
+    max-height: 94vh;
+  }
+  .office-billing-grid {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+  .office-billing-left { overflow: visible; }
+  .office-billing-right { overflow: visible; }
+}
+
 @media (max-width: 720px) {
   .office-hmo-fields-pro { grid-template-columns: 1fr; }
   .office-hmo-field-pro.wide { grid-column: span 1; }
   .office-hmo-summary-row-pro { font-size: 0.82rem; padding: 6px 8px; }
+  .office-billing-header-strip { flex-direction: column; }
+  .office-billing-header-totals { width: 100%; }
+  .office-billing-payform-grid { grid-template-columns: 1fr; }
+  .office-billing-refund-grid { grid-template-columns: 1fr; }
 }
 
 

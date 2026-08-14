@@ -2986,7 +2986,7 @@ export default function OfficeStaffDashboard({ mode }) {
 
       {selectedInvoice || selectedInvoiceLoading ? (
         <div className="office-modal-overlay" onClick={() => setSelectedInvoice(null)}>
-          <div className="office-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="office-modal office-billing-modal" onClick={(e) => e.stopPropagation()}>
             <div className="office-modal-head">
               <div className="office-modal-title">{role === 'cashier' ? `Cashier POS • Invoice #${selectedInvoice?.id || ''}` : `Invoice #${selectedInvoice?.id || ''}`}</div>
               <button type="button" className="office-btn ghost" onClick={() => setSelectedInvoice(null)}>Close</button>
@@ -2996,597 +2996,645 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div className="text-slate-500">Loading…</div>
               ) : selectedInvoice ? (
                 <>
-                  <div className="office-row" style={{ justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontWeight: 900, color: '#0f172a' }}>
+                  <div className="office-billing-header-strip">
+                    <div className="office-billing-header-patient">
+                      <div className="office-title" style={{ fontWeight: 900, color: '#0f172a' }}>
                         {selectedInvoice.patients ? `${selectedInvoice.patients.first_name || ''} ${selectedInvoice.patients.last_name || ''}`.trim() : 'Patient'}
                       </div>
-                      <div style={{ color: '#64748b', fontSize: '0.9rem' }}>
+                      <div className="office-billing-header-meta">
                         Status: <strong>{selectedInvoice.status || 'Draft'}</strong>
                       </div>
-                      <div style={{ color: '#64748b', fontSize: '0.9rem' }}>
+                      <div className="office-billing-header-meta">
                         Source: <strong>{inferInvoiceSource(selectedInvoice)}</strong>{selectedInvoice.appointment_id ? ` • Appointment #${selectedInvoice.appointment_id}` : ''}
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 900, color: '#0f172a' }}>Total: ₱ {toMoney(selectedInvoice.total_amount)}</div>
-                      <div style={{ color: '#64748b' }}>Paid: ₱ {toMoney(selectedInvoice.net_paid_amount ?? selectedInvoice.paid_amount ?? 0)}</div>
+                    <div className="office-billing-header-totals">
+                      <div className="lbl">Total Bill</div>
+                      <div className="val">₱ {toMoney(selectedInvoice.total_amount)}</div>
+                      <div className="lbl">Paid</div>
+                      <div className="val">₱ {toMoney(selectedInvoice.net_paid_amount ?? selectedInvoice.paid_amount ?? 0)}</div>
                       {Number(selectedInvoice.refunded_amount || 0) > 0 ? (
-                        <div style={{ color: '#64748b' }}>Refunded: ₱ {toMoney(selectedInvoice.refunded_amount)}</div>
+                        <>
+                          <div className="lbl">Refunded</div>
+                          <div className="val">₱ {toMoney(selectedInvoice.refunded_amount)}</div>
+                        </>
                       ) : null}
-                      <div style={{ color: '#64748b' }}>Balance: ₱ {toMoney(selectedInvoice.balance_amount)}</div>
+                      <div className="lbl">Balance</div>
+                      <div className="val big">₱ {toMoney(selectedInvoice.balance_amount)}</div>
                     </div>
                   </div>
 
-                  <div style={{ marginTop: 14 }}>
-                    <div style={{ fontWeight: 900, marginBottom: 8 }}>Items</div>
-                    <div className="logs-table-container" style={{ maxHeight: 220 }}>
-                      <table className="staff-table">
-                        <thead>
-                          <tr>
-                            <th>Description</th>
-                            <th>Qty</th>
-                            <th>Unit</th>
-                            <th>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(selectedInvoice.items || []).map((it) => (
-                            <tr key={it.id}>
-                              <td className="text-sm text-slate-700">{it.description}</td>
-                              <td className="text-sm text-slate-600">{it.quantity}</td>
-                              <td className="text-sm text-slate-600">₱ {toMoney(it.unit_price)}</td>
-                              <td className="text-sm text-slate-600">₱ {toMoney(it.line_total)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {role === 'doctor_secretary' ? (
-                    <div style={{ marginTop: 14, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                      <button
-                        type="button"
-                        className="office-btn"
-                        onClick={() => setInvoiceStatusSafe(selectedInvoice.id, 'Cancelled')}
-                        disabled={selectedInvoiceLoading || selectedInvoice.status === 'Cancelled' || selectedInvoice.status === 'Paid'}
-                      >
-                        Cancel Invoice
-                      </button>
-                      <button
-                        type="button"
-                        className="office-btn primary"
-                        onClick={() => setInvoiceStatusSafe(selectedInvoice.id, 'Ready')}
-                        disabled={selectedInvoiceLoading || selectedInvoice.status === 'Ready' || selectedInvoice.status === 'Paid' || selectedInvoice.status === 'Cancelled'}
-                      >
-                        Set Ready For Payment
-                      </button>
-                    </div>
-                  ) : null}
-
-                  {role === 'cashier' ? (
-                    <div style={{ marginTop: 14 }}>
-                      <div style={{ fontWeight: 900, marginBottom: 8 }}>Payments</div>
-                      <div className="logs-table-container" style={{ maxHeight: 200 }}>
-                        <table className="staff-table">
-                          <thead>
-                            <tr>
-                              <th>Time</th>
-                              <th>Method</th>
-                              <th>Amount</th>
-                              <th>Reference</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(selectedInvoice.payments || []).length === 0 ? (
-                              <tr>
-                                <td colSpan="4" className="text-center py-8 text-slate-500">No payments yet.</td>
-                              </tr>
-                            ) : (
-                              (selectedInvoice.payments || []).map((p) => (
-                                <tr key={p.id}>
-                                  <td className="text-sm text-slate-600">{p.created_at ? new Date(p.created_at).toLocaleString() : '—'}</td>
-                                  <td className="text-sm text-slate-600">{p.method || '—'}</td>
-                                  <td className="text-sm text-slate-700">₱ {toMoney(p.amount)}</td>
-                                  <td className="text-sm text-slate-600">{p.reference || '—'}</td>
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="office-payment-panel">
-  <div className="office-payment-panel-head">
-    <div>
-      <div className="office-payment-title">
-        {String(selectedInvoice.status || '').toLowerCase() === 'ready' && Number(selectedInvoice.balance_amount || 0) > 0 ? 'POS Payment Entry' : 'Payment Record'}
-      </div>
-      <div className="office-payment-subtitle">
-        Record the cashier payment here. GCash is currently unavailable.
-      </div>
-    </div>
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-      {(() => {
-        const claim = selectedInvoice?.hmo_claim || null;
-        if (!claim) return null;
-        const provider = String(claim.provider || '').trim();
-        if (!provider) return null;
-        const status = String(claim.status || 'Pending');
-        const ph = Number(claim.philhealth_deduction || 0);
-        const hmoAmt = Number(claim.applied_hmo_amount || claim.loa_approved_amount || 0);
-        const statusApplied = status === 'Approved' || status === 'Partially Approved';
-        const hmoSafe = statusApplied ? hmoAmt : 0;
-        const total = Number(selectedInvoice?.total_amount || 0);
-        const due = Math.max(0, total - Math.max(0, Math.min(total, ph)) - hmoSafe);
-        return (
-          <div className="office-hmo-chip-pro">
-            <Shield size={13} />
-            {provider}
-            <span style={{ fontWeight: 800, color: '#059669' }}>−₱ {toMoney(ph + hmoSafe)}</span>
-            <span className="chip-due">₱ {toMoney(due)}</span>
-          </div>
-        );
-      })()}
-      <div className="office-payment-badge">
-        {String(selectedInvoice.status || '').toLowerCase() === 'paid' ? 'Settled' : 'Ready to collect'}
-      </div>
-    </div>
-  </div>
-
-  <div className="office-payment-metrics">
-    <div className="office-payment-metric total-due">
-      <span>Net Amount Due</span>
-      <strong>PHP {toMoney(selectedInvoiceDue)}</strong>
-    </div>
-    <div className={`office-payment-metric ${payMethod === 'Cash' && paymentEntryValue > 0 ? 'accent' : ''}`}>
-      <span>{payMethod === 'Cash' ? 'Cash Received' : 'Payment Amount'}</span>
-      <strong>PHP {toMoney(paymentEntryValue)}</strong>
-    </div>
-    <div className={`office-payment-metric ${paymentChange > 0 ? 'success' : ''}`}>
-      <span>Change / Sukli</span>
-      <strong>PHP {toMoney(paymentChange)}</strong>
-    </div>
-  </div>
-
-  <div className="office-payment-quick-cash" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-    {[100, 500, 1000].map(amount => (
-      <button 
-        key={amount}
-        type="button" 
-        className="office-btn ghost" 
-        style={{ border: '1px solid #e2e8f0', flex: 1, height: '44px', borderRadius: '14px' }}
-        onClick={() => {
-          setCashReceived(String(amount));
-          setPayAmount(String(amount));
-        }}
-      >
-        ₱ {amount}
-      </button>
-    ))}
-    <button 
-      type="button" 
-      className="office-btn ghost" 
-      style={{ border: '2px solid #ea580c', color: '#ea580c', flex: 1.5, height: '44px', borderRadius: '14px' }}
-      onClick={() => {
-        setCashReceived(String(selectedInvoiceDue));
-        setPayAmount(String(selectedInvoiceDue));
-      }}
-    >
-      Exact Amount
-    </button>
-  </div>
-
-  <div className="office-hmo-card-pro">
-    <div className="office-hmo-head-pro">
-      <div className="office-hmo-head-icon-pro">
-        <Shield size={20} />
-      </div>
-      <div style={{ minWidth: 0 }}>
-        <div className="office-hmo-head-title-pro">PhilHealth & HMO Deductions</div>
-        <div className="office-hmo-head-subtitle-pro">Hospital Standard — PhilHealth is deducted first, then HMO covers the excess per the Letter of Authority (LOA) issued by the provider.</div>
-      </div>
-    </div>
-
-    <div className="office-hmo-quick-pro">
-      <button
-        type="button"
-        className="office-hmo-quick-btn-pro ph"
-        onClick={() => {
-          const total = Number(selectedInvoice?.total_amount || 0);
-          if (!Number.isFinite(total) || total <= 0) return;
-          const next = Math.max(0, Math.round(total * 0.2 * 100) / 100);
-          setPhilhealthDeduction(String(next));
-        }}
-      >
-        <span style={{ fontWeight: 900 }}>PH 20%</span>
-      </button>
-      <button
-        type="button"
-        className="office-hmo-quick-btn-pro ph"
-        onClick={() => setPhilhealthDeduction('500')}
-      >
-        PH ₱500
-      </button>
-      <button
-        type="button"
-        className="office-hmo-quick-btn-pro hmo"
-        onClick={() => {
-          const total = Number(selectedInvoice?.total_amount || 0);
-          const ph = Number(philhealthDeduction || 0);
-          const after = Math.max(0, Math.min(total, ph));
-          const excess = Math.max(0, total - after);
-          setHmoCoverage(String(Math.round(excess * 100) / 100));
-          if (!hmoProvider) setHmoProvider('Cocolife');
-          if (!hmoStatus || hmoStatus === 'Pending') setHmoStatus('Approved');
-        }}
-      >
-        <Check size={14} />
-        HMO = EXCESS
-      </button>
-      <button
-        type="button"
-        className="office-hmo-quick-btn-pro ghost"
-        onClick={() => {
-          setPhilhealthDeduction(''); setHmoCoverage(''); setHmoProvider('');
-          setLoaNumber(''); setHmoStatus('Pending'); setHmoNotes('');
-        }}
-      >
-        <X size={14} />
-        CLEAR
-      </button>
-    </div>
-
-    <div className="office-hmo-fields-pro">
-      <div className="office-hmo-field-pro">
-        <label className="office-hmo-field-label-pro">
-          <span className="label-dot-ph"></span> PhilHealth Share
-        </label>
-        <div className="office-hmo-input-wrap-pro">
-          <CreditCard size={15} className="office-hmo-input-icon-pro" />
-          <input
-            className="office-hmo-input-pro"
-            type="number"
-            value={philhealthDeduction}
-            onChange={(e) => setPhilhealthDeduction(e.target.value)}
-            placeholder="₱ 0.00"
-          />
-        </div>
-      </div>
-      <div className="office-hmo-field-pro">
-        <label className="office-hmo-field-label-pro">
-          <span className="label-dot-hmo"></span> HMO Provider
-        </label>
-        <div className="office-hmo-input-wrap-pro">
-          <Shield size={15} className="office-hmo-input-icon-pro" />
-          <select className="office-hmo-select-pro" value={hmoProvider} onChange={(e) => setHmoProvider(e.target.value)}>
-            <option value="">None</option>
-            <option value="Cocolife">Cocolife</option>
-            <option value="Philcare">Philcare</option>
-            <option value="Value Care">Value Care</option>
-            <option value="Eastwest">Eastwest</option>
-            <option value="IMS">IMS</option>
-            <option value="Medocare">Medocare</option>
-            <option value="Sunlife">Sunlife</option>
-            <option value="AMAPHIL">AMAPHIL</option>
-            <option value="Other">Other</option>
-          </select>
-        </div>
-      </div>
-      <div className="office-hmo-field-pro">
-        <label className="office-hmo-field-label-pro">
-          <span className="label-dot-hmo"></span> HMO Covered Amount
-        </label>
-        <div className="office-hmo-input-wrap-pro">
-          <Check size={15} className="office-hmo-input-icon-pro" />
-          <input
-            className="office-hmo-input-pro"
-            type="number"
-            value={hmoCoverage}
-            onChange={(e) => setHmoCoverage(e.target.value)}
-            placeholder="₱ 0.00"
-          />
-        </div>
-      </div>
-      <div className="office-hmo-field-pro">
-        <label className="office-hmo-field-label-pro">
-          <span className="label-dot-loa"></span> LOA / Reference No.
-        </label>
-        <div className="office-hmo-input-wrap-pro">
-          <FileText size={15} className="office-hmo-input-icon-pro" />
-          <input
-            className="office-hmo-input-pro"
-            type="text"
-            value={loaNumber}
-            onChange={(e) => setLoaNumber(e.target.value)}
-            placeholder="e.g. LOA-2026-00123"
-          />
-        </div>
-      </div>
-      <div className="office-hmo-field-pro">
-        <label className="office-hmo-field-label-pro">
-          <span className="label-dot-st"></span> Claim Status
-        </label>
-        <div className="office-hmo-input-wrap-pro">
-          <ClipboardList size={15} className="office-hmo-input-icon-pro" />
-          <select className="office-hmo-select-pro" value={hmoStatus} onChange={(e) => setHmoStatus(e.target.value)}>
-            <option value="Pending">Pending</option>
-            <option value="Awaiting LOA">Awaiting LOA</option>
-            <option value="Approved">Approved</option>
-            <option value="Partially Approved">Partially Approved</option>
-            <option value="Rejected">Rejected</option>
-          </select>
-        </div>
-      </div>
-      <div className="office-hmo-field-pro wide">
-        <label className="office-hmo-field-label-pro">
-          <span className="label-dot-st" style={{ background: '#64748b' }}></span> Approval Notes
-        </label>
-        <div className="office-hmo-input-wrap-pro">
-          <FileText size={15} className="office-hmo-input-icon-pro" />
-          <input
-            className="office-hmo-input-pro"
-            type="text"
-            value={hmoNotes}
-            onChange={(e) => setHmoNotes(e.target.value)}
-            placeholder="Optional — HMO approval notes, contact name, budget remarks"
-          />
-        </div>
-      </div>
-    </div>
-
-    {(() => {
-      const total = Number(selectedInvoice?.total_amount || 0);
-      const phRaw = Number(philhealthDeduction || 0);
-      const phSafe = Math.max(0, Math.min(total, phRaw));
-      const phClamped = Number.isFinite(phRaw) && phRaw > 0 && Math.abs(phRaw - phSafe) > 0.0001;
-      const afterPH = Math.max(0, total - phSafe);
-      const statusApplied = hmoStatus === 'Approved' || hmoStatus === 'Partially Approved';
-      const hmoRaw = Number(hmoCoverage || 0);
-      const hmoSafe = statusApplied ? Math.max(0, Math.min(afterPH, hmoRaw)) : 0;
-      const hmoClamped = statusApplied && Number.isFinite(hmoRaw) && hmoRaw > 0 && Math.abs(hmoRaw - hmoSafe) > 0.0001;
-      const hmoWarn = !statusApplied && hmoRaw > 0;
-      const totalDeduct = phSafe + hmoSafe;
-      const net = Math.max(0, total - totalDeduct);
-      const providerLabel = String(hmoProvider || '').trim();
-      return (
-        <div>
-          {phClamped ? (
-            <div className="office-hmo-warn-pro">
-              <ShieldAlert size={15} />
-              PhilHealth was clamped — it cannot exceed the total bill.
-            </div>
-          ) : null}
-          {hmoClamped ? (
-            <div className="office-hmo-warn-pro">
-              <ShieldAlert size={15} />
-              HMO amount was clamped — it cannot exceed the excess after PhilHealth.
-            </div>
-          ) : null}
-          {hmoWarn ? (
-            <div className="office-hmo-warn-pro">
-              <ShieldAlert size={15} />
-              HMO amount not deducted — status is not Approved / Partially Approved.
-            </div>
-          ) : null}
-
-          <div className="office-hmo-summary-pro">
-            <div className="office-hmo-summary-row-pro gross">
-              <span>Gross Bill</span>
-              <strong>₱ {toMoney(total)}</strong>
-            </div>
-            <div className="office-hmo-summary-row-pro ph-row">
-              <span>Less PhilHealth (Standard Share)</span>
-              <strong>−₱ {toMoney(phSafe)}</strong>
-            </div>
-            <div className="office-hmo-summary-row-pro hmo-row">
-              <span>
-                Less HMO {providerLabel ? `· ${providerLabel}` : ''}
-              </span>
-              <strong>−₱ {toMoney(hmoSafe)}</strong>
-            </div>
-            {totalDeduct > 0 ? (
-              <div className="office-hmo-summary-row-pro deduct-total">
-                <span>Total Deductions Applied</span>
-                <strong>−₱ {toMoney(totalDeduct)}</strong>
-              </div>
-            ) : null}
-            <div className="office-hmo-summary-divider-pro" />
-            <div className="office-hmo-summary-row-pro total-row">
-              <span>Patient Pays</span>
-              <strong>₱ {toMoney(net)}</strong>
-            </div>
-            {loaNumber ? (
-              <div className="office-hmo-loa-pro">
-                <FileText size={12} />
-                LOA Reference: <span style={{ fontWeight: 900, color: '#4c1d95' }}>{String(loaNumber)}</span>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      );
-    })()}
-
-    <div className="office-hmo-actions-pro">
-      <button
-        type="button"
-        className="office-btn primary"
-        onClick={async () => {
-          if (!selectedInvoice?.id) return;
-          try {
-            const result = await saveHmoClaim(selectedInvoice.id);
-            if (result) {
-              setSelectedInvoice(result);
-              const bal = Number(result.balance_amount || 0);
-              if (bal > 0) setPayAmount(String(bal));
-            }
-          } catch (e) {
-            setPaymentError(String(e?.message || 'Failed to save HMO details'));
-          }
-        }}
-        disabled={savingHmoClaim || !selectedInvoice?.id}
-      >
-        <Save size={15} />
-        {savingHmoClaim ? 'Saving…' : 'Save Deductions'}
-      </button>
-      <button
-        type="button"
-        className="office-btn ghost"
-        style={{ border: '1px solid #e2e8f0', color: '#64748b' }}
-        onClick={() => {
-          setPhilhealthDeduction(''); setHmoCoverage(''); setHmoProvider('');
-          setLoaNumber(''); setHmoStatus('Pending'); setHmoNotes('');
-        }}
-      >
-        <RefreshCw size={15} />
-        Reset
-      </button>
-    </div>
-  </div>
-
-  {paymentError ? <div className="admin-alert error" style={{ marginBottom: 10 }}>{paymentError}</div> : null}
-  {payMethod === 'Cash' && paymentShort ? (
-    <div className="office-payment-warning" style={{ marginBottom: 12 }}>
-      Cash received is below the amount due of PHP {toMoney(selectedInvoiceDue)}.
-    </div>
-  ) : null}
-
-  <div className="office-payment-form" style={{ marginTop: '12px' }}>
-    <div className="office-payment-field">
-      <label>Payment method</label>
-      <div style={{ position: 'relative' }}>
-        <select className="office-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} style={{ paddingLeft: '40px' }}>
-          <option value="Cash">Cash</option>
-          <option value="GCash" disabled>GCash (Unavailable)</option>
-          <option value="Card">Card</option>
-        </select>
-        <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
-          {payMethod === 'Cash' ? <CreditCard size={18} /> : payMethod === 'Card' ? <CreditCard size={18} /> : <CreditCard size={18} />}
-        </div>
-      </div>
-    </div>
-
-    <div className="office-payment-field">
-      <label>{payMethod === 'Cash' ? 'Cash received' : 'Amount to post'}</label>
-      <input
-        className="office-input"
-        value={payMethod === 'Cash' ? (cashReceived || payAmount) : payAmount}
-        onChange={(e) => {
-          if (payMethod === 'Cash') {
-            setCashReceived(e.target.value);
-            setPayAmount(e.target.value);
-            return;
-          }
-          setPayAmount(e.target.value);
-        }}
-        placeholder={payMethod === 'Cash' ? 'e.g. 1000' : `e.g. ${toMoney(selectedInvoiceDue)}`}
-      />
-    </div>
-
-    <div className="office-payment-field office-payment-field-wide">
-      <label>{payMethod === 'Cash' ? 'Receipt / Reference No. (optional)' : 'Receipt / Reference No.'}</label>
-      <input
-        className="office-input"
-        value={payReference}
-        onChange={(e) => setPayReference(e.target.value)}
-        placeholder={payMethod === 'Cash' ? 'Optional for cash payments' : 'Enter OR / receipt / card slip reference'}
-      />
-    </div>
-  </div>
-
-  <div className="office-payment-actions">
-    <div className="office-payment-note">
-      {payMethod === 'Cash'
-        ? 'The system records the exact invoice balance and shows the change for the patient.'
-        : 'Non-cash posting will still settle only the current invoice balance.'}
-    </div>
-    <button
-      type="button"
-      className="office-btn primary office-payment-submit"
-      onClick={createPayment}
-      disabled={paymentLoading || selectedInvoice.status === 'Paid' || Number(selectedInvoice.balance_amount || 0) <= 0}
-    >
-      {paymentLoading ? 'Processing payment�' : 'Accept Payment'}
-    </button>
-  </div>
-</div>
-
-<div style={{ marginTop: 12, borderTop: '1px solid #f1f5f9', paddingTop: 12 }}>
-                        <div style={{ fontWeight: 900, marginBottom: 8 }}>Adjustments</div>
-                        {adjustmentError ? <div className="admin-alert error" style={{ marginBottom: 10 }}>{adjustmentError}</div> : null}
-                        <div className="logs-table-container" style={{ maxHeight: 180 }}>
-                          <table className="staff-table">
-                            <thead>
-                              <tr>
-                                <th>Time</th>
-                                <th>Type</th>
-                                <th>Amount</th>
-                                <th>Reference</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {(selectedInvoice.adjustments || []).length === 0 ? (
+                  <div className="office-billing-grid">
+                    <div className="office-billing-left">
+                      <div className="office-billing-card">
+                        <div className="office-billing-card-head">
+                          <span>Invoice Items</span>
+                          <span className="small-note">{(selectedInvoice.items || []).length} line(s)</span>
+                        </div>
+                        <div className="office-billing-card-body">
+                          <div className="logs-table-container">
+                            <table className="staff-table">
+                              <thead>
                                 <tr>
-                                  <td colSpan="4" className="text-center py-8 text-slate-500">No adjustments yet.</td>
+                                  <th>Description</th>
+                                  <th>Qty</th>
+                                  <th>Unit</th>
+                                  <th>Total</th>
                                 </tr>
-                              ) : (
-                                (selectedInvoice.adjustments || []).map((a) => (
-                                  <tr key={a.id}>
-                                    <td className="text-sm text-slate-600">{a.created_at ? new Date(a.created_at).toLocaleString() : '—'}</td>
-                                    <td className="text-sm text-slate-600">{a.type || '—'}</td>
-                                    <td className="text-sm text-slate-700">₱ {toMoney(a.amount)}</td>
-                                    <td className="text-sm text-slate-600" title={a.reason || ''}>{a.reference || '—'}</td>
+                              </thead>
+                              <tbody>
+                                {(selectedInvoice.items || []).map((it) => (
+                                  <tr key={it.id}>
+                                    <td className="text-sm text-slate-700">{it.description}</td>
+                                    <td className="text-sm text-slate-600">{it.quantity}</td>
+                                    <td className="text-sm text-slate-600">₱ {toMoney(it.unit_price)}</td>
+                                    <td className="text-sm text-slate-600">₱ {toMoney(it.line_total)}</td>
                                   </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-
-                        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                          <div style={{ border: '1px solid #f1f5f9', borderRadius: 12, padding: 12 }}>
-                            <div style={{ fontWeight: 900, marginBottom: 8 }}>Issue Refund</div>
-                            <div className="office-row" style={{ flexWrap: 'wrap' }}>
-                              <input className="office-input" style={{ flex: '1 1 140px', minWidth: 0 }} value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} placeholder="Amount" />
-                              <input className="office-input" style={{ flex: '1 1 180px', minWidth: 0 }} value={refundReference} onChange={(e) => setRefundReference(e.target.value)} placeholder="Refund reference (required)" />
-                            </div>
-                            <input className="office-input" style={{ marginTop: 10, width: '100%' }} value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="Reason (optional)" />
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-                              <button
-                                type="button"
-                                className="office-btn"
-                                onClick={() => createAdjustment('refund')}
-                                disabled={
-                                  adjustmentLoading ||
-                                  ['Voided', 'Cancelled'].includes(String(selectedInvoice.status || '')) ||
-                                  Number(selectedInvoice.net_paid_amount ?? selectedInvoice.paid_amount ?? 0) <= 0
-                                }
-                              >
-                                {adjustmentLoading ? 'Saving…' : 'Refund'}
-                              </button>
-                            </div>
-                          </div>
-
-                          <div style={{ border: '1px solid #f1f5f9', borderRadius: 12, padding: 12 }}>
-                            <div style={{ fontWeight: 900, marginBottom: 8 }}>Void Invoice</div>
-                            <input className="office-input" style={{ width: '100%' }} value={voidReference} onChange={(e) => setVoidReference(e.target.value)} placeholder="Void reference (optional)" />
-                            <input className="office-input" style={{ marginTop: 10, width: '100%' }} value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Reason (required)" />
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-                              <button
-                                type="button"
-                                className="office-btn"
-                                onClick={() => createAdjustment('void')}
-                                disabled={adjustmentLoading || ['Voided', 'Cancelled'].includes(String(selectedInvoice.status || ''))}
-                              >
-                                {adjustmentLoading ? 'Saving…' : 'Void'}
-                              </button>
-                            </div>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       </div>
+
+                      {role === 'doctor_secretary' ? (
+                        <div className="office-billing-sec-tight" style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="office-btn"
+                            onClick={() => setInvoiceStatusSafe(selectedInvoice.id, 'Cancelled')}
+                            disabled={selectedInvoiceLoading || selectedInvoice.status === 'Cancelled' || selectedInvoice.status === 'Paid'}
+                          >
+                            Cancel Invoice
+                          </button>
+                          <button
+                            type="button"
+                            className="office-btn primary"
+                            onClick={() => setInvoiceStatusSafe(selectedInvoice.id, 'Ready')}
+                            disabled={selectedInvoiceLoading || selectedInvoice.status === 'Ready' || selectedInvoice.status === 'Paid' || selectedInvoice.status === 'Cancelled'}
+                          >
+                            Set Ready For Payment
+                          </button>
+                        </div>
+                      ) : null}
+
+                      {role === 'cashier' ? (
+                        <div className="office-billing-card">
+                          <div className="office-billing-card-head">
+                            <span>Payment History</span>
+                            <span className="small-note">{(selectedInvoice.payments || []).length} record(s)</span>
+                          </div>
+                          <div className="office-billing-card-body">
+                            <div className="logs-table-container">
+                              <table className="staff-table">
+                                <thead>
+                                  <tr>
+                                    <th>Time</th>
+                                    <th>Method</th>
+                                    <th>Amount</th>
+                                    <th>Reference</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(selectedInvoice.payments || []).length === 0 ? (
+                                    <tr>
+                                      <td colSpan="4" className="text-center py-8 text-slate-500">No payments yet.</td>
+                                    </tr>
+                                  ) : (
+                                    (selectedInvoice.payments || []).map((p) => (
+                                      <tr key={p.id}>
+                                        <td className="text-sm text-slate-600">{p.created_at ? new Date(p.created_at).toLocaleString() : '—'}</td>
+                                        <td className="text-sm text-slate-600">{p.method || '—'}</td>
+                                        <td className="text-sm text-slate-700">₱ {toMoney(p.amount)}</td>
+                                        <td className="text-sm text-slate-600">{p.reference || '—'}</td>
+                                      </tr>
+                                    ))
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {role === 'cashier' ? (
+                        <div className="office-billing-card">
+                          <div className="office-billing-card-head">
+                            <span>Adjustments</span>
+                            <span className="small-note">{(selectedInvoice.adjustments || []).length} record(s)</span>
+                          </div>
+                          <div className="office-billing-card-body">
+                            {adjustmentError ? <div className="admin-alert error" style={{ margin: 12 }}>{adjustmentError}</div> : null}
+                            <div className="logs-table-container">
+                              <table className="staff-table">
+                                <thead>
+                                  <tr>
+                                    <th>Time</th>
+                                    <th>Type</th>
+                                    <th>Amount</th>
+                                    <th>Reference</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(selectedInvoice.adjustments || []).length === 0 ? (
+                                    <tr>
+                                      <td colSpan="4" className="text-center py-8 text-slate-500">No adjustments yet.</td>
+                                    </tr>
+                                  ) : (
+                                    (selectedInvoice.adjustments || []).map((a) => (
+                                      <tr key={a.id}>
+                                        <td className="text-sm text-slate-600">{a.created_at ? new Date(a.created_at).toLocaleString() : '—'}</td>
+                                        <td className="text-sm text-slate-600">{a.type || '—'}</td>
+                                        <td className="text-sm text-slate-700">₱ {toMoney(a.amount)}</td>
+                                        <td className="text-sm text-slate-600" title={a.reason || ''}>{a.reference || '—'}</td>
+                                      </tr>
+                                    ))
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            <div className="office-billing-sec-tight">
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                <div style={{ border: '1px solid #f1f5f9', borderRadius: 12, padding: 10 }}>
+                                  <div style={{ fontWeight: 900, marginBottom: 8, fontSize: '0.86rem' }}>Issue Refund</div>
+                                  <div className="office-billing-refund-grid">
+                                    <input className="office-input" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} placeholder="Amount" />
+                                    <input className="office-input" value={refundReference} onChange={(e) => setRefundReference(e.target.value)} placeholder="Refund reference (required)" />
+                                    <input className="office-input full" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="Reason (optional)" />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+                                    <button
+                                      type="button"
+                                      className="office-btn"
+                                      onClick={() => createAdjustment('refund')}
+                                      disabled={
+                                        adjustmentLoading ||
+                                        ['Voided', 'Cancelled'].includes(String(selectedInvoice.status || '')) ||
+                                        Number(selectedInvoice.net_paid_amount ?? selectedInvoice.paid_amount ?? 0) <= 0
+                                      }
+                                    >
+                                      {adjustmentLoading ? 'Saving…' : 'Refund'}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div style={{ border: '1px solid #f1f5f9', borderRadius: 12, padding: 10 }}>
+                                  <div style={{ fontWeight: 900, marginBottom: 8, fontSize: '0.86rem' }}>Void Invoice</div>
+                                  <input className="office-input" style={{ width: '100%' }} value={voidReference} onChange={(e) => setVoidReference(e.target.value)} placeholder="Void reference (optional)" />
+                                  <input className="office-input" style={{ marginTop: 8, width: '100%' }} value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Reason (required)" />
+                                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+                                    <button
+                                      type="button"
+                                      className="office-btn"
+                                      onClick={() => createAdjustment('void')}
+                                      disabled={adjustmentLoading || ['Voided', 'Cancelled'].includes(String(selectedInvoice.status || ''))}
+                                    >
+                                      {adjustmentLoading ? 'Saving…' : 'Void'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
+
+                    {role === 'cashier' ? (
+                      <div className="office-billing-right">
+                        <div className="office-payment-panel" style={{ padding: 0, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, flex: '1 1 auto', overflow: 'hidden' }}>
+                          <div className="office-payment-panel-head" style={{ flexWrap: 'wrap' }}>
+                            <div>
+                              <div className="office-payment-title">
+                                {String(selectedInvoice.status || '').toLowerCase() === 'ready' && Number(selectedInvoice.balance_amount || 0) > 0 ? 'POS Payment Entry' : 'Payment Record'}
+                              </div>
+                              <div className="office-payment-subtitle">
+                                Record the cashier payment here. GCash is currently unavailable.
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                              {(() => {
+                                const claim = selectedInvoice?.hmo_claim || null;
+                                if (!claim) return null;
+                                const provider = String(claim.provider || '').trim();
+                                if (!provider) return null;
+                                const status = String(claim.status || 'Pending');
+                                const ph = Number(claim.philhealth_deduction || 0);
+                                const hmoAmt = Number(claim.applied_hmo_amount || claim.loa_approved_amount || 0);
+                                const statusApplied = status === 'Approved' || status === 'Partially Approved';
+                                const hmoSafe = statusApplied ? hmoAmt : 0;
+                                const total = Number(selectedInvoice?.total_amount || 0);
+                                const due = Math.max(0, total - Math.max(0, Math.min(total, ph)) - hmoSafe);
+                                return (
+                                  <div className="office-hmo-chip-pro">
+                                    <Shield size={13} />
+                                    {provider}
+                                    <span style={{ fontWeight: 800, color: '#059669' }}>−₱ {toMoney(ph + hmoSafe)}</span>
+                                    <span className="chip-due">₱ {toMoney(due)}</span>
+                                  </div>
+                                );
+                              })()}
+                              <div className="office-payment-badge">
+                                {String(selectedInvoice.status || '').toLowerCase() === 'paid' ? 'Settled' : 'Ready to collect'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="office-payment-metrics">
+                            <div className="office-payment-metric total-due">
+                              <span>Net Amount Due</span>
+                              <strong>PHP {toMoney(selectedInvoiceDue)}</strong>
+                            </div>
+                            <div className={`office-payment-metric ${payMethod === 'Cash' && paymentEntryValue > 0 ? 'accent' : ''}`}>
+                              <span>{payMethod === 'Cash' ? 'Cash Received' : 'Payment Amount'}</span>
+                              <strong>PHP {toMoney(paymentEntryValue)}</strong>
+                            </div>
+                            <div className={`office-payment-metric ${paymentChange > 0 ? 'success' : ''}`}>
+                              <span>Change / Sukli</span>
+                              <strong>PHP {toMoney(paymentChange)}</strong>
+                            </div>
+                          </div>
+
+                          <div className="office-payment-quick-cash" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {[100, 500, 1000].map(amount => (
+                              <button 
+                                key={amount}
+                                type="button" 
+                                className="office-btn ghost" 
+                                style={{ border: '1px solid #e2e8f0', flex: 1, minWidth: 90 }}
+                                onClick={() => {
+                                  setCashReceived(String(amount));
+                                  setPayAmount(String(amount));
+                                }}
+                              >
+                                ₱ {amount}
+                              </button>
+                            ))}
+                            <button 
+                              type="button" 
+                              className="office-btn ghost" 
+                              style={{ border: '2px solid #ea580c', color: '#ea580c', flex: 1.5, minWidth: 140 }}
+                              onClick={() => {
+                                setCashReceived(String(selectedInvoiceDue));
+                                setPayAmount(String(selectedInvoiceDue));
+                              }}
+                            >
+                              Exact Amount
+                            </button>
+                          </div>
+
+                          <div className="office-hmo-card-pro" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
+                            <div className="office-hmo-head-pro">
+                              <div className="office-hmo-head-icon-pro">
+                                <Shield size={20} />
+                              </div>
+                              <div style={{ minWidth: 0 }}>
+                                <div className="office-hmo-head-title-pro">PhilHealth & HMO Deductions</div>
+                                <div className="office-hmo-head-subtitle-pro">PhilHealth first, then HMO covers excess per LOA.</div>
+                              </div>
+                            </div>
+
+                            <div className="office-hmo-quick-pro">
+                              <button
+                                type="button"
+                                className="office-hmo-quick-btn-pro ph"
+                                onClick={() => {
+                                  const total = Number(selectedInvoice?.total_amount || 0);
+                                  if (!Number.isFinite(total) || total <= 0) return;
+                                  const next = Math.max(0, Math.round(total * 0.2 * 100) / 100);
+                                  setPhilhealthDeduction(String(next));
+                                }}
+                              >
+                                <span style={{ fontWeight: 900 }}>PH 20%</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="office-hmo-quick-btn-pro ph"
+                                onClick={() => setPhilhealthDeduction('500')}
+                              >
+                                PH ₱500
+                              </button>
+                              <button
+                                type="button"
+                                className="office-hmo-quick-btn-pro hmo"
+                                onClick={() => {
+                                  const total = Number(selectedInvoice?.total_amount || 0);
+                                  const ph = Number(philhealthDeduction || 0);
+                                  const after = Math.max(0, Math.min(total, ph));
+                                  const excess = Math.max(0, total - after);
+                                  setHmoCoverage(String(Math.round(excess * 100) / 100));
+                                  if (!hmoProvider) setHmoProvider('Cocolife');
+                                  if (!hmoStatus || hmoStatus === 'Pending') setHmoStatus('Approved');
+                                }}
+                              >
+                                <Check size={14} />
+                                HMO = EXCESS
+                              </button>
+                              <button
+                                type="button"
+                                className="office-hmo-quick-btn-pro ghost"
+                                onClick={() => {
+                                  setPhilhealthDeduction(''); setHmoCoverage(''); setHmoProvider('');
+                                  setLoaNumber(''); setHmoStatus('Pending'); setHmoNotes('');
+                                }}
+                              >
+                                <X size={14} />
+                                CLEAR
+                              </button>
+                            </div>
+
+                            <div className="office-hmo-fields-pro">
+                              <div className="office-hmo-field-pro">
+                                <label className="office-hmo-field-label-pro">
+                                  <span className="label-dot-ph"></span> PhilHealth Share
+                                </label>
+                                <div className="office-hmo-input-wrap-pro">
+                                  <CreditCard size={15} className="office-hmo-input-icon-pro" />
+                                  <input
+                                    className="office-hmo-input-pro"
+                                    type="number"
+                                    value={philhealthDeduction}
+                                    onChange={(e) => setPhilhealthDeduction(e.target.value)}
+                                    placeholder="₱ 0.00"
+                                  />
+                                </div>
+                              </div>
+                              <div className="office-hmo-field-pro">
+                                <label className="office-hmo-field-label-pro">
+                                  <span className="label-dot-hmo"></span> HMO Provider
+                                </label>
+                                <div className="office-hmo-input-wrap-pro">
+                                  <Shield size={15} className="office-hmo-input-icon-pro" />
+                                  <select className="office-hmo-select-pro" value={hmoProvider} onChange={(e) => setHmoProvider(e.target.value)}>
+                                    <option value="">None</option>
+                                    <option value="Cocolife">Cocolife</option>
+                                    <option value="Philcare">Philcare</option>
+                                    <option value="Value Care">Value Care</option>
+                                    <option value="Eastwest">Eastwest</option>
+                                    <option value="IMS">IMS</option>
+                                    <option value="Medocare">Medocare</option>
+                                    <option value="Sunlife">Sunlife</option>
+                                    <option value="AMAPHIL">AMAPHIL</option>
+                                    <option value="Other">Other</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div className="office-hmo-field-pro">
+                                <label className="office-hmo-field-label-pro">
+                                  <span className="label-dot-hmo"></span> HMO Covered Amount
+                                </label>
+                                <div className="office-hmo-input-wrap-pro">
+                                  <Check size={15} className="office-hmo-input-icon-pro" />
+                                  <input
+                                    className="office-hmo-input-pro"
+                                    type="number"
+                                    value={hmoCoverage}
+                                    onChange={(e) => setHmoCoverage(e.target.value)}
+                                    placeholder="₱ 0.00"
+                                  />
+                                </div>
+                              </div>
+                              <div className="office-hmo-field-pro">
+                                <label className="office-hmo-field-label-pro">
+                                  <span className="label-dot-loa"></span> LOA / Reference No.
+                                </label>
+                                <div className="office-hmo-input-wrap-pro">
+                                  <FileText size={15} className="office-hmo-input-icon-pro" />
+                                  <input
+                                    className="office-hmo-input-pro"
+                                    type="text"
+                                    value={loaNumber}
+                                    onChange={(e) => setLoaNumber(e.target.value)}
+                                    placeholder="e.g. LOA-2026-00123"
+                                  />
+                                </div>
+                              </div>
+                              <div className="office-hmo-field-pro">
+                                <label className="office-hmo-field-label-pro">
+                                  <span className="label-dot-st"></span> Claim Status
+                                </label>
+                                <div className="office-hmo-input-wrap-pro">
+                                  <ClipboardList size={15} className="office-hmo-input-icon-pro" />
+                                  <select className="office-hmo-select-pro" value={hmoStatus} onChange={(e) => setHmoStatus(e.target.value)}>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Awaiting LOA">Awaiting LOA</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="Partially Approved">Partially Approved</option>
+                                    <option value="Rejected">Rejected</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div className="office-hmo-field-pro wide">
+                                <label className="office-hmo-field-label-pro">
+                                  <span className="label-dot-st" style={{ background: '#64748b' }}></span> Approval Notes
+                                </label>
+                                <div className="office-hmo-input-wrap-pro">
+                                  <FileText size={15} className="office-hmo-input-icon-pro" />
+                                  <input
+                                    className="office-hmo-input-pro"
+                                    type="text"
+                                    value={hmoNotes}
+                                    onChange={(e) => setHmoNotes(e.target.value)}
+                                    placeholder="Optional — HMO approval notes"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {(() => {
+                              const total = Number(selectedInvoice?.total_amount || 0);
+                              const phRaw = Number(philhealthDeduction || 0);
+                              const phSafe = Math.max(0, Math.min(total, phRaw));
+                              const phClamped = Number.isFinite(phRaw) && phRaw > 0 && Math.abs(phRaw - phSafe) > 0.0001;
+                              const afterPH = Math.max(0, total - phSafe);
+                              const statusApplied = hmoStatus === 'Approved' || hmoStatus === 'Partially Approved';
+                              const hmoRaw = Number(hmoCoverage || 0);
+                              const hmoSafe = statusApplied ? Math.max(0, Math.min(afterPH, hmoRaw)) : 0;
+                              const hmoClamped = statusApplied && Number.isFinite(hmoRaw) && hmoRaw > 0 && Math.abs(hmoRaw - hmoSafe) > 0.0001;
+                              const hmoWarn = !statusApplied && hmoRaw > 0;
+                              const totalDeduct = phSafe + hmoSafe;
+                              const net = Math.max(0, total - totalDeduct);
+                              const providerLabel = String(hmoProvider || '').trim();
+                              return (
+                                <div>
+                                  {phClamped ? (
+                                    <div className="office-hmo-warn-pro">
+                                      <ShieldAlert size={15} />
+                                      PhilHealth clamped — cannot exceed total bill.
+                                    </div>
+                                  ) : null}
+                                  {hmoClamped ? (
+                                    <div className="office-hmo-warn-pro">
+                                      <ShieldAlert size={15} />
+                                      HMO clamped — cannot exceed PhilHealth excess.
+                                    </div>
+                                  ) : null}
+                                  {hmoWarn ? (
+                                    <div className="office-hmo-warn-pro">
+                                      <ShieldAlert size={15} />
+                                      HMO not deducted — status not Approved / Partially Approved.
+                                    </div>
+                                  ) : null}
+
+                                  <div className="office-hmo-summary-pro">
+                                    <div className="office-hmo-summary-row-pro gross">
+                                      <span>Gross Bill</span>
+                                      <strong>₱ {toMoney(total)}</strong>
+                                    </div>
+                                    <div className="office-hmo-summary-row-pro ph-row">
+                                      <span>Less PhilHealth</span>
+                                      <strong>−₱ {toMoney(phSafe)}</strong>
+                                    </div>
+                                    <div className="office-hmo-summary-row-pro hmo-row">
+                                      <span>
+                                        Less HMO {providerLabel ? `· ${providerLabel}` : ''}
+                                      </span>
+                                      <strong>−₱ {toMoney(hmoSafe)}</strong>
+                                    </div>
+                                    {totalDeduct > 0 ? (
+                                      <div className="office-hmo-summary-row-pro deduct-total">
+                                        <span>Total Deductions</span>
+                                        <strong>−₱ {toMoney(totalDeduct)}</strong>
+                                      </div>
+                                    ) : null}
+                                    <div className="office-hmo-summary-divider-pro" />
+                                    <div className="office-hmo-summary-row-pro total-row">
+                                      <span>Patient Pays</span>
+                                      <strong>₱ {toMoney(net)}</strong>
+                                    </div>
+                                    {loaNumber ? (
+                                      <div className="office-hmo-loa-pro">
+                                        <FileText size={12} />
+                                        LOA: <span style={{ fontWeight: 900, color: '#4c1d95' }}>{String(loaNumber)}</span>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            <div className="office-hmo-actions-pro">
+                              <button
+                                type="button"
+                                className="office-btn primary"
+                                onClick={async () => {
+                                  if (!selectedInvoice?.id) return;
+                                  try {
+                                    const result = await saveHmoClaim(selectedInvoice.id);
+                                    if (result) {
+                                      setSelectedInvoice(result);
+                                      const bal = Number(result.balance_amount || 0);
+                                      if (bal > 0) setPayAmount(String(bal));
+                                    }
+                                  } catch (e) {
+                                    setPaymentError(String(e?.message || 'Failed to save HMO details'));
+                                  }
+                                }}
+                                disabled={savingHmoClaim || !selectedInvoice?.id}
+                              >
+                                <Save size={15} />
+                                {savingHmoClaim ? 'Saving…' : 'Save Deductions'}
+                              </button>
+                              <button
+                                type="button"
+                                className="office-btn ghost"
+                                style={{ border: '1px solid #e2e8f0', color: '#64748b' }}
+                                onClick={() => {
+                                  setPhilhealthDeduction(''); setHmoCoverage(''); setHmoProvider('');
+                                  setLoaNumber(''); setHmoStatus('Pending'); setHmoNotes('');
+                                }}
+                              >
+                                <RefreshCw size={15} />
+                                Reset
+                              </button>
+                            </div>
+                          </div>
+
+                          {paymentError ? <div className="admin-alert error" style={{ margin: 0 }}>{paymentError}</div> : null}
+                          {payMethod === 'Cash' && paymentShort ? (
+                            <div className="office-payment-warning" style={{ margin: 0 }}>
+                              Cash received is below the amount due of PHP {toMoney(selectedInvoiceDue)}.
+                            </div>
+                          ) : null}
+
+                          <div className="office-payment-form">
+                            <div className="office-billing-payform-grid">
+                              <div className="office-payment-field">
+                                <label>Payment method</label>
+                                <div style={{ position: 'relative' }}>
+                                  <select className="office-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} style={{ paddingLeft: '40px', width: '100%' }}>
+                                    <option value="Cash">Cash</option>
+                                    <option value="GCash" disabled>GCash (Unavailable)</option>
+                                    <option value="Card">Card</option>
+                                  </select>
+                                  <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
+                                    <CreditCard size={18} />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="office-payment-field">
+                                <label>{payMethod === 'Cash' ? 'Cash received' : 'Amount to post'}</label>
+                                <input
+                                  className="office-input"
+                                  style={{ width: '100%' }}
+                                  value={payMethod === 'Cash' ? (cashReceived || payAmount) : payAmount}
+                                  onChange={(e) => {
+                                    if (payMethod === 'Cash') {
+                                      setCashReceived(e.target.value);
+                                      setPayAmount(e.target.value);
+                                      return;
+                                    }
+                                    setPayAmount(e.target.value);
+                                  }}
+                                  placeholder={payMethod === 'Cash' ? 'e.g. 1000' : `e.g. ${toMoney(selectedInvoiceDue)}`}
+                                />
+                              </div>
+
+                              <div className="office-payment-field full">
+                                <label>{payMethod === 'Cash' ? 'Receipt / Reference No. (optional)' : 'Receipt / Reference No.'}</label>
+                                <input
+                                  className="office-input"
+                                  style={{ width: '100%' }}
+                                  value={payReference}
+                                  onChange={(e) => setPayReference(e.target.value)}
+                                  placeholder={payMethod === 'Cash' ? 'Optional for cash payments' : 'Enter OR / receipt / card slip reference'}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="office-payment-actions">
+                            <div className="office-payment-note">
+                              {payMethod === 'Cash'
+                                ? 'Records the exact balance and shows change for the patient.'
+                                : 'Non-cash posting settles only the current invoice balance.'}
+                            </div>
+                            <button
+                              type="button"
+                              className="office-btn primary office-payment-submit"
+                              onClick={createPayment}
+                              disabled={paymentLoading || selectedInvoice.status === 'Paid' || Number(selectedInvoice.balance_amount || 0) <= 0}
+                            >
+                              {paymentLoading ? 'Processing payment…' : 'Accept Payment'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="office-billing-right">
+                        <div className="office-billing-card">
+                          <div className="office-billing-card-head">
+                            <span>Actions</span>
+                          </div>
+                          <div className="office-billing-sec-tight" style={{ textAlign: 'center', color: '#64748b', fontSize: '0.86rem' }}>
+                            Billing controls are only available for the cashier role.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </>
               ) : null}
             </div>
