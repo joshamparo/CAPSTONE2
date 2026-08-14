@@ -3658,7 +3658,8 @@ function DoctorDashboard() {
           </div>
           <div className="doctor-topbar-right">
             <AccountHeaderActions 
-              user={currentUser} 
+              user={currentUser}
+              showChangePasswordMenu={false}
               onSignOut={handleLogout} 
               onMyProfile={() => setActiveNav('profile')}
               onOpenNotification={(n) => {
@@ -3670,6 +3671,12 @@ function DoctorDashboard() {
                     setToast({ type: 'error', message: 'Approvals Inbox is not available for your department.' });
                     setActiveNav(defaultDoctorNav);
                   }
+                } else if (String(n?.type || '').toLowerCase().includes('lab') || String(n?.type || '').toLowerCase().includes('result') || n?.type === 'lab_result') {
+                  setActiveNav('labs');
+                } else if (String(n?.type || '').toLowerCase().includes('patient') || n?.type === 'patient_update') {
+                  setActiveNav('worklist');
+                } else {
+                  setActiveNav(defaultDoctorNav);
                 }
               }}
             />

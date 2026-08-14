@@ -2516,7 +2516,18 @@ function PharmacistDashboard() {
               <Search size={18} className="pharm-search-icon" />
               <input value={searchText} onChange={(e) => setSearchText(e.target.value)} placeholder="Search..." />
             </div>
-            <AccountHeaderActions user={currentUser} onMyProfile={() => setActiveTab('profile')} onSignOut={confirmLogout} />
+            <AccountHeaderActions user={currentUser} showChangePasswordMenu={false} onMyProfile={() => setActiveTab('profile')} onSignOut={confirmLogout} onOpenNotification={(n) => {
+              const type = String(n?.type || '').toLowerCase();
+              if (type.includes('inventory') || type.includes('stock') || type.includes('restock')) {
+                setActiveTab('restocks');
+              } else if (type.includes('request') || type.includes('prescription')) {
+                setActiveTab('requests');
+              } else if (type.includes('sale') || type.includes('pos') || type.includes('transaction')) {
+                setActiveTab('sales');
+              } else {
+                setActiveTab('pos');
+              }
+            }} />
           </div>
         </header>
 

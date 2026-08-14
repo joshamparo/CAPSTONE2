@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Inbox, LayoutDashboard, RefreshCw, ShieldAlert, XCircle, User, Upload, Save, Eye, EyeOff, Search, CreditCard, WalletCards, Menu, X } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Inbox, LayoutDashboard, RefreshCw, ShieldAlert, XCircle, User, Upload, Save, Eye, EyeOff, Search, CreditCard, WalletCards, Menu, X, HelpCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
@@ -1455,9 +1455,21 @@ export default function DoctorSecretaryDashboard() {
 
         <div className="sec-sidebar-body">
           <div className="sec-user-card">
-            <div className="sec-user-title">{secretaryName}</div>
-            <div className="sec-user-sub">{norm(user.email) || '—'}</div>
-            <div className="sec-user-sub">{linkedDoctor?.specialization || 'Consultation'}</div>
+            <div className="sec-user-avatar">
+              {(norm(user.profilePicture || user.profile_picture || user.avatar_url || '') || !secretaryName) ? (
+                norm(user.profilePicture || user.profile_picture || user.avatar_url || '') ? (
+                  <img src={norm(user.profilePicture || user.profile_picture || user.avatar_url)} alt="" style={{ width: '100%', height: '100%', borderRadius: 12, objectFit: 'cover' }} />
+                ) : (
+                  <span>{secretaryName ? secretaryName.charAt(0).toUpperCase() : 'U'}</span>
+                )
+              ) : (
+                <span>{secretaryName.charAt(0).toUpperCase()}</span>
+              )}
+            </div>
+            <div className="sec-user-texts">
+              <div className="sec-user-title">{secretaryName}</div>
+              <div className="sec-user-sub">{norm(user.email) || '—'}</div>
+            </div>
           </div>
 
           <nav className="sec-nav">
@@ -1491,6 +1503,23 @@ export default function DoctorSecretaryDashboard() {
               <span>Sign Out</span>
             </button>
           </nav>
+
+          <div className="sec-sidebar-footer">
+            <button
+              type="button"
+              className="sec-sidebar-help"
+              onClick={() => setActiveTab('profile')}
+              title="Help & Support"
+            >
+              <div className="sec-sidebar-help-icon">
+                <HelpCircle size={16} />
+              </div>
+              <div className="sec-sidebar-help-body">
+                <div className="sec-sidebar-help-title">Need Help?</div>
+                <div className="sec-sidebar-help-sub">Contact IT or visit profile docs</div>
+              </div>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -1516,7 +1545,18 @@ export default function DoctorSecretaryDashboard() {
                       : 'Approvals'}
             </div>
           </div>
-          <AccountHeaderActions user={user} roleLabel="Doctor Secretary" onSignOut={() => setShowLogoutConfirm(true)} onMyProfile={() => setActiveTab('profile')} />
+          <AccountHeaderActions user={user} roleLabel="Doctor Secretary" showChangePasswordMenu={false} onSignOut={() => setShowLogoutConfirm(true)} onMyProfile={() => setActiveTab('profile')} onOpenNotification={(n) => {
+            if (n?.type === 'approval_request' || n?.meta?.requestId || String(n?.type || '').toLowerCase().includes('approval')) {
+              setActiveTab('approvals');
+            } else if (n?.type === 'onsite_booking' || String(n?.type || '').toLowerCase().includes('onsite') || String(n?.type || '').toLowerCase().includes('inbox')) {
+              setActiveTab('onsite-inbox');
+            } else {
+              setActiveTab('dashboard');
+            }
+            if (typeof showToast === 'function') {
+              showToast({ type: 'success', message: `Opened: ${n?.title || 'Notification'}` });
+            }
+          }} />
         </header>
 
         {Array.isArray(toasts) && toasts.length > 0 ? (
