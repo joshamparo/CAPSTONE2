@@ -1830,6 +1830,153 @@
   font-weight: 700;
 }
 
+/* ============ HMO / PhilHealth Capture Card (Nurse Walk-in) ============ */
+.hmo-capture-card {
+  background: linear-gradient(180deg, #ffffff 0%, #fdfdfd 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 16px 16px 18px;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px 0 rgba(15, 23, 42, 0.03);
+  position: relative;
+  overflow: hidden;
+}
+.hmo-capture-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: linear-gradient(180deg, #6366f1 0%, #06b6d4 100%);
+}
+.hmo-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 10px;
+  margin-bottom: 14px;
+}
+.hmo-card-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 900;
+  color: #0f172a;
+  font-size: 0.92rem;
+  letter-spacing: 0.01em;
+}
+.hmo-card-title svg { color: #6366f1; }
+.hmo-badge-optional {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: 4px;
+}
+
+.hmo-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-left: 10px;
+}
+.hmo-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  min-width: auto;
+  width: auto;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  font-weight: 800;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+}
+.hmo-toggle-pill:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+.hmo-toggle-pill.active {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #ffffff;
+  border-color: #4f46e5;
+  box-shadow: 0 4px 12px 0 rgba(79, 70, 229, 0.22);
+}
+.hmo-toggle-pill.active svg { color: #fff; }
+.hmo-toggle-pill svg { flex-shrink: 0; color: #64748b; }
+
+.hmo-subsection {
+  margin-top: 14px;
+  padding-top: 14px;
+  padding-left: 10px;
+  border-top: 1px dashed #e2e8f0;
+}
+.hmo-field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.hmo-service-checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.hmo-service-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  width: auto;
+  min-width: auto;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  font-weight: 800;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+.hmo-service-pill:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+.hmo-service-pill.checked {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border-color: #10b981;
+  color: #065f46;
+  box-shadow: 0 1px 3px 0 rgba(16, 185, 129, 0.12);
+}
+.hmo-service-pill.checked svg:first-child { color: #059669; }
+.hmo-service-pill svg { flex-shrink: 0; }
+.pill-empty-box {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .hmo-field-grid { grid-template-columns: minmax(0, 1fr); }
+  .hmo-toggle-pill { flex: 1 1 calc(50% - 10px); justify-content: center; }
+}
+/* ============ END HMO Capture Card ============ */
+
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }

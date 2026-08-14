@@ -261,6 +261,7 @@ function normalizeServiceKey(value) {
 
 let walkInCounterSchemaPromise = null;
 let nurseTasksTablePromise = null;
+let walkInHmoSchemaPromise = null;
 function ensureWalkInCounterSchemaOnce() {
     if (!walkInCounterSchemaPromise) {
         walkInCounterSchemaPromise = prisma.$executeRawUnsafe(`
@@ -716,6 +717,50 @@ async function ensureNurseTasksTable() {
     }
 
     return nurseTasksTablePromise.catch(() => null);
+}
+
+async function ensureWalkInHmoSupport() {
+    if (!walkInHmoSchemaPromise) {
+        walkInHmoSchemaPromise = (async () => {
+            const cols = [
+                ['hmo_provider', 'VARCHAR(100)'],
+                ['hmo_loa_number', 'VARCHAR(100)'],
+                ['hmo_notes', 'TEXT'],
+                ['philhealth_number', 'VARCHAR(50)'],
+                ['philhealth_deduction', 'DECIMAL(12,2) DEFAULT 0'],
+                ['hmo_covered_json', 'JSONB'],
+                ['is_hmo', 'BOOLEAN DEFAULT FALSE']
+            ];
+            for (const [name, type] of cols) {
+                await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS ${name} ${type};`).catch(() => {});
+            }
+            await prisma.$executeRawUnsafe(`
+                CREATE TABLE IF NOT EXISTS public.billing_hmo_claims (
+                    id bigserial PRIMARY KEY,
+                    invoice_id bigint NULL,
+                    appointment_id bigint NULL,
+                    patient_id uuid NULL,
+                    patient_name text NULL,
+                    hmo_provider text NULL,
+                    loa_number text NULL,
+                    hmo_amount numeric(12,2) NOT NULL DEFAULT 0,
+                    philhealth_amount numeric(12,2) NOT NULL DEFAULT 0,
+                    claim_status text NOT NULL DEFAULT 'Pending - Nurse Intake',
+                    coverage_json JSONB NULL,
+                    notes text NULL,
+                    created_by text NULL,
+                    created_at timestamptz NOT NULL DEFAULT now(),
+                    updated_at timestamptz NOT NULL DEFAULT now()
+                );
+            `).catch(() => {});
+            await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_appointment ON public.billing_hmo_claims (appointment_id);`).catch(() => {});
+            await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_patient ON public.billing_hmo_claims (patient_id);`).catch(() => {});
+        })().catch((err) => {
+            walkInHmoSchemaPromise = null;
+            throw err;
+        });
+    }
+    return walkInHmoSchemaPromise.catch(() => null);
 }
 
 // GET all patients
@@ -1242,7 +1287,8 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
     try {
         await Promise.all([
             ensureNurseTasksTable(),
-            ensureWalkInCounterSchemaOnce()
+            ensureWalkInCounterSchemaOnce(),
+            ensureWalkInHmoSupport()
         ]);
         const payload = req.body || {};
         const routeTypeRaw = String(payload.routeType || '').trim();
@@ -1605,6 +1651,36 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     }
                 });
 
+                const isHmoActive = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
+                if (isHmoActive) {
+                    const hmoProvider = String(payload.hmoProvider || '').trim() || null;
+                    const hmoLoa = String(payload.hmoLoaNumber || '').trim() || null;
+                    const hmoNotesVal = String(payload.hmoNotes || '').trim() || null;
+                    const phNumber = String(payload.philhealthNumber || '').trim() || null;
+                    const phDeduct = Number(payload.philhealthDeduction) || 0;
+                    const coverageJson = payload.hmoCoveredServices && typeof payload.hmoCoveredServices === 'object'
+                        ? JSON.stringify(payload.hmoCoveredServices)
+                        : null;
+                    await tx.$executeRawUnsafe(`
+                        UPDATE public.appointments
+                        SET hmo_provider = ($1::text),
+                            hmo_loa_number = ($2::text),
+                            hmo_notes = ($3::text),
+                            philhealth_number = ($4::text),
+                            philhealth_deduction = ($5::numeric),
+                            hmo_covered_json = ($6::jsonb),
+                            is_hmo = TRUE
+                        WHERE id = ($7::bigint)
+                    `, hmoProvider, hmoLoa, hmoNotesVal, phNumber, phDeduct, coverageJson, Number(appointment.id)).catch(() => {});
+
+                    if (phNumber) {
+                        await tx.patients.update({
+                            where: { id: patient.id },
+                            data: { philhealth_number: patient.philhealth_number || phNumber }
+                        }).catch(() => {});
+                    }
+                }
+
                 if (routeMeta.type === 'onsite_consult') {
                     try {
                         await ensureBillingTablesExist(tx);
@@ -1903,6 +1979,43 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     details: `${routeMeta.label} • ${createdRecord?.kind || 'record'} #${createdRecord?.id || 'n/a'}`
                 }
             }).catch(() => null);
+
+            const hmoSave = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
+            if (hmoSave) {
+                const hmoProv = String(payload.hmoProvider || '').trim() || null;
+                const loaNum = String(payload.hmoLoaNumber || '').trim() || null;
+                const hmoNts = String(payload.hmoNotes || '').trim() || null;
+                const phAmt = Number(payload.philhealthDeduction) || 0;
+                const cov = payload.hmoCoveredServices && typeof payload.hmoCoveredServices === 'object'
+                    ? JSON.stringify(payload.hmoCoveredServices)
+                    : null;
+                const apptId = routeMeta.creates === 'appointment' && createdRecord?.id
+                    ? Number(createdRecord.id)
+                    : null;
+                await tx.$executeRawUnsafe(`
+                    INSERT INTO public.billing_hmo_claims
+                        (invoice_id, appointment_id, patient_id, patient_name,
+                         hmo_provider, loa_number, hmo_amount, philhealth_amount,
+                         claim_status, coverage_json, notes, created_by, created_at, updated_at)
+                    VALUES
+                        (NULL,
+                         ${apptId != null ? `${apptId}::bigint` : 'NULL'},
+                         $1::uuid,
+                         $2::text,
+                         $3::text,
+                         $4::text,
+                         0::numeric,
+                         $5::numeric,
+                         'Pending - Nurse Intake',
+                         $6::jsonb,
+                         $7::text,
+                         $8::text,
+                         now(),
+                         now())
+                `, patient.id, patientName, hmoProv, loaNum, phAmt, cov, hmoNts,
+                    getRequesterEmail(req) || requesterName || null
+                ).catch(() => null);
+            }
 
             return { patient, createdRecord };
         }, { timeout: 45000 });

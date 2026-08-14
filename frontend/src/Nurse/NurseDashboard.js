@@ -629,7 +629,22 @@ function NurseDashboard() {
     nextStepImaging: false,
     nextStepPharmacy: false,
     selectedLabServices: [],
-    selectedImagingServices: []
+    selectedImagingServices: [],
+    // HMO / PhilHealth (Optional Nurse Capture)
+    hasHmo: false,
+    hmoProvider: '',
+    hmoLoaNumber: '',
+    hmoNotes: '',
+    hasPhilhealth: false,
+    philhealthNumber: '',
+    philhealthDeduction: '',
+    hmoCoveredServices: {
+      checkup: false,
+      lab: false,
+      imaging: false,
+      pharmacy: false,
+      admission_eval: false
+    }
   });
 
   const walkInRouteOptions = [
@@ -876,6 +891,35 @@ function NurseDashboard() {
     loadDoctors();
     return () => { cancelled = true; };
   }, [addPatientData.routeType, showAddPatientModal]);
+
+  useEffect(() => {
+    if (!showAddPatientModal) return;
+    const rt = String(addPatientData.routeType || '').trim();
+    setAddPatientData((prev) => {
+      const next = { ...prev, hmoCoveredServices: { ...(prev.hmoCoveredServices || {}) } };
+      if (rt === 'er_consult' || rt === 'onsite_consult') next.hmoCoveredServices.checkup = true;
+      if (rt === 'lab') next.hmoCoveredServices.lab = true;
+      if (rt === 'imaging') next.hmoCoveredServices.imaging = true;
+      if (rt === 'pharmacy') next.hmoCoveredServices.pharmacy = true;
+      if (rt === 'admission_eval') next.hmoCoveredServices.admission_eval = true;
+      return next;
+    });
+  }, [addPatientData.routeType, showAddPatientModal]);
+
+  const toggleHmoCoveredService = (key) => {
+    setAddPatientData((prev) => ({
+      ...prev,
+      hmoCoveredServices: {
+        ...(prev.hmoCoveredServices || {}),
+        [key]: !(prev.hmoCoveredServices || {})[key]
+      }
+    }));
+  };
+
+  const WALKIN_HMO_PROVIDERS = [
+    'Cocolife', 'Philcare', 'Value Care', 'Eastwest', 'IMS',
+    'Medocare', 'Sunlife', 'AMAPHIL', 'Other'
+  ];
 
   useEffect(() => {
     if (!showAddPatientModal) return;
@@ -1261,7 +1305,15 @@ function NurseDashboard() {
           routeNote: addPatientData.routeNote,
           painLevel: addPatientData.painLevel,
           selectedLabServices: addPatientData.selectedLabServices || [],
-          selectedImagingServices: addPatientData.selectedImagingServices || []
+          selectedImagingServices: addPatientData.selectedImagingServices || [],
+          hasHmo: addPatientData.hasHmo,
+          hmoProvider: addPatientData.hmoProvider || null,
+          hmoLoaNumber: addPatientData.hmoLoaNumber || null,
+          hmoNotes: addPatientData.hmoNotes || null,
+          hasPhilhealth: addPatientData.hasPhilhealth,
+          philhealthNumber: addPatientData.philhealthNumber || null,
+          philhealthDeduction: Number(addPatientData.philhealthDeduction) || 0,
+          hmoCoveredServices: addPatientData.hmoCoveredServices || null
         })
       });
 
@@ -9860,6 +9912,166 @@ function NurseDashboard() {
                       Use ER / Walk-In Doctor for most walk-ins. Pick from here for special cases.
                     </div>
                   </div>
+
+                  <div className="hmo-capture-card" style={{marginBottom: '18px'}}>
+                    <div className="hmo-card-header">
+                      <div className="hmo-card-title">
+                        <Shield size={18} />
+                        <span>HMO / PhilHealth Coverage <span className="hmo-badge-optional">Optional</span></span>
+                      </div>
+                    </div>
+
+                    <div className="hmo-toggle-row" style={{marginBottom: addPatientData.hasHmo || addPatientData.hasPhilhealth ? '16px' : '0'}}>
+                      <button
+                        type="button"
+                        onClick={() => handleAddPatientChange({ target: { name: 'hasHmo', value: !addPatientData.hasHmo } })}
+                        className={`hmo-toggle-pill ${addPatientData.hasHmo ? 'active' : ''}`}
+                      >
+                        <Shield size={15} />
+                        <span>{addPatientData.hasHmo ? 'HMO: YES' : 'HMO: NO'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAddPatientChange({ target: { name: 'hasPhilhealth', value: !addPatientData.hasPhilhealth } })}
+                        className={`hmo-toggle-pill ${addPatientData.hasPhilhealth ? 'active' : ''}`}
+                      >
+                        <ShieldAlert size={15} />
+                        <span>{addPatientData.hasPhilhealth ? 'PhilHealth: YES' : 'PhilHealth: NO'}</span>
+                      </button>
+                    </div>
+
+                    {(addPatientData.hasHmo || addPatientData.hasPhilhealth) && (
+                      <div className="hmo-subsection">
+                        {addPatientData.hasHmo && (
+                          <div style={{marginBottom: '14px'}}>
+                            <div className="hmo-field-grid">
+                              <div className="input-group">
+                                <label>HMO Provider {addPatientData.hmoProvider ? null : <span style={{color:'#f59e0b'}}>•</span>}</label>
+                                <select
+                                  className="white-input"
+                                  value={addPatientData.hmoProvider || ''}
+                                  onChange={(e) => handleAddPatientChange({ target: { name: 'hmoProvider', value: e.target.value } })}
+                                >
+                                  <option value="">— Select provider —</option>
+                                  {WALKIN_HMO_PROVIDERS.map((p) => (
+                                    <option key={p} value={p}>{p}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="input-group">
+                                <label>LOA / Authorization #</label>
+                                <input
+                                  type="text"
+                                  name="hmoLoaNumber"
+                                  value={addPatientData.hmoLoaNumber || ''}
+                                  onChange={handleAddPatientChange}
+                                  className="white-input"
+                                  placeholder="e.g., LOA-2026-04128"
+                                />
+                              </div>
+                            </div>
+                            <div className="input-group">
+                              <label>HMO Notes (for Billing)</label>
+                              <input
+                                type="text"
+                                name="hmoNotes"
+                                value={addPatientData.hmoNotes || ''}
+                                onChange={handleAddPatientChange}
+                                className="white-input"
+                                placeholder="Plan type, coverage limits, or special instructions…"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {addPatientData.hasPhilhealth && (
+                          <div style={{marginBottom: '14px'}}>
+                            <div className="hmo-field-grid">
+                              <div className="input-group">
+                                <label>PhilHealth Member #</label>
+                                <input
+                                  type="text"
+                                  name="philhealthNumber"
+                                  value={addPatientData.philhealthNumber || ''}
+                                  onChange={handleAddPatientChange}
+                                  className="white-input"
+                                  placeholder="e.g., 12-3456789-0"
+                                />
+                              </div>
+                              <div className="input-group">
+                                <label>Est. Deduction Amount (₱)</label>
+                                <input
+                                  type="number"
+                                  name="philhealthDeduction"
+                                  value={addPatientData.philhealthDeduction || ''}
+                                  onChange={handleAddPatientChange}
+                                  className="white-input"
+                                  placeholder="0.00"
+                                  min="0"
+                                  step="0.01"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{marginBottom: '4px'}}>
+                          <label style={{fontWeight: 900, color: '#0f172a', display: 'block', marginBottom: '8px'}}>
+                            <ClipboardList size={15} style={{display: 'inline', verticalAlign: '-2px', marginRight: '6px'}} />
+                            Services Covered by HMO <span style={{color:'#64748b', fontWeight: 600, fontSize: '0.78rem'}}>(check all applicable)</span>
+                          </label>
+                          <div className="hmo-service-checklist">
+                            <button
+                              type="button"
+                              onClick={() => toggleHmoCoveredService('checkup')}
+                              className={`hmo-service-pill ${addPatientData.hmoCoveredServices.checkup ? 'checked' : ''}`}
+                            >
+                              {addPatientData.hmoCoveredServices.checkup ? <Check size={13} /> : <div className="pill-empty-box" />}
+                              <Stethoscope size={14} />
+                              <span>Check-up / Consult</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleHmoCoveredService('lab')}
+                              className={`hmo-service-pill ${addPatientData.hmoCoveredServices.lab ? 'checked' : ''}`}
+                            >
+                              {addPatientData.hmoCoveredServices.lab ? <Check size={13} /> : <div className="pill-empty-box" />}
+                              <FlaskConical size={14} />
+                              <span>Laboratory</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleHmoCoveredService('imaging')}
+                              className={`hmo-service-pill ${addPatientData.hmoCoveredServices.imaging ? 'checked' : ''}`}
+                            >
+                              {addPatientData.hmoCoveredServices.imaging ? <Check size={13} /> : <div className="pill-empty-box" />}
+                              <ClipboardList size={14} />
+                              <span>Imaging / ECG</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleHmoCoveredService('pharmacy')}
+                              className={`hmo-service-pill ${addPatientData.hmoCoveredServices.pharmacy ? 'checked' : ''}`}
+                            >
+                              {addPatientData.hmoCoveredServices.pharmacy ? <Check size={13} /> : <div className="pill-empty-box" />}
+                              <Pill size={14} />
+                              <span>Pharmacy</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleHmoCoveredService('admission_eval')}
+                              className={`hmo-service-pill ${addPatientData.hmoCoveredServices.admission_eval ? 'checked' : ''}`}
+                            >
+                              {addPatientData.hmoCoveredServices.admission_eval ? <Check size={13} /> : <div className="pill-empty-box" />}
+                              <BedDouble size={14} />
+                              <span>Admission Eval</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="walkin-toggle-row" style={{display: 'flex', gap: '10px', marginBottom: '18px'}}>
                     <button
                       type="button"
@@ -10422,6 +10634,46 @@ function NurseDashboard() {
                           <div style={{ marginTop: 8, padding: 8, background: '#eff6ff', borderRadius: 8, border: '1px solid #dbeafe' }}>
                             <div style={{ color: '#1e40af', fontSize: 12, fontWeight: 900 }}>SELECTED IMAGING / ECG</div>
                             <div style={{ color: '#2563eb', fontSize: 13 }}>{(addPatientData.selectedImagingServices || []).join(', ')}</div>
+                          </div>
+                        )}
+
+                        {(addPatientData.hasHmo || addPatientData.hasPhilhealth) && (
+                          <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 12, border: '1px solid #c7d2fe', background: '#eef2ff' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#3730a3', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>
+                              <Shield size={14} /> HMO / PhilHealth Coverage
+                            </div>
+                            {addPatientData.hasHmo && addPatientData.hmoProvider && (
+                              <div style={{ fontSize: 13, color: '#312e81', lineHeight: 1.7 }}>
+                                <span style={{ color: '#6366f1', fontWeight: 800 }}>Provider:</span> {addPatientData.hmoProvider}
+                                {addPatientData.hmoLoaNumber && (
+                                  <> · <span style={{ color: '#6366f1', fontWeight: 800 }}>LOA:</span> {addPatientData.hmoLoaNumber}</>
+                                )}
+                              </div>
+                            )}
+                            {addPatientData.hasPhilhealth && (
+                              <div style={{ fontSize: 13, color: '#312e81', lineHeight: 1.7 }}>
+                                <span style={{ color: '#6366f1', fontWeight: 800 }}>PhilHealth:</span>{' '}
+                                {addPatientData.philhealthNumber || 'Member'}
+                                {addPatientData.philhealthDeduction ? (
+                                  <> · <span style={{ color: '#6366f1', fontWeight: 800 }}>Deduct:</span> ₱ {toMoney(addPatientData.philhealthDeduction)}</>
+                                ) : null}
+                              </div>
+                            )}
+                            {(() => {
+                              const svc = addPatientData.hmoCoveredServices || {};
+                              const labels = [];
+                              if (svc.checkup) labels.push('☑ Check-up');
+                              if (svc.lab) labels.push('☑ Lab');
+                              if (svc.imaging) labels.push('☑ Imaging');
+                              if (svc.pharmacy) labels.push('☑ Pharmacy');
+                              if (svc.admission_eval) labels.push('☑ Admission');
+                              if (labels.length === 0) labels.push('None selected');
+                              return (
+                                <div style={{ marginTop: 6, fontSize: 12, color: '#4338ca', fontWeight: 800 }}>
+                                  Covered: {labels.join(' · ')}
+                                </div>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>
