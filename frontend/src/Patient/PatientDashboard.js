@@ -1314,30 +1314,58 @@ function PatientDashboard() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(15, 23, 42, 0.45)',
+            background: 'rgba(15, 23, 42, 0.55)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: 16,
+            padding: 'clamp(6px, 1vh, 14px)',
             zIndex: 60
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: 'min(1100px, 96vw)',
-              height: 'min(720px, 92vh)',
+              width: 'min(1780px, 98vw)',
+              height: '98vh',
+              maxHeight: '98vh',
               background: '#fff',
               borderRadius: 14,
               border: '1px solid #e2e8f0',
               display: 'flex',
               flexDirection: 'column',
-              padding: 12
+              padding: 'clamp(8px, 1vh, 12px)'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <div style={{ fontWeight: 1000, color: '#0f172a' }}>{videoMeetingTitle || 'Video Consultation'}</div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const wrap = document.getElementById('patient-video-wrapper');
+                    if (wrap && wrap.requestFullscreen) wrap.requestFullscreen().catch(() => {});
+                  }}
+                  style={{
+                    background: '#ecfeff',
+                    color: '#155e75',
+                    border: '1px solid rgba(21,94,117,0.18)',
+                    borderRadius: 10,
+                    padding: '6px 10px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 700
+                  }}
+                  title="Enter Fullscreen (FHD video view)"
+                >
+                  <span aria-hidden style={{ display: 'inline-block', width: 12, height: 12, verticalAlign: '-2px', marginRight: 4, stroke: '#155e75', fill: 'none', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ display: 'block' }}>
+                      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+                      <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+                      <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+                    </svg>
+                  </span>Fullscreen
+                </button>
                 <button
                   type="button"
                   onClick={() => window.open(videoMeetingUrl, '_blank')}
@@ -1346,7 +1374,7 @@ function PatientDashboard() {
                     color: '#0369a1',
                     border: '1px solid rgba(3,105,161,0.2)',
                     borderRadius: 10,
-                    padding: '6px 12px',
+                    padding: '6px 10px',
                     cursor: 'pointer',
                     fontSize: '12px',
                     fontWeight: 700
@@ -1363,11 +1391,10 @@ function PatientDashboard() {
                     color: '#dc2626',
                     border: '1px solid rgba(220,38,38,0.2)',
                     borderRadius: 10,
-                    padding: '6px 12px',
+                    padding: '6px 10px',
                     cursor: 'pointer',
                     fontSize: '12px',
-                    fontWeight: 700,
-                    marginLeft: '8px'
+                    fontWeight: 700
                   }}
                   title="Test Camera/Mic Hardware"
                 >
@@ -1393,10 +1420,11 @@ function PatientDashboard() {
                 Close
               </button>
             </div>
-            <div style={{ flex: 1, marginTop: 12, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+            <div id="patient-video-wrapper" style={{ flex: 1, marginTop: 8, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', minHeight: 0 }}>
               <iframe
                 title="Video Consultation"
                 src={videoMeetingUrl}
+                allowFullScreen
                 style={{ width: '100%', height: '100%', border: 0 }}
                 allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write; encrypted-media; speaker-selection; picture-in-picture; geolocation; midi; gyroscope; accelerometer; magnetometer"
               />

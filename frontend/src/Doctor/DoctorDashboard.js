@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronLeft, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronLeft, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff, Maximize2 } from 'lucide-react';
 import './DoctorDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
@@ -4938,6 +4938,7 @@ function DoctorDashboard() {
         {videoModalOpen && (
           <div
             className="doc-modal-overlay"
+            style={{ padding: 'clamp(6px, 1vh, 14px)' }}
             onClick={() => {
               setVideoModalOpen(false);
               setVideoMeetingUrl('');
@@ -4947,17 +4948,29 @@ function DoctorDashboard() {
             <div
               className="doc-modal-card"
               onClick={(e) => e.stopPropagation()}
-              style={{ width: 'min(1100px, 96vw)', height: 'min(720px, 92vh)', display: 'flex', flexDirection: 'column' }}
+              style={{ width: 'min(1780px, 98vw)', height: '98vh', maxHeight: '98vh', display: 'flex', flexDirection: 'column' }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <div className="doc-modal-title" style={{ margin: 0 }}>
                     {videoMeetingTitle || 'Video Consultation'}
                   </div>
                   <button
                     type="button"
                     className="doc-icon-btn"
-                    style={{ background: '#e0f2fe', color: '#0369a1', borderColor: 'rgba(3,105,161,0.2)', padding: '6px 12px', fontSize: '12px', fontWeight: 700 }}
+                    style={{ background: '#ecfeff', color: '#155e75', borderColor: 'rgba(21,94,117,0.18)', padding: '6px 10px', fontSize: '12px', fontWeight: 700 }}
+                    onClick={() => {
+                      const wrap = document.getElementById('doctor-video-wrapper');
+                      if (wrap && wrap.requestFullscreen) wrap.requestFullscreen().catch(() => {});
+                    }}
+                    title="Enter Fullscreen (FHD video view)"
+                  >
+                    <Maximize2 size={14} style={{ display: 'inline-block', verticalAlign: '-2px', marginRight: 4 }} /> Fullscreen
+                  </button>
+                  <button
+                    type="button"
+                    className="doc-icon-btn"
+                    style={{ background: '#e0f2fe', color: '#0369a1', borderColor: 'rgba(3,105,161,0.2)', padding: '6px 10px', fontSize: '12px', fontWeight: 700 }}
                     onClick={() => window.open(videoMeetingUrl, '_blank')}
                     title="Troubleshooting: Open in new tab"
                   >
@@ -4966,7 +4979,7 @@ function DoctorDashboard() {
                   <button
                     type="button"
                     className="doc-icon-btn"
-                    style={{ background: '#fef2f2', color: '#dc2626', borderColor: 'rgba(220,38,38,0.2)', padding: '6px 12px', fontSize: '12px', fontWeight: 700 }}
+                    style={{ background: '#fef2f2', color: '#dc2626', borderColor: 'rgba(220,38,38,0.2)', padding: '6px 10px', fontSize: '12px', fontWeight: 700 }}
                     onClick={() => window.open('https://test.webrtc.org/', '_blank')}
                     title="Test Camera/Mic Hardware"
                   >
@@ -4986,10 +4999,11 @@ function DoctorDashboard() {
                   <X size={16} />
                 </button>
               </div>
-              <div style={{ flex: 1, marginTop: 12, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+              <div id="doctor-video-wrapper" style={{ flex: 1, marginTop: 8, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', minHeight: 0 }}>
                 <iframe
                   title="Video Consultation"
                   src={videoMeetingUrl}
+                  allowFullScreen
                   style={{ width: '100%', height: '100%', border: 0 }}
                   allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write; encrypted-media; speaker-selection; picture-in-picture; geolocation; midi; gyroscope; accelerometer; magnetometer"
                 />
