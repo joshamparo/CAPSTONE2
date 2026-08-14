@@ -7,6 +7,7 @@ import { ncrCalabarzonCities, SPECIALIZATION_OPTIONS } from '../utils/constants'
 import { supabase } from '../lib/supabaseClient';
 import { API_BASE, checkBackendHealth, fetchJson } from '../utils/api';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
+import AccountHeaderActions from '../components/AccountHeaderActions';
 import ConfirmModal from '../components/ConfirmModal';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
 
@@ -5830,59 +5831,17 @@ function NurseDashboard() {
 	                
 	                <div className="header-separator"></div>
 
-                <div 
-                    className="header-profile-wrapper" 
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setShowProfileMenu(!showProfileMenu);
-                    }}
-                >
-                    <div className="header-profile-info">
-                        <span className="header-profile-name">{user.name}</span>
-                        <span className="header-profile-role">{user.roleLabel || 'Nurse'}</span>
-                    </div>
-                    <div className="header-avatar-circle">
-                        <User size={20} className="text-slate-600" />
-                    </div>
-                    <ChevronDown size={14} className="text-slate-400" />
-                    
-                    {showProfileMenu && (
-                        <div className="profile-dropdown-menu" onClick={(e) => e.stopPropagation()}>
-                            <div className="profile-dropdown-header">
-                                <div className="dropdown-user-info">
-                                    <div className="dropdown-avatar">{user.name.charAt(0)}</div>
-                                    <div>
-                                        <p className="dropdown-name">{user.name}</p>
-                                        <p className="dropdown-role">{user.roleLabel || 'Nurse'}</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="profile-dropdown-body">
-                                <div className="profile-menu-item" style={{ cursor: 'default', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <LayoutDashboard size={18} />
-                                    <span style={{ flex: 1 }}>Department</span>
-                                    <select className="white-input" value={activeDept} disabled style={{ width: '140px', padding: '6px 10px' }}>
-                                        <option value={activeDept}>{activeDept}</option>
-                                    </select>
-                                </div>
-                                <button className="profile-menu-item" onClick={() => {
-                                    setShowProfileMenu(false);
-                                    setView('profile');
-                                }}>
-                                    <User size={18} />
-                                    <span>My Profile</span>
-                                </button>
-                                <button className="profile-menu-item logout" onClick={() => {
-                                    setShowProfileMenu(false);
-                                    setShowLogoutConfirm(true);
-                                }}>
-                                    <LogOut size={18} />
-                                    <span>Sign Out</span>
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
+                <AccountHeaderActions
+                  user={user}
+                  roleLabel={user.roleLabel || 'Nurse'}
+                  showDepartment={true}
+                  departmentValue={activeDept}
+                  departmentOptions={[{ value: activeDept, label: activeDept }]}
+                  onDepartmentChange={setActiveDept}
+                  onMyProfile={() => setView('profile')}
+                  showChangePasswordMenu={false}
+                  onSignOut={() => setShowLogoutConfirm(true)}
+                />
             </div>
         </header>
         <section className="nurse-content-body">

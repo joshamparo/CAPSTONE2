@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, ChevronDown, LayoutDashboard, LogOut, Settings, User } from 'lucide-react';
+import { Bell, ChevronDown, LayoutGrid, LogOut, Settings, User } from 'lucide-react';
 import ChangePasswordModal from './ChangePasswordModal';
 import SignOutConfirmModal from './SignOutConfirmModal';
 import './AccountHeaderActions.css';
@@ -720,7 +720,7 @@ export default function AccountHeaderActions({
               <div className="aha-profile-body">
                 {showDepartment ? (
                   <div className="aha-menu-item static">
-                    <LayoutDashboard size={18} />
+                    <LayoutGrid size={18} />
                     <span className="aha-menu-label">Department</span>
                     <select
                       className="aha-select"
