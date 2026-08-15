@@ -1,16 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "create-react-app",
-  "installCommand": "npm install --no-audit --no-fund --loglevel=error",
-  "buildCommand": "npm run build",
+  "framework": "static",
+  "buildCommand": false,
+  "installCommand": "echo skip",
   "outputDirectory": "build",
-  "build": {
-    "env": {
-      "CI": "false",
-      "DISABLE_ESLINT_PLUGIN": "true",
-      "GENERATE_SOURCEMAP": "false"
-    }
-  },
   "regions": ["sgn1"],
   "cleanUrls": true,
   "trailingSlash": false,

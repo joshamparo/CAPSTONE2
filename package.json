@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "start": "node capstone-backend/server.js",
-    "build": "cd capstone-backend && npm install && npx prisma generate",
-    "postinstall": "cd capstone-backend && npm install && npx prisma generate"
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd capstone-backend && npm install --no-audit --no-fund && npx prisma generate",
+    "build:frontend": "cd frontend && npm install --no-audit --no-fund && CI=false DISABLE_ESLINT_PLUGIN=true GENERATE_SOURCEMAP=false npm run build",
+    "build:frontend:only": "cd frontend && CI=false DISABLE_ESLINT_PLUGIN=true GENERATE_SOURCEMAP=false npm run build"
   },
   "engines": {
     "node": ">=18.0.0"
