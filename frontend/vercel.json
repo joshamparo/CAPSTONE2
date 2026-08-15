@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "create-react-app",
-  "buildCommand": null,
-  "installCommand": null,
+  "buildCommand": "echo skip",
+  "installCommand": "echo skip",
   "outputDirectory": "build",
   "regions": ["sgn1"],
   "cleanUrls": true,
