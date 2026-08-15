@@ -39,16 +39,33 @@ function DoctorDashboard() {
   const [profileForm, setProfileForm] = useState({
     firstName: '',
     lastName: '',
+    middleName: '',
     specialization: '',
+    department: '',
     email: '',
     contactNumber: '',
+    phone: '',
     profilePicture: '',
+    currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
   const [profilePreview, setProfilePreview] = useState(null);
+  const [showDoctorCurrentPassword, setShowDoctorCurrentPassword] = useState(false);
+  const [showDoctorNewPassword, setShowDoctorNewPassword] = useState(false);
+  const [showDoctorConfirmPassword, setShowDoctorConfirmPassword] = useState(false);
+  const [profileErrors, setProfileErrors] = useState({});
+  const doctorPasswordCriteria = useMemo(() => {
+    const pw = String(profileForm.newPassword || '');
+    return {
+      length: pw.length >= 11,
+      hasSpecial: /[^A-Za-z0-9]/.test(pw),
+      hasNumber: /[0-9]/.test(pw),
+    };
+  }, [profileForm.newPassword]);
+  const [doctorProfileFormNotice, setDoctorProfileFormNotice] = useState('');
 
   const [selectedDate, setSelectedDate] = useState(new Date());  
   const [patients, setPatients] = useState([]);
@@ -2085,10 +2102,14 @@ function DoctorDashboard() {
     setProfileForm({
       firstName: parsed.firstName || parsed.first_name || '',
       lastName: parsed.lastName || parsed.last_name || '',
+      middleName: parsed.middleName || parsed.middle_name || '',
       specialization: parsed.specialization || '',
+      department: parsed.department || parsed.dept || parsed.specialization || '',
       email: parsed.email || '',
-      contactNumber: parsed.contactNumber || parsed.contact_number || '',
-      profilePicture: parsed.profilePicture || parsed.profile_picture || parsed.avatar_url || '',
+      contactNumber: parsed.contactNumber || parsed.contact_number || parsed.phone || '',
+      phone: parsed.phone || parsed.contactNumber || parsed.contact_number || '',
+      profilePicture: parsed.profilePicture || parsed.profile_picture || parsed.avatar_url || parsed.avatarUrl || '',
+      currentPassword: '',
       newPassword: '',
       confirmPassword: ''
     });
@@ -2174,15 +2195,58 @@ function DoctorDashboard() {
   }, [patientQuery, patients]);
 
   const saveProfile = async () => {
-    if (profileForm.newPassword || profileForm.confirmPassword) {
-      if (profileForm.newPassword !== profileForm.confirmPassword) {
-        setToast({ type: 'error', message: 'Passwords do not match.' });
-        return;
+    setProfileErrors({});
+    setDoctorProfileFormNotice('');
+
+    const fName = String(profileForm.firstName || '').trim();
+    const lName = String(profileForm.lastName || '').trim();
+    const mName = String(profileForm.middleName || '').trim();
+    const emailRaw = String(profileForm.email || '').trim();
+    const phoneRaw = String(profileForm.phone || profileForm.contactNumber || '').trim();
+    const deptRaw = String(profileForm.department || profileForm.specialization || '').trim();
+
+    const errors = {};
+    const nameRegex = /^[A-Za-zÑñ][A-Za-zÑñ' .\-]*$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    const phoneRegex = /^(\+?63\s?|0)9\d{9}$/;
+
+    if (fName.length < 2) errors.firstName = "First Name must be at least 2 characters.";
+    else if (!nameRegex.test(fName)) errors.firstName = "First Name contains invalid characters.";
+
+    if (lName.length < 2) errors.lastName = "Last Name must be at least 2 characters.";
+    else if (!nameRegex.test(lName)) errors.lastName = "Last Name contains invalid characters.";
+
+    if (mName && !nameRegex.test(mName)) errors.middleName = "Middle Name contains invalid characters.";
+
+    if (!emailRaw) errors.email = "Email is required.";
+    else if (!emailRegex.test(emailRaw)) errors.email = "Invalid email address format.";
+
+    if (phoneRaw && !phoneRegex.test(String(phoneRaw).replace(/[\s\-()]/g, ''))) {
+      errors.phone = "Invalid PH phone. Use: 09XX XXX XXXX or +63 9XX XXX XXXX.";
+    }
+
+    if (deptRaw && deptRaw.replace(/\s+/g, '').length < 2) errors.department = "Department / Specialization is too short.";
+
+    const { currentPassword, newPassword, confirmPassword } = profileForm;
+    const isChangingPassword = Boolean(currentPassword || newPassword || confirmPassword);
+
+    if (isChangingPassword) {
+      if (!currentPassword) errors.currentPassword = "Current password is required to save profile changes.";
+      const pwClean = String(newPassword || '');
+      if (pwClean || confirmPassword) {
+        if (pwClean.length < 11) errors.newPassword = "Password must be at least 11 characters.";
+        if (!/[^A-Za-z0-9]/.test(pwClean)) errors.newPassword = errors.newPassword || "Password must contain at least one special character.";
+        if (!/[0-9]/.test(pwClean)) errors.newPassword = errors.newPassword || "Password must contain at least one number.";
+        if (pwClean !== String(confirmPassword || '')) errors.confirmPassword = "Passwords do not match.";
       }
-      if (profileForm.newPassword.length < 6) {
-        setToast({ type: 'error', message: 'Password must be at least 6 characters.' });
-        return;
-      }
+    } else if (!currentPassword) {
+      errors.currentPassword = "Current password is required to save profile changes.";
+    }
+
+    setProfileErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setDoctorProfileFormNotice("Please correct the highlighted errors above.");
+      return;
     }
 
     setSavingProfile(true);
@@ -2192,7 +2256,8 @@ function DoctorDashboard() {
       if (profileImage) {
         const formData = new FormData();
         formData.append('avatar', profileImage);
-        formData.append('id', currentUser.id);
+        formData.append('id', currentUser.id || currentUser._id);
+        formData.append('userId', String(currentUser.id || currentUser._id));
         formData.append('accountType', 'doctor');
 
         const uploadData = await fetchJson(`/api/staff/avatar`, {
@@ -2207,29 +2272,55 @@ function DoctorDashboard() {
 
       const payload = {
         ...profileForm,
+        firstName: fName,
+        lastName: lName,
+        middleName: mName,
+        email: emailRaw,
+        contactNumber: phoneRaw,
+        phone: phoneRaw,
+        department: deptRaw,
+        specialization: deptRaw,
         profilePicture: profilePictureUrl,
-        id: currentUser.id
+        id: currentUser.id || currentUser._id,
+        requiresPasswordAuth: true
       };
 
-      await fetchJson(`/api/doctor/profile/update`, {
+      const res = await fetchJson(`/api/doctor/profile/update`, {
         apiBase: API_BASE,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(payload)
       });
 
-      const updatedUser = { ...currentUser, ...payload };
+      const updatedUser = { ...currentUser, ...payload, avatar_url: profilePictureUrl, avatarUrl: profilePictureUrl };
       delete updatedUser.newPassword;
       delete updatedUser.confirmPassword;
+      delete updatedUser.currentPassword;
       setCurrentUser(updatedUser);
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-      setToast({ type: 'success', message: 'Profile updated successfully.' });
+      setToast({ type: 'success', message: res?.message || 'Profile updated successfully.' });
       setProfileImage(null);
       setProfilePreview(null);
-      setProfileForm(prev => ({ ...prev, newPassword: '', confirmPassword: '' }));
+      setProfileForm(prev => ({
+        ...prev,
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+        firstName: fName,
+        lastName: lName,
+        middleName: mName,
+        email: emailRaw,
+        phone: phoneRaw,
+        contactNumber: phoneRaw,
+        department: deptRaw,
+        specialization: deptRaw,
+        profilePicture: profilePictureUrl || prev.profilePicture
+      }));
+      setDoctorProfileFormNotice('');
     } catch (err) {
       console.error(err);
-      setToast({ type: 'error', message: 'An error occurred while saving profile.' });
+      setDoctorProfileFormNotice(String(err?.message || 'An error occurred while saving profile.'));
+      setToast({ type: 'error', message: String(err?.message || 'An error occurred while saving profile.') });
     } finally {
       setSavingProfile(false);
     }
@@ -3790,113 +3881,251 @@ function DoctorDashboard() {
   );
 
   const doctorProfileView = (
-    <div className="doc-profile-module">
-      <div className="doc-module-header">
-        <div className="doc-module-title">
-          <User size={24} />
-          <h2>My Profile</h2>
+    <div className="admin-profile-container" style={{ paddingBottom: 60 }}>
+      <div className="admin-profile-header-card">
+        <div className="profile-image-section">
+          <div className="large-avatar-circle">
+            {profilePreview || profileForm.profilePicture ? (
+              <img src={profilePreview || profileForm.profilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <User size={64} color="#cbd5e1" />
+            )}
+          </div>
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleImageChange}
+            id="doctor-avatar-file-input"
+          />
+          <button
+            type="button"
+            className="btn-neutral-sm shadow-btn"
+            onClick={() => { const d = document.getElementById('doctor-avatar-file-input'); if (d) d.click(); }}
+          >
+            Update Avatar
+          </button>
+        </div>
+        <div className="profile-info-section">
+          <h1>Dr. {`${String(profileForm.firstName || '').trim()} ${String(profileForm.lastName || '').trim()}`.trim() || 'Doctor Profile'}</h1>
+          <p className="admin-role-badge">{profileForm.department || profileForm.specialization || 'Physician'}</p>
         </div>
       </div>
-      <div className="doc-module-content profile-centered">
-        <div className="doc-profile-container-simple">
-          <div className="doc-profile-header-new">
-            <div className="doc-profile-avatar-section">
-              <div className="doc-avatar-upload">
-                {profilePreview || profileForm.profilePicture ? (
-                  <img src={profilePreview || profileForm.profilePicture} alt="Profile" className="doc-avatar-large" />
-                ) : (
-                  <div className="doc-avatar-large placeholder">
-                    {profileForm.firstName?.[0]}{profileForm.lastName?.[0]}
-                  </div>
-                )}
-                <label className="doc-avatar-edit-btn">
-                  <Upload size={16} />
-                  <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
-                </label>
-              </div>
-            </div>
-            <div className="doc-profile-main-info">
-              <h3>Dr. {profileForm.firstName} {profileForm.lastName}</h3>
-              <p className="specialization-text">{profileForm.specialization || 'ER'}</p>
-              <div className="doc-profile-stats-mini">
-                <div className="doc-stat-mini">
-                  <span className="doc-stat-label">Member since</span>
-                  <span className="doc-stat-value">2024</span>
-                </div>
-                <div className="doc-stat-mini">
-                  <span className="doc-stat-label">Status</span>
-                  <span className="doc-stat-value active">Active</span>
-                </div>
-              </div>
-            </div>
-          </div>
 
-          <div className="doc-profile-form-simple">
-            <div className="doc-profile-grid-compact">
-              <div className="doc-form-group">
+      <div className="admin-profile-form" onSubmit={(e) => { e.preventDefault(); saveProfile(); }} style={{ display: 'block' }}>
+        <div className="profile-form-grid">
+          <div className="profile-column">
+            <div className="profile-card">
+              <h3 className="column-title">
+                <User size={20} color="#475569" />
+                Personal Information
+              </h3>
+
+              <div className="profile-input-group">
                 <label>First Name</label>
-                <input 
-                  className="doc-input" 
-                  value={profileForm.firstName} 
-                  onChange={(e) => setProfileForm(v => ({ ...v, firstName: e.target.value }))} 
-                />
+                <div className="input-wrapper-relative">
+                  <User size={18} className="absolute-icon-left text-slate-400" />
+                  <input
+                    type="text"
+                    value={profileForm.firstName}
+                    onChange={(e) => setProfileForm((v) => ({ ...v, firstName: e.target.value }))}
+                    onInput={() => { if (profileErrors.firstName) setProfileErrors((p) => ({ ...p, firstName: null })); }}
+                    className={`profile-input input-with-icon-padding ${profileErrors.firstName ? 'input-error-border' : ''}`}
+                    placeholder="e.g. Juan"
+                  />
+                </div>
+                {profileErrors.firstName && <p className="field-notice-error">{profileErrors.firstName}</p>}
               </div>
-              <div className="doc-form-group">
+
+              <div className="profile-input-group">
+                <label>Middle Name</label>
+                <div className="input-wrapper-relative">
+                  <User size={18} className="absolute-icon-left text-slate-400" />
+                  <input
+                    type="text"
+                    value={profileForm.middleName}
+                    onChange={(e) => setProfileForm((v) => ({ ...v, middleName: e.target.value }))}
+                    onInput={() => { if (profileErrors.middleName) setProfileErrors((p) => ({ ...p, middleName: null })); }}
+                    className={`profile-input input-with-icon-padding ${profileErrors.middleName ? 'input-error-border' : ''}`}
+                    placeholder="e.g. Dela Cruz"
+                  />
+                </div>
+                {profileErrors.middleName && <p className="field-notice-error">{profileErrors.middleName}</p>}
+              </div>
+
+              <div className="profile-input-group">
                 <label>Last Name</label>
-                <input 
-                  className="doc-input" 
-                  value={profileForm.lastName} 
-                  onChange={(e) => setProfileForm(v => ({ ...v, lastName: e.target.value }))} 
-                />
+                <div className="input-wrapper-relative">
+                  <User size={18} className="absolute-icon-left text-slate-400" />
+                  <input
+                    type="text"
+                    value={profileForm.lastName}
+                    onChange={(e) => setProfileForm((v) => ({ ...v, lastName: e.target.value }))}
+                    onInput={() => { if (profileErrors.lastName) setProfileErrors((p) => ({ ...p, lastName: null })); }}
+                    className={`profile-input input-with-icon-padding ${profileErrors.lastName ? 'input-error-border' : ''}`}
+                    placeholder="e.g. Reyes"
+                  />
+                </div>
+                {profileErrors.lastName && <p className="field-notice-error">{profileErrors.lastName}</p>}
               </div>
-              <div className="doc-form-group">
-                <label>Specialization</label>
-                <input 
-                  className="doc-input read-only" 
-                  value={profileForm.specialization || 'ER'} 
-                  readOnly
-                />
-              </div>
-              <div className="doc-form-group">
+              
+              <div className="profile-input-group">
                 <label>Email Address</label>
-                <input 
-                  className="doc-input read-only" 
-                  value={profileForm.email} 
-                  readOnly
-                />
+                <div className="input-wrapper-relative">
+                  <Mail size={18} className="absolute-icon-left text-slate-400" />
+                  <input 
+                    type="email" 
+                    value={profileForm.email}
+                    onChange={(e) => setProfileForm((v) => ({ ...v, email: e.target.value }))}
+                    onInput={() => { if (profileErrors.email) setProfileErrors((p) => ({ ...p, email: null })); }}
+                    className={`profile-input input-with-icon-padding ${profileErrors.email ? 'input-error-border' : ''}`}
+                    placeholder="doctor@hospital.com"
+                  />
+                </div>
+                {profileErrors.email && <p className="field-notice-error">{profileErrors.email}</p>}
               </div>
-              <div className="doc-form-group">
-                <label>New Password</label>
-                <input 
-                  type="password"
-                  className="doc-input" 
-                  placeholder="Leave blank to keep current"
-                  value={profileForm.newPassword} 
-                  onChange={(e) => setProfileForm(v => ({ ...v, newPassword: e.target.value }))} 
-                />
+
+              <div className="profile-input-group">
+                <label>Department / Specialization</label>
+                <div className="input-wrapper-relative">
+                  <Briefcase size={18} className="absolute-icon-left text-slate-400" />
+                  <input 
+                    type="text" 
+                    value={profileForm.department || profileForm.specialization || ''}
+                    onChange={(e) => setProfileForm((v) => ({ ...v, department: e.target.value, specialization: e.target.value }))}
+                    onInput={() => { if (profileErrors.department) setProfileErrors((p) => ({ ...p, department: null })); }}
+                    className={`profile-input input-with-icon-padding ${profileErrors.department ? 'input-error-border' : ''}`}
+                    placeholder="e.g. Pediatrics, Internal Medicine, ER"
+                  />
+                </div>
+                {profileErrors.department && <p className="field-notice-error">{profileErrors.department}</p>}
               </div>
-              <div className="doc-form-group">
-                <label>Re-type New Password</label>
-                <input 
-                  type="password"
-                  className="doc-input" 
-                  placeholder="Confirm new password"
-                  value={profileForm.confirmPassword} 
-                  onChange={(e) => setProfileForm(v => ({ ...v, confirmPassword: e.target.value }))} 
-                />
+
+              <div className="profile-input-group">
+                <label>Phone Number</label>
+                <div className="input-wrapper-relative">
+                  <Phone size={18} className="absolute-icon-left text-slate-400" />
+                  <input 
+                    type="tel" 
+                    value={profileForm.phone || profileForm.contactNumber || ''}
+                    onChange={(e) => setProfileForm((v) => ({ ...v, phone: e.target.value, contactNumber: e.target.value }))}
+                    onInput={() => { if (profileErrors.phone) setProfileErrors((p) => ({ ...p, phone: null })); }}
+                    className={`profile-input input-with-icon-padding ${profileErrors.phone ? 'input-error-border' : ''}`}
+                    placeholder="+63 900 000 0000"
+                  />
+                </div>
+                {profileErrors.phone && <p className="field-notice-error">{profileErrors.phone}</p>}
               </div>
             </div>
           </div>
 
-          <div className="doc-profile-actions-simple">
-            <button 
-              className="doc-primary doc-save-profile-btn" 
-              onClick={saveProfile} 
-              disabled={savingProfile}
-            >
-              {savingProfile ? 'Saving...' : 'Save Changes'}
-            </button>
+          <div className="profile-column">
+            <div className="profile-card">
+              <h3 className="column-title">
+                <Shield size={20} color="#475569" />
+                Security & Password
+              </h3>
+              
+              <div className="profile-input-group">
+                <label>Current Password</label>
+                <div className="input-wrapper-relative">
+                  <Key size={18} className="absolute-icon-left text-slate-400" />
+                  <input 
+                    type={showDoctorCurrentPassword ? "text" : "password"}
+                    value={profileForm.currentPassword}
+                    onChange={(e) => setProfileForm((v) => ({ ...v, currentPassword: e.target.value }))}
+                    onInput={() => { if (profileErrors.currentPassword) setProfileErrors((p) => ({ ...p, currentPassword: null })); }}
+                    className={`profile-input input-with-icon-padding ${profileErrors.currentPassword ? 'input-error-border' : ''}`}
+                    placeholder="Enter current password to save changes"
+                  />
+                  <button 
+                    type="button"
+                    className="toggle-password-btn"
+                    onClick={() => setShowDoctorCurrentPassword(!showDoctorCurrentPassword)}
+                  >
+                    {showDoctorCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+                {profileErrors.currentPassword && <p className="field-notice-error">{profileErrors.currentPassword}</p>}
+              </div>
+
+              <div className="profile-input-group">
+                <label>New Password</label>
+                <div className="input-wrapper-relative">
+                  <Key size={18} className="absolute-icon-left text-slate-400" />
+                  <input 
+                    type={showDoctorNewPassword ? "text" : "password"}
+                    value={profileForm.newPassword}
+                    onChange={(e) => setProfileForm((v) => ({ ...v, newPassword: e.target.value }))}
+                    onInput={() => { if (profileErrors.newPassword) setProfileErrors((p) => ({ ...p, newPassword: null })); }}
+                    className={`profile-input input-with-icon-padding ${profileErrors.newPassword ? 'input-error-border' : ''}`}
+                    placeholder="Leave blank to keep current"
+                  />
+                  <button 
+                    type="button"
+                    className="toggle-password-btn"
+                    onClick={() => setShowDoctorNewPassword(!showDoctorNewPassword)}
+                  >
+                    {showDoctorNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+                
+                <div className="password-checklist">
+                  <div className={`checklist-item ${doctorPasswordCriteria.length ? 'valid' : ''}`}>
+                    {doctorPasswordCriteria.length ? <Check size={14} /> : <X size={14} />}
+                    <span>At least 11 characters</span>
+                  </div>
+                  <div className={`checklist-item ${doctorPasswordCriteria.hasSpecial ? 'valid' : ''}`}>
+                    {doctorPasswordCriteria.hasSpecial ? <Check size={14} /> : <X size={14} />}
+                    <span>Contains special characters</span>
+                  </div>
+                  <div className={`checklist-item ${doctorPasswordCriteria.hasNumber ? 'valid' : ''}`}>
+                    {doctorPasswordCriteria.hasNumber ? <Check size={14} /> : <X size={14} />}
+                    <span>Contains numbers</span>
+                  </div>
+                </div>
+                {profileErrors.newPassword && <p className="field-notice-error">{profileErrors.newPassword}</p>}
+              </div>
+
+              <div className="profile-input-group">
+                <label>Confirm New Password</label>
+                <div className="input-wrapper-relative">
+                  <Key size={18} className="absolute-icon-left text-slate-400" />
+                  <input 
+                    type={showDoctorConfirmPassword ? "text" : "password"}
+                    value={profileForm.confirmPassword}
+                    onChange={(e) => setProfileForm((v) => ({ ...v, confirmPassword: e.target.value }))}
+                    onInput={() => { if (profileErrors.confirmPassword) setProfileErrors((p) => ({ ...p, confirmPassword: null })); }}
+                    className={`profile-input input-with-icon-padding ${profileErrors.confirmPassword ? 'input-error-border' : ''}`}
+                    placeholder="Confirm new password"
+                  />
+                  <button 
+                    type="button"
+                    className="toggle-password-btn"
+                    onClick={() => setShowDoctorConfirmPassword(!showDoctorConfirmPassword)}
+                  >
+                    {showDoctorConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
+                {profileForm.confirmPassword && (
+                  <p className={`match-indicator ${profileForm.newPassword === profileForm.confirmPassword ? 'match-success' : 'match-error'}`}>
+                    {profileForm.newPassword === profileForm.confirmPassword ? 'Passwords match' : 'Passwords do not match'}
+                  </p>
+                )}
+                {profileErrors.confirmPassword && <p className="field-notice-error">{profileErrors.confirmPassword}</p>}
+              </div>
+            </div>
           </div>
+        </div>
+
+        <div className="form-actions-row">
+          {doctorProfileFormNotice && (
+            <p className="form-notice-error form-notice-error-text">{doctorProfileFormNotice}</p>
+          )}
+          <button type="submit" className="btn-neutral-large flex-center-gap-8" disabled={savingProfile} onClick={saveProfile}>
+            <Save size={18} />
+            {savingProfile ? 'Saving…' : 'Save Changes'}
+          </button>
         </div>
       </div>
     </div>

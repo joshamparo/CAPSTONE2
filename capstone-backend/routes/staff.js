@@ -2118,34 +2118,40 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         // ---- Backend update validation (required fields + email/phone format) ----
         const bodyErrors = [];
         const cleanStr = (v) => String(v || "").trim();
-        const isValidPHPhone = (v) => /^09\d{9}$/.test(cleanStr(v));
-        const isValidEmail = (v) => /^[A-Za-z][A-Za-z0-9._-]*@(gmail\.com|yahoo\.com)$/.test(cleanStr(v));
+        const isValidPHPhone = (v) => /^(\+?63\s?|0)9\d{9}$/.test(String(cleanStr(v)).replace(/[\s\-()]/g, ''));
+        const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanStr(v));
+        const isValidName = (v) => { const s = cleanStr(v); return !!s && /^[A-Za-zÑñ][A-Za-zÑñ' .\-]*$/.test(s); };
 
         const firstNameIn = req.body?.firstName ?? req.body?.first_name ?? (model === 'accounts' ? undefined : user?.first_name);
         const lastNameIn = req.body?.lastName ?? req.body?.last_name ?? (model === 'accounts' ? undefined : user?.last_name);
+        const middleNameIn = req.body?.middleName ?? req.body?.middle_name ?? (model === 'accounts' ? undefined : user?.middle_name);
         const phoneIn = req.body?.phone ?? user?.phone ?? user?.contact_number;
         const emailIn = req.body?.email ?? user?.email;
 
         const firstNameClean = cleanStr(firstNameIn);
         const lastNameClean = cleanStr(lastNameIn);
+        const middleNameClean = cleanStr(middleNameIn);
         const phoneClean = cleanStr(phoneIn);
         const emailClean = emailIn ? normalizeEmail(emailIn) : '';
 
         if (model !== 'accounts') {
             if (!firstNameClean || firstNameClean.length < 2) bodyErrors.push("First Name is required (at least 2 characters).");
+            else if (!isValidName(firstNameClean)) bodyErrors.push("First Name contains invalid characters.");
             if (!lastNameClean || lastNameClean.length < 2) bodyErrors.push("Last Name is required (at least 2 characters).");
+            else if (!isValidName(lastNameClean)) bodyErrors.push("Last Name contains invalid characters.");
+            if (middleNameClean && !isValidName(middleNameClean)) bodyErrors.push("Middle Name contains invalid characters.");
         }
         if (!emailClean) bodyErrors.push("Email is required.");
-        else if (!isValidEmail(emailClean)) bodyErrors.push("Email must start with a letter and end with @gmail.com or @yahoo.com.");
+        else if (!isValidEmail(emailClean)) bodyErrors.push("Invalid email address format.");
 
         if (model === 'accounts') {
             // accounts model: phone maps to contact_number BigInt string; required to be 11-digit PH 09xxxxxxxxx if provided
             if (phoneClean) {
-                if (!isValidPHPhone(phoneClean)) bodyErrors.push("Phone number must start with 09 and be 11 digits.");
+                if (!isValidPHPhone(phoneClean)) bodyErrors.push("Invalid PH phone number. Use format: 09XX XXX XXXX or +63 9XX XXX XXXX.");
             }
         } else {
             if (!phoneClean) bodyErrors.push("Phone number is required.");
-            else if (!isValidPHPhone(phoneClean)) bodyErrors.push("Phone number must start with 09 and be 11 digits.");
+            else if (!isValidPHPhone(phoneClean)) bodyErrors.push("Invalid PH phone number. Use format: 09XX XXX XXXX or +63 9XX XXX XXXX.");
         }
         if (req.body?.streetAddress !== undefined && cleanStr(req.body.streetAddress).length > 0 && cleanStr(req.body.streetAddress).length < 5) {
             bodyErrors.push("Street Address, if provided, must be at least 5 characters.");
@@ -2156,7 +2162,7 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         if (bodyErrors.length > 0) {
             return res.status(400).json({
                 message: bodyErrors.join(" | "),
-                field: bodyErrors.some((m) => m.includes("Email")) ? "email" : bodyErrors.some((m) => m.includes("Phone")) ? "phone" : undefined
+                field: bodyErrors.some((m) => m.includes("Email")) ? "email" : bodyErrors.some((m) => m.includes("Phone")) ? "phone" : bodyErrors.some((m) => m.includes("First")) ? "firstName" : bodyErrors.some((m) => m.includes("Last")) ? "lastName" : undefined
             });
         }
         // If email is being changed, enforce unique across ALL models (admin self-edit + admin → staff edit)
@@ -2175,6 +2181,8 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             }
         }
 
+        const updateWhere = model === 'accounts' ? { id: Number(req.params.id) } : { id: req.params.id };
+
         const hasPasswordUpdate = Boolean(req.body.password);
         const providedCurrentPassword = typeof req.body.currentPassword === 'string' ? req.body.currentPassword : '';
 
@@ -2182,14 +2190,33 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             return res.status(400).json({ message: "Cannot update password for this account type" });
         }
 
-        if (hasPasswordUpdate || (typeof req.body.requiresPasswordAuth !== 'undefined' && req.body.requiresPasswordAuth)) {
+        // Strict: ANY profile change OR password change OR explicit auth REQUIRES current password
+        const hasAnyDataChange = Object.keys(req.body || {}).some(k => !['id', '_id', 'requiresPasswordAuth', 'currentPassword'].includes(k));
+        const needsCurrentPassword = Boolean(hasPasswordUpdate || hasAnyDataChange || (typeof req.body.requiresPasswordAuth !== 'undefined' && req.body.requiresPasswordAuth) || providedCurrentPassword);
+
+        if (needsCurrentPassword) {
             if (!providedCurrentPassword) {
-                return res.status(400).json({ message: "Current password is required to change password" });
+                return res.status(400).json({ message: "Current password is required to save profile changes." });
             }
-            const bcrypt = require('bcrypt');
-            const isMatch = await bcrypt.compare(providedCurrentPassword, user.password);
-            if (!isMatch) {
-                return res.status(400).json({ message: "Incorrect current password" });
+            if (user?.password) {
+                const bcrypt = require('bcrypt');
+                let isMatch = false;
+                try {
+                    if (/^\$2[aby]\$/.test(String(user.password || ''))) {
+                        isMatch = await bcrypt.compare(providedCurrentPassword, String(user.password));
+                    } else {
+                        isMatch = String(providedCurrentPassword) === String(user.password);
+                        if (isMatch) {
+                            try {
+                                const salt = await bcrypt.genSalt(10);
+                                await prisma[model].update({ where: updateWhere, data: { password: await bcrypt.hash(String(user.password), salt) } });
+                            } catch (_ignore) { /* ignore */ }
+                        }
+                    }
+                } catch (_bcErr) { /* ignore */ }
+                if (!isMatch) {
+                    return res.status(400).json({ message: "Incorrect current password." });
+                }
             }
         }
         if (providedCurrentPassword) {
@@ -2202,9 +2229,13 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             const trimmedPassword = req.body.password.trim();
             req.body.password = trimmedPassword;
 
-            // Validate password length if needed
-            if (trimmedPassword.length < 6) {
-                 return res.status(400).json({ message: "New password must be at least 6 characters" });
+            const pwErrors = [];
+            // Validate password strength (11 chars, special char, number)
+            if (trimmedPassword.length < 11) pwErrors.push("11 characters");
+            if (!/[^A-Za-z0-9]/.test(trimmedPassword)) pwErrors.push("special character");
+            if (!/[0-9]/.test(trimmedPassword)) pwErrors.push("number");
+            if (pwErrors.length > 0) {
+                 return res.status(400).json({ message: `Password must contain at least: ${pwErrors.join(", ")}.` });
             }
             
             const salt = await bcrypt.genSalt(10);
@@ -2247,8 +2278,6 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             delete updateData.phone;
             delete updateData.department;
         }
-
-        const updateWhere = model === 'accounts' ? { id: Number(req.params.id) } : { id: req.params.id };
 
         const updatedUser = await prisma[model].update({
             where: updateWhere,
