@@ -1600,7 +1600,6 @@ function localAssistantReply({ role, message, pathname, preferredLanguage = 'eng
     };
   }
 
-  const normalized = normalizeQuestionText(text);
   const symptomHit = detectSymptomIntent(normalized);
   if (symptomHit) {
     const nextChips = symptomHit.level === 'RED'
