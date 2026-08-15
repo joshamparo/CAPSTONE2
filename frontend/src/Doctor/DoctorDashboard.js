@@ -398,8 +398,6 @@ function DoctorDashboard() {
   const [doctorChatBannerDismissed, setDoctorChatBannerDismissed] = useState(() => {
     try { return Number(localStorage.getItem('dc_phi_banner_closed') || 0) >= 3; } catch (_) { return false; }
   });
-  const [doctorChatAttachment, setDoctorChatAttachment] = useState(null);
-  const [doctorChatAttachmentUploading, setDoctorChatAttachmentUploading] = useState(false);
   const [doctorChatAttPreview, setDoctorChatAttPreview] = useState(null);
   const [doctorChatReplying, setDoctorChatReplying] = useState(null);
   const [doctorChatMentionOpen, setDoctorChatMentionOpen] = useState(false);
@@ -410,7 +408,6 @@ function DoctorDashboard() {
   const [doctorChatDeleteConfirm, setDoctorChatDeleteConfirm] = useState(null);
   const [doctorChatActiveTab, setDoctorChatActiveTab] = useState('all-hospital');
   const doctorChatScrollRef = useRef(null);
-  const doctorChatFileInputRef = useRef(null);
   const doctorChatComposeRef = useRef(null);
   const doctorChatLastSeenIdRef = useRef(null);
 
@@ -793,211 +790,8 @@ function DoctorDashboard() {
     { id: 'saan-na', label: '❓ Saan ka na?', text: 'Nasaan ka na? Need ka na dito.' }
   ];
 
-  const doctorChatFileAllowed = useMemo(() => {
-    return {
-      image: { accept: 'image/jpeg,image/png,image/gif,image/webp', max: 10 * 1024 * 1024, types: ['image/jpeg','image/png','image/gif','image/webp'] },
-      pdf: { accept: 'application/pdf', max: 10 * 1024 * 1024, types: ['application/pdf'] },
-      video: { accept: 'video/mp4,video/webm,video/quicktime,video/x-matroska', max: 50 * 1024 * 1024, types: ['video/mp4','video/webm','video/quicktime','video/x-matroska'] }
-    };
-  }, []);
-
-  const doctorChatAttachmentKind = (file) => {
-    if (!file) return null;
-    const type = String(file.type || '').toLowerCase();
-    const name = String(file.name || '').toLowerCase();
-    if (doctorChatFileAllowed.image.types.includes(type) || /\.(jpe?g|png|gif|webp)$/i.test(name)) return 'image';
-    if (doctorChatFileAllowed.pdf.types.includes(type) || name.endsWith('.pdf')) return 'pdf';
-    if (doctorChatFileAllowed.video.types.includes(type) || /\.(mp4|webm|mov|mkv|qt)$/i.test(name)) return 'video';
-    return null;
-  };
-
-  const doctorChatFileSizeOk = (file, kind) => {
-    if (!file || !kind) return { ok: false, msg: 'Unsupported file type.' };
-    const limit = doctorChatFileAllowed[kind]?.max || 0;
-    if (!file.size || file.size <= 0) return { ok: false, msg: 'Empty file.' };
-    if (file.size > limit) return { ok: false, msg: `File too large. Max ${Math.round(limit / 1024 / 1024)}MB.` };
-    return { ok: true };
-  };
-
-  const doctorChatOnPickFile = (ev) => {
-    const files = Array.from(ev?.target?.files || []);
-    if (!files.length) return;
-    const f = files[0];
-    const kind = doctorChatAttachmentKind(f);
-    if (!kind) { setToast({ type: 'error', message: 'Only images, PDFs, or videos allowed.' }); return; }
-    const sz = doctorChatFileSizeOk(f, kind);
-    if (!sz.ok) { setToast({ type: 'error', message: sz.msg }); return; }
-    setDoctorChatAttachment({ file: f, kind, name: f.name, size: f.size, type: f.type });
-  };
-
-  const doctorChatUploadAttachment = async () => {
-    if (!supabase || !doctorChatAttachment) return;
-    const { file, kind } = doctorChatAttachment;
-    const sz = doctorChatFileSizeOk(file, kind);
-    if (!sz.ok) { setToast({ type: 'error', message: sz.msg }); return; }
-    setDoctorChatAttachmentUploading(true);
-    try {
-      const ts = Date.now();
-      const safe = String(file.name || 'file').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
-      const path = `${doctorChatSpecialty}/${doctorChatSenderIdentity.username || 'doc'}/${ts}_${safe}`;
-      const BUCKET_NAME = 'doctor-chat-attachments';
-      const isBucketMissingErr = (errMsg) => {
-        const m = String(errMsg || '').toLowerCase();
-        return m.includes('bucket') && (m.includes('not found') || m.includes('does not exist') || m.includes('no such'));
-      };
-      let uploadOnce = await supabase.storage.from(BUCKET_NAME).upload(path, file, { cacheControl: '31536000', upsert: false });
-      if (uploadOnce.error && isBucketMissingErr(uploadOnce.error.message)) {
-        setToast({ type: 'info', message: '🗄️ Storage bucket not found! Auto-creating "doctor-chat-attachments" (50MB, private w/ signed URLs)...' });
-        try {
-          const allowed = [];
-          if (kind === 'image') allowed.push('image/*');
-          if (kind === 'pdf') allowed.push('application/pdf');
-          if (kind === 'video') allowed.push('video/*');
-          await supabase.storage.createBucket(BUCKET_NAME, {
-            public: false,
-            fileSizeLimit: 50 * 1024 * 1024,
-            allowedMimeTypes: allowed.length ? allowed : ['image/*', 'application/pdf', 'video/*']
-          });
-        } catch (_createErr) {
-          // Create bucket via JS may fail on anon key (most Supabase projects block it) — tell user 2 manual ways.
-          setToast({
-            type: 'warning',
-            message: '⚠️ Auto-create blocked by Supabase anon key! FIX: Supabase Dashboard → Storage → + New Bucket → Name = doctor-chat-attachments → Public = OFF → Create. Then retry upload.',
-          });
-          setDoctorChatAttachmentUploading(false);
-          return;
-        }
-        // Retry the upload ONCE after successful bucket creation
-        uploadOnce = await supabase.storage.from(BUCKET_NAME).upload(path, file, { cacheControl: '31536000', upsert: false });
-      }
-      const { error: upErr } = uploadOnce;
-      if (upErr) throw upErr;
-      const signedUrlRes = await supabase.storage.from(BUCKET_NAME).createSignedUrl(path, 60 * 60 * 72);
-      const signedUrl = signedUrlRes?.data?.signedUrl || '';
-      const publicData = supabase.storage.from(BUCKET_NAME).getPublicUrl(path);
-      const publicUrl = publicData?.data?.publicUrl || '';
-      const caption = String(doctorChatText || '').trim();
-      const uDept = String(currentUser?.department || currentUser?.dept || currentUser?.departmentName || '').trim();
-      const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || uDept || doctorChatSpecialty;
-      const senderId = String(currentUser?.id || currentUser?.uuid || '').trim() || null;
-      const senderEmail = String(currentUser?.email || '').trim() || null;
-      const senderUsername = String(currentUser?.username || doctorChatSenderIdentity.username || '').trim() || null;
-      const payload = {
-        specialty: doctorChatSpecialty, room: roomValue, sender_role: 'doctor',
-        sender_id: senderId, sender_email: senderEmail, sender_username: senderUsername,
-        body: caption,
-        sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept,
-        attachment_kind: kind, attachment_name: file.name, attachment_size: file.size, attachment_mime: file.type || '',
-        attachment_path: path, attachment_url: signedUrl || publicUrl, attachment_public_url: publicUrl
-      };
-      if (doctorChatReplying?.id) { payload.reply_to_id = doctorChatReplying.id; payload.reply_to_body = String(doctorChatReplying.body || '').slice(0, 240); }
-      const isSchemaMissingColErrUp = (errMsg) => {
-        const m = String(errMsg || '').toLowerCase();
-        return (m.includes('could not find') && m.includes('column')) ||
-               m.includes('schema cache') ||
-               (m.includes('column') && (m.includes('room') || m.includes('attachment') || m.includes('reply_to') || m.includes('sender_email') || m.includes('sender_username') || m.includes('sender_id'))) ||
-               m.includes('violates not-null constraint') ||
-               m.includes('new row violates row-level security policy') ||
-               m.includes('violates row-level security policy') ||
-               m.includes('row level security') ||
-               m.includes('42501') ||
-               m.includes('permission denied');
-      };
-      let hitTier = 1;
-      let { error } = await supabase.from('consultation_messages').insert([payload]);
-      if (error && isSchemaMissingColErrUp(error.message)) {
-        hitTier = 2;
-        const midPayload = {
-          specialty: doctorChatSpecialty, room: roomValue, sender_role: 'doctor', body: caption,
-          sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept,
-          attachment_url: signedUrl || publicUrl
-        };
-        const mid = await supabase.from('consultation_messages').insert([midPayload]);
-        if (!mid.error) { error = null; }
-        else {
-          hitTier = 3;
-          const legacyPayload = {
-            specialty: doctorChatSpecialty, sender_role: 'doctor', body: caption,
-            attachment_url: signedUrl || publicUrl
-          };
-          const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
-          error = legacy.error;
-        }
-        if (!error && hitTier === 3) {
-          setToast({ type: 'warning', message: '📋 Migrations 003+005 needed! File attached (ultra-legacy mode). Run 003, 004, 005 SQL in /supabase/migrations folder for full features.' });
-        }
-      }
-      if (error) throw error;
-      setDoctorChatAttachment(null);
-      setDoctorChatAttachmentUploading(false);
-      setDoctorChatText('');
-      setDoctorChatReplying(null);
-      setTimeout(() => {
-        loadDoctorChatMessages();
-        scrollDoctorChatToBottom();
-      }, 180);
-    } catch (e) {
-      console.error('[doctorChatUploadAttachment] supabase path failed:', e);
-      // =====================================================================
-      // TIER 4 (GUARANTEED!): BACKEND Multipart upload!
-      // ENTIRE storage upload + insert message is handled by backend using:
-      //   a) SUPABASE SERVICE ROLE KEY (storage) → bypasses ALL bucket RLS!
-      //   b) PRISMA DIRECT (insert) → bypasses ALL table RLS!
-      // Works even if bucket doesn't exist, backend tries to create it too!
-      // =====================================================================
-      try {
-        if (!doctorChatAttachment?.file) throw e;
-        const uDept = String(currentUser?.department || currentUser?.dept || currentUser?.departmentName || '').trim();
-        const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || uDept || doctorChatSpecialty;
-        const senderId = String(currentUser?.id || currentUser?.uuid || '').trim() || null;
-        const senderEmail = String(currentUser?.email || '').trim() || null;
-        const senderUsername = String(currentUser?.username || doctorChatSenderIdentity.username || '').trim() || null;
-        const formData = new FormData();
-        formData.append('file', doctorChatAttachment.file, doctorChatAttachment.file.name || 'attachment');
-        formData.append('caption', String(doctorChatText || '').trim());
-        formData.append('specialty', doctorChatSpecialty);
-        formData.append('room', roomValue);
-        formData.append('sender_role', 'doctor');
-        formData.append('sender_name', doctorChatSenderIdentity.name || 'Doctor');
-        formData.append('sender_dept', doctorChatSenderIdentity.dept || doctorChatSpecialty);
-        if (senderEmail) formData.append('sender_email', senderEmail);
-        if (senderUsername) formData.append('sender_username', senderUsername);
-        if (senderId) formData.append('sender_id', senderId);
-        const res = await fetch('/api/doctor-chat/attachments', {
-          method: 'POST',
-          credentials: 'include',
-          body: formData
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data?.ok) {
-          throw new Error(data?.error || `Backend upload status ${res.status}`);
-        }
-        setDoctorChatAttachment(null);
-        setDoctorChatAttachmentUploading(false);
-        setDoctorChatText('');
-        setDoctorChatReplying(null);
-        setToast({
-          type: 'success',
-          message: '✅ File uploaded via Backend Direct (all RLS bypassed)! Storage + insert worked perfectly! Run Migration 007 SQL for direct anon path to also work.'
-        });
-        setTimeout(() => {
-          loadDoctorChatMessages();
-          scrollDoctorChatToBottom();
-        }, 220);
-      } catch (be2) {
-        console.error('[doctorChatUploadAttachment] TIER 4 backend also failed:', be2);
-        setDoctorChatAttachmentUploading(false);
-        setToast({ type: 'error', message: String(be2?.message || 'Upload failed. Restart backend server (for new route) + ensure SUPABASE_SERVICE_ROLE_KEY set in backend .env.') });
-      }
-    }
-  };
-
   const sendDoctorChatMessage = async () => {
     const specialty = doctorChatSpecialty;
-    if (doctorChatAttachment && !doctorChatAttachmentUploading) {
-      await doctorChatUploadAttachment();
-      return;
-    }
     const body = String(doctorChatText || '').trim();
     if (body.length > 2000) {
       setToast({ type: 'error', message: 'Message too long (2000 character max).' });
@@ -6062,50 +5856,6 @@ function DoctorDashboard() {
                 </div>
               )}
 
-              {doctorChatAttachment && (
-                <div style={{ padding: '8px 16px 0', background: 'linear-gradient(180deg,#f8fafc,transparent)' }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '10px 12px',
-                    background: '#ecfdf5',
-                    border: '1px solid rgba(34,197,94,0.2)',
-                    borderRadius: 10
-                  }}>
-                    <div style={{
-                      width: 34, height: 34, borderRadius: 8,
-                      background: doctorChatAttachment.kind === 'image' ? '#fef3c7' : doctorChatAttachment.kind === 'pdf' ? '#fee2e2' : '#e0e7ff',
-                      color: doctorChatAttachment.kind === 'image' ? '#b45309' : doctorChatAttachment.kind === 'pdf' ? '#b91c1c' : '#4f46e5',
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto'
-                    }}>
-                      {doctorChatAttachment.kind === 'image' ? <ImageIcon size={16} /> : doctorChatAttachment.kind === 'pdf' ? <File size={16} /> : <VideoIcon size={16} />}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 800, color: '#065f46', fontSize: '0.8rem' }}>
-                        {doctorChatAttachment.kind.toUpperCase()} ready to attach
-                      </div>
-                      <div style={{ fontSize: '0.74rem', color: '#047857', fontWeight: 600 }}>
-                        {doctorChatAttachment.name} • {doctorChatAttachment.size >= 1024*1024 ? `${(doctorChatAttachment.size/1024/1024).toFixed(1)} MB` : `${Math.max(1, Math.round(doctorChatAttachment.size/1024))} KB`}
-                      </div>
-                    </div>
-                    {doctorChatAttachmentUploading ? (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.76rem', color: '#065f46' }}>
-                        <RotateCw size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Uploading…
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        className="doc-btn danger"
-                        style={{ height: 28, minHeight: 0, padding: '4px 8px', fontWeight: 700, fontSize: '0.72rem', color: '#991b1b' }}
-                        onClick={() => setDoctorChatAttachment(null)}
-                        disabled={doctorChatAttachmentUploading}
-                      >
-                        <X size={12} /> Cancel
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
               <div style={{ padding: '10px 16px 4px', background: 'linear-gradient(180deg,#f8fafc,transparent)' }}>
                 <div className="dc-quick-chips" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {doctorChatQuickReplies.map((qr) => (
@@ -6135,23 +5885,7 @@ function DoctorDashboard() {
               </div>
 
               <div ref={doctorChatComposeRef} className="doc-msg-compose dc-compose-wrap" style={{ padding: '12px 16px 16px', background: '#fff', borderTop: '1px solid var(--border)' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'flex-end' }}>
-                  <input
-                    ref={doctorChatFileInputRef}
-                    type="file"
-                    accept={`${doctorChatFileAllowed.image.accept},${doctorChatFileAllowed.pdf.accept},${doctorChatFileAllowed.video.accept}`}
-                    onChange={doctorChatOnPickFile}
-                    style={{ display: 'none' }}
-                  />
-                  <button
-                    type="button"
-                    className="doc-btn"
-                    style={{ height: 44, width: 44, minHeight: 0, padding: 0, borderRadius: 14, border: '1px solid var(--border)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#475569', background: '#fff', flex: '0 0 auto' }}
-                    title="📎 Attach image / PDF / video"
-                    onClick={() => { try { doctorChatFileInputRef.current?.click(); } catch(_) {} }}
-                  >
-                    <Paperclip size={16} />
-                  </button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'flex-end' }}>
                   <div style={{ position: 'relative', minWidth: 0, width: '100%' }}>
                     <textarea
                       ref={(el) => { if (typeof doctorChatComposeRef === 'object' && doctorChatComposeRef) (doctorChatComposeRef._textarea = el); }}
@@ -6195,18 +5929,14 @@ function DoctorDashboard() {
                         } else if (e.key === 'Escape') {
                           if (doctorChatMentionOpen) setDoctorChatMentionOpen(false);
                           else if (doctorChatReplying) setDoctorChatReplying(null);
-                          else if (doctorChatAttachment && !doctorChatAttachmentUploading) setDoctorChatAttachment(null);
                         } else if (e.key === 'ArrowDown' && doctorChatMentionOpen) {
                           e.preventDefault();
                         }
                       }}
-                      disabled={!doctorChatSpecialty || doctorChatAttachmentUploading}
+                      disabled={!doctorChatSpecialty}
                       style={{ width: '100%', padding: '12px 110px 12px 16px', minHeight: 62, maxHeight: 170, borderRadius: 16, border: '1.5px solid #e2e8f0', fontSize: '0.95rem', resize: 'none', lineHeight: 1.5, background: '#fff', boxSizing: 'border-box' }}
                     />
                     <div style={{ position: 'absolute', right: 14, bottom: 10, display: 'inline-flex', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
-                      {doctorChatAttachment && (
-                        <Check size={11} style={{ color: '#22c55e', fontWeight: 800 }} title="Attachment queued" />
-                      )}
                       <span style={{ fontSize: '0.7rem', fontWeight: 800, color: String(doctorChatText || '').length >= 1900 ? '#dc2626' : (String(doctorChatText || '').length >= 1700 ? '#d97706' : '#94a3b8') }}>
                         {String(doctorChatText || '').length}/2000
                       </span>
@@ -6260,10 +5990,10 @@ function DoctorDashboard() {
                     className="doc-primary dc-send-btn"
                     type="button"
                     onClick={sendDoctorChatMessage}
-                    disabled={!doctorChatSpecialty || doctorChatAttachmentUploading || (!String(doctorChatText || '').trim() && !doctorChatAttachment)}
+                    disabled={!doctorChatSpecialty || (!String(doctorChatText || '').trim())}
                     style={{ height: 44, minHeight: 44, padding: '0 22px', borderRadius: 14, gap: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flex: '0 0 auto' }}
                   >
-                    <Send size={16} /> {doctorChatAttachment ? 'Send + Attach' : 'Send'}
+                    <Send size={16} /> Send
                   </button>
                 </div>
               </div>
