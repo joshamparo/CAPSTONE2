@@ -423,7 +423,7 @@ function DoctorDashboard() {
     const spec = String(doctorSpecialization || '').trim();
     const deptId = String(u.departmentId || u.department_id || u.deptId || u.id || '').trim();
     const deptName = String(u.department || u.departmentName || u.dept || '').trim();
-    const nameRaw = String(doctorChatSenderIdentity?.name || doctorInboxName || doctorName || '').trim();
+    const nameRaw = String(doctorInboxName || doctorName || u.first_name || u.firstName || u.name || u.username || '').trim();
     const set = new Set();
     const add = (v) => {
       const s = String(v || '').trim();
@@ -459,7 +459,7 @@ function DoctorDashboard() {
     ];
     for (const d of departments) add(d);
     return set;
-  }, [currentUser, doctorSpecialization, doctorInboxName, doctorName, doctorChatSenderIdentity?.name]);
+  }, [currentUser, doctorSpecialization, doctorInboxName, doctorName]);
 
   const doctorChatUnifiedInboxFilters = useMemo(() => {
     const ALLIED_SET = new Set(['Physical Therapy', 'PT', 'Radiology', 'Xray', 'X-Ray', 'Laboratory', 'Lab', 'ECG', 'EKG', 'EEG', 'Ultrasound', 'CT Scan', 'MRI', 'OT', 'ST', 'Speech Therapy', 'Occupational Therapy', 'Pharmacy', 'Cashier']);
