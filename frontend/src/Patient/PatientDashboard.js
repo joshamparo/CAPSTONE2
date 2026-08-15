@@ -1421,13 +1421,46 @@ function PatientDashboard() {
               </button>
             </div>
             <div id="patient-video-wrapper" style={{ flex: 1, marginTop: 8, borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', minHeight: 0 }}>
-              <iframe
-                title="Video Consultation"
-                src={videoMeetingUrl}
-                allowFullScreen
-                style={{ width: '100%', height: '100%', border: 0 }}
-                allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write; encrypted-media; speaker-selection; picture-in-picture; geolocation; midi; gyroscope; accelerometer; magnetometer"
-              />
+              {(() => {
+                const url = String(videoMeetingUrl || '').trim();
+                const looksValid = /^https?:\/\//i.test(url) && /[a-z0-9\-]+\.[a-z]{2,}/i.test(url);
+                if (!looksValid) {
+                  return (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(180deg,#f8fafc,#eef2f7)', padding: 'clamp(20px, 4vh, 60px)' }}>
+                      <div style={{ maxWidth: 620, textAlign: 'center' }}>
+                        <div style={{ width: 54, height: 54, borderRadius: 27, background: '#fff', border: '1px solid #e2e8f0', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#ea580c', boxShadow: '0 10px 30px rgba(234,88,12,0.12)' }}>
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                            <path d="m22 8-6 4 6 4V8Z" /><rect x="2" y="6" width="14" height="12" rx="2" ry="2" />
+                          </svg>
+                        </div>
+                        <div style={{ marginTop: 16, fontSize: '1.08rem', fontWeight: 800, color: '#0f172a' }}>Doctor Has Not Started The Call Yet</div>
+                        <div style={{ marginTop: 6, color: '#475569', lineHeight: 1.55, fontSize: '0.88rem' }}>
+                          Your teleconsultation room link is not ready. Please try the steps below:
+                        </div>
+                        <ul style={{ marginTop: 14, textAlign: 'left', paddingLeft: 18, color: '#334155', fontSize: '0.86rem', lineHeight: 1.7, listStyle: 'disc' }}>
+                          <li>Wait 1-2 minutes — the doctor may still be finishing the previous patient.</li>
+                          <li>Tap <b>Join Video Call</b> button again to refresh the room link.</li>
+                          <li>Use <b>Open in New Tab</b> if iframe is blocked by browser privacy/ad blockers.</li>
+                          <li>Run <b>Test Hardware</b> to allow camera and microphone permissions for this website.</li>
+                          <li>On Safari/Mobile: enable <b>Allow cross-site tracking</b> in Settings → Privacy.</li>
+                          <li>Still no video? Message your doctor via the SMS/phone numbers on the appointment confirmation.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <iframe
+                    title="Video Consultation"
+                    src={url}
+                    allowFullScreen
+                    style={{ width: '100%', height: '100%', border: 0 }}
+                    allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write; encrypted-media; speaker-selection; picture-in-picture; geolocation; midi; gyroscope; accelerometer; magnetometer"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    loading="eager"
+                  />
+                );
+              })()}
             </div>
           </div>
         </div>

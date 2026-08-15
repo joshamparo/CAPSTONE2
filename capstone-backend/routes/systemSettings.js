@@ -4,6 +4,22 @@ const { getSystemSettings, saveSystemSettings } = require('../utils/systemSettin
 
 const router = express.Router();
 
+// Public, no auth — globally exposes safe signals only (maintenance mode)
+router.get('/public', async (_req, res) => {
+  try {
+    const settings = await getSystemSettings({ force: false });
+    const safe = {
+      maintenanceMode: Boolean(settings?.maintenanceMode),
+      updatedAt: settings?.updatedAt || null,
+      publicVersion: 1
+    };
+    res.set('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+    res.json(safe);
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to load public system status.', maintenanceMode: false });
+  }
+});
+
 router.get('/', requireRole(['admin']), async (_req, res) => {
   try {
     const settings = await getSystemSettings({ force: true });

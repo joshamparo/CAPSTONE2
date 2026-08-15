@@ -333,14 +333,14 @@ function AdminDashboard() {
     if (trimmed.length < 3) {
       setNewTodoError("Task is too short. Add at least 3 characters.");
       setModalType("error");
-      setSuccessMessage("Task is too short. Add at least 3 characters.");
+      setSuccessMessage("⚠️ Task is too short — add at least 3 characters.");
       setShowSuccessModal(true);
       return;
     }
     if (trimmed.length > 220) {
       setNewTodoError("Task is too long. Max 220 characters allowed.");
       setModalType("error");
-      setSuccessMessage("Task is too long. Max 220 characters allowed.");
+      setSuccessMessage("⚠️ Task is too long — keep under 220 characters.");
       setShowSuccessModal(true);
       return;
     }
@@ -4454,7 +4454,7 @@ function AdminDashboard() {
                       aria-invalid={Boolean(newTodoError)}
                       aria-describedby={newTodoError ? "todo-input-error" : undefined}
                     />
-                    <button type="submit" className="todo-add-btn" title="Add task">
+                    <button type="submit" className="todo-add-btn" title="Add task" disabled={!String(newTodo || "").trim()}>
                       <Plus size={18} />
                     </button>
                   </div>
