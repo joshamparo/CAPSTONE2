@@ -202,21 +202,61 @@ function DoctorDashboard() {
 
   const doctorName = useMemo(() => {
     if (!currentUser) return 'Doctor';
-    if (currentUser.firstName) return currentUser.firstName;
-    if (currentUser.name) return currentUser.name;
+    const u = currentUser;
+    const first = String(u.firstName || u.first_name || u.firstname || '').trim();
+    const last = String(u.lastName || u.last_name || u.lastname || '').trim();
+    const hasSpace = (s) => /\s/.test(String(s || '').trim());
+    const isEmailOrUser = (s) => {
+      const v = String(s || '').trim().toLowerCase();
+      if (!v) return true;
+      if (v.includes('@')) return true;
+      if (/\d{2,}$/.test(v) && !hasSpace(v)) return true;
+      if (/^(user|staff|doctor|patient|admin|nurse|cashier|pharm)\d+$/i.test(v)) return true;
+      return false;
+    };
+    const fullName = `${first} ${last}`.trim();
+    if (fullName && hasSpace(fullName) && !isEmailOrUser(fullName)) return fullName;
+    if (u.fullName && String(u.fullName).trim() && hasSpace(u.fullName) && !isEmailOrUser(u.fullName)) return String(u.fullName).trim();
+    if (u.full_name && String(u.full_name).trim() && hasSpace(u.full_name) && !isEmailOrUser(u.full_name)) return String(u.full_name).trim();
+    const nameRaw = String(u.name || u.displayName || '').trim();
+    if (nameRaw && hasSpace(nameRaw) && !isEmailOrUser(nameRaw)) return nameRaw;
+    if (first && last && !isEmailOrUser(first) && !isEmailOrUser(last)) {
+      return `${first} ${last}`.trim();
+    }
+    const titleCaseWord = (w) => String(w || '').trim().replace(/^./, (c) => c.toUpperCase());
+    const cleanUsername = (v) => {
+      const s = String(v || '').trim();
+      if (!s) return '';
+      const local = s.includes('@') ? s.split('@')[0] : s;
+      const stripped = local.replace(/[-_.]+/g, ' ').replace(/\d+$/, '').trim();
+      const parts = stripped.split(/\s+/).filter(Boolean).map(titleCaseWord);
+      if (parts.length === 1) {
+        const only = parts[0];
+        if (!only) return '';
+        const split = only.match(/^([A-Z][a-z]+)([A-Z][a-z]+)$/);
+        if (split) return `${split[1]} ${split[2]}`;
+      }
+      return parts.join(' ');
+    };
+    if (u.email && !isEmailOrUser(first) === false) {
+      const nice = cleanUsername(u.email);
+      if (nice && hasSpace(nice)) return nice;
+    }
+    if (first) {
+      if (!isEmailOrUser(first)) {
+        if (last) return `${first} ${last}`.trim();
+        return first;
+      }
+      const niceF = cleanUsername(first);
+      if (niceF) return niceF;
+    }
+    if (nameRaw) return cleanUsername(nameRaw) || nameRaw;
     return 'Doctor';
   }, [currentUser]);
 
   const doctorInboxName = useMemo(() => {
-    const u = currentUser || {};
-    const first = u.firstName || u.first_name || '';
-    const last = u.lastName || u.last_name || '';
-    const full = `${first} ${last}`.trim();
-    if (full) return full;
-    if (u.name) return u.name;
-    if (first) return first;
     return doctorName;
-  }, [currentUser, doctorName]);
+  }, [doctorName]);
 
   const doctorSpecialization = useMemo(() => {
     const u = currentUser || {};

@@ -82,6 +82,8 @@ export default function AccountHeaderActions({
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [announcementToast, setAnnouncementToast] = useState(null);
+  const [greetToast, setGreetToast] = useState(null);
+  const greetHideRef = useRef(null);
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifItems, setNotifItems] = useState([]);
   const [notifUnreadCount, setNotifUnreadCount] = useState(0);
@@ -179,10 +181,68 @@ export default function AccountHeaderActions({
     }
   };
 
+  const dismissGreetToast = () => {
+    setGreetToast(null);
+    if (greetHideRef.current) {
+      clearTimeout(greetHideRef.current);
+      greetHideRef.current = null;
+    }
+  };
+
+  // Session-scoped login greeting (matches Admin pattern — runs once per tab session, per role+email).
+  // Falls back to showing greet even if DB announcement returned nothing on first load.
+  useEffect(() => {
+    if (!name || !rawRole) return;
+    const sessionKey = `greetShown:${rawRole}:${userEmail || name}`;
+    let already;
+    try { already = sessionStorage.getItem(sessionKey) === '1'; } catch (_) { already = false; }
+    if (already) return;
+    try { sessionStorage.setItem(sessionKey, '1'); } catch (_) {}
+    const now = new Date();
+    const hour = now.getHours();
+    let greeting = 'Good day';
+    if (hour < 12) greeting = 'Good morning';
+    else if (hour < 17) greeting = 'Good afternoon';
+    else greeting = 'Good evening';
+    const dateStr = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const roleEmoji = (() => {
+      const r = String(rawRole || '').toLowerCase();
+      if (r === 'doctor') return '🩺';
+      if (r === 'nurse') return '💉';
+      if (r === 'admin') return '🛡️';
+      if (r === 'cashier') return '🧾';
+      if (r === 'pharmacist') return '💊';
+      if (r === 'medtech' || r === 'radiographer' || r === 'ecg_operator' || r === 'ecg' || r === 'physical_therapist' || r === 'pt') return '🔬';
+      if (r === 'doctor_secretary') return '📋';
+      return '👋';
+    })();
+    const isDoctor = rawRole && String(rawRole).toLowerCase() === 'doctor';
+    const greetName = isDoctor ? `Dr. ${String(name).trim()}` : String(name).trim();
+    let title = `${greeting}, ${greetName}!`;
+    let message = `Welcome back to Pascualinga Hospital. Today is ${dateStr}.`;
+    if (isDoctor) message = `${message} Today may you bring clarity and healing to every patient you see. Have a smooth shift!`;
+    else if (rawRole === 'nurse') message = `${message} Thank you for keeping the wards running — your watch matters.`;
+    else if (rawRole === 'admin') message = `${message} Review operations, stay on top of incidents, and let's keep standards high.`;
+    else if (rawRole === 'cashier') message = `${message} Have an accurate shift — double check change and receipts.`;
+    else if (rawRole === 'pharmacist') message = `${message} Dispense safely — double-check names, doses, and allergies first.`;
+    setGreetToast({ id: `greet-${Date.now()}`, title, message, author: roleEmoji, priority: 'Normal' });
+    if (greetHideRef.current) clearTimeout(greetHideRef.current);
+    greetHideRef.current = setTimeout(() => {
+      setGreetToast(null);
+      greetHideRef.current = null;
+    }, 12000);
+    return () => {
+      if (greetHideRef.current) { clearTimeout(greetHideRef.current); greetHideRef.current = null; }
+    };
+  }, [name, rawRole, userEmail]);
+
   useEffect(() => {
     quietHoursRef.current = Boolean(settingsPrefs?.quietHours);
-    if (quietHoursRef.current && isWithinQuietHoursWindow()) dismissAnnouncementToast();
-  }, [settingsPrefs?.quietHours]);
+    if (quietHoursRef.current && isWithinQuietHoursWindow()) {
+      dismissAnnouncementToast();
+      if (greetToast?.id?.startsWith?.('greet-')) dismissGreetToast();
+    }
+  }, [settingsPrefs?.quietHours, greetToast]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -516,11 +576,32 @@ export default function AccountHeaderActions({
         clearTimeout(announcementHideRef.current);
         announcementHideRef.current = null;
       }
+      if (greetHideRef.current) {
+        clearTimeout(greetHideRef.current);
+        greetHideRef.current = null;
+      }
     };
   }, [rawRole, userEmail, roleBucket, authHeaders, name]);
 
   return (
     <div className="aha-root" ref={rootRef}>
+      {greetToast ? (
+        <div className={`aha-announcement-toast pri-greet`} style={{ borderLeft: '4px solid #ea580c', background: 'linear-gradient(135deg,#fff7ed,#ffedd5)' }}>
+          <div className="aha-announcement-top">
+            <div className="aha-announcement-title" style={{ color: '#9a3412', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span aria-hidden>{greetToast.author || '👋'}</span>
+              <span>{greetToast.title}</span>
+            </div>
+            <button type="button" className="aha-announcement-close" onClick={dismissGreetToast} aria-label="Dismiss greeting" style={{ color: '#9a3412' }}>
+              ×
+            </button>
+          </div>
+          <div className="aha-announcement-message" style={{ color: '#7c2d12' }}>{greetToast.message}</div>
+          <div className="aha-announcement-meta" style={{ color: '#9a3412' }}>
+            {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </div>
+        </div>
+      ) : null}
       {announcementToast ? (
         <div className={`aha-announcement-toast pri-${String(announcementToast.priority || 'normal').toLowerCase()}`}>
           <div className="aha-announcement-top">
