@@ -846,18 +846,28 @@ function DoctorDashboard() {
         const m = String(errMsg || '').toLowerCase();
         return (m.includes('could not find') && m.includes('column')) ||
                m.includes('schema cache') ||
-               (m.includes('column') && (m.includes('room') || m.includes('sender_role') || m.includes('sender_name') || m.includes('sender_dept') || m.includes('attachment') || m.includes('reply_to')));
+               (m.includes('column') && (m.includes('room') || m.includes('attachment') || m.includes('reply_to'))) ||
+               m.includes('violates not-null constraint');
       };
       let { error } = await supabase.from('consultation_messages').insert([payload]);
       if (error && isSchemaMissingColErrUp(error.message)) {
-        const legacyPayload = {
-          specialty: doctorChatSpecialty, body: caption,
+        const midPayload = {
+          specialty: doctorChatSpecialty, room: roomValue, sender_role: 'doctor', body: caption,
+          sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept,
           attachment_url: signedUrl || publicUrl
         };
-        const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
-        error = legacy.error;
+        const mid = await supabase.from('consultation_messages').insert([midPayload]);
+        if (!mid.error) { error = null; }
+        else {
+          const legacyPayload = {
+            specialty: doctorChatSpecialty, sender_role: 'doctor', body: caption,
+            attachment_url: signedUrl || publicUrl
+          };
+          const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
+          error = legacy.error;
+        }
         if (!error) {
-          setToast({ type: 'warning', message: '📋 Migration 003 needed! File attached (legacy mode). Run SQL in Supabase Editor: supabase/migrations/003_unified_inbox_room_role_columns.sql → enables Nurse App rooms + full dept badges.' });
+          setToast({ type: 'warning', message: '📋 Migration 004 recommended! File attached (compat mode). Optional: run supabase/migrations/004_drop_notnull_defaults.sql in Supabase SQL Editor to eliminate future constraint warnings.' });
         }
       }
       if (error) throw error;
@@ -901,15 +911,25 @@ function DoctorDashboard() {
     const isSchemaMissingColErr = (errMsg) => {
       const m = String(errMsg || '').toLowerCase();
       return (m.includes('could not find') && m.includes('column')) ||
-             m.includes('schema cache') || m.includes('column') && (m.includes('room') || m.includes('sender_role') || m.includes('sender_name') || m.includes('sender_dept') || m.includes('reply_to'));
+             m.includes('schema cache') ||
+             (m.includes('column') && (m.includes('room') || m.includes('reply_to'))) ||
+             m.includes('violates not-null constraint');
     };
     let { error } = await supabase.from('consultation_messages').insert([payload]);
     if (error && isSchemaMissingColErr(error.message)) {
-      const legacyPayload = { specialty, body };
-      const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
-      error = legacy.error;
+      const midPayload = {
+        specialty, room: roomValue, sender_role: 'doctor', body,
+        sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept
+      };
+      const mid = await supabase.from('consultation_messages').insert([midPayload]);
+      if (!mid.error) { error = null; }
+      else {
+        const legacyPayload = { specialty, sender_role: 'doctor', body };
+        const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
+        error = legacy.error;
+      }
       if (!error) {
-        setToast({ type: 'warning', message: '📋 Migration 003 needed! Message sent (legacy mode). Run SQL in Supabase Editor: supabase/migrations/003_unified_inbox_room_role_columns.sql → enables Nurse App rooms + P avatars.' });
+        setToast({ type: 'warning', message: '📋 Migration 004 recommended! Message sent (compat mode). Optional: run supabase/migrations/004_drop_notnull_defaults.sql for zero-warning inserts.' });
       }
     }
     if (error) throw error;
