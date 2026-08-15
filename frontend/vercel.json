@@ -4,7 +4,6 @@
   "buildCommand": "echo skip",
   "installCommand": "echo skip",
   "outputDirectory": "build",
-  "regions": ["sgn1"],
   "cleanUrls": true,
   "trailingSlash": false,
   "headers": [
