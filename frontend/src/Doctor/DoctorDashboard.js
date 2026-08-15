@@ -408,6 +408,7 @@ function DoctorDashboard() {
   const [doctorChatPinOpen, setDoctorChatPinOpen] = useState(false);
   const [doctorChatMsgMenu, setDoctorChatMsgMenu] = useState(null);
   const [doctorChatDeleteConfirm, setDoctorChatDeleteConfirm] = useState(null);
+  const [doctorChatActiveTab, setDoctorChatActiveTab] = useState('all-hospital');
   const doctorChatScrollRef = useRef(null);
   const doctorChatFileInputRef = useRef(null);
   const doctorChatComposeRef = useRef(null);
@@ -416,6 +417,73 @@ function DoctorDashboard() {
   const doctorChatSpecialty = useMemo(() => {
     return 'global_doctors'; // All doctors share the same chat room
   }, []);
+
+  const doctorChatDeptRoomMatchKeys = useMemo(() => {
+    const spec = String(doctorSpecialization || '').trim();
+    const deptId = String(doctorDepartmentId || '').trim();
+    const deptName = String(doctorDepartmentName || '').trim();
+    const nameRaw = String(doctorChatSenderIdentity?.name || doctorInboxName || doctorName || '').trim();
+    const set = new Set();
+    const add = (v) => {
+      const s = String(v || '').trim();
+      if (!s) return;
+      set.add(s);
+      set.add(s.toLowerCase());
+      set.add(s.replace(/\s+/g, '_').toLowerCase());
+      set.add(s.replace(/\s+/g, '-').toLowerCase());
+      set.add(s.replace(/[_\-\s]+/g, '').toLowerCase());
+    };
+    add('global_doctors');
+    add('doctors');
+    add('all');
+    add('all-hospital');
+    add('hospital-staff');
+    add('Hospital Staff');
+    add('All Hospital Staff');
+    add(spec);
+    add(deptId);
+    add(deptName);
+    // Known clinical departments (to match Nurse/PT App room naming)
+    const departments = [
+      'Physical Therapy', 'Physiotherapy', 'PT', 'Occupational Therapy', 'OT', 'Speech Therapy', 'ST',
+      'Radiology', 'Xray', 'X-Ray', 'Ultrasound', 'CT Scan', 'MRI',
+      'Laboratory', 'Lab', 'Pathology', 'Phlebotomy', 'Hematology',
+      'ECG', 'EKG', 'EEG', 'Pulmo', 'Pulmonary',
+      'Emergency', 'Emergency Room', 'ER',
+      'Pediatrics', 'Pedia', 'PEDIATRICS',
+      'Medicine', 'Internal Medicine', 'IM',
+      'Surgery', 'Orthopedics', 'Ortho', 'OB Gyne', 'OB-Gyne', 'OBGYN', 'Ophthalmology', 'ENT', 'Dermatology', 'Anesthesiology', 'Psychiatry',
+      'Nurse', 'Nursing', 'Nurses', 'Ward Nurse', 'ER Nurse', 'OPD Nurse',
+      'OPD', 'Outpatient', 'IPD', 'Inpatient', 'Ward', 'ICU', 'NICU', 'PICU', 'OR'
+    ];
+    for (const d of departments) add(d);
+    return set;
+  }, [doctorSpecialization, doctorDepartmentId, doctorDepartmentName, doctorInboxName, doctorName, doctorChatSenderIdentity?.name]);
+
+  const doctorChatUnifiedInboxFilters = useMemo(() => {
+    const ALLIED_SET = new Set(['Physical Therapy', 'PT', 'Radiology', 'Xray', 'X-Ray', 'Laboratory', 'Lab', 'ECG', 'EKG', 'EEG', 'Ultrasound', 'CT Scan', 'MRI', 'OT', 'ST', 'Speech Therapy', 'Occupational Therapy', 'Pharmacy', 'Cashier']);
+    return {
+      filterRow: (m) => {
+        const spec = String(m?.specialty || '').trim();
+        const room = String(m?.room || '').trim();
+        const dept = String(m?.sender_dept || '').trim();
+        const role = String(m?.sender_role || '').trim().toLowerCase();
+        const keys = [spec, room, dept, role];
+        const inKeys = keys.some((k) => doctorChatDeptRoomMatchKeys.has(k) || doctorChatDeptRoomMatchKeys.has(String(k || '').toLowerCase()));
+        const mine = isDoctorChatMine(m);
+        if (mine) return true;
+        const tab = doctorChatActiveTab;
+        if (tab === 'all-hospital') return inKeys || Boolean(spec || room);
+        if (tab === 'my-dept') return inKeys;
+        if (tab === 'nurses-allied') {
+          if (role === 'nurse' || ALLIED_SET.has(room) || ALLIED_SET.has(dept) || ALLIED_SET.has(spec)) return true;
+          const norm = String(room || dept || spec || '').toLowerCase();
+          return ['phys', 'lab', 'rad', 'xray', 'x-ray', 'ecg', 'ultrasound', 'pt,', 'therapist'].some((s) => norm.includes(s));
+        }
+        return inKeys;
+      }
+    };
+  }, [doctorChatActiveTab, doctorChatDeptRoomMatchKeys]);
 
   const loadDoctorChatMessages = async (opts = {}) => {
     const specialty = doctorChatSpecialty;
@@ -433,20 +501,37 @@ function DoctorDashboard() {
     if (isOlder) setDoctorChatLoadingOlder(true); else setDoctorChatLoading(true);
     setDoctorChatError('');
     try {
-      const PAGE = 50;
-      let query = supabase
-        .from('consultation_messages')
-        .select('*')
-        .eq('specialty', specialty)
-        .order('created_at', { ascending: false })
-        .limit(PAGE);
-      if (isOlder && existing.length) {
-        const earliest = existing[0];
-        if (earliest?.created_at) query = query.lt('created_at', earliest.created_at);
+      const PAGE = 75;
+      const matchList = Array.from(doctorChatDeptRoomMatchKeys);
+      const baseQuery = (table) => table.from('consultation_messages').select('*').order('created_at', { ascending: false }).limit(PAGE);
+      const runWithWhere = async (builderLabel) => {
+        try {
+          let q = supabase.from('consultation_messages').select('*').order('created_at', { ascending: false }).limit(PAGE);
+          if (builderLabel === 'or') {
+            q = q.or(`specialty.in.(${matchList.map((v) => `"${String(v).replace(/"/g, '')}"`).slice(0, 250).join(',')}),room.in.(${matchList.map((v) => `"${String(v).replace(/"/g, '')}"`).slice(0, 250).join(',')})`);
+          }
+          if (isOlder && existing.length) {
+            const earliest = existing[0];
+            if (earliest?.created_at) q = q.lt('created_at', earliest.created_at);
+          }
+          const r = await q;
+          if (r.error && builderLabel === 'or') throw r.error;
+          if (!r.error && Array.isArray(r.data) && r.data.length) return r.data;
+          return null;
+        } catch (e) {
+          if (builderLabel === 'or') return null;
+          throw e;
+        }
+      };
+      let data = await runWithWhere('or');
+      if (!Array.isArray(data) || !data.length) {
+        // Fallback: load broad recent messages and apply client-side filter for unknown room names
+        const fallback = await supabase.from('consultation_messages').select('*').order('created_at', { ascending: false }).limit(200);
+        data = Array.isArray(fallback.data) ? fallback.data : [];
       }
-      const { data, error } = await query;
-      if (error) throw error;
-      const rows = Array.isArray(data) ? [...data].reverse() : [];
+      if (!data) data = [];
+      const rowsRaw = Array.isArray(data) ? [...data] : [];
+      const rows = rowsRaw.filter(doctorChatUnifiedInboxFilters.filterRow).reverse();
       if (isOlder) {
         if (!rows.length) setDoctorChatOlderExhausted(true);
         setDoctorChatMessages((prev) => [...rows, ...(Array.isArray(prev) ? prev : [])]);
@@ -674,11 +759,13 @@ function DoctorDashboard() {
   };
 
   const doctorChatFiltered = useMemo(() => {
-    const list = Array.isArray(doctorChatMessages) ? doctorChatMessages.filter((m) => !m?.deleted) : [];
+    const raw = Array.isArray(doctorChatMessages) ? doctorChatMessages : [];
+    const filteredByTab = raw.filter((m) => doctorChatUnifiedInboxFilters.filterRow(m));
+    const noDeleted = filteredByTab.filter((m) => !m?.deleted);
     const q = String(doctorChatSearch || '').trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((m) => String(m?.body || '').toLowerCase().includes(q));
-  }, [doctorChatMessages, doctorChatSearch]);
+    if (!q) return noDeleted;
+    return noDeleted.filter((m) => String(m?.body || '').toLowerCase().includes(q));
+  }, [doctorChatMessages, doctorChatSearch, doctorChatUnifiedInboxFilters, doctorChatActiveTab]);
 
   const doctorChatQuickReplies = [
     { id: 'hi-avail', label: '👋 Hi, available now?', text: 'Hi, available now here.' },
@@ -744,8 +831,9 @@ function DoctorDashboard() {
       const publicData = supabase.storage.from('doctor-chat-attachments').getPublicUrl(path);
       const publicUrl = publicData?.data?.publicUrl || '';
       const caption = String(doctorChatText || '').trim();
+      const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || String(doctorDepartmentName || '').trim() || doctorChatSpecialty;
       const payload = {
-        specialty: doctorChatSpecialty, sender_role: 'doctor',
+        specialty: doctorChatSpecialty, room: roomValue, sender_role: 'doctor',
         body: caption,
         sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept,
         attachment_kind: kind, attachment_name: file.name, attachment_size: file.size, attachment_mime: file.type || '',
@@ -782,8 +870,9 @@ function DoctorDashboard() {
     }
     if (!supabase) return;
     try {
+      const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || String(doctorDepartmentName || '').trim() || doctorChatSpecialty;
       const payload = {
-      specialty, sender_role: 'doctor', body,
+      specialty, room: roomValue, sender_role: 'doctor', body,
       sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept
     };
     if (doctorChatReplying?.id) {
@@ -1868,16 +1957,15 @@ function DoctorDashboard() {
     if (activeNav !== 'doctor-chat') return;
     loadDoctorChatMessages();
     const specialty = String(doctorChatSpecialty || '').trim();
-    if (!supabase || !specialty) return;
+    if (!supabase) return;
     const channel = supabase
-      .channel(`consultation:${specialty}`)
+      .channel(`consultation:unified:${specialty}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'consultation_messages',
-          filter: `specialty=eq.${specialty}`
+          table: 'consultation_messages'
         },
         (payload) => {
           if (!payload) return;
@@ -1907,13 +1995,16 @@ function DoctorDashboard() {
                 setTimeout(() => scrollDoctorChatToBottom(false), 120);
                 return prev;
               }
-              setDoctorChatUnreadBadge((n) => n + 1);
+              const passesTab = doctorChatUnifiedInboxFilters.filterRow(last);
+              if (passesTab) {
+                setDoctorChatUnreadBadge((n) => n + 1);
+              }
               const el = doctorChatScrollRef?.current;
               if (el) {
                 const near = el.scrollHeight - el.scrollTop - el.clientHeight;
                 if (near < 220) {
                   setTimeout(() => scrollDoctorChatToBottom(false), 120);
-                } else {
+                } else if (passesTab) {
                   setDoctorChatShowFAB(true);
                   setDoctorChatScrollInterrupt(true);
                 }
@@ -1931,7 +2022,7 @@ function DoctorDashboard() {
     return () => {
       try { supabase.removeChannel(channel); } catch (_) {}
     };
-  }, [activeNav, doctorChatSpecialty, supabase]);
+  }, [activeNav, doctorChatSpecialty, supabase, doctorChatActiveTab, doctorChatUnifiedInboxFilters]);
 
   useEffect(() => {
     if (activeNav !== 'doctor-chat') return;
@@ -5179,6 +5270,43 @@ function DoctorDashboard() {
                     </div>
                   )}
 
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingTop: 2 }}>
+                    {[
+                      { id: 'all-hospital', label: '🏥 All Hospital', desc: 'Every room + dept' },
+                      { id: 'my-dept', label: '🩺 My Dept', desc: doctorChatSenderIdentity?.dept || 'My Department' },
+                      { id: 'nurses-allied', label: '🩹 Nurses Allied', desc: 'PT / Lab / Rad / Nurses' }
+                    ].map((tab) => {
+                      const active = doctorChatActiveTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          className={`doc-btn ${active ? 'dc-btn-active' : ''}`}
+                          onClick={() => { setDoctorChatActiveTab(tab.id); setTimeout(() => loadDoctorChatMessages(), 20); }}
+                          title={tab.desc}
+                          style={{
+                            padding: '7px 14px',
+                            borderRadius: 999,
+                            fontWeight: active ? 800 : 600,
+                            fontSize: '0.82rem',
+                            letterSpacing: active ? 0.1 : 0,
+                            background: active ? 'linear-gradient(180deg,#fff7ed,#ffedd5)' : undefined,
+                            border: active ? '1px solid rgba(234,88,12,0.28)' : '1px solid #e2e8f0',
+                            color: active ? '#9a3412' : '#475569',
+                            boxShadow: active ? '0 1px 2px rgba(234,88,12,0.08), inset 0 1px 0 rgba(255,255,255,0.6)' : '0 1px 1px rgba(15,23,42,0.03)'
+                          }}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                    <span style={{ marginLeft: 'auto', fontSize: '0.74rem', color: '#94a3b8', fontWeight: 500 }}>
+                      {doctorChatActiveTab === 'all-hospital' && 'Unified inbox — every room synced'}
+                      {doctorChatActiveTab === 'my-dept' && `Only ${doctorChatSenderIdentity?.dept || 'your dept'} threads`}
+                      {doctorChatActiveTab === 'nurses-allied' && 'PT · Lab · Rad · ECG · Nurses pool'}
+                    </span>
+                  </div>
+
                   {!doctorChatBannerDismissed && (
                     <div className="dc-banner" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', border: '1px solid rgba(234,88,12,0.22)', background: 'linear-gradient(180deg,#fff7ed,#ffffff)', borderRadius: 12, color: '#7c2d12', fontSize: '0.78rem', lineHeight: 1.5 }}>
                       <AlertTriangle size={15} style={{ flex: '0 0 auto', marginTop: 2, color: '#c2410c' }} />
@@ -5343,28 +5471,86 @@ function DoctorDashboard() {
                           );
                         };
 
+                        const roomRaw = String(msg?.room || msg?.Room || '').trim();
+                        const senderRoleRaw = String(msg?.sender_role || msg?.senderRole || '').trim().toLowerCase();
+                        const sDeptLower = (senderDept || roomRaw).toLowerCase();
+                        const roomLower = roomRaw.toLowerCase();
+                        let avInitial = (displayName || 'D').trim().charAt(0).toUpperCase();
+                        let avBg = '#ea580c';
+                        let avBadge = senderDept || null;
+                        if (senderRoleRaw === 'nurse' || roomLower.includes('nurse')) {
+                          avInitial = 'N'; avBg = '#f97316'; avBadge = avBadge || 'Nurse';
+                        } else if (roomLower.includes('physical') || sDeptLower.includes('physical') || roomLower === 'pt' || sDeptLower === 'pt') {
+                          avInitial = 'P'; avBg = '#f97316'; avBadge = avBadge || 'Physical Therapy';
+                        } else if (roomLower.includes('lab') || sDeptLower.includes('lab')) {
+                          avInitial = 'L'; avBg = '#dc2626'; avBadge = avBadge || 'Laboratory';
+                        } else if (roomLower.includes('rad') || sDeptLower.includes('rad') || roomLower.includes('xray') || sDeptLower.includes('xray')) {
+                          avInitial = 'R'; avBg = '#3b82f6'; avBadge = avBadge || 'Radiology';
+                        } else if (roomLower.includes('ecg') || sDeptLower.includes('ecg')) {
+                          avInitial = 'E'; avBg = '#8b5cf6'; avBadge = avBadge || 'ECG';
+                        } else if (roomLower.includes('er') || sDeptLower.includes('er') || roomLower.includes('emergency')) {
+                          avInitial = 'ER'; avBg = '#dc2626'; avBadge = avBadge || 'Emergency';
+                        } else if (roomLower.includes('pedia') || sDeptLower.includes('pedia')) {
+                          avInitial = 'PD'; avBg = '#10b981'; avBadge = avBadge || 'Pediatrics';
+                        } else if (senderRoleRaw === 'doctor' || !avBadge) {
+                          const firstTwo = (displayName || 'Dr').trim().split(/\s+/).map((p) => p?.[0] || '').filter(Boolean).slice(0, 2).join('');
+                          avInitial = firstTwo.toUpperCase() || 'Dr';
+                          avBg = '#ea580c';
+                          avBadge = avBadge || 'Doctor';
+                        }
+
                         items.push(
                           <div
                             key={msgId}
                             data-dc-id={String(msgId)}
                             className={`dc-bubble-row ${mine ? 'dc-bubble-row-me' : 'dc-bubble-row-other'} ${isPinned ? 'dc-pin-highlight' : ''}`}
-                            style={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', marginBottom: 12, position: 'relative' }}
+                            style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: mine ? 0 : 10, justifyContent: mine ? 'flex-end' : 'flex-start', marginBottom: 12, position: 'relative' }}
                           >
-                            {showHeader && (
-                              <div className="dc-name-label" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.76rem', fontWeight: 800, color: '#334155', marginBottom: 5, paddingLeft: 2, paddingRight: 2 }}>
-                                <span className={`dc-dot dc-dot-${onlineInfo.level}`} style={{ width: 8, height: 8, borderRadius: 999, background: onlineInfo.level === 'on' ? '#22c55e' : onlineInfo.level === 'away' ? '#eab308' : '#94a3b8', boxShadow: `0 0 0 3px ${onlineInfo.level === 'on' ? 'rgba(34,197,94,0.16)' : onlineInfo.level === 'away' ? 'rgba(234,179,8,0.14)' : 'rgba(148,163,184,0.14)'}` }} title={onlineInfo.label} />
-                                <span>{searchHL(displayName)}</span>
-                                {senderDept && <span style={{ color: '#94a3b8', fontWeight: 600 }}>• {senderDept}</span>}
-                                <span style={{ color: '#94a3b8', fontWeight: 600, marginLeft: 4 }}>• {onlineInfo.label}</span>
+                            {!mine && (
+                              <div
+                                aria-hidden
+                                className="dc-avatar"
+                                style={{
+                                  flex: '0 0 auto',
+                                  width: 36,
+                                  height: 36,
+                                  borderRadius: '50%',
+                                  background: `linear-gradient(135deg, ${avBg}, ${avBg}dd)`,
+                                  color: '#fff',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontWeight: 900,
+                                  fontSize: avInitial.length > 1 ? '0.78rem' : '0.9rem',
+                                  letterSpacing: avInitial.length > 1 ? 0.2 : 0,
+                                  boxShadow: `0 2px 6px ${avBg}33, 0 0 0 3px #ffffff, 0 0 0 4px ${avBg}22`,
+                                  marginTop: showHeader ? 18 : 4
+                                }}
+                              >
+                                {avInitial}
                               </div>
                             )}
 
-                            {replyToBody && (
-                              <div
-                                className="dc-reply-quote"
-                                style={{
-                                  maxWidth: '78%',
-                                  marginBottom: 4,
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', maxWidth: '100%', flex: '1 1 auto', minWidth: 0 }}>
+                              {showHeader && (
+                                <div className="dc-name-label" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: '0.76rem', fontWeight: 800, color: '#334155', marginBottom: 5, paddingLeft: 2, paddingRight: 2 }}>
+                                  <span className={`dc-dot dc-dot-${onlineInfo.level}`} style={{ width: 8, height: 8, borderRadius: 999, background: onlineInfo.level === 'on' ? '#22c55e' : onlineInfo.level === 'away' ? '#eab308' : '#94a3b8', boxShadow: `0 0 0 3px ${onlineInfo.level === 'on' ? 'rgba(34,197,94,0.16)' : onlineInfo.level === 'away' ? 'rgba(234,179,8,0.14)' : 'rgba(148,163,184,0.14)'}` }} title={onlineInfo.label} />
+                                  <span>{searchHL(displayName)}</span>
+                                  {avBadge && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', padding: '1px 7px', borderRadius: 999, fontSize: '0.66rem', fontWeight: 800, color: '#fff', background: avBg, letterSpacing: 0.2 }}>
+                                      {avBadge}
+                                    </span>
+                                  )}
+                                  <span style={{ color: '#94a3b8', fontWeight: 600, marginLeft: 2 }}>• {onlineInfo.label}</span>
+                                </div>
+                              )}
+
+                              {replyToBody && (
+                                <div
+                                  className="dc-reply-quote"
+                                  style={{
+                                    maxWidth: '78%',
+                                    marginBottom: 4,
                                   padding: '6px 10px',
                                   fontSize: '0.76rem',
                                   background: mine ? 'rgba(255,255,255,0.16)' : 'rgba(234,88,12,0.06)',
@@ -5584,6 +5770,7 @@ function DoctorDashboard() {
                                 {mine && <Check size={10} style={{ opacity: 0.65, color: '#22c55e' }} title="Delivered" />}
                               </div>
                             )}
+                            </div>
                           </div>
                         );
                       });
