@@ -143,19 +143,30 @@ router.post('/messages', async (req, res) => {
     const pinned = Boolean(req.body?.pinned);
 
     // =========================================================================
-    // 3-TIER PRISMA DIRECT INSERT: BYPASSES ALL RLS!
-    //   Tier 1: FULL (with timestamps created_at + updated_at — if cols exist)
-    //   Tier 2: NO updated_at (created_at only — if updated_at missing
-    //   Tier 3: NO TIMESTAMPS AT ALL (if created_at missing too!)
-    //   Tier 4: ULTRA-LEGACY (body + attachment_url + specialty — 3 OLDEST COLS
-    // All tiers have the same bind params so no duplicated logic drift.
+    // 4-TIER PRISMA DIRECT INSERT — NO REGEX! 100% EXPLICIT QUERIES!
+    // Every tier has an explicit hardcoded SQL string + matching values array
+    // so placeholder count == values count (NEVER param mismatch again!)
+    //   Tier 1: FULL (22 cols + created_at/updated_at NOW() literals)
+    //   Tier 2: NO updated_at (22 cols + created_at only NOW())
+    //   Tier 3: NO TIMESTAMPS AT ALL (22 cols only)
+    //   Tier 4: ULTRA-LEGACY (3 OLDEST COLS: body, attachment_url, specialty)
     // =========================================================================
     let rowInsertedOk = false;
     let row = { id: null, created_at: new Date().toISOString() };
     let rowCount = 0;
     let hitInsertTier = 'full';
 
-    const colsFull = `
+    const base22Values = [
+      bodyRaw, attachmentUrl, specialty, room, senderRole, senderName, senderDept,
+      senderEmail, senderUsername, senderId,
+      replyToId, replyToBody, replyToSender, replyToKind,
+      attachmentKind, attachmentName, attachmentSize, attachmentMime,
+      attachmentPath, attachmentPublicUrl, deleted, pinned
+    ];
+    // LENGTH = 22, matches 22 $1..$22 placeholders below. COUNT CHECKED!
+
+    // ===== TIER 1: 22 cols + created_at,updated_at (24 total cols; NOW() inline)
+    const tier1Sql = `
       INSERT INTO public.consultation_messages (
         body, attachment_url, specialty, room, sender_role, sender_name, sender_dept,
         sender_email, sender_username, sender_id,
@@ -163,83 +174,88 @@ router.post('/messages', async (req, res) => {
         attachment_kind, attachment_name, attachment_size, attachment_mime,
         attachment_path, attachment_public_url, deleted, pinned,
         created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,NOW(),NOW())
-      RETURNING id, created_at
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+        $21,$22, NOW(), NOW()
+      )
     `;
-    const colsValues = [
-      bodyRaw, attachmentUrl, specialty, room, senderRole, senderName, senderDept,
-      senderEmail, senderUsername, senderId,
-      replyToId, replyToBody, replyToSender, replyToKind,
-      attachmentKind, attachmentName, attachmentSize, attachmentMime,
-      attachmentPath, attachmentPublicUrl, deleted, pinned
+    // Placeholders: 22 ✅
+
+    // ===== TIER 2: No updated_at column (created_at only)
+    const tier2Sql = `
+      INSERT INTO public.consultation_messages (
+        body, attachment_url, specialty, room, sender_role, sender_name, sender_dept,
+        sender_email, sender_username, sender_id,
+        reply_to_id, reply_to_body, reply_to_sender, reply_to_kind,
+        attachment_kind, attachment_name, attachment_size, attachment_mime,
+        attachment_path, attachment_public_url, deleted, pinned,
+        created_at
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+        $21,$22, NOW()
+      )
+    `;
+    // Placeholders: 22 ✅
+
+    // ===== TIER 3: No created_at / updated_at timestamps AT ALL
+    const tier3Sql = `
+      INSERT INTO public.consultation_messages (
+        body, attachment_url, specialty, room, sender_role, sender_name, sender_dept,
+        sender_email, sender_username, sender_id,
+        reply_to_id, reply_to_body, reply_to_sender, reply_to_kind,
+        attachment_kind, attachment_name, attachment_size, attachment_mime,
+        attachment_path, attachment_public_url, deleted, pinned
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+        $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+        $21,$22
+      )
+    `;
+    // Placeholders: 22 ✅
+
+    // ===== TIER 4: Ultra-Legacy 3-col OLDEST GUARANTEED COLUMNS ONLY
+    const tier4Values = [
+      cleanText(req.body?.body, 2000) || '-',
+      cleanStr(req.body?.attachment_url, 2048) || null,
+      cleanStr(req.body?.specialty || 'global_doctors', 120)
     ];
+    const tier4Sql = `
+      INSERT INTO public.consultation_messages (body, attachment_url, specialty)
+      VALUES ($1,$2,$3)
+    `;
+    // Placeholders: 3 ✅ tier4Values LENGTH 3.
 
-    // Tier 2 = no updated_at
-    const colsNoUpdated = colsFull.replace(/,\s*updated_at\s*\)\s*VALUES/g, ') VALUES ').replace(/,NOW\(\),NOW\(\)\s*\)/g, ',NOW()) )').replace(/,\s*created_at\s*, updated_at/g, ', created_at');
-    // Tier 3 = no timestamps at all
-    const colsNoTs = colsFull
-      .replace(/,\s*created_at,\s*updated_at\s*\)\s*VALUES/g, ') VALUES')
-      .replace(/,\s*NOW\(\),NOW\(\)\s*\)/g, ')')
-      .replace(/,\s*updated_at\s*\)\s*VALUES/g, ') VALUES')
-      .replace(/,\s*NOW\(\)\s*\)/g, ')');
-
-    // Try Tier 1 first
+    // ============ TRY TIERS 1 → 4 IN ORDER ============
     try {
-      rowCount = await prisma.$executeRawUnsafe(colsFull, colsValues) || 0;
+      rowCount = await prisma.$executeRawUnsafe(tier1Sql, base22Values) || 0;
       rowInsertedOk = true;
       hitInsertTier = 'full';
-    } catch (tier1Err) {
-      const msg = String(tier1Err?.message || tier1Err || '');
-      // Tier 2: try no updated_at (only for updated_at missing)
-      if (/updated_at.*does not exist|42703.*updated_at|column.*updated_at/i.test(msg)) {
+    } catch (e1) {
+      try {
+        rowCount = await prisma.$executeRawUnsafe(tier2Sql, base22Values) || 0;
+        rowInsertedOk = true;
+        hitInsertTier = 'created_at-only';
+      } catch (e2) {
         try {
-          rowCount = await prisma.$executeRawUnsafe(colsFull
-            .replace(/,\s*updated_at\s*\)\s*VALUES\s*\(/g, ') VALUES (')
-            .replace(/,\s*NOW\(\),\s*NOW\(\)\s*\)/g, ', NOW())')
-            .replace(/,\s*updated_at/g, '')
-            , colsValues) || 0;
-          rowInsertedOk = true;
-          hitInsertTier = 'created_at-only';
-        } catch (tier2Err) {
-          const msg2 = String(tier2Err?.message || tier2Err || '');
-          // Fall through to Tier 3 / Ultra-legacy
-        }
-      }
-      if (!rowInsertedOk) {
-        // Tier 3: no timestamps
-        try {
-          rowCount = await prisma.$executeRawUnsafe(colsFull
-            .replace(/,\s*created_at,\s*updated_at\s*\)\s*VALUES\s*\(/g, ') VALUES (')
-            .replace(/,\s*NOW\(\),\s*NOW\(\)\s*\)/g, ')')
-            .replace(/,\s*created_at\s*,\s*updated_at/g, '')
-            , colsValues) || 0;
+          rowCount = await prisma.$executeRawUnsafe(tier3Sql, base22Values) || 0;
           rowInsertedOk = true;
           hitInsertTier = 'no-timestamps';
-        } catch (tier3Err) {
-          // Fallback: Ultra-legacy at catch-all below
+        } catch (e3) {
+          try {
+            rowCount = await prisma.$executeRawUnsafe(tier4Sql, tier4Values) || 0;
+            rowInsertedOk = true;
+            hitInsertTier = 'ultra-legacy-3-col';
+          } catch (e4) {
+            console.error('[doctorChat] POST /messages ALL 4 tiers failed. e1=', e1?.message, '| e2=', e2?.message, '| e3=', e3?.message, '| e4=', e4?.message);
+            throw e4;
+          }
         }
       }
     }
 
-    // Ultra-legacy 3-col / oldest cols fallback (in case whole column set missing)
-    if (!rowInsertedOk) {
-      try {
-        rowCount = await prisma.$executeRawUnsafe(`
-          INSERT INTO public.consultation_messages (body, attachment_url, specialty) VALUES ($1,$2,$3)
-        `, [
-          cleanText(req.body?.body, 2000) || '-',
-          cleanStr(req.body?.attachment_url, 2048) || null,
-          cleanStr(req.body?.specialty || 'global_doctors', 120)
-        ]) || 0;
-        rowInsertedOk = true;
-        hitInsertTier = 'ultra-legacy-3-col';
-      } catch (ultraLegacyErr) {
-          console.error('[doctorChat] ALL 4 insert tiers failed:', ultraLegacyErr);
-          throw ultraLegacyErr;
-        }
-    }
-
-    // Lookup the inserted row for identity-based best-effort.
+    // Lookup the inserted row (best effort identity based). ORDER BY id (not ordinal)
     try {
       const rows = await prisma.$queryRawUnsafe(`
         SELECT id, body, sender_role, sender_name, specialty, room, attachment_url, deleted, pinned
@@ -251,7 +267,7 @@ router.post('/messages', async (req, res) => {
           AND (COALESCE(sender_role, '') = COALESCE($4::text, ''))
           AND (COALESCE(sender_name, '') = COALESCE($5::text, ''))
           AND ($6::text IS NULL OR COALESCE(room, '') = COALESCE($6::text, ''))
-        ORDER BY 1 DESC
+        ORDER BY id DESC
         LIMIT 1
       `, [bodyRaw, attachmentUrl, specialty, senderRole, senderName, room]);
       if (Array.isArray(rows) && rows[0]) {
@@ -264,13 +280,13 @@ router.post('/messages', async (req, res) => {
       ok: true,
       source: `prisma-direct-no-rls`,
       hitInsertTier,
-      message: hitInsertTier === 'full' ? 'Inserted via Prisma direct (Supabase PostgREST RLS bypassed)' :
-               'Inserted via Prisma direct (some columns missing in DB; run migration 008 for full timestamps)',
+      message: hitInsertTier === 'full' ? 'Inserted via Prisma direct (all RLS bypassed).' :
+               `Inserted via Prisma direct (hit tier=${hitInsertTier}; run migration 008 for full timestamp cols)`,
       row,
       rowCount: typeof rowCount === 'number' ? rowCount : 1,
     });
   } catch (err) {
-    console.error('[doctorChat] POST /messages all tiers failed:', err);
+    console.error('[doctorChat] POST /messages final catch:', err);
     return res.status(500).json({ ok: false, error: String(err?.message || err).slice(0, 800) });
   }
 });
@@ -399,83 +415,109 @@ router.post('/attachments', upload.single('file'), async (req, res) => {
 
     // =====================================================================
     // STEP B: INSERT MESSAGE INTO DB VIA PRISMA DIRECT (RLS BYPASSED!)
-    // 4-TIER FALLBACK — just like /messages endpoint
-    //   Tier 1: FULL (with created_at + updated_at)
-    //   Tier 2: created_at only (if updated_at missing)
-    //   Tier 3: NO timestamps (if created_at also missing)
-    //   Tier 4: ULTRA-LEGACY 3-COL (body, attachment_url, specialty)
+    // 4-TIER FALLBACK — NO REGEX! 100% EXPLICIT HARDCODED QUERIES!
+    // Placeholder count == value array count GUARANTEED for every tier!
+    //   Tier 1: FULL (18 cols + created_at + updated_at)
+    //   Tier 2: NO updated_at (18 cols + created_at)
+    //   Tier 3: NO TIMESTAMPS AT ALL (18 cols only)
+    //   Tier 4: ULTRA-LEGACY (3 OLDEST COLS: body, attachment_url, specialty)
     // =====================================================================
     let insertedRow = { id: null, created_at: new Date().toISOString() };
     let insertOk = false;
     let hitTier = 'full';
 
-    const attachColsFull = `
+    // BASE 18 VALUES — matches $1..$18 in tier1/2/3 SQL below
+    const base18Values = [
+      caption, signedUrl || publicUrl,                         // $1,$2 = body, attachment_url
+      attachmentKind, attachmentName, attachmentSize, attachmentMime, // $3..$6
+      storagePath, publicUrl,                                   // $7,$8
+      specialty, room, senderRole, senderName, senderDept,      // $9..$13
+      senderEmail, senderUsername, senderId,                    // $14..$16
+      false, false                                              // $17,$18 = deleted, pinned
+    ];
+    // LENGTH = 18 ✅ (matches $1..$18 below COUNT CHECKED!)
+
+    // ==== TIER 1: FULL with created_at + updated_at (NOW() inline)
+    const attachTier1 = `
       INSERT INTO public.consultation_messages (
         body, attachment_url, attachment_kind, attachment_name, attachment_size, attachment_mime,
         attachment_path, attachment_public_url,
         specialty, room, sender_role, sender_name, sender_dept,
         sender_email, sender_username, sender_id,
         deleted, pinned, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW(),NOW())
-      RETURNING id, created_at
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,
+        $9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+        NOW(), NOW()
+      )
     `;
-    const attachValues = [
-      caption, signedUrl || publicUrl,
-      attachmentKind, attachmentName, attachmentSize, attachmentMime,
-      storagePath, publicUrl,
-      specialty, room, senderRole, senderName, senderDept,
-      senderEmail, senderUsername, senderId,
-      false, false
-    ];
+    // Placeholders: 18 ✅
 
-    // Tier 1: Full with timestamps
+    // ==== TIER 2: No updated_at column (created_at only)
+    const attachTier2 = `
+      INSERT INTO public.consultation_messages (
+        body, attachment_url, attachment_kind, attachment_name, attachment_size, attachment_mime,
+        attachment_path, attachment_public_url,
+        specialty, room, sender_role, sender_name, sender_dept,
+        sender_email, sender_username, sender_id,
+        deleted, pinned, created_at
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,
+        $9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+        NOW()
+      )
+    `;
+    // Placeholders: 18 ✅
+
+    // ==== TIER 3: NO TIMESTAMP COLS AT ALL (no created_at/updated_at)
+    const attachTier3 = `
+      INSERT INTO public.consultation_messages (
+        body, attachment_url, attachment_kind, attachment_name, attachment_size, attachment_mime,
+        attachment_path, attachment_public_url,
+        specialty, room, sender_role, sender_name, sender_dept,
+        sender_email, sender_username, sender_id,
+        deleted, pinned
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,
+        $9,$10,$11,$12,$13,$14,$15,$16,$17,$18
+      )
+    `;
+    // Placeholders: 18 ✅
+
+    // ==== TIER 4: Ultra-Legacy 3 COL OLDEST GUARANTEED ONLY
+    const attachTier4Values = [caption || '[file]', signedUrl || publicUrl, specialty];
+    const attachTier4 = `INSERT INTO public.consultation_messages (body, attachment_url, specialty) VALUES ($1,$2,$3)`;
+    // Placeholders: 3, Values array length = 3 ✅ COUNT CHECKED!
+
+    // ============ TIERS 1 → 4 IN ORDER (nested try/catch) ============
     try {
-      await prisma.$executeRawUnsafe(attachColsFull, attachValues);
+      await prisma.$executeRawUnsafe(attachTier1, base18Values);
       insertOk = true;
       hitTier = 'full';
-    } catch (tier1DbErr) {
-      const msg = String(tier1DbErr?.message || tier1DbErr || '');
-      // Tier 2: no updated_at
-      if (/updated_at.*does not exist|42703.*updated_at|column.*updated_at/i.test(msg)) {
+    } catch (e1) {
+      try {
+        await prisma.$executeRawUnsafe(attachTier2, base18Values);
+        insertOk = true;
+        hitTier = 'created_at-only';
+      } catch (e2) {
         try {
-          await prisma.$executeRawUnsafe(attachColsFull
-            .replace(/,\s*updated_at\s*\)\s*VALUES\s*\(/g, ') VALUES (')
-            .replace(/,\s*NOW\(\),\s*NOW\(\)\s*\)/g, ', NOW())')
-            .replace(/,\s*updated_at/g, '')
-            , attachValues);
-          insertOk = true;
-          hitTier = 'created_at-only';
-        } catch (_tier2) { /* fall through */ }
-      }
-      if (!insertOk) {
-        // Tier 3: no timestamps
-        try {
-          await prisma.$executeRawUnsafe(attachColsFull
-            .replace(/,\s*created_at,\s*updated_at\s*\)\s*VALUES\s*\(/g, ') VALUES (')
-            .replace(/,\s*NOW\(\),\s*NOW\(\)\s*\)/g, ')')
-            .replace(/,\s*created_at\s*,\s*updated_at/g, '')
-            , attachValues);
+          await prisma.$executeRawUnsafe(attachTier3, base18Values);
           insertOk = true;
           hitTier = 'no-timestamps';
-        } catch (_tier3) { /* fall through */ }
-      }
-      if (!insertOk) {
-        // Tier 4: ULTRA-LEGACY 3 COL — NO TIMESTAMPS!
-        try {
-          await prisma.$executeRawUnsafe(`
-            INSERT INTO public.consultation_messages (body, attachment_url, specialty)
-            VALUES ($1,$2,$3)
-          `, [caption || '[file]', signedUrl || publicUrl, specialty]);
-          insertOk = true;
-          hitTier = 'ultra-legacy-3-col';
-        } catch (ultraLegacyErr) {
-          console.error('[doctorChat] attachment ALL 4 insert tiers failed:', ultraLegacyErr);
-          throw ultraLegacyErr;
+        } catch (e3) {
+          try {
+            await prisma.$executeRawUnsafe(attachTier4, attachTier4Values);
+            insertOk = true;
+            hitTier = 'ultra-legacy-3-col';
+          } catch (e4) {
+            console.error('[doctorChat] attachments ALL 4 tiers failed. e1=', e1?.message, '| e2=', e2?.message, '| e3=', e3?.message, '| e4=', e4?.message);
+            throw e4;
+          }
         }
       }
     }
 
-    // Lookup inserted row (optional, best effort)
+    // Lookup inserted row (optional, best effort) ORDER BY id DESC (not ordinal!)
     try {
       const rows = await prisma.$queryRawUnsafe(`
         SELECT id, attachment_url, attachment_kind, attachment_name, attachment_size,
@@ -485,7 +527,7 @@ router.post('/attachments', upload.single('file'), async (req, res) => {
           COALESCE(attachment_name, '') = COALESCE($1::text, '')
           AND COALESCE(attachment_size, 0) = COALESCE($2::bigint, 0)
           AND COALESCE(sender_name, '') = COALESCE($3::text, '')
-        ORDER BY 1 DESC LIMIT 1
+        ORDER BY id DESC LIMIT 1
       `, [attachmentName, attachmentSize, senderName]);
       if (Array.isArray(rows) && rows[0]) {
         insertedRow = rows[0];
