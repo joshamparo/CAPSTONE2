@@ -419,9 +419,10 @@ function DoctorDashboard() {
   }, []);
 
   const doctorChatDeptRoomMatchKeys = useMemo(() => {
+    const u = currentUser || {};
     const spec = String(doctorSpecialization || '').trim();
-    const deptId = String(doctorDepartmentId || '').trim();
-    const deptName = String(doctorDepartmentName || '').trim();
+    const deptId = String(u.departmentId || u.department_id || u.deptId || u.id || '').trim();
+    const deptName = String(u.department || u.departmentName || u.dept || '').trim();
     const nameRaw = String(doctorChatSenderIdentity?.name || doctorInboxName || doctorName || '').trim();
     const set = new Set();
     const add = (v) => {
@@ -458,7 +459,7 @@ function DoctorDashboard() {
     ];
     for (const d of departments) add(d);
     return set;
-  }, [doctorSpecialization, doctorDepartmentId, doctorDepartmentName, doctorInboxName, doctorName, doctorChatSenderIdentity?.name]);
+  }, [currentUser, doctorSpecialization, doctorInboxName, doctorName, doctorChatSenderIdentity?.name]);
 
   const doctorChatUnifiedInboxFilters = useMemo(() => {
     const ALLIED_SET = new Set(['Physical Therapy', 'PT', 'Radiology', 'Xray', 'X-Ray', 'Laboratory', 'Lab', 'ECG', 'EKG', 'EEG', 'Ultrasound', 'CT Scan', 'MRI', 'OT', 'ST', 'Speech Therapy', 'Occupational Therapy', 'Pharmacy', 'Cashier']);
@@ -831,7 +832,8 @@ function DoctorDashboard() {
       const publicData = supabase.storage.from('doctor-chat-attachments').getPublicUrl(path);
       const publicUrl = publicData?.data?.publicUrl || '';
       const caption = String(doctorChatText || '').trim();
-      const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || String(doctorDepartmentName || '').trim() || doctorChatSpecialty;
+      const uDept = String(currentUser?.department || currentUser?.dept || currentUser?.departmentName || '').trim();
+      const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || uDept || doctorChatSpecialty;
       const payload = {
         specialty: doctorChatSpecialty, room: roomValue, sender_role: 'doctor',
         body: caption,
@@ -870,7 +872,8 @@ function DoctorDashboard() {
     }
     if (!supabase) return;
     try {
-      const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || String(doctorDepartmentName || '').trim() || doctorChatSpecialty;
+      const uDept = String(currentUser?.department || currentUser?.dept || currentUser?.departmentName || '').trim();
+      const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || uDept || doctorChatSpecialty;
       const payload = {
       specialty, room: roomValue, sender_role: 'doctor', body,
       sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept
