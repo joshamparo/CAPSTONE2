@@ -873,9 +873,7 @@ function DoctorDashboard() {
       if (error && isSchemaMissingColErrUp(error.message)) {
         hitTier = 2;
         const midPayload = {
-          specialty: doctorChatSpecialty, room: roomValue, sender_role: 'doctor',
-          sender_id: senderId, sender_email: senderEmail, sender_username: senderUsername,
-          body: caption,
+          specialty: doctorChatSpecialty, room: roomValue, sender_role: 'doctor', body: caption,
           sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept,
           attachment_url: signedUrl || publicUrl
         };
@@ -884,16 +882,14 @@ function DoctorDashboard() {
         else {
           hitTier = 3;
           const legacyPayload = {
-            specialty: doctorChatSpecialty, sender_role: 'doctor',
-            sender_id: senderId, sender_username: senderUsername,
-            body: caption,
+            specialty: doctorChatSpecialty, sender_role: 'doctor', body: caption,
             attachment_url: signedUrl || publicUrl
           };
           const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
           error = legacy.error;
         }
         if (!error && hitTier === 3) {
-          setToast({ type: 'warning', message: '📋 Migration 004 needed! File attached (legacy compat). Run supabase/migrations/004_drop_notnull_defaults.sql to silence.' });
+          setToast({ type: 'warning', message: '📋 Migrations 003+005 needed! File attached (ultra-legacy mode). Run 003, 004, 005 SQL in /supabase/migrations folder for full features.' });
         }
       }
       if (error) throw error;
@@ -951,23 +947,19 @@ function DoctorDashboard() {
     if (error && isSchemaMissingColErr(error.message)) {
       hitTier = 2;
       const midPayload = {
-        specialty, room: roomValue, sender_role: 'doctor',
-        sender_id: senderId, sender_email: senderEmail, sender_username: senderUsername,
-        body,
+        specialty, room: roomValue, sender_role: 'doctor', body,
         sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept
       };
       const mid = await supabase.from('consultation_messages').insert([midPayload]);
       if (!mid.error) { error = null; }
       else {
         hitTier = 3;
-        const legacyPayload = {
-          specialty, sender_role: 'doctor', sender_id: senderId, sender_username: senderUsername, body
-        };
+        const legacyPayload = { specialty, sender_role: 'doctor', body };
         const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
         error = legacy.error;
       }
       if (!error && hitTier === 3) {
-        setToast({ type: 'warning', message: '📋 Migration 004 needed! Message sent (legacy compat). Run 004_drop_notnull_defaults.sql to silence.' });
+        setToast({ type: 'warning', message: '📋 Migrations 003+005 needed! Message sent (ultra-legacy mode). Run all SQL files in /supabase/migrations (003, 004, 005) for full Nurse ↔ Doctor sync + sender identity.' });
       }
     }
     if (error) throw error;
