@@ -840,11 +840,41 @@ function DoctorDashboard() {
       const ts = Date.now();
       const safe = String(file.name || 'file').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
       const path = `${doctorChatSpecialty}/${doctorChatSenderIdentity.username || 'doc'}/${ts}_${safe}`;
-      const { error: upErr } = await supabase.storage.from('doctor-chat-attachments').upload(path, file, { cacheControl: '31536000', upsert: false });
+      const BUCKET_NAME = 'doctor-chat-attachments';
+      const isBucketMissingErr = (errMsg) => {
+        const m = String(errMsg || '').toLowerCase();
+        return m.includes('bucket') && (m.includes('not found') || m.includes('does not exist') || m.includes('no such'));
+      };
+      let uploadOnce = await supabase.storage.from(BUCKET_NAME).upload(path, file, { cacheControl: '31536000', upsert: false });
+      if (uploadOnce.error && isBucketMissingErr(uploadOnce.error.message)) {
+        setToast({ type: 'info', message: '🗄️ Storage bucket not found! Auto-creating "doctor-chat-attachments" (50MB, private w/ signed URLs)...' });
+        try {
+          const allowed = [];
+          if (kind === 'image') allowed.push('image/*');
+          if (kind === 'pdf') allowed.push('application/pdf');
+          if (kind === 'video') allowed.push('video/*');
+          await supabase.storage.createBucket(BUCKET_NAME, {
+            public: false,
+            fileSizeLimit: 50 * 1024 * 1024,
+            allowedMimeTypes: allowed.length ? allowed : ['image/*', 'application/pdf', 'video/*']
+          });
+        } catch (_createErr) {
+          // Create bucket via JS may fail on anon key (most Supabase projects block it) — tell user 2 manual ways.
+          setToast({
+            type: 'warning',
+            message: '⚠️ Auto-create blocked by Supabase anon key! FIX: Supabase Dashboard → Storage → + New Bucket → Name = doctor-chat-attachments → Public = OFF → Create. Then retry upload.',
+          });
+          setDoctorChatAttachmentUploading(false);
+          return;
+        }
+        // Retry the upload ONCE after successful bucket creation
+        uploadOnce = await supabase.storage.from(BUCKET_NAME).upload(path, file, { cacheControl: '31536000', upsert: false });
+      }
+      const { error: upErr } = uploadOnce;
       if (upErr) throw upErr;
-      const signedUrlRes = await supabase.storage.from('doctor-chat-attachments').createSignedUrl(path, 60 * 60 * 72);
+      const signedUrlRes = await supabase.storage.from(BUCKET_NAME).createSignedUrl(path, 60 * 60 * 72);
       const signedUrl = signedUrlRes?.data?.signedUrl || '';
-      const publicData = supabase.storage.from('doctor-chat-attachments').getPublicUrl(path);
+      const publicData = supabase.storage.from(BUCKET_NAME).getPublicUrl(path);
       const publicUrl = publicData?.data?.publicUrl || '';
       const caption = String(doctorChatText || '').trim();
       const uDept = String(currentUser?.department || currentUser?.dept || currentUser?.departmentName || '').trim();
