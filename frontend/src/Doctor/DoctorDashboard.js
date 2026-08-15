@@ -896,7 +896,12 @@ function DoctorDashboard() {
         return (m.includes('could not find') && m.includes('column')) ||
                m.includes('schema cache') ||
                (m.includes('column') && (m.includes('room') || m.includes('attachment') || m.includes('reply_to') || m.includes('sender_email') || m.includes('sender_username') || m.includes('sender_id'))) ||
-               m.includes('violates not-null constraint');
+               m.includes('violates not-null constraint') ||
+               m.includes('new row violates row-level security policy') ||
+               m.includes('violates row-level security policy') ||
+               m.includes('row level security') ||
+               m.includes('42501') ||
+               m.includes('permission denied');
       };
       let hitTier = 1;
       let { error } = await supabase.from('consultation_messages').insert([payload]);
@@ -970,7 +975,12 @@ function DoctorDashboard() {
       return (m.includes('could not find') && m.includes('column')) ||
              m.includes('schema cache') ||
              (m.includes('column') && (m.includes('room') || m.includes('reply_to') || m.includes('sender_email') || m.includes('sender_username') || m.includes('sender_id'))) ||
-             m.includes('violates not-null constraint');
+             m.includes('violates not-null constraint') ||
+             m.includes('new row violates row-level security policy') ||
+             m.includes('violates row-level security policy') ||
+             m.includes('row level security') ||
+             m.includes('42501') ||
+             m.includes('permission denied');
     };
     let hitTier = 1;
     let { error } = await supabase.from('consultation_messages').insert([payload]);
