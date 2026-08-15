@@ -224,6 +224,37 @@ function DoctorDashboard() {
       return `${first} ${last}`.trim();
     }
     const titleCaseWord = (w) => String(w || '').trim().replace(/^./, (c) => c.toUpperCase());
+    // Common Filipino + Spanish surnames (longest first) for lowercase concat splits.
+    // Needed because usernames like 'joshamparo5' are all lowercase (PascalCase splitter fails), so we match known lastname suffix at end then split.
+    const PH_SURNAMES_LONGEST_FIRST = [
+      // 9+
+      'pascualinga','bautista','gonzales','rodriguez','hernandez','guerrero','gutierrez','benedicto','alejandro','santiago','villanueva','cruz','mercado','mendoza','montenegro','navarro','salvador','tolentino','castillo','fernando','clemente','corpus','flores','fontanilla','dejesus','delacruz','dimalanta','galicia','hermosa','hipolito','isidoro','javier','jimenez','joson','labios','ledesma','legazpi','macaraig','malonzo','marasigan','marcelo','miranda','montealto','morales','natividad','nolasco','padilla','panganiban','panlilio','pedrosa','pilapil','pineda','plantilla','quirino','regalado','remulla','salazar','sandoval','sanjuanserroblesrosalesrostata','tuazon','umbaliurdanetavenezuela','vicencio','villena','viteri','amparo',
+      // 7-8
+      'acosta','aguinaldo','agustin','alvarez','angelo','antonio','asilo','ayala','baldos','bayani','bernal','besa','bueno','cabrera','cadeña','carreon','casanova','cendaña','chavez','conde','corona','cortes','danao','dapula','devera','divina','domingo','enciso','ermitaño','faustino','fuerte','gabriel','galang','galvez','garcia','ginez','gomez','gozon','ignacio','ilustre','kalaw','laurel','lazaro','lopez','macaraig','magno','malaya','manuel','marcos','mariano','matienzo','medina','mojica','nable','ortiz','osmena','palma','paraiso','pastor','pascual','perez','ponce','quezon','quimpo','ramirez','ramos','ranada','ricarte','rivas','rivera','sanchez','sepuede','soliman','sotto','suarez','sumulong','taber','tabora','tandoc','tanchanco','teodoro','torres','valdez','vargas','vasquez','velasco','veloso','villas',
+      // 6
+      'abravalencia','zamora','abaya','albaño','aldo','amocha','angeles','asano','bagsic','baliuag','bantug','basco','bautra','baylon','beltran','buanza','bundoc','cabral','cabus','cano','caraos','cedo','cera','chua','colet','dado','dalmacio','daza','diaz','digo','diosdado','echavez','elena','emeterio','eraña','estrada','fabella','fariñas','filio','galicia','gervacio','ginez','godinez','gregorio','halili','hidalgo','ibanez','ilagan','javellana','jocson','kalaw','kapunan','lanuza','lares','latonio','ledesma','licuanan','limjoco','linan','mabini','magbanua','makarunday','malazcona','manalo','manlapaz','manzano','maratas','masbate','mateo','mayo','menchaca','mijares','milante','misa','moldes','niel','nucum','obra','ocampo','otad','pacia','pagad','paguio','palabay','panti','paraiso','pasco','pedron','peralta','pilapil','pinlac','plantiya','quibilan','quirino','rabe','rafael','rances','recio','reyna','rubio','sabado','sagala','saldarretercias','tiglao','tinio','tiomsa','togonon','tolentino','umbra','urquiza','valera','vicencio','villon','viray',
+      // 5 (always LAST since we match longest FIRST, sorted by default — short matches won't consume long.
+      'reyes','santos','cruz','garcia','mercado','rivera','ramos','torres','flores','villanueva','santiago','diaz','pascua','aquino','bautista','delosreyes'
+    ].map(s => String(s).toLowerCase().replace(/[^a-z]/g,'')).filter(Boolean).sort((a,b)=>b.length-a.length);
+    const splitLowerSurnameSplit = (oneWordLower) => {
+      const s = String(oneWordLower || '').toLowerCase().replace(/[^a-z]/g,'');
+      if (!s || s.length < 6) return '';
+      for (const sfx of PH_SURNAMES_LONGEST_FIRST) {
+        if (!sfx || s === sfx) continue;
+        if (s.endsWith(sfx)) {
+          const firstLen = s.length - sfx.length;
+          if (firstLen >= 2 && firstLen <= sfx.length + 6) {
+            const fRaw = s.slice(0, firstLen);
+            // first part shouldn't itself be a known surname
+            if (PH_SURNAMES_LONGEST_FIRST.indexOf(fRaw) === -1) {
+              const l = sfx;
+              return [titleCaseWord(fRaw), titleCaseWord(l)].join(' ');
+            }
+          }
+        }
+      }
+      return '';
+    };
     const cleanUsername = (v) => {
       const s = String(v || '').trim();
       if (!s) return '';
@@ -235,10 +266,17 @@ function DoctorDashboard() {
         if (!only) return '';
         const split = only.match(/^([A-Z][a-z]+)([A-Z][a-z]+)$/);
         if (split) return `${split[1]} ${split[2]}`;
+        const lowerSplit = splitLowerSurnameSplit(only);
+        if (lowerSplit && /\s/.test(lowerSplit)) return lowerSplit;
+      }
+      if (parts.length === 0) {
+        const lowerFallback = splitLowerSurnameSplit(stripped);
+        if (lowerFallback && /\s/.test(lowerFallback)) return lowerFallback;
       }
       return parts.join(' ');
     };
-    if (u.email && !isEmailOrUser(first) === false) {
+    const firstIsPattern = Boolean(isEmailOrUser(first));
+    if (u.email && firstIsPattern) {
       const nice = cleanUsername(u.email);
       if (nice && hasSpace(nice)) return nice;
     }
@@ -248,9 +286,14 @@ function DoctorDashboard() {
         return first;
       }
       const niceF = cleanUsername(first);
+      if (niceF && hasSpace(niceF)) return niceF;
       if (niceF) return niceF;
     }
-    if (nameRaw) return cleanUsername(nameRaw) || nameRaw;
+    if (nameRaw) {
+      const niceRaw = cleanUsername(nameRaw);
+      if (niceRaw) return niceRaw;
+      return nameRaw;
+    }
     return 'Doctor';
   }, [currentUser]);
 
