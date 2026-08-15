@@ -5029,8 +5029,8 @@ function DoctorDashboard() {
         )}
 
         {activeNav === 'doctor-chat' && (
-          <div className="doctor-grid doc-section">
-            <div className="doc-card" style={{ overflow: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div className="doctor-grid doc-section dc-chat-outer" style={{ flex: 1, minHeight: 0, height: 0 }}>
+            <div className="doc-card dc-chat-card" style={{ overflow: 'hidden', minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
               <div className="doc-card-header" style={{ padding: '12px 16px 14px', borderBottom: doctorChatShowSearch || !doctorChatBannerDismissed ? '1px solid #f1f5f9' : '1px solid #f1f5f9' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>

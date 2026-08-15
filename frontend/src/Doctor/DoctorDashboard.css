@@ -494,6 +494,21 @@
   margin-bottom: 18px;
 }
 
+.dc-chat-outer.doctor-grid {
+  grid-template-columns: 1fr;
+  gap: 0;
+  margin-bottom: 0;
+  height: 100%;
+}
+
+.dc-chat-card .doc-card-header {
+  flex: 0 0 auto;
+}
+
+.dc-msg-more-open {
+  opacity: 1 !important;
+}
+
 .doctor-grid-2 {
   grid-template-columns: 1fr;
 }
@@ -2417,9 +2432,6 @@
 
 .dc-msg-more {
   transition: opacity 120ms ease;
-}
-.dc-msg-more-open {
-  opacity: 1 !important;
 }
 
 @media (max-width: 980px) {
