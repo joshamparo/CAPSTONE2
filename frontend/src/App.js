@@ -60,7 +60,20 @@ function AppShell() {
     try { return localStorage.getItem('app_global_maint') === '1'; } catch (_) { return false; }
   });
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [bannerDismissedForKey, setBannerDismissedForKey] = useState('');
   const [lastCheckedAt, setLastCheckedAt] = useState(0);
+
+  // Auto-dismiss reset: if backend/maintenance combo CHANGES (maint→down or down→maint or state toggle on/off)
+  // re-show banner (was hidden forever after user X before this fix)
+  useEffect(() => {
+    const currentKey = `${backendDown ? 'D' : '0'}${maintenanceMode ? 'M' : '0'}`;
+    if (bannerDismissedForKey !== currentKey && bannerDismissedForKey) {
+      setBannerDismissed(false);
+      setBannerDismissedForKey(currentKey);
+    } else if (!bannerDismissedForKey) {
+      setBannerDismissedForKey(currentKey);
+    }
+  }, [backendDown, maintenanceMode, bannerDismissedForKey]);
 
   const runSystemHealthCheck = useMark => new Promise((resolve) => {
     const t0 = Date.now();
@@ -157,7 +170,10 @@ function AppShell() {
             </span>
             <button
               type="button"
-              onClick={() => setBannerDismissed(true)}
+              onClick={() => {
+                setBannerDismissed(true);
+                setBannerDismissedForKey(`${backendDown ? 'D' : '0'}${maintenanceMode ? 'M' : '0'}`);
+              }}
               style={{
                 width: 28, height: 28, borderRadius: 8,
                 background: 'transparent', border: 'none',

@@ -3077,6 +3077,57 @@ function AdminDashboard() {
     }
   };
 
+  const isValidRegisterStep = useMemo(() => {
+    const clean = (v) => String(v || "").trim();
+    if (registrationStep === 1) {
+      if (!clean(staffFormData.firstName) || clean(staffFormData.firstName).length < 2) return false;
+      if (!clean(staffFormData.lastName) || clean(staffFormData.lastName).length < 2) return false;
+      if (!clean(staffFormData.middleName) || clean(staffFormData.middleName).length < 2) return false;
+      const dobStr = clean(staffFormData.dateOfBirth);
+      if (!dobStr) return false;
+      const dob = new Date(dobStr);
+      if (Number.isNaN(dob.getTime())) return false;
+      const today = new Date();
+      if (dob > today) return false;
+      let age = today.getFullYear() - dob.getFullYear();
+      const m = today.getMonth() - dob.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age -= 1;
+      if (age < 18) return false;
+      if (!clean(staffFormData.gender)) return false;
+      if (!clean(staffFormData.civilStatus)) return false;
+      if (!clean(staffFormData.nationality)) return false;
+    } else if (registrationStep === 2) {
+      if (!clean(staffFormData.role)) return false;
+      const hiredStr = clean(staffFormData.dateHired);
+      if (!hiredStr) return false;
+      const hired = new Date(hiredStr);
+      const today = new Date();
+      if (Number.isNaN(hired.getTime()) || hired > today) return false;
+      const medicalRoles = ['Doctor', 'Nurse', 'Pharmacist'];
+      if (medicalRoles.includes(clean(staffFormData.role))) {
+        if (!/^\d{7}$/.test(clean(staffFormData.medicalLicenseNumber))) return false;
+      }
+      if (clean(staffFormData.role) && !clean(staffFormData.specialization)) return false;
+      const isMedicineDoctor = clean(staffFormData.role) === 'Doctor' && clean(staffFormData.specialization) === 'Medicine';
+      if (isMedicineDoctor && !clean(staffFormData.department)) return false;
+      const specClean = clean(staffFormData.specialization);
+      const isDoctorSecretary = ['Office Staff', 'Staff'].includes(clean(staffFormData.role)) &&
+        (specClean === "Doctor's Secretary" || specClean === 'Doctor Secretary');
+      if (isDoctorSecretary && !clean(staffFormData.linkedDoctorId)) return false;
+      if (['Nurse', 'Medtech', 'Radiographer', 'ECG Operator', 'Physical Therapist'].includes(clean(staffFormData.role)) && !clean(staffFormData.department)) {
+        return false;
+      }
+    } else if (registrationStep === 3) {
+      if (!clean(staffFormData.email) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(staffFormData.email))) return false;
+      if (!clean(staffFormData.phone) || clean(staffFormData.phone).replace(/\D/g, '').length < 10) return false;
+      if (!clean(staffFormData.address) || clean(staffFormData.address).length < 8) return false;
+      if (!clean(staffFormData.username) || clean(staffFormData.username).length < 4) return false;
+      if (!clean(staffFormData.password) || clean(staffFormData.password).length < 8) return false;
+      if (clean(staffFormData.password) !== clean(staffFormData.confirmPassword)) return false;
+    }
+    return true;
+  }, [registrationStep, staffFormData]);
+
   const handleNextStep = () => {
     setCreateStaffError(""); // Clear previous errors
     const errors = [];
@@ -6032,9 +6083,9 @@ function AdminDashboard() {
                 <button type="button" className="btn-gray shadow-btn" onClick={() => setRegistrationStep(prev => prev - 1)}>Back</button>
               )}
               {registrationStep < 3 ? (
-                <button type="button" className="btn-orange-large shadow-btn" onClick={handleNextStep}>Next</button>
+                <button type="button" className="btn-orange-large shadow-btn" onClick={handleNextStep} disabled={!isValidRegisterStep}>Next</button>
               ) : (
-                <button type="submit" className="btn-orange-large shadow-btn">Create Staff Account</button>
+                <button type="submit" className="btn-orange-large shadow-btn" disabled={!isValidRegisterStep}>Create Staff Account</button>
               )}
               <button type="button" className="btn-gray shadow-btn" onClick={handleReset}>Remove All</button>
             </div>
