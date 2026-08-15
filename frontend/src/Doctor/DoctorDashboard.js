@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronLeft, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff, Maximize2 } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronLeft, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff, Maximize2, Paperclip, Pin, MoreHorizontal, Download, Image as ImageIcon, File, Video as VideoIcon, ArrowDown, Bell, Copy, AtSign, Reply, Clock, Sparkles } from 'lucide-react';
 import './DoctorDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
@@ -302,48 +302,93 @@ function DoctorDashboard() {
 
   const [doctorChatMessages, setDoctorChatMessages] = useState([]);
   const [doctorChatLoading, setDoctorChatLoading] = useState(false);
+  const [doctorChatLoadingOlder, setDoctorChatLoadingOlder] = useState(false);
+  const [doctorChatOlderExhausted, setDoctorChatOlderExhausted] = useState(false);
   const [doctorChatError, setDoctorChatError] = useState('');
   const [doctorChatText, setDoctorChatText] = useState('');
   const [doctorChatInputInvalid, setDoctorChatInputInvalid] = useState(false);
+  const [doctorChatShowFAB, setDoctorChatShowFAB] = useState(false);
+  const [doctorChatUnreadBadge, setDoctorChatUnreadBadge] = useState(0);
+  const [doctorChatScrollInterrupt, setDoctorChatScrollInterrupt] = useState(false);
+  const [doctorChatSearch, setDoctorChatSearch] = useState('');
+  const [doctorChatShowSearch, setDoctorChatShowSearch] = useState(false);
+  const [doctorChatBannerDismissed, setDoctorChatBannerDismissed] = useState(() => {
+    try { return Number(localStorage.getItem('dc_phi_banner_closed') || 0) >= 3; } catch (_) { return false; }
+  });
+  const [doctorChatAttachment, setDoctorChatAttachment] = useState(null);
+  const [doctorChatAttachmentUploading, setDoctorChatAttachmentUploading] = useState(false);
+  const [doctorChatAttPreview, setDoctorChatAttPreview] = useState(null);
+  const [doctorChatReplying, setDoctorChatReplying] = useState(null);
+  const [doctorChatMentionOpen, setDoctorChatMentionOpen] = useState(false);
+  const [doctorChatMentionIdx, setDoctorChatMentionIdx] = useState(null);
+  const [doctorChatMentionQuery, setDoctorChatMentionQuery] = useState('');
+  const [doctorChatPinOpen, setDoctorChatPinOpen] = useState(false);
+  const [doctorChatMsgMenu, setDoctorChatMsgMenu] = useState(null);
+  const [doctorChatDeleteConfirm, setDoctorChatDeleteConfirm] = useState(null);
   const doctorChatScrollRef = useRef(null);
+  const doctorChatFileInputRef = useRef(null);
+  const doctorChatComposeRef = useRef(null);
+  const doctorChatLastSeenIdRef = useRef(null);
 
   const doctorChatSpecialty = useMemo(() => {
     return 'global_doctors'; // All doctors share the same chat room
   }, []);
 
-  const loadDoctorChatMessages = async () => {
+  const loadDoctorChatMessages = async (opts = {}) => {
     const specialty = doctorChatSpecialty;
     if (!supabase) {
       setDoctorChatMessages([]);
       setDoctorChatError('Chat is not configured. Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY in homepage/.env, then restart the dev server and rebuild before uploading to Hostinger.');
       return;
     }
-    setDoctorChatLoading(true);
+    const isOlder = opts.older === true;
+    const existing = Array.isArray(doctorChatMessages) ? doctorChatMessages : [];
+    if (isOlder && existing.length < 20) {
+      setDoctorChatOlderExhausted(true);
+      return;
+    }
+    if (isOlder) setDoctorChatLoadingOlder(true); else setDoctorChatLoading(true);
     setDoctorChatError('');
     try {
-      const { data, error } = await supabase
+      const PAGE = 50;
+      let query = supabase
         .from('consultation_messages')
         .select('*')
         .eq('specialty', specialty)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .limit(PAGE);
+      if (isOlder && existing.length) {
+        const earliest = existing[0];
+        if (earliest?.created_at) query = query.lt('created_at', earliest.created_at);
+      }
+      const { data, error } = await query;
       if (error) throw error;
-      setDoctorChatMessages(Array.isArray(data) ? data : []);
+      const rows = Array.isArray(data) ? [...data].reverse() : [];
+      if (isOlder) {
+        if (!rows.length) setDoctorChatOlderExhausted(true);
+        setDoctorChatMessages((prev) => [...rows, ...(Array.isArray(prev) ? prev : [])]);
+      } else {
+        if (rows.length < PAGE) setDoctorChatOlderExhausted(true);
+        setDoctorChatMessages(rows);
+        if (rows.length) doctorChatLastSeenIdRef.current = rows[rows.length - 1]?.id || null;
+      }
     } catch (e) {
-      setDoctorChatMessages([]);
+      if (!isOlder) setDoctorChatMessages([]);
       setDoctorChatError(String(e?.message || 'Unable to load messages.'));
     } finally {
-      setDoctorChatLoading(false);
+      if (isOlder) setDoctorChatLoadingOlder(false); else setDoctorChatLoading(false);
     }
   };
 
-  const scrollDoctorChatToBottom = () => {
+  const scrollDoctorChatToBottom = (force) => {
     try {
       const el = doctorChatScrollRef?.current;
-      if (el && typeof el.scrollTo === 'function') {
-        el.scrollTo({ top: el.scrollHeight + 9999, behavior: 'smooth' });
-      } else if (el) {
-        el.scrollTop = el.scrollHeight;
-      }
+      if (!el) return;
+      if (force !== true && doctorChatScrollInterrupt) return;
+      if (typeof el.scrollTo === 'function') el.scrollTo({ top: el.scrollHeight + 99999, behavior: 'smooth' });
+      else el.scrollTop = el.scrollHeight;
+      setDoctorChatUnreadBadge(0);
+      setDoctorChatShowFAB(false);
     } catch (_) {}
   };
 
@@ -351,46 +396,116 @@ function DoctorDashboard() {
     const name = String(doctorInboxName || doctorName || 'Doctor').trim();
     const spec = String(doctorSpecialization || '').trim();
     const dept = spec ? spec.replace(/\b\w/g, (c) => c.toUpperCase()) : '';
-    return {
-      name,
-      dept,
-      displayName: dept ? `${name} • ${dept}` : name
-    };
-  }, [doctorInboxName, doctorName, doctorSpecialization]);
+    const username = String(currentUser?.username || currentUser?.email || currentUser?.user || '').trim().split('@')[0];
+    return { name, dept, displayName: dept ? `${name} • ${dept}` : name, username };
+  }, [doctorInboxName, doctorName, doctorSpecialization, currentUser]);
 
-  const normalizeSenderKey = (raw) => {
-    return String(raw || '').trim().toLowerCase().replace(/\s+/g, '');
-  };
+  const doctorChatCurrentUsernameKeys = useMemo(() => {
+    const keys = new Set();
+    const push = (raw) => {
+      const s = String(raw || '').trim().toLowerCase().replace(/[\s._-]+/g, '');
+      if (s) keys.add(s);
+    };
+    push(doctorChatSenderIdentity.name);
+    push(doctorChatSenderIdentity.username);
+    push(currentUser?.username);
+    push(currentUser?.email);
+    push(currentUser?.user);
+    const u0 = String(currentUser?.username || '').split('@')[0];
+    push(u0);
+    const e0 = String(currentUser?.email || '').split('@')[0];
+    if (e0 && e0 !== u0) push(e0);
+    const nameParts = doctorChatSenderIdentity.name.split(/\s+/).filter(Boolean);
+    if (nameParts.length >= 2) push(nameParts[0] + nameParts[nameParts.length - 1]);
+    return keys;
+  }, [doctorChatSenderIdentity, currentUser]);
+
+  const normalizeSenderKey = (raw) => String(raw || '').trim().toLowerCase().replace(/[\s._@-]+/g, '');
 
   const isDoctorChatMine = (msg) => {
-    const a = normalizeSenderKey(msg?.sender_name || msg?.senderName || '');
-    const b = normalizeSenderKey(doctorChatSenderIdentity.name);
-    if (a && b && a === b) return true;
-    const c = normalizeSenderKey(msg?.sender_email || msg?.senderEmail || msg?.sender_user || '');
-    const d = normalizeSenderKey(currentUser?.email || currentUser?.username || currentUser?.user || '');
-    return !!(c && d && c === d);
+    const names = [msg?.sender_name, msg?.senderName, msg?.sender_email, msg?.senderEmail, msg?.sender_user, msg?.sender_username];
+    for (const raw of names) {
+      const k = normalizeSenderKey(raw);
+      if (!k) continue;
+      if (doctorChatCurrentUsernameKeys.has(k)) return true;
+      for (const mine of doctorChatCurrentUsernameKeys) if (mine && k.includes(mine)) return true;
+    }
+    if (msg?.sender_id && String(msg.sender_id) === String(currentUser?.id || '')) return true;
+    return false;
   };
+
+  const guessDisplayName = (msg) => {
+    const raw = String(msg?.sender_name || msg?.senderName || '').trim();
+    if (raw.includes(' ')) return raw;
+    if (!raw) return 'Doctor';
+    if (/^[a-z0-9]+$/i.test(raw) && /\d/.test(raw)) {
+      const cleaned = raw.replace(/\d+$/g, '').replace(/[_.-]/g, ' ').replace(/\s+/g, ' ').trim();
+      const titled = cleaned ? cleaned.replace(/\b\w/g, (c) => c.toUpperCase()) : '';
+      return titled ? `Dr. ${titled}` : `Dr. (${raw})`;
+    }
+    if (/^[a-z]+$/i.test(raw)) return `Dr. ${raw.charAt(0).toUpperCase() + raw.slice(1)}`;
+    return raw;
+  };
+
+  const doctorChatAllSenders = useMemo(() => {
+    const map = new Map();
+    const list = Array.isArray(doctorChatMessages) ? doctorChatMessages : [];
+    list.forEach((m) => {
+      const name = guessDisplayName(m);
+      if (!name || name === 'Doctor') return;
+      const key = name.toLowerCase().replace(/\s+/g, '');
+      if (map.has(key)) return;
+      const dept = String(m?.sender_dept || m?.senderDept || '').trim();
+      map.set(key, { name, dept, key });
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [doctorChatMessages]);
+
+  const doctorChatOnlineMap = useMemo(() => {
+    const state = new Map();
+    const now = Date.now();
+    const list = Array.isArray(doctorChatMessages) ? [...doctorChatMessages].reverse() : [];
+    list.forEach((m) => {
+      const key = normalizeSenderKey(guessDisplayName(m) + '|' + String(m?.sender_dept || ''));
+      if (state.has(key)) return;
+      const ts = m?.created_at || m?.createdAt || null;
+      if (!ts) { state.set(key, { level: 'off', label: 'Offline' }); return; }
+      const diff = now - new Date(ts).getTime();
+      let level = 'off', label = 'Offline';
+      if (diff <= 5 * 60 * 1000) { level = 'on'; label = 'Online'; }
+      else if (diff <= 30 * 60 * 1000) { level = 'away'; label = 'Away'; }
+      state.set(key, { level, label, ts });
+    });
+    const meKey = normalizeSenderKey(doctorChatSenderIdentity.displayName);
+    state.set(meKey, { level: 'on', label: 'Online', ts: now });
+    return state;
+  }, [doctorChatMessages, doctorChatSenderIdentity]);
+
+  const doctorChatOnlineCounts = useMemo(() => {
+    let on = 0, away = 0, off = 0;
+    doctorChatOnlineMap.forEach((v) => {
+      if (v.level === 'on') on += 1;
+      else if (v.level === 'away') away += 1; else off += 1;
+    });
+    return { on, away, off, total: on + away + off };
+  }, [doctorChatOnlineMap]);
 
   const formatDoctorChatTime = (ts) => {
     if (!ts) return '';
-    try {
-      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (_) {
-      return '';
-    }
+    try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; }
+  };
+
+  const formatDoctorChatFullTs = (ts) => {
+    if (!ts) return '';
+    try { return new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; }
   };
 
   const formatDoctorChatDayKey = (ts) => {
     if (!ts) return '';
     try {
       const d = new Date(ts);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    } catch (_) {
-      return '';
-    }
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    } catch (_) { return ''; }
   };
 
   const formatDoctorChatDayLabel = (dayKey) => {
@@ -402,16 +517,181 @@ function DoctorDashboard() {
     if (dayKey === yesterday) return 'Yesterday';
     try {
       const [yy, mm, dd] = dayKey.split('-').map(Number);
-      const d = new Date(yy, mm - 1, dd);
-      return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
-    } catch (_) {
-      return dayKey;
+      return new Date(yy, mm - 1, dd).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+    } catch (_) { return dayKey; }
+  };
+
+  const doctorChatPinnedMessages = useMemo(() => {
+    const arr = Array.isArray(doctorChatMessages) ? doctorChatMessages.filter((m) => !!m?.pinned) : [];
+    return [...arr].sort((a, b) => new Date(b.pinned_at || b.created_at || 0) - new Date(a.pinned_at || a.created_at || 0)).slice(0, 3);
+  }, [doctorChatMessages]);
+
+  const doctorChatMessageDeletable = (m) => {
+    if (!isDoctorChatMine(m)) return false;
+    if (!!m?.deleted) return false;
+    const ts = m?.created_at || m?.createdAt;
+    if (!ts) return false;
+    return (Date.now() - new Date(ts).getTime()) <= 5 * 60 * 1000;
+  };
+
+  const doctorChatCopyText = async (txt) => {
+    try {
+      await navigator.clipboard.writeText(String(txt || ''));
+      setToast({ type: 'success', message: 'Copied to clipboard.' });
+    } catch (_) { setToast({ type: 'info', message: String(txt || '').slice(0, 120) }); }
+  };
+
+  const doctorChatSoftDelete = async (m) => {
+    if (!doctorChatMessageDeletable(m) || !supabase) return;
+    try {
+      const { error } = await supabase
+        .from('consultation_messages')
+        .update({ deleted: true, deleted_at: new Date().toISOString(), deleted_by: doctorChatSenderIdentity.name })
+        .eq('id', m.id);
+      if (error) throw error;
+      setDoctorChatMessages((prev) => (Array.isArray(prev) ? prev : []).map((x) => String(x?.id) === String(m?.id) ? { ...x, deleted: true, deleted_at: new Date().toISOString(), deleted_by: doctorChatSenderIdentity.name } : x));
+      setDoctorChatDeleteConfirm(null);
+      setToast({ type: 'success', message: 'Message deleted.' });
+    } catch (e) {
+      setToast({ type: 'error', message: String(e?.message || 'Delete failed.') });
+    }
+  };
+
+  const doctorChatTogglePin = async (m) => {
+    if (!supabase || !m?.id) return;
+    const pinned = !m?.pinned;
+    if (pinned && doctorChatPinnedMessages.length >= 3) {
+      setToast({ type: 'warning', message: 'Maximum 3 pinned messages. Unpin an older one first.' });
+      return;
+    }
+    try {
+      const payload = pinned ? { pinned: true, pinned_at: new Date().toISOString(), pinned_by: doctorChatSenderIdentity.name } : { pinned: false, pinned_at: null, pinned_by: null };
+      const { error } = await supabase.from('consultation_messages').update(payload).eq('id', m.id);
+      if (error) throw error;
+      setDoctorChatMessages((prev) => (Array.isArray(prev) ? prev : []).map((x) => String(x?.id) === String(m?.id) ? { ...x, ...payload } : x));
+      setDoctorChatMsgMenu(null);
+      setToast({ type: 'success', message: pinned ? '📌 Pinned to top.' : 'Unpinned.' });
+    } catch (e) {
+      setToast({ type: 'error', message: String(e?.message || 'Pin failed.') });
+    }
+  };
+
+  const doctorChatScrollToMsg = (id) => {
+    try {
+      const el = doctorChatScrollRef?.current;
+      if (!el) return;
+      const tgt = el.querySelector(`[data-dc-id="${CSS.escape(String(id))}"]`);
+      if (tgt && typeof tgt.scrollIntoView === 'function') {
+        tgt.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        tgt.classList.add('dc-flash');
+        setTimeout(() => tgt.classList.remove('dc-flash'), 1600);
+      }
+      setDoctorChatPinOpen(false);
+    } catch (_) {}
+  };
+
+  const doctorChatFiltered = useMemo(() => {
+    const list = Array.isArray(doctorChatMessages) ? doctorChatMessages.filter((m) => !m?.deleted) : [];
+    const q = String(doctorChatSearch || '').trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((m) => String(m?.body || '').toLowerCase().includes(q));
+  }, [doctorChatMessages, doctorChatSearch]);
+
+  const doctorChatQuickReplies = [
+    { id: 'hi-avail', label: '👋 Hi, available now?', text: 'Hi, available now here.' },
+    { id: 'stat-consult', label: '🩺 STAT consult', text: 'STAT consult needed — please assist.' },
+    { id: 'stat-lab', label: '🩸 Lab priority', text: 'Lab priority request for patient.' },
+    { id: 'er-help', label: '🚨 ER help', text: 'ER help needed — please proceed to ER.' },
+    { id: 'queue-upd', label: '⏱️ Queue update', text: 'Queue update — current ETA 30-45min.' },
+    { id: 'pt-upd', label: '📋 Patient update', text: 'Patient status update incoming.' },
+    { id: 'saan-na', label: '❓ Saan ka na?', text: 'Nasaan ka na? Need ka na dito.' }
+  ];
+
+  const doctorChatFileAllowed = useMemo(() => {
+    return {
+      image: { accept: 'image/jpeg,image/png,image/gif,image/webp', max: 10 * 1024 * 1024, types: ['image/jpeg','image/png','image/gif','image/webp'] },
+      pdf: { accept: 'application/pdf', max: 10 * 1024 * 1024, types: ['application/pdf'] },
+      video: { accept: 'video/mp4,video/webm,video/quicktime,video/x-matroska', max: 50 * 1024 * 1024, types: ['video/mp4','video/webm','video/quicktime','video/x-matroska'] }
+    };
+  }, []);
+
+  const doctorChatAttachmentKind = (file) => {
+    if (!file) return null;
+    const type = String(file.type || '').toLowerCase();
+    const name = String(file.name || '').toLowerCase();
+    if (doctorChatFileAllowed.image.types.includes(type) || /\.(jpe?g|png|gif|webp)$/i.test(name)) return 'image';
+    if (doctorChatFileAllowed.pdf.types.includes(type) || name.endsWith('.pdf')) return 'pdf';
+    if (doctorChatFileAllowed.video.types.includes(type) || /\.(mp4|webm|mov|mkv|qt)$/i.test(name)) return 'video';
+    return null;
+  };
+
+  const doctorChatFileSizeOk = (file, kind) => {
+    if (!file || !kind) return { ok: false, msg: 'Unsupported file type.' };
+    const limit = doctorChatFileAllowed[kind]?.max || 0;
+    if (!file.size || file.size <= 0) return { ok: false, msg: 'Empty file.' };
+    if (file.size > limit) return { ok: false, msg: `File too large. Max ${Math.round(limit / 1024 / 1024)}MB.` };
+    return { ok: true };
+  };
+
+  const doctorChatOnPickFile = (ev) => {
+    const files = Array.from(ev?.target?.files || []);
+    if (!files.length) return;
+    const f = files[0];
+    const kind = doctorChatAttachmentKind(f);
+    if (!kind) { setToast({ type: 'error', message: 'Only images, PDFs, or videos allowed.' }); return; }
+    const sz = doctorChatFileSizeOk(f, kind);
+    if (!sz.ok) { setToast({ type: 'error', message: sz.msg }); return; }
+    setDoctorChatAttachment({ file: f, kind, name: f.name, size: f.size, type: f.type });
+  };
+
+  const doctorChatUploadAttachment = async () => {
+    if (!supabase || !doctorChatAttachment) return;
+    const { file, kind } = doctorChatAttachment;
+    const sz = doctorChatFileSizeOk(file, kind);
+    if (!sz.ok) { setToast({ type: 'error', message: sz.msg }); return; }
+    setDoctorChatAttachmentUploading(true);
+    try {
+      const ts = Date.now();
+      const safe = String(file.name || 'file').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+      const path = `${doctorChatSpecialty}/${doctorChatSenderIdentity.username || 'doc'}/${ts}_${safe}`;
+      const { error: upErr } = await supabase.storage.from('doctor-chat-attachments').upload(path, file, { cacheControl: '31536000', upsert: false });
+      if (upErr) throw upErr;
+      const signedUrlRes = await supabase.storage.from('doctor-chat-attachments').createSignedUrl(path, 60 * 60 * 72);
+      const signedUrl = signedUrlRes?.data?.signedUrl || '';
+      const publicData = supabase.storage.from('doctor-chat-attachments').getPublicUrl(path);
+      const publicUrl = publicData?.data?.publicUrl || '';
+      const caption = String(doctorChatText || '').trim();
+      const payload = {
+        specialty: doctorChatSpecialty, sender_role: 'doctor',
+        body: caption,
+        sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept,
+        attachment_kind: kind, attachment_name: file.name, attachment_size: file.size, attachment_mime: file.type || '',
+        attachment_path: path, attachment_url: signedUrl || publicUrl, attachment_public_url: publicUrl
+      };
+      if (doctorChatReplying?.id) { payload.reply_to_id = doctorChatReplying.id; payload.reply_to_body = String(doctorChatReplying.body || '').slice(0, 240); }
+      const { error } = await supabase.from('consultation_messages').insert([payload]);
+      if (error) throw error;
+      setDoctorChatAttachment(null);
+      setDoctorChatAttachmentUploading(false);
+      setDoctorChatText('');
+      setDoctorChatReplying(null);
+    } catch (e) {
+      setDoctorChatAttachmentUploading(false);
+      setToast({ type: 'error', message: String(e?.message || 'Upload failed. Ensure bucket "doctor-chat-attachments" exists with RLS insert enabled.') });
     }
   };
 
   const sendDoctorChatMessage = async () => {
     const specialty = doctorChatSpecialty;
+    if (doctorChatAttachment && !doctorChatAttachmentUploading) {
+      await doctorChatUploadAttachment();
+      return;
+    }
     const body = String(doctorChatText || '').trim();
+    if (body.length > 2000) {
+      setToast({ type: 'error', message: 'Message too long (2000 character max).' });
+      return;
+    }
     if (!body) {
       setDoctorChatInputInvalid(true);
       setTimeout(() => setDoctorChatInputInvalid(false), 900);
@@ -419,21 +699,21 @@ function DoctorDashboard() {
     }
     if (!supabase) return;
     try {
-      const { error } = await supabase
-        .from('consultation_messages')
-        .insert([{
-          specialty,
-          sender_role: 'doctor',
-          body,
-          sender_name: doctorChatSenderIdentity.name,
-          sender_dept: doctorChatSenderIdentity.dept
-        }]);
-      if (error) throw error;
-      setDoctorChatText('');
-      setDoctorChatInputInvalid(false);
-    } catch (e) {
-      setToast({ type: 'error', message: String(e?.message || 'Failed to send message.') });
+      const payload = {
+      specialty, sender_role: 'doctor', body,
+      sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept
+    };
+    if (doctorChatReplying?.id) {
+      payload.reply_to_id = doctorChatReplying.id; payload.reply_to_body = String(doctorChatReplying.body || '').slice(0, 240); payload.reply_to_sender = guessDisplayName(doctorChatReplying);
     }
+    const { error } = await supabase.from('consultation_messages').insert([payload]);
+    if (error) throw error;
+    setDoctorChatText('');
+    setDoctorChatInputInvalid(false);
+    setDoctorChatReplying(null);
+  } catch (e) {
+    setToast({ type: 'error', message: String(e?.message || 'Failed to send.') });
+  }
   };
 
   const rxTemplates = useMemo(() => {
@@ -1511,35 +1791,95 @@ function DoctorDashboard() {
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'consultation_messages',
           filter: `specialty=eq.${specialty}`
         },
         (payload) => {
+          if (!payload) return;
+          const evType = String(payload?.eventType || '').toLowerCase();
           const next = payload?.new || null;
-          if (!next) return;
-          setDoctorChatMessages((prev) => {
-            const list = Array.isArray(prev) ? prev : [];
-            if (next.id && list.some((m) => String(m?.id || '') === String(next.id))) return list;
-            return [...list, next];
-          });
-          setTimeout(() => scrollDoctorChatToBottom(), 80);
+          const old = payload?.old || null;
+          if (evType === 'insert') {
+            if (!next) return;
+            setDoctorChatMessages((prev) => {
+              const list = Array.isArray(prev) ? prev : [];
+              if (next.id && list.some((m) => String(m?.id || '') === String(next.id))) return list;
+              const merged = [...list, next];
+              const seen = new Set();
+              const deduped = [];
+              for (let i = merged.length - 1; i >= 0; i -= 1) {
+                const m = merged[i] || {};
+                const k = String(m?.id || `${m.created_at}_${m.body}`);
+                if (seen.has(k)) continue;
+                seen.add(k);
+                deduped.unshift(m);
+              }
+              return deduped;
+            });
+            setDoctorChatMessages((prev) => {
+              const last = Array.isArray(prev) ? prev[prev.length - 1] : null;
+              if (!last || isDoctorChatMine(last)) {
+                setTimeout(() => scrollDoctorChatToBottom(false), 120);
+                return prev;
+              }
+              setDoctorChatUnreadBadge((n) => n + 1);
+              const el = doctorChatScrollRef?.current;
+              if (el) {
+                const near = el.scrollHeight - el.scrollTop - el.clientHeight;
+                if (near < 220) {
+                  setTimeout(() => scrollDoctorChatToBottom(false), 120);
+                } else {
+                  setDoctorChatShowFAB(true);
+                  setDoctorChatScrollInterrupt(true);
+                }
+              }
+              return prev;
+            });
+          } else if (evType === 'update' && next) {
+            setDoctorChatMessages((prev) => (Array.isArray(prev) ? prev : []).map((m) => String(m?.id) === String(next?.id || old?.id) ? { ...m, ...next } : m));
+          } else if (evType === 'delete' && old) {
+            setDoctorChatMessages((prev) => (Array.isArray(prev) ? prev : []).filter((m) => String(m?.id) !== String(old?.id)));
+          }
         }
       )
       .subscribe();
     return () => {
-      try {
-        supabase.removeChannel(channel);
-      } catch (_) {}
+      try { supabase.removeChannel(channel); } catch (_) {}
     };
-  }, [activeNav, doctorChatSpecialty]);
+  }, [activeNav, doctorChatSpecialty, supabase]);
 
   useEffect(() => {
     if (activeNav !== 'doctor-chat') return;
-    const t = setTimeout(() => scrollDoctorChatToBottom(), 150);
+    const t = setTimeout(() => scrollDoctorChatToBottom(true), 220);
     return () => clearTimeout(t);
-  }, [activeNav, doctorChatMessages.length, doctorChatLoading]);
+  }, [activeNav, doctorChatFiltered.length, doctorChatLoading]);
+
+  useEffect(() => {
+    if (activeNav !== 'doctor-chat') return;
+    const el = doctorChatScrollRef?.current;
+    if (!el) return undefined;
+    const onScroll = () => {
+      const near = el.scrollHeight - el.scrollTop - el.clientHeight;
+      const nearBottom = near < 150;
+      const scrolledUp = el.scrollTop > 350;
+      setDoctorChatScrollInterrupt(!nearBottom && scrolledUp);
+      setDoctorChatShowFAB(!nearBottom);
+      if (nearBottom && doctorChatUnreadBadge) setDoctorChatUnreadBadge(0);
+      if (el.scrollTop < 30 && !doctorChatLoadingOlder && !doctorChatOlderExhausted) {
+        loadDoctorChatMessages({ older: true });
+      }
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [activeNav, doctorChatLoadingOlder, doctorChatOlderExhausted, doctorChatUnreadBadge]);
+
+  useEffect(() => {
+    const onClickOutside = () => setDoctorChatMsgMenu(null);
+    window.addEventListener('click', onClickOutside);
+    return () => window.removeEventListener('click', onClickOutside);
+  }, []);
 
   useEffect(() => {
     if (activeNav === 'worklist') fetchWorklist();
@@ -4691,46 +5031,189 @@ function DoctorDashboard() {
         {activeNav === 'doctor-chat' && (
           <div className="doctor-grid doc-section">
             <div className="doc-card" style={{ overflow: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-              <div className="doc-card-header">
-                <div className="doc-card-title">
-                  <MessageSquare size={18} />
-                  {doctorChatSpecialty ? `Doctor Chat • ${doctorChatSpecialty}` : 'Doctor Chat'}
+              <div className="doc-card-header" style={{ padding: '12px 16px 14px', borderBottom: doctorChatShowSearch || !doctorChatBannerDismissed ? '1px solid #f1f5f9' : '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div className="doc-card-title">
+                        <MessageSquare size={18} />
+                        {doctorChatSpecialty ? `Doctor Chat • ${doctorChatSpecialty}` : 'Doctor Chat'}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.78rem', fontWeight: 600, color: '#475569', paddingLeft: 28 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span className={`dc-dot dc-dot-on`} style={{ width: 9, height: 9, borderRadius: 999, background: '#22c55e', boxShadow: '0 0 0 3px rgba(34,197,94,0.18)' }} />
+                          <strong style={{ color: '#0f172a' }}>{doctorChatOnlineCounts.on}</strong> Online
+                          {doctorChatOnlineCounts.away > 0 && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+                              <span className={`dc-dot dc-dot-away`} style={{ width: 8, height: 8, borderRadius: 999, background: '#eab308', boxShadow: '0 0 0 3px rgba(234,179,8,0.14)' }} />
+                              {doctorChatOnlineCounts.away} Away
+                            </span>
+                          )}
+                        </span>
+                        <span style={{ color: '#94a3b8', fontWeight: 500 }}>• Total {doctorChatOnlineCounts.total} doctors seen</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {doctorChatPinnedMessages.length > 0 && (
+                        <button
+                          className={`doc-btn ${doctorChatPinOpen ? 'dc-btn-active' : ''}`}
+                          type="button"
+                          onClick={() => setDoctorChatPinOpen((v) => !v)}
+                          title={`📌 Pinned (${doctorChatPinnedMessages.length})`}
+                          style={{ position: 'relative' }}
+                        >
+                          <Pin size={14} />
+                          <span style={{ fontSize: '0.76rem', fontWeight: 800, marginLeft: 4 }}>{doctorChatPinnedMessages.length}</span>
+                        </button>
+                      )}
+                      <button className={`doc-btn ${doctorChatShowSearch ? 'dc-btn-active' : ''}`} type="button" onClick={() => setDoctorChatShowSearch((v) => !v)} title="Search messages">
+                        <Search size={14} />
+                      </button>
+                      <button className="doc-btn" type="button" onClick={() => { loadDoctorChatMessages(); }} disabled={doctorChatLoading}>
+                        <RotateCw size={16} />
+                        Refresh
+                      </button>
+                    </div>
+                  </div>
+
+                  {doctorChatShowSearch && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
+                      <div style={{ position: 'relative' }}>
+                        <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', zIndex: 1 }} />
+                        <input
+                          className="doc-input"
+                          placeholder="Search messages… (e.g., STAT, patient, xray)"
+                          value={doctorChatSearch}
+                          onChange={(e) => setDoctorChatSearch(e.target.value)}
+                          style={{ paddingLeft: 36 }}
+                        />
+                      </div>
+                      {doctorChatSearch && (
+                        <button className="doc-btn" type="button" onClick={() => { setDoctorChatSearch(''); }}>
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {!doctorChatBannerDismissed && (
+                    <div className="dc-banner" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', border: '1px solid rgba(234,88,12,0.22)', background: 'linear-gradient(180deg,#fff7ed,#ffffff)', borderRadius: 12, color: '#7c2d12', fontSize: '0.78rem', lineHeight: 1.5 }}>
+                      <AlertTriangle size={15} style={{ flex: '0 0 auto', marginTop: 2, color: '#c2410c' }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 800, color: '#9a3412' }}>DOH / Data Privacy Act Reminder</div>
+                        <div>Avoid posting patient full names, lab values, addresses, or confidential PHI in shared chat rooms. Use patient IDs only. Violations may breach RA 10173.</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="doc-btn"
+                        style={{ padding: '4px 8px', minHeight: 0, height: 26, fontWeight: 700, color: '#94a3b8' }}
+                        onClick={() => {
+                          try {
+                            const n = (Number(localStorage.getItem('dc_phi_banner_closed') || 0) + 1);
+                            localStorage.setItem('dc_phi_banner_closed', String(n));
+                            if (n >= 3) setDoctorChatBannerDismissed(true);
+                          } catch (_) { setDoctorChatBannerDismissed(true); }
+                        }}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  )}
+
+                  {doctorChatPinOpen && doctorChatPinnedMessages.length > 0 && (
+                    <div className="dc-pinned-wrap" style={{ border: '1px solid rgba(234,88,12,0.18)', background: '#fff7ed', borderRadius: 12, overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid rgba(234,88,12,0.14)', fontWeight: 800, fontSize: '0.8rem', color: '#9a3412' }}>
+                        <Pin size={13} /> 📌 Pinned Announcements <span style={{ marginLeft: 'auto', color: '#b45309', fontWeight: 700 }}>(max 3)</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        {doctorChatPinnedMessages.map((m, i) => {
+                          const preview = String(m?.body || m?.attachment_name || '(attachment)').slice(0, 140) + (String(m?.body || '').length > 140 ? '…' : '');
+                          const sn = guessDisplayName(m);
+                          return (
+                            <button
+                              key={`pin-${m?.id || i}`}
+                              type="button"
+                              onClick={() => doctorChatScrollToMsg(m?.id)}
+                              style={{ textAlign: 'left', cursor: 'pointer', padding: '10px 12px', borderBottom: i < doctorChatPinnedMessages.length - 1 ? '1px dashed rgba(234,88,12,0.12)' : 'none', background: 'transparent', color: '#431407' }}
+                              className="dc-pin-row"
+                              onMouseEnter={(e) => { e.currentTarget.style.background = '#ffedd5'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#9a3412' }}>{sn}</div>
+                                <div style={{ fontSize: '0.7rem', color: '#b45309', fontWeight: 600 }}>{formatDoctorChatTime(m.pinned_at || m.created_at)}</div>
+                              </div>
+                              <div style={{ fontSize: '0.88rem', lineHeight: 1.5, marginTop: 4, fontWeight: 500 }}>{preview}</div>
+                              <div style={{ marginTop: 6, fontSize: '0.7rem', color: '#c2410c', fontWeight: 700 }}>Jump →</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <button className="doc-btn" type="button" onClick={loadDoctorChatMessages} disabled={doctorChatLoading}>
-                  <RotateCw size={16} />
-                  Refresh
-                </button>
               </div>
 
               {doctorChatLoading ? (
-                <div className="doc-muted" style={{ padding: '16px' }}>Loading…</div>
+                <div className="doc-muted" style={{ padding: '30px 16px', textAlign: 'center' }}><div style={{ opacity: 0.6, marginBottom: 6 }}>Loading chat…</div></div>
               ) : doctorChatError ? (
-                <div className="doc-muted" style={{ padding: '16px' }}>{doctorChatError}</div>
+                <div className="doc-muted" style={{ padding: '20px 16px', color: '#991b1b', fontWeight: 600 }}>{doctorChatError}</div>
               ) : (
-                <div ref={doctorChatScrollRef} className="dc-scroll-pane" style={{ flex: 1, overflowY: 'auto', padding: '18px 16px', background: '#f8fafc', scrollBehavior: 'smooth' }}>
-                  {doctorChatMessages.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '28px 12px', color: '#64748b' }}>
+                <div
+                  ref={doctorChatScrollRef}
+                  className="dc-scroll-pane"
+                  style={{ position: 'relative', flex: 1, overflowY: 'auto', padding: '14px 16px 16px', background: '#f8fafc', scrollBehavior: 'smooth' }}
+                >
+                  {doctorChatLoadingOlder && (
+                    <div style={{ textAlign: 'center', padding: '10px 0 16px', color: '#64748b', fontSize: '0.76rem', fontWeight: 700 }}>
+                      <RotateCw size={13} style={{ display: 'inline-block', animation: 'spin 1s linear infinite', verticalAlign: -2, marginRight: 6 }} /> Loading older messages…
+                    </div>
+                  )}
+                  {!doctorChatLoadingOlder && !doctorChatOlderExhausted && (
+                    <div style={{ textAlign: 'center', padding: '0 0 6px', color: '#94a3b8', fontSize: '0.72rem', fontWeight: 600 }}>⬆ Scroll up to load older messages</div>
+                  )}
+                  {doctorChatSearch && (
+                    <div style={{ textAlign: 'center', padding: '6px 12px 14px', fontSize: '0.76rem', fontWeight: 700, color: '#475569' }}>
+                      <Search size={12} style={{ display: 'inline', marginRight: 4, verticalAlign: -1 }} />
+                      Search results: <strong style={{ color: '#0f172a' }}>{doctorChatFiltered.length}</strong> match{doctorChatFiltered.length === 1 ? '' : 'es'} for "{doctorChatSearch}"
+                    </div>
+                  )}
+
+                  {doctorChatFiltered.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '34px 12px', color: '#64748b' }}>
                       <MessageSquare size={28} style={{ opacity: 0.5, marginBottom: 10 }} />
-                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#334155' }}>No messages yet.</div>
-                      <div style={{ marginTop: 4, fontSize: '0.82rem' }}>Type a greeting below to start chatting with other doctors.</div>
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#334155' }}>{doctorChatSearch ? 'No messages match your search.' : 'No messages yet.'}</div>
+                      <div style={{ marginTop: 4, fontSize: '0.82rem' }}>{doctorChatSearch ? 'Try different keywords.' : 'Type a greeting below to start chatting with other doctors.'}</div>
                     </div>
                   ) : (
                     (() => {
                       const items = [];
                       let lastDay = '';
                       let lastSenderKey = '';
-                      doctorChatMessages.forEach((msg, idx) => {
-                        const body = String(msg?.body || '').trim();
-                        if (!body) return;
+                      doctorChatFiltered.forEach((msg, idx) => {
+                        if (msg?.deleted) {
+                          const ts = msg.created_at || msg.createdAt;
+                          const dayKey = formatDoctorChatDayKey(ts);
+                          if (dayKey && dayKey !== lastDay) { lastDay = dayKey; lastSenderKey = ''; }
+                          const mine = isDoctorChatMine(msg);
+                          items.push(
+                            <div key={msg?.id || `del-${idx}`} className="dc-bubble-row" style={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
+                              <div className="dc-deleted-bubble" style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 12, fontSize: '0.78rem', color: '#94a3b8', fontStyle: 'italic', background: '#f1f5f9', border: '1px dashed #cbd5e1' }}>
+                                {mine ? 'You' : guessDisplayName(msg)} deleted this message.
+                              </div>
+                            </div>
+                          );
+                          return;
+                        }
                         const ts = msg?.created_at || msg?.createdAt || null;
                         const dayKey = formatDoctorChatDayKey(ts);
                         if (dayKey && dayKey !== lastDay) {
                           lastDay = dayKey;
                           lastSenderKey = '';
                           items.push(
-                            <div key={`day-${dayKey}-${idx}`} className="dc-divider-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '10px 0 18px' }}>
+                            <div key={`day-${dayKey}-${idx}`} className="dc-divider-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '6px 0 14px' }}>
                               <div className="dc-divider" style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-                              <div className="dc-divider-label" style={{ margin: '0 12px', padding: '4px 12px', fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.02em', color: '#64748b', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 999 }}>
+                              <div className="dc-divider-label" style={{ margin: '0 10px', padding: '4px 10px', fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.02em', color: '#64748b', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 999 }}>
                                 {formatDoctorChatDayLabel(dayKey)}
                               </div>
                               <div className="dc-divider" style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
@@ -4738,50 +5221,284 @@ function DoctorDashboard() {
                           );
                         }
                         const mine = isDoctorChatMine(msg);
-                        const senderName = String(msg?.sender_name || msg?.senderName || 'Doctor').trim();
+                        const displayName = guessDisplayName(msg);
                         const senderDeptRaw = String(msg?.sender_dept || msg?.senderDept || '').trim();
                         const senderDept = senderDeptRaw || (() => {
                           const specRaw = String(msg?.sender_specialization || msg?.senderSpecialization || '').trim();
                           return specRaw ? specRaw.replace(/\b\w/g, (c) => c.toUpperCase()) : '';
                         })();
-                        const senderKey = `${mine ? 'ME' : 'OTHER'}-${senderName}|${senderDept}`;
+                        const onlineKey = normalizeSenderKey(displayName + '|' + senderDept);
+                        const onlineInfo = doctorChatOnlineMap.get(onlineKey) || { level: 'off', label: 'Offline' };
+                        const senderKey = `${mine ? 'ME' : 'OTHER'}-${displayName}|${senderDept}|${onlineInfo.level}`;
                         const showHeader = !mine && senderKey !== lastSenderKey;
                         lastSenderKey = senderKey;
                         const timeText = formatDoctorChatTime(ts);
+                        const fullTs = formatDoctorChatFullTs(ts);
+                        const msgId = msg?.id || idx;
+                        const isPinned = !!msg?.pinned;
+                        const replyToBody = String(msg?.reply_to_body || msg?.replyToBody || '').slice(0, 160);
+                        const replyToSender = String(msg?.reply_to_sender || msg?.replyToSender || '').trim() || 'Doctor';
+                        const hasAttach = msg?.attachment_kind || msg?.attachmentKind;
+                        const attKind = String(msg?.attachment_kind || msg?.attachmentKind || '').toLowerCase();
+                        const attName = String(msg?.attachment_name || msg?.attachmentName || '').trim();
+                        const attSize = Number(msg?.attachment_size || msg?.attachmentSize || 0);
+                        const attUrl = String(msg?.attachment_url || msg?.attachmentUrl || msg?.attachment_public_url || msg?.attachmentPublicUrl || '').trim();
+                        const attPublic = String(msg?.attachment_public_url || msg?.attachmentPublicUrl || '').trim();
+                        const sizeStr = attSize ? (attSize >= 1024 * 1024 ? `${(attSize / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(attSize / 1024))} KB`) : '';
+                        const q = String(doctorChatSearch || '').trim().toLowerCase();
+                        const searchHL = (text) => {
+                          const raw = String(text || '');
+                          if (!q) return raw;
+                          const i = raw.toLowerCase().indexOf(q);
+                          if (i < 0) return raw;
+                          return (
+                            <>
+                              {raw.slice(0, i)}
+                              <mark className="dc-highlight" style={{ background: 'rgba(250, 204, 21, 0.35)', padding: '1px 2px', borderRadius: 3 }}>{raw.slice(i, i + q.length)}</mark>
+                              {raw.slice(i + q.length)}
+                            </>
+                          );
+                        };
+
                         items.push(
                           <div
-                            key={msg?.id || idx}
-                            className={`dc-bubble-row ${mine ? 'dc-bubble-row-me' : 'dc-bubble-row-other'}`}
-                            style={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', marginBottom: 10 }}
+                            key={msgId}
+                            data-dc-id={String(msgId)}
+                            className={`dc-bubble-row ${mine ? 'dc-bubble-row-me' : 'dc-bubble-row-other'} ${isPinned ? 'dc-pin-highlight' : ''}`}
+                            style={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', marginBottom: 12, position: 'relative' }}
                           >
                             {showHeader && (
-                              <div className="dc-name-label" style={{ fontSize: '0.76rem', fontWeight: 800, color: '#475569', marginBottom: 6, paddingLeft: 2, paddingRight: 2 }}>
-                                {senderName}{senderDept ? ` • ${senderDept}` : ''}
+                              <div className="dc-name-label" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.76rem', fontWeight: 800, color: '#334155', marginBottom: 5, paddingLeft: 2, paddingRight: 2 }}>
+                                <span className={`dc-dot dc-dot-${onlineInfo.level}`} style={{ width: 8, height: 8, borderRadius: 999, background: onlineInfo.level === 'on' ? '#22c55e' : onlineInfo.level === 'away' ? '#eab308' : '#94a3b8', boxShadow: `0 0 0 3px ${onlineInfo.level === 'on' ? 'rgba(34,197,94,0.16)' : onlineInfo.level === 'away' ? 'rgba(234,179,8,0.14)' : 'rgba(148,163,184,0.14)'}` }} title={onlineInfo.label} />
+                                <span>{searchHL(displayName)}</span>
+                                {senderDept && <span style={{ color: '#94a3b8', fontWeight: 600 }}>• {senderDept}</span>}
+                                <span style={{ color: '#94a3b8', fontWeight: 600, marginLeft: 4 }}>• {onlineInfo.label}</span>
                               </div>
                             )}
-                            <div
-                              className={`dc-bubble ${mine ? 'dc-bubble-me' : 'dc-bubble-other'}`}
-                              style={{
-                                display: 'inline-block',
-                                padding: '11px 14px',
-                                borderRadius: mine ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                                background: mine ? 'var(--primary, #ea580c)' : '#ffffff',
-                                color: mine ? '#ffffff' : '#0f172a',
-                                boxShadow: '0 2px 6px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04)',
-                                maxWidth: '82%',
-                                whiteSpace: 'pre-wrap',
-                                overflowWrap: 'anywhere',
-                                lineHeight: 1.5,
-                                fontSize: '0.95rem',
-                                fontWeight: 500,
-                                border: mine ? '1px solid rgba(0,0,0,0.06)' : '1px solid #e2e8f0'
-                              }}
-                            >
-                              {body}
+
+                            {replyToBody && (
+                              <div
+                                className="dc-reply-quote"
+                                style={{
+                                  maxWidth: '78%',
+                                  marginBottom: 4,
+                                  padding: '6px 10px',
+                                  fontSize: '0.76rem',
+                                  background: mine ? 'rgba(255,255,255,0.16)' : 'rgba(234,88,12,0.06)',
+                                  color: mine ? '#fff7ed' : '#9a3412',
+                                  borderLeft: `3px solid ${mine ? '#fb923c' : 'var(--primary, #ea580c)'}`,
+                                  borderRadius: '10px 10px 10px 4px',
+                                  fontWeight: 600,
+                                  lineHeight: 1.45,
+                                  alignSelf: mine ? 'flex-end' : 'flex-start'
+                                }}>
+                                  <div style={{ fontSize: '0.68rem', fontWeight: 800, marginBottom: 2, opacity: 0.92 }}>↩ Replying to {replyToSender}</div>
+                                  <div style={{ opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{replyToBody}</div>
+                                </div>
+                            )}
+
+                            <div className="dc-message-wrap" style={{ position: 'relative', maxWidth: '100%' }}>
+                              <div
+                                className={`dc-bubble ${mine ? 'dc-bubble-me' : 'dc-bubble-other'}`}
+                                title={fullTs}
+                                style={{
+                                  display: 'inline-block',
+                                  position: 'relative',
+                                  padding: isPinned ? '10px 14px 8px' : '11px 14px',
+                                  borderRadius: mine ? '18px 18px 6px 18px' : '18px 18px 18px 6px',
+                                  background: isPinned ? (mine ? 'linear-gradient(180deg,#f59e0b,#ea580c)' : 'linear-gradient(180deg,#fff7ed,#ffffff)') : (mine ? 'var(--primary, #ea580c)' : '#ffffff'),
+                                  color: isPinned ? (mine ? '#ffffff' : '#7c2d12') : (mine ? '#ffffff' : '#0f172a'),
+                                  boxShadow: isPinned
+                                    ? '0 6px 14px rgba(234,88,12,0.18), 0 2px 4px rgba(15,23,42,0.05)'
+                                    : '0 2px 6px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04)',
+                                  maxWidth: '82%',
+                                  minWidth: hasAttach ? 230 : 0,
+                                  whiteSpace: 'pre-wrap',
+                                  overflowWrap: 'anywhere',
+                                  lineHeight: 1.5,
+                                  fontSize: '0.95rem',
+                                  fontWeight: 500,
+                                  border: isPinned
+                                    ? (mine ? '1px solid rgba(180,83,9,0.28)' : '1px solid rgba(234,88,12,0.28)')
+                                    : (mine ? '1px solid rgba(0,0,0,0.06)' : '1px solid #e2e8f0')
+                                }}
+                              >
+                                {isPinned && (
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.68rem', fontWeight: 800, marginBottom: 5, letterSpacing: '0.03em', opacity: 0.92 }}>
+                                    <Pin size={11} /> PINNED
+                                  </div>
+                                )}
+                                {String(msg?.body || '').trim() && <div className="dc-bubble-body" style={{ marginTop: isPinned ? 2 : 0 }}>{searchHL(String(msg.body).trim())}</div>}
+
+                                {hasAttach && (
+                                  <div
+                                    className="dc-attachment"
+                                    style={{ marginTop: 9, display: 'block' }}
+                                  >
+                                    {attKind === 'image' && (
+                                      <div
+                                        className="dc-att-image"
+                                        onClick={() => { if (attUrl || attPublic) setDoctorChatAttPreview({ kind: 'image', src: attUrl || attPublic, name: attName }); }}
+                                        style={{ cursor: 'zoom-in', borderRadius: 12, overflow: 'hidden', border: mine ? '1px solid rgba(255,255,255,0.2)' : '1px solid #e2e8f0', maxWidth: 320 }}
+                                      >
+                                        <img src={attUrl || attPublic} alt={attName || 'image'} loading="lazy" style={{ display: 'block', width: '100%', height: 'auto', maxHeight: 260, objectFit: 'cover', background: mine ? 'rgba(255,255,255,0.06)' : '#f8fafc' }} />
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', fontWeight: 700, fontSize: '0.74rem', color: mine ? '#fff7ed' : '#475569', background: mine ? 'rgba(0,0,0,0.12)' : '#f8fafc', borderTop: mine ? '1px solid rgba(255,255,255,0.1)' : '1px solid #f1f5f9' }}>
+                                          <ImageIcon size={12} />
+                                          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attName || 'Image'}</span>
+                                          {sizeStr && <span style={{ opacity: 0.85 }}>{sizeStr}</span>}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {attKind === 'pdf' && (
+                                      <a
+                                        className="dc-att-pdf"
+                                        href={attUrl || attPublic}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{
+                                          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12,
+                                          background: mine ? 'rgba(0,0,0,0.14)' : '#f8fafc',
+                                          color: mine ? '#fff7ed' : '#7c2d12',
+                                          textDecoration: 'none',
+                                          border: mine ? '1px solid rgba(255,255,255,0.15)' : '1px solid #f1f5f9',
+                                          minWidth: 220, maxWidth: 320
+                                        }}
+                                      >
+                                        <div style={{ width: 34, height: 34, borderRadius: 8, background: mine ? 'rgba(239,68,68,0.28)' : '#fef2f2', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: mine ? '#fecaca' : '#dc2626', flex: '0 0 auto' }}>
+                                          <File size={17} />
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ fontSize: '0.82rem', fontWeight: 800, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attName || 'Document.pdf'}</div>
+                                          <div style={{ fontSize: '0.7rem', fontWeight: 600, marginTop: 2, opacity: 0.88 }}>
+                                            {sizeStr || 'PDF'} • <span style={{ textDecoration: 'underline' }}>Open PDF</span>
+                                          </div>
+                                        </div>
+                                        <Download size={13} style={{ opacity: 0.85 }} />
+                                      </a>
+                                    )}
+
+                                    {attKind === 'video' && (
+                                      <div className="dc-att-video" style={{ borderRadius: 12, overflow: 'hidden', maxWidth: 340, background: mine ? 'rgba(0,0,0,0.16)' : '#0f172a', border: mine ? '1px solid rgba(255,255,255,0.18)' : '1px solid #1e293b' }}>
+                                        <video
+                                          controls
+                                          preload="metadata"
+                                          src={attUrl || attPublic}
+                                          style={{ display: 'block', width: '100%', maxHeight: 280, background: '#0f172a' }}
+                                        />
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', color: mine ? '#fff7ed' : '#cbd5e1', fontSize: '0.72rem', fontWeight: 700, background: mine ? 'rgba(0,0,0,0.2)' : '#0f172a' }}>
+                                          <VideoIcon size={12} />
+                                          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attName || 'Video'}</span>
+                                          {sizeStr && <span style={{ opacity: 0.85 }}>{sizeStr}</span>}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {!['image', 'pdf', 'video'].includes(attKind) && attName && (
+                                      <div style={{ marginTop: 6, fontSize: '0.76rem', opacity: 0.92, fontWeight: 600 }}>📎 {attName}</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                aria-label="Message options"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDoctorChatMsgMenu((prev) => (prev && prev.id === msgId) ? null : { id: msgId, msg, mine });
+                                }}
+                                className={`dc-msg-more ${doctorChatMsgMenu?.id === msgId ? 'dc-msg-more-open' : ''}`}
+                                style={{
+                                  position: 'absolute', top: 2, right: mine ? 'auto' : -4, left: mine ? -4 : 'auto',
+                                  width: 26, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
+                                  background: mine ? 'rgba(0,0,0,0.06)' : 'rgba(148,163,184,0.12)',
+                                  color: mine ? 'rgba(255,255,255,0.82)' : '#64748b',
+                                  opacity: 0, transition: 'opacity 120ms ease',
+                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; }}
+                                onMouseLeave={(e) => { if (!(doctorChatMsgMenu && doctorChatMsgMenu.id === msgId)) e.currentTarget.style.opacity = 0; }}
+                              >
+                                <MoreHorizontal size={13} />
+                              </button>
+
+                              {doctorChatMsgMenu && doctorChatMsgMenu.id === msgId && (
+                                <div
+                                  className="dc-msg-menu"
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    position: 'absolute',
+                                    top: mine ? 30 : 30,
+                                    right: mine ? -6 : 'auto',
+                                    left: mine ? 'auto' : -6,
+                                    zIndex: 30,
+                                    minWidth: 190,
+                                    background: '#ffffff',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: 12,
+                                    padding: 6,
+                                    boxShadow: '0 10px 24px rgba(15,23,42,0.14), 0 4px 8px rgba(15,23,42,0.07)',
+                                    display: 'flex', flexDirection: 'column', gap: 2,
+                                    fontSize: '0.8rem',
+                                    fontWeight: 600
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => { const text = String(msg.body || attName || ''); if (msg?.attachment_url || msg?.attachment_public_url) { const u = msg.attachment_url || msg.attachment_public_url; window.open(u, '_blank', 'noopener'); setDoctorChatMsgMenu(null); return; } doctorChatCopyText(text); setDoctorChatMsgMenu(null); }}
+                                    className="dc-menu-btn"
+                                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', color: '#0f172a', fontWeight: 600 }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                  >
+                                    <Copy size={13} /> {hasAttach ? 'Open / Copy' : 'Copy text'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setDoctorChatReplying({ id: msg.id, body: String(msg.body || attName || '[message]'), sender: guessDisplayName(msg) }); setDoctorChatMsgMenu(null); setTimeout(() => { try { const input = document.querySelector('.dc-compose-input'); if (input) input.focus(); } catch(_) {} }, 40); }}
+                                    className="dc-menu-btn"
+                                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', color: '#0f172a', fontWeight: 600 }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                  >
+                                    <Reply size={13} /> Reply / Quote
+                                  </button>
+                                  {(!mine || doctorChatMessageDeletable(msg)) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => doctorChatTogglePin(msg)}
+                                      className="dc-menu-btn"
+                                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', color: isPinned ? '#9a3412' : '#7c2d12', fontWeight: 700 }}
+                                      onMouseEnter={(e) => e.currentTarget.style.background = '#fff7ed'}
+                                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                    >
+                                      <Pin size={13} /> {isPinned ? 'Unpin (max 3)' : 'Pin announcement 📌'}
+                                    </button>
+                                  )}
+                                  {mine && doctorChatMessageDeletable(msg) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => { setDoctorChatDeleteConfirm(msg); setDoctorChatMsgMenu(null); }}
+                                      className="dc-menu-btn"
+                                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', color: '#b91c1c', fontWeight: 700 }}
+                                      onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
+                                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                    >
+                                      <Trash2 size={13} /> Delete (5-min rule)
+                                    </button>
+                                  )}
+                                  {mine && !doctorChatMessageDeletable(msg) && (
+                                    <div style={{ padding: '6px 10px', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>⏱ Deletion window closed</div>
+                                  )}
+                                </div>
+                              )}
                             </div>
+
                             {timeText && (
-                              <div className="dc-time-label" style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 5, paddingLeft: 4, paddingRight: 4, fontWeight: 600 }}>
-                                {timeText}
+                              <div className="dc-time-label" title={fullTs} style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: 5, paddingLeft: 4, paddingRight: 4, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                <Clock size={10} style={{ opacity: 0.8 }} /> {timeText}
+                                {mine && <Check size={10} style={{ opacity: 0.65, color: '#22c55e' }} title="Delivered" />}
                               </div>
                             )}
                           </div>
@@ -4793,28 +5510,291 @@ function DoctorDashboard() {
                 </div>
               )}
 
-              <div className="doc-msg-compose" style={{ paddingTop: 14 }}>
-                <input
-                  className={`doc-input ${doctorChatInputInvalid ? 'dc-input-shake' : ''}`}
-                  placeholder={doctorChatSpecialty ? 'Type a message…' : 'Set specialization to enable chat…'}
-                  value={doctorChatText}
-                  onChange={(e) => {
-                    setDoctorChatText(e.target.value);
-                    if (doctorChatInputInvalid && String(e.target.value || '').trim()) setDoctorChatInputInvalid(false);
+              {doctorChatShowFAB && (
+                <button
+                  type="button"
+                  aria-label="Scroll to new messages"
+                  onClick={() => { scrollDoctorChatToBottom(true); }}
+                  style={{
+                    position: 'absolute', bottom: 170, right: 28, zIndex: 20,
+                    width: 44, height: 44, borderRadius: 22,
+                    background: 'var(--primary, #ea580c)',
+                    color: 'white',
+                    border: 'none', cursor: 'pointer',
+                    boxShadow: '0 10px 20px rgba(234,88,12,0.32), 0 4px 8px rgba(15,23,42,0.08)',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      sendDoctorChatMessage();
-                    }
-                  }}
-                  disabled={!doctorChatSpecialty}
-                />
-                <button className="doc-primary" type="button" onClick={sendDoctorChatMessage} disabled={!doctorChatSpecialty || !String(doctorChatText || '').trim()}>
-                  <Send size={16} />
-                  Send
+                  className="dc-fab-scroll"
+                >
+                  {doctorChatUnreadBadge > 0 && (
+                    <span style={{
+                      position: 'absolute', top: -6, right: -6, background: '#ef4444',
+                      color: 'white', fontWeight: 800, fontSize: '0.68rem',
+                      width: 22, height: 22, borderRadius: 11,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 0 0 2px #f8fafc', padding: 0, lineHeight: 1
+                    }}>
+                      {doctorChatUnreadBadge > 99 ? '99+' : doctorChatUnreadBadge}
+                    </span>
+                  )}
+                  <ArrowDown size={17} />
                 </button>
+              )}
+
+              {doctorChatReplying && (
+                <div style={{
+                  padding: '8px 16px 0',
+                  background: 'linear-gradient(180deg,#f8fafc,transparent)'
+                }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '8px 10px 8px 12px',
+                    background: '#fff7ed',
+                    border: '1px solid rgba(234,88,12,0.18)',
+                    borderRadius: 10,
+                    fontSize: '0.78rem'
+                  }}>
+                    <CornerUpRight size={13} style={{ color: 'var(--primary, #ea580c)' }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 800, color: '#9a3412', fontSize: '0.72rem' }}>
+                        Replying to {doctorChatReplying.sender || 'Doctor'}
+                      </div>
+                      <div style={{ color: '#7c2d12', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                        {String(doctorChatReplying.body || '').slice(0, 140)}
+                      </div>
+                    </div>
+                    <button type="button" className="doc-btn" onClick={() => setDoctorChatReplying(null)} style={{ padding: '4px 8px', height: 26, minHeight: 0, fontWeight: 700, color: '#b45309' }}>
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {doctorChatAttachment && (
+                <div style={{ padding: '8px 16px 0', background: 'linear-gradient(180deg,#f8fafc,transparent)' }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 12px',
+                    background: '#ecfdf5',
+                    border: '1px solid rgba(34,197,94,0.2)',
+                    borderRadius: 10
+                  }}>
+                    <div style={{
+                      width: 34, height: 34, borderRadius: 8,
+                      background: doctorChatAttachment.kind === 'image' ? '#fef3c7' : doctorChatAttachment.kind === 'pdf' ? '#fee2e2' : '#e0e7ff',
+                      color: doctorChatAttachment.kind === 'image' ? '#b45309' : doctorChatAttachment.kind === 'pdf' ? '#b91c1c' : '#4f46e5',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto'
+                    }}>
+                      {doctorChatAttachment.kind === 'image' ? <ImageIcon size={16} /> : doctorChatAttachment.kind === 'pdf' ? <File size={16} /> : <VideoIcon size={16} />}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 800, color: '#065f46', fontSize: '0.8rem' }}>
+                        {doctorChatAttachment.kind.toUpperCase()} ready to attach
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#047857', fontWeight: 600 }}>
+                        {doctorChatAttachment.name} • {doctorChatAttachment.size >= 1024*1024 ? `${(doctorChatAttachment.size/1024/1024).toFixed(1)} MB` : `${Math.max(1, Math.round(doctorChatAttachment.size/1024))} KB`}
+                      </div>
+                    </div>
+                    {doctorChatAttachmentUploading ? (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.76rem', color: '#065f46' }}>
+                        <RotateCw size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Uploading…
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="doc-btn danger"
+                        style={{ height: 28, minHeight: 0, padding: '4px 8px', fontWeight: 700, fontSize: '0.72rem', color: '#991b1b' }}
+                        onClick={() => setDoctorChatAttachment(null)}
+                        disabled={doctorChatAttachmentUploading}
+                      >
+                        <X size={12} /> Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ padding: '10px 16px 4px', background: 'linear-gradient(180deg,#f8fafc,transparent)' }}>
+                <div className="dc-quick-chips" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {doctorChatQuickReplies.map((qr) => (
+                    <button
+                      key={qr.id}
+                      type="button"
+                      onClick={() => { setDoctorChatText(qr.text); setTimeout(() => sendDoctorChatMessage(), 40); }}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 999,
+                        border: '1px solid rgba(234,88,12,0.2)',
+                        background: '#ffffff',
+                        color: '#9a3412',
+                        fontWeight: 700,
+                        fontSize: '0.74rem',
+                        cursor: 'pointer',
+                        transition: 'all 120ms ease'
+                      }}
+                      className="dc-quick-chip"
+                      onMouseEnter={(e) => { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                    >
+                      <Sparkles size={11} style={{ display: 'inline', marginRight: 4, verticalAlign: -1, opacity: 0.7 }} /> {qr.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              <div ref={doctorChatComposeRef} className="doc-msg-compose dc-compose-wrap" style={{ padding: '12px 16px 16px', background: '#fff', borderTop: '1px solid var(--border)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'center' }}>
+                  <input
+                    ref={doctorChatFileInputRef}
+                    type="file"
+                    accept={`${doctorChatFileAllowed.image.accept},${doctorChatFileAllowed.pdf.accept},${doctorChatFileAllowed.video.accept}`}
+                    onChange={doctorChatOnPickFile}
+                    style={{ display: 'none' }}
+                  />
+                  <button
+                    type="button"
+                    className="doc-btn"
+                    style={{ height: 44, width: 44, minHeight: 0, padding: 0, borderRadius: 14, border: '1px solid var(--border)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#475569', background: '#fff' }}
+                    title="📎 Attach image / PDF / video"
+                    onClick={() => { try { doctorChatFileInputRef.current?.click(); } catch(_) {} }}
+                  >
+                    <Paperclip size={16} />
+                  </button>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      className={`doc-input dc-compose-input ${doctorChatInputInvalid ? 'dc-input-shake' : ''}`}
+                      placeholder={doctorChatSpecialty ? 'Type a message… (max 2000 chars) — Enter to send, ⇧ Enter for new line' : 'Set specialization to enable chat…'}
+                      value={doctorChatText}
+                      maxLength={2100}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDoctorChatText(val);
+                        const atPos = val.lastIndexOf('@');
+                        if (atPos >= 0 && /(^|\s)@\w*$/.test(val.slice(atPos - 1))) {
+                          const after = val.slice(atPos + 1).toLowerCase();
+                          setDoctorChatMentionOpen(true);
+                          setDoctorChatMentionIdx(atPos);
+                          setDoctorChatMentionQuery(after);
+                        } else if (doctorChatMentionOpen) {
+                          setDoctorChatMentionOpen(false);
+                        }
+                        if (doctorChatInputInvalid && String(val || '').trim()) setDoctorChatInputInvalid(false);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          if (e.shiftKey) return;
+                          e.preventDefault();
+                          if (doctorChatMentionOpen) return;
+                          sendDoctorChatMessage();
+                        } else if (e.key === 'Escape') {
+                          if (doctorChatMentionOpen) setDoctorChatMentionOpen(false);
+                          else if (doctorChatReplying) setDoctorChatReplying(null);
+                          else if (doctorChatAttachment && !doctorChatAttachmentUploading) setDoctorChatAttachment(null);
+                        } else if (e.key === 'ArrowDown' && doctorChatMentionOpen) {
+                          e.preventDefault();
+                        }
+                      }}
+                      disabled={!doctorChatSpecialty || doctorChatAttachmentUploading}
+                      style={{ paddingRight: 88 }}
+                    />
+                    <div style={{ position: 'absolute', right: 12, bottom: 11, display: 'inline-flex', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
+                      {doctorChatAttachment && (
+                        <Check size={11} style={{ color: '#22c55e', fontWeight: 800 }} title="Attachment queued" />
+                      )}
+                      <span style={{ fontSize: '0.66rem', fontWeight: 800, color: String(doctorChatText || '').length >= 1900 ? '#dc2626' : (String(doctorChatText || '').length >= 1700 ? '#d97706' : '#94a3b8') }}>
+                        {String(doctorChatText || '').length}/2000
+                      </span>
+                    </div>
+
+                    {doctorChatMentionOpen && (
+                      <div
+                        style={{
+                          position: 'absolute', bottom: 52, left: 0,
+                          zIndex: 35, minWidth: 240, maxWidth: 360, maxHeight: 220, overflowY: 'auto',
+                          background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12,
+                          padding: 6,
+                          boxShadow: '0 12px 28px rgba(15,23,42,0.18)',
+                          display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.8rem'
+                        }}
+                      >
+                        {(() => {
+                          const q = String(doctorChatMentionQuery || '').toLowerCase();
+                          const list = doctorChatAllSenders.filter((s) => !q || s.name.toLowerCase().includes(q) || (s.dept && s.dept.toLowerCase().includes(q))).slice(0, 8);
+                          if (!list.length) return <div style={{ padding: '10px 8px', color: '#94a3b8', fontSize: '0.76rem', fontWeight: 600 }}>No doctors match "{q}"</div>;
+                          return list.map((s, i) => (
+                            <button
+                              key={`men-${s.key}-${i}`}
+                              type="button"
+                              onClick={() => {
+                                const t = String(doctorChatText || '');
+                                const before = t.slice(0, doctorChatMentionIdx || 0);
+                                const replaced = t.slice(doctorChatMentionIdx || 0).replace(/^@\S*/, `@${s.name} `);
+                                setDoctorChatText(before + replaced);
+                                setDoctorChatMentionOpen(false);
+                                setTimeout(() => { try { const inp = document.querySelector('.dc-compose-input'); if (inp) inp.focus(); } catch(_) {} }, 30);
+                              }}
+                              style={{ textAlign: 'left', padding: '8px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'transparent', color: '#0f172a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#fff7ed'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <span style={{ width: 22, height: 22, borderRadius: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(234,88,12,0.12)', color: 'var(--primary, #ea580c)', fontSize: '0.68rem', fontWeight: 800 }}>
+                                <AtSign size={11} />
+                              </span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>
+                                {s.dept && <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 500 }}>{s.dept}</div>}
+                              </div>
+                            </button>
+                          ));
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    className="doc-primary dc-send-btn"
+                    type="button"
+                    onClick={sendDoctorChatMessage}
+                    disabled={!doctorChatSpecialty || doctorChatAttachmentUploading || (!String(doctorChatText || '').trim() && !doctorChatAttachment)}
+                    style={{ height: 44, padding: '0 18px', borderRadius: 14, gap: 6, display: 'inline-flex', alignItems: 'center', fontWeight: 800 }}
+                  >
+                    <Send size={15} /> {doctorChatAttachment ? 'Send + Attach' : 'Send'}
+                  </button>
+                </div>
+              </div>
+
+              {doctorChatDeleteConfirm && (
+                <div className="doc-modal-overlay" style={{ zIndex: 80 }} onClick={() => setDoctorChatDeleteConfirm(null)}>
+                  <div className="doc-modal-card" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+                    <div className="doc-modal-header" style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#fef2f2', color: '#dc2626', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Trash2 size={17} /></div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 900, fontSize: '1rem', color: '#0f172a' }}>Delete this message?</div>
+                        <div style={{ fontSize: '0.78rem', marginTop: 2, color: '#64748b' }}>This cannot be undone. Other doctors will no longer see it.</div>
+                      </div>
+                      <button type="button" className="doc-icon-btn" onClick={() => setDoctorChatDeleteConfirm(null)}><X size={16} /></button>
+                    </div>
+                    <div style={{ padding: '14px 16px', borderRadius: 12, border: '1px solid #f1f5f9', background: '#f8fafc', margin: '0 16px', color: '#334155', fontSize: '0.86rem', lineHeight: 1.5, fontWeight: 500, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                      {String(doctorChatDeleteConfirm?.body || doctorChatDeleteConfirm?.attachment_name || '').slice(0, 240) || 'Message preview unavailable'}
+                    </div>
+                    <div style={{ padding: '14px 16px 18px', display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+                      <button type="button" className="doc-btn" onClick={() => setDoctorChatDeleteConfirm(null)}>Cancel</button>
+                      <button type="button" className="doc-btn danger" style={{ fontWeight: 800, color: '#fff', background: '#dc2626', border: '1px solid #dc2626' }} onClick={() => doctorChatSoftDelete(doctorChatDeleteConfirm)}><Trash2 size={14} /> Delete</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {doctorChatAttPreview && (
+                <div className="doc-modal-overlay" style={{ zIndex: 90 }} onClick={() => setDoctorChatAttPreview(null)}>
+                  <div style={{ position: 'relative', maxWidth: 960, width: '90vw', maxHeight: '88vh' }} onClick={(e) => e.stopPropagation()}>
+                    <button type="button" className="doc-icon-btn" style={{ position: 'absolute', top: -12, right: -12, zIndex: 3, background: '#0f172a', color: 'white' }} onClick={() => setDoctorChatAttPreview(null)}><X size={18} /></button>
+                    {doctorChatAttPreview.kind === 'image' && (
+                      <img src={doctorChatAttPreview.src} alt={doctorChatAttPreview.name || ''} style={{ display: 'block', width: '100%', height: 'auto', maxHeight: '88vh', borderRadius: 14, objectFit: 'contain', background: '#0f172a', boxShadow: '0 20px 50px rgba(15,23,42,0.4)' }} />
+                    )}
+                    <div style={{ textAlign: 'center', paddingTop: 10, fontSize: '0.8rem', color: '#cbd5e1', fontWeight: 700 }}>{doctorChatAttPreview.name || 'Preview'}</div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

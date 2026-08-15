@@ -2364,6 +2364,64 @@
   40%, 60% { transform: translateX(4px); }
 }
 
+.dc-flash {
+  outline: 3px solid rgba(234, 179, 8, 0.55);
+  outline-offset: 2px;
+  border-radius: 16px;
+  animation: dcFlashY 1.6s ease-out both;
+}
+@keyframes dcFlashY {
+  0%   { outline-color: rgba(234, 179, 8, 0.85); background-color: rgba(254, 243, 199, 0.55); }
+  60%  { outline-color: rgba(234, 179, 8, 0.45); background-color: rgba(254, 243, 199, 0.25); }
+  100% { outline-color: rgba(234, 179, 8, 0);    background-color: transparent; }
+}
+
+.dc-highlight {
+  border-radius: 3px;
+}
+
+.dc-deleted-bubble {
+  user-select: none;
+}
+
+.dc-btn-active {
+  background-color: #fff7ed !important;
+  border-color: rgba(234, 88, 12, 0.28) !important;
+  color: #9a3412 !important;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.dc-fab-scroll {
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+.dc-fab-scroll:hover {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 14px 28px rgba(234, 88, 12, 0.4), 0 5px 10px rgba(15, 23, 42, 0.09) !important;
+}
+
+.dc-menu-btn:hover {
+  background-color: #f8fafc;
+}
+
+.dc-quick-chip {
+  transition: all 120ms ease;
+}
+.dc-quick-chip:hover {
+  transform: translateY(-1px);
+  background-color: #fff7ed;
+}
+
+.dc-msg-more {
+  transition: opacity 120ms ease;
+}
+.dc-msg-more-open {
+  opacity: 1 !important;
+}
+
 @media (max-width: 980px) {
   .doc-msg-wrap {
     grid-template-columns: 1fr;
