@@ -4357,14 +4357,33 @@ function NurseDashboard() {
   // Profile Form State
   const [profileData, setProfileData] = useState({
     username: '',
+    firstName: '',
+    lastName: '',
+    middleName: '',
     email: '',
     phone: '',
+    department: '',
     currentPassword: '',
     newPassword: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    profilePicture: ''
   });
   const [profileErrors, setProfileErrors] = useState({});
   const [formError, setFormError] = useState('');
+  const nurseAvatarInputRef = React.useRef(null);
+  const [pendingNurseAvatarFile, setPendingNurseAvatarFile] = useState(null);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const passwordCriteria = useMemo(() => {
+    const pw = String(profileData.newPassword || '');
+    return {
+      length: pw.length >= 11,
+      hasSpecial: /[^A-Za-z0-9]/.test(pw),
+      hasNumber: /[0-9]/.test(pw),
+    };
+  }, [profileData.newPassword]);
 
 
 
@@ -4390,8 +4409,13 @@ function NurseDashboard() {
             setProfileData(prev => ({
                 ...prev,
                 username: displayName,
+                firstName: currentUser.firstName || currentUser.first_name || '',
+                lastName: currentUser.lastName || currentUser.last_name || '',
+                middleName: currentUser.middleName || currentUser.middle_name || '',
                 email: currentUser.email || 'nurse@hospital.com', // fallback
-                phone: currentUser.phone || '09123456789' // fallback
+                phone: currentUser.phone || '09123456789', // fallback
+                department: formatDepartmentLabel(currentUser.department || currentUser.dept || specialization || activeDept) || '',
+                profilePicture: currentUser.avatarUrl || currentUser.avatar_url || currentUser.profilePicture || ''
             }));
         }
     } catch (e) {
@@ -4460,22 +4484,60 @@ function NurseDashboard() {
     }
   }, [view, activeDept, approvalDepartment]);
 
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setProfileData(prev => ({ ...prev, [name]: value }));
+    // Clear error when user types
+    if (profileErrors[name]) {
+        setProfileErrors(prev => ({ ...prev, [name]: null }));
+    }
+    if (formError) setFormError('');
+  };
+
+  const handleNurseAvatarPick = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (!f.type.startsWith('image/')) {
+      setFormError('Please select a valid image file.');
+      return;
+    }
+    if (f.size > 5 * 1024 * 1024) {
+      setFormError('Avatar image must be less than 5MB.');
+      return;
+    }
+    setPendingNurseAvatarFile(f);
+    const reader = new FileReader();
+    reader.onload = (ev) => setProfileData(prev => ({ ...prev, profilePicture: String(ev.target?.result || '') }));
+    reader.readAsDataURL(f);
+  };
+
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
     
     const errors = {};
-    if (!profileData.username) errors.username = "Username is required";
+    const fName = String(profileData.firstName || '').trim();
+    const lName = String(profileData.lastName || '').trim();
+    if (!fName) errors.firstName = "First Name is required";
+    if (!lName) errors.lastName = "Last Name is required";
     if (!profileData.email) errors.email = "Email is required";
     if (!profileData.phone) errors.phone = "Phone is required";
     
-    // Only validate new password if user is trying to change it
-    if (profileData.newPassword || profileData.confirmPassword) {
-        if ((profileData.newPassword || "").length < 6) errors.newPassword = "Password must be at least 6 characters";
-        if (profileData.newPassword !== profileData.confirmPassword) errors.confirmPassword = "Passwords do not match";
-    }
+    const { currentPassword, newPassword, confirmPassword } = profileData;
+    const isChangingPassword = Boolean(currentPassword || newPassword || confirmPassword);
 
-    // Strict validation: Always require current password for any update
-    if (!profileData.currentPassword) errors.currentPassword = "Current password is required";
+    // Only validate new password if user is trying to change it
+    if (isChangingPassword) {
+      if (!currentPassword) errors.currentPassword = "Current password is required to change profile settings";
+      const pwClean = String(newPassword || '');
+      if (pwClean || confirmPassword) {
+        if (pwClean.length < 11) errors.newPassword = "Password must be at least 11 characters";
+        if (!/[^A-Za-z0-9]/.test(pwClean)) errors.newPassword = errors.newPassword || "Password must contain at least one special character";
+        if (!/[0-9]/.test(pwClean)) errors.newPassword = errors.newPassword || "Password must contain at least one number";
+        if (pwClean !== String(confirmPassword || '')) errors.confirmPassword = "Passwords do not match";
+      }
+    } else if (!currentPassword) {
+      errors.currentPassword = "Current password is required to save profile changes";
+    }
     
     setProfileErrors(errors);
     
@@ -4491,80 +4553,77 @@ function NurseDashboard() {
             return;
         }
 
-        // Split username into firstName and lastName for backend compatibility
-        const nameParts = profileData.username.trim().split(' ');
-        let firstName = profileData.username;
-        let lastName = '.'; // Default placeholder if single name provided
-
-        if (nameParts.length > 1) {
-            lastName = nameParts.pop();
-            firstName = nameParts.join(' ');
+        const userId = currentUser._id;
+        let savedAvatarUrl = profileData.profilePicture || currentUser.avatarUrl || currentUser.avatar_url || currentUser.profilePicture || '';
+        if (pendingNurseAvatarFile) {
+          const fd = new FormData();
+          fd.append('avatar', pendingNurseAvatarFile);
+          fd.append('accountType', 'nurse');
+          fd.append('userId', String(userId));
+          try {
+            const avatarData = await fetchJson(`/api/staff/avatar`, {
+              apiBase: API_BASE,
+              method: 'POST',
+              headers: { ...getAuthHeaders() },
+              body: fd
+            });
+            savedAvatarUrl = avatarData?.avatarUrl || savedAvatarUrl;
+          } catch (avatarErr) {
+            console.warn('Avatar upload failed, proceeding without new avatar:', avatarErr);
+          }
         }
 
         const payload = {
-            firstName: firstName,
-            lastName: lastName,
+            firstName: fName,
+            lastName: lName,
+            middleName: String(profileData.middleName || '').trim(),
             email: profileData.email,
             phone: profileData.phone,
+            department: String(profileData.department || '').trim(),
             currentPassword: profileData.currentPassword,
             requiresPasswordAuth: true
         };
 
         if (profileData.newPassword) {
-            payload.password = profileData.newPassword.trim();
+            payload.password = String(profileData.newPassword || '').trim();
         }
 
-        const response = await fetch(`${API_BASE}/api/staff/${currentUser._id}`, {
+        const data = await fetchJson(`/api/staff/${userId}`, {
+            apiBase: API_BASE,
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify(payload)
         });
 
-        const data = await response.json();
+        const resolvedUser = currentUser;
+        const updatedUser = { ...resolvedUser, email: data.email, phone: data.phone, avatarUrl: savedAvatarUrl || resolvedUser.avatarUrl || '', firstName: fName, lastName: lName, middleName: payload.middleName, department: payload.department };
+        const displayName = `${fName} ${lName}`.trim();
+        updatedUser.name = displayName;
 
-        if (response.ok) {
-            setSuccessMessage("Successful");
-            setShowSuccessModal(true);
-            setFormError("");
-            
-            // Update local storage
-            const updatedUser = { 
-                ...currentUser, 
-                name: profileData.username,
-                email: data.email || profileData.email, 
-                phone: data.phone || profileData.phone 
-            };
-            localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-            
-            // Update Dashboard Header
-            setUser(prev => ({ ...prev, name: profileData.username, email: data.email || profileData.email }));
-            
-            // Clear passwords from form
-            setProfileData(prev => ({ 
-                ...prev, 
-                currentPassword: '', 
-                newPassword: '', 
-                confirmPassword: '' 
-            }));
-            
-            // Optional: Navigate after modal close? For now, just show modal.
-        } else {
-            setFormError(data.message || "Failed to update profile.");
-        }
+        localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+        
+        setUser(prev => ({ ...prev, name: displayName, email: data.email || profileData.email, departmentLabel: formatDepartmentLabel(payload.department || prev.departmentLabel || '') || prev.departmentLabel }));
+        
+        setSuccessMessage("Profile updated successfully!");
+        setShowSuccessModal(true);
+        setFormError("");
+        setPendingNurseAvatarFile(null);
+
+        setProfileData(prev => ({ 
+            ...prev, 
+            currentPassword: '', 
+            newPassword: '', 
+            confirmPassword: '',
+            profilePicture: savedAvatarUrl || prev.profilePicture,
+            firstName: fName,
+            lastName: lName,
+            middleName: payload.middleName,
+            department: payload.department
+        }));
     } catch (error) {
         console.error("Update error:", error);
-        setFormError("Network error. Please try again.");
+        setFormError(error?.message || "Network error. Please try again.");
     }
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setProfileData(prev => ({ ...prev, [name]: value }));
-    // Clear error when user types
-    if (profileErrors[name]) {
-        setProfileErrors(prev => ({ ...prev, [name]: null }));
-    }
-    if (formError) setFormError('');
   };
 
   const handleRequestSubmit = async (e) => {
@@ -8154,130 +8213,261 @@ function NurseDashboard() {
 
 
             {view === 'profile' && (
-                <div className="profile-container">
-                    <div className="profile-header">
-                        <h2>Profile Settings</h2>
-                        <p>Manage your account settings and preferences</p>
+                <div className="admin-profile-container">
+                  <div className="admin-profile-header-card">
+                    <div className="profile-image-section">
+                      <div className="large-avatar-circle">
+                        {profileData.profilePicture ? (
+                          <img src={profileData.profilePicture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <User size={64} color="#cbd5e1" />
+                        )}
+                      </div>
+                      <input
+                        ref={nurseAvatarInputRef}
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={handleNurseAvatarPick}
+                      />
+                      <button type="button" className="btn-neutral-sm shadow-btn" onClick={() => nurseAvatarInputRef.current && nurseAvatarInputRef.current.click()}>
+                        Update Avatar
+                      </button>
+                    </div>
+                    <div className="profile-info-section">
+                      <h1>{`${String(profileData.firstName || '').trim()} ${String(profileData.lastName || '').trim()}`.trim() || 'Nurse Profile'}</h1>
+                      <p className="admin-role-badge">{profileData.department || user?.departmentLabel || 'Nurse'}</p>
+                    </div>
+                  </div>
+
+                  <form className="admin-profile-form" onSubmit={handleProfileUpdate}>
+                    <div className="profile-form-grid">
+                      <div className="profile-column">
+                        <div className="profile-card">
+                          <h3 className="column-title">
+                            <User size={20} color="#475569" />
+                            Personal Information
+                          </h3>
+
+                          <div className="profile-input-group">
+                            <label>First Name</label>
+                            <div className="input-wrapper-relative">
+                              <User size={18} className="absolute-icon-left text-slate-400" />
+                              <input
+                                type="text"
+                                name="firstName"
+                                value={profileData.firstName}
+                                onChange={handleInputChange}
+                                className="profile-input input-with-icon-padding"
+                                placeholder="e.g. Maria"
+                              />
+                            </div>
+                            {profileErrors.firstName && (
+                              <p className="field-notice-error">{profileErrors.firstName}</p>
+                            )}
+                          </div>
+
+                          <div className="profile-input-group">
+                            <label>Middle Name</label>
+                            <div className="input-wrapper-relative">
+                              <User size={18} className="absolute-icon-left text-slate-400" />
+                              <input
+                                type="text"
+                                name="middleName"
+                                value={profileData.middleName}
+                                onChange={handleInputChange}
+                                className="profile-input input-with-icon-padding"
+                                placeholder="e.g. Santos"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="profile-input-group">
+                            <label>Last Name</label>
+                            <div className="input-wrapper-relative">
+                              <User size={18} className="absolute-icon-left text-slate-400" />
+                              <input
+                                type="text"
+                                name="lastName"
+                                value={profileData.lastName}
+                                onChange={handleInputChange}
+                                className="profile-input input-with-icon-padding"
+                                placeholder="e.g. Reyes"
+                              />
+                            </div>
+                            {profileErrors.lastName && (
+                              <p className="field-notice-error">{profileErrors.lastName}</p>
+                            )}
+                          </div>
+                          
+                          <div className="profile-input-group">
+                            <label>Email Address</label>
+                            <div className="input-wrapper-relative">
+                              <Mail size={18} className="absolute-icon-left text-slate-400" />
+                              <input 
+                                type="email" 
+                                name="email"
+                                value={profileData.email}
+                                onChange={handleInputChange}
+                                className="profile-input input-with-icon-padding"
+                                placeholder="nurse@hospital.com"
+                              />
+                            </div>
+                            {profileErrors.email && (
+                              <p className="field-notice-error">{profileErrors.email}</p>
+                            )}
+                          </div>
+
+                          <div className="profile-input-group">
+                            <label>Department / Role</label>
+                            <div className="input-wrapper-relative">
+                              <Briefcase size={18} className="absolute-icon-left text-slate-400" />
+                              <input 
+                                type="text" 
+                                name="department"
+                                value={profileData.department}
+                                onChange={handleInputChange}
+                                className="profile-input input-with-icon-padding"
+                                placeholder="e.g. ER Nurse, Ward, OPD"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="profile-input-group">
+                            <label>Phone Number</label>
+                            <div className="input-wrapper-relative">
+                              <Phone size={18} className="absolute-icon-left text-slate-400" />
+                              <input 
+                                type="tel" 
+                                name="phone"
+                                value={profileData.phone}
+                                onChange={handleInputChange}
+                                className="profile-input input-with-icon-padding"
+                                placeholder="+63 900 000 0000"
+                              />
+                            </div>
+                            {profileErrors.phone && (
+                              <p className="field-notice-error">{profileErrors.phone}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="profile-column">
+                        <div className="profile-card">
+                          <h3 className="column-title">
+                            <Shield size={20} color="#475569" />
+                            Security & Password
+                          </h3>
+                          
+                          <div className="profile-input-group">
+                            <label>Current Password</label>
+                            <div className="input-wrapper-relative">
+                              <Key size={18} className="absolute-icon-left text-slate-400" />
+                              <input 
+                                type={showCurrentPassword ? "text" : "password"}
+                                name="currentPassword"
+                                value={profileData.currentPassword}
+                                onChange={handleInputChange}
+                                className="profile-input input-with-icon-padding"
+                                placeholder="Enter current password to save changes"
+                              />
+                              <button 
+                                type="button"
+                                className="toggle-password-btn"
+                                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                              >
+                                {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                              </button>
+                            </div>
+                            {profileErrors.currentPassword && (
+                              <p className="field-notice-error">{profileErrors.currentPassword}</p>
+                            )}
+                          </div>
+
+                          <div className="profile-input-group">
+                            <label>New Password</label>
+                            <div className="input-wrapper-relative">
+                              <Key size={18} className="absolute-icon-left text-slate-400" />
+                              <input 
+                                type={showNewPassword ? "text" : "password"}
+                                name="newPassword"
+                                value={profileData.newPassword}
+                                onChange={handleInputChange}
+                                className="profile-input input-with-icon-padding"
+                                placeholder="Leave blank to keep current"
+                              />
+                              <button 
+                                type="button"
+                                className="toggle-password-btn"
+                                onClick={() => setShowNewPassword(!showNewPassword)}
+                              >
+                                {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                              </button>
+                            </div>
+                            
+                            <div className="password-checklist">
+                              <div className={`checklist-item ${passwordCriteria.length ? 'valid' : ''}`}>
+                                {passwordCriteria.length ? <Check size={14} /> : <X size={14} />}
+                                <span>At least 11 characters</span>
+                              </div>
+                              <div className={`checklist-item ${passwordCriteria.hasSpecial ? 'valid' : ''}`}>
+                                {passwordCriteria.hasSpecial ? <Check size={14} /> : <X size={14} />}
+                                <span>Contains special characters</span>
+                              </div>
+                              <div className={`checklist-item ${passwordCriteria.hasNumber ? 'valid' : ''}`}>
+                                {passwordCriteria.hasNumber ? <Check size={14} /> : <X size={14} />}
+                                <span>Contains numbers</span>
+                              </div>
+                            </div>
+                            {profileErrors.newPassword && (
+                              <p className="field-notice-error">{profileErrors.newPassword}</p>
+                            )}
+                          </div>
+
+                          <div className="profile-input-group">
+                            <label>Confirm New Password</label>
+                            <div className="input-wrapper-relative">
+                              <Key size={18} className="absolute-icon-left text-slate-400" />
+                              <input 
+                                type={showConfirmPassword ? "text" : "password"}
+                                name="confirmPassword"
+                                value={profileData.confirmPassword}
+                                onChange={handleInputChange}
+                                className="profile-input input-with-icon-padding"
+                                placeholder="Confirm new password"
+                              />
+                              <button 
+                                type="button"
+                                className="toggle-password-btn"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              >
+                                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                              </button>
+                            </div>
+                            {profileData.confirmPassword && (
+                              <p className={`match-indicator ${profileData.newPassword === profileData.confirmPassword ? 'match-success' : 'match-error'}`}>
+                                {profileData.newPassword === profileData.confirmPassword ? 'Passwords match' : 'Passwords do not match'}
+                              </p>
+                            )}
+                            {profileErrors.confirmPassword && (
+                              <p className="field-notice-error">{profileErrors.confirmPassword}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="profile-card">
-                        <form onSubmit={handleProfileUpdate}>
-                            <div className="settings-section-title">Personal Information</div>
-                            
-                            <div className="settings-form-grid">
-                                <div className="profile-input-group full-width">
-                                    <label className="settings-label">Username</label>
-                                    <input 
-                                        type="text" 
-                                        name="username"
-                                        className="settings-input" 
-                                        value={profileData.username} 
-                                        onChange={handleInputChange}
-                                    />
-                                    {profileErrors.username && <span className="field-notice">{profileErrors.username}</span>}
-                                </div>
-                                
-                                <div className="settings-row-2">
-                                    <div className="profile-input-group">
-                                        <label className="settings-label">Email Address</label>
-                                        <input 
-                                            type="email" 
-                                            name="email"
-                                            className="settings-input" 
-                                            value={profileData.email} 
-                                            onChange={handleInputChange}
-                                        />
-                                        {profileErrors.email && <span className="field-notice">{profileErrors.email}</span>}
-                                    </div>
-                                    <div className="profile-input-group">
-                                        <label className="settings-label">Phone Number</label>
-                                        <input 
-                                            type="text" 
-                                            name="phone"
-                                            className="settings-input" 
-                                            value={profileData.phone} 
-                                            onChange={handleInputChange}
-                                        />
-                                        {profileErrors.phone && <span className="field-notice">{profileErrors.phone}</span>}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="settings-section-title" style={{marginTop: '30px'}}>Security</div>
-                            
-                            <div className="settings-form-grid">
-                                <div className="profile-input-group full-width">
-                                    <label className="settings-label">Current Password</label>
-                                    <input 
-                                        type="password" 
-                                        name="currentPassword"
-                                        className="settings-input" 
-                                        value={profileData.currentPassword}
-                                        onChange={handleInputChange}
-                                        placeholder="Enter current password to save changes"
-                                    />
-                                    {profileErrors.currentPassword && <span className="field-notice">{profileErrors.currentPassword}</span>}
-                                </div>
-                                
-                                <div className="settings-row-2">
-                                    <div className="profile-input-group">
-                                        <label className="settings-label">New Password</label>
-                                        <input 
-                                            type="password" 
-                                            name="newPassword"
-                                            className="settings-input" 
-                                            value={profileData.newPassword}
-                                            onChange={handleInputChange}
-                                        />
-                                        {profileErrors.newPassword && <span className="field-notice">{profileErrors.newPassword}</span>}
-                                    </div>
-                                    <div className="profile-input-group" style={{position: 'relative'}}>
-                                        <label className="settings-label">Confirm New Password</label>
-                                        <input 
-                                            type="password" 
-                                            name="confirmPassword"
-                                            className="settings-input" 
-                                            value={profileData.confirmPassword}
-                                            onChange={handleInputChange}
-                                            style={{
-                                                borderColor: profileData.confirmPassword && profileData.newPassword === profileData.confirmPassword 
-                                                    ? '#22c55e' 
-                                                    : profileData.confirmPassword && profileData.newPassword !== profileData.confirmPassword 
-                                                        ? '#ef4444' 
-                                                        : '#cbd5e1'
-                                            }}
-                                        />
-                                        {/* Real-time Password Match Feedback */}
-                                        {profileData.confirmPassword && (
-                                            <div style={{marginTop: '5px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '5px'}}>
-                                                {profileData.newPassword === profileData.confirmPassword ? (
-                                                    <span className="text-success" style={{fontWeight: '500'}}>Passwords match</span>
-                                                ) : (
-                                                    <span className="text-error" style={{fontWeight: '500'}}>Passwords do not match</span>
-                                                )}
-                                            </div>
-                                        )}
-                                        {profileErrors.confirmPassword && <span className="field-notice">{profileErrors.confirmPassword}</span>}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="settings-actions">
-                                {formError && <div className="form-error-message" style={{marginBottom: '10px'}}>{formError}</div>}
-                                <div style={{display: 'flex', gap: '15px', width: '100%', justifyContent: 'flex-end'}}>
-                                    <button type="button" className="btn-cancel-settings" onClick={() => setView('overview')}>Cancel</button>
-                                    <button 
-                                        type="submit" 
-                                        className="btn-save-settings"
-                                    >
-                                        Save Changes
-                                    </button>
-                                </div>
-                            </div>
-                            
-
-                        </form>
+                    <div className="form-actions-row">
+                      {formError && (
+                        <p className="form-notice-error form-notice-error-text">{formError}</p>
+                      )}
+                      <button type="submit" className="btn-neutral-large flex-center-gap-8">
+                        <Save size={18} />
+                        Save Changes
+                      </button>
                     </div>
+                  </form>
                 </div>
             )}
         </section>
