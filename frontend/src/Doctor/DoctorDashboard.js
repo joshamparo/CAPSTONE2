@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronLeft, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff, Maximize2 } from 'lucide-react';
 import './DoctorDashboard.css';
@@ -304,6 +304,8 @@ function DoctorDashboard() {
   const [doctorChatLoading, setDoctorChatLoading] = useState(false);
   const [doctorChatError, setDoctorChatError] = useState('');
   const [doctorChatText, setDoctorChatText] = useState('');
+  const [doctorChatInputInvalid, setDoctorChatInputInvalid] = useState(false);
+  const doctorChatScrollRef = useRef(null);
 
   const doctorChatSpecialty = useMemo(() => {
     return 'global_doctors'; // All doctors share the same chat room
@@ -334,17 +336,101 @@ function DoctorDashboard() {
     }
   };
 
+  const scrollDoctorChatToBottom = () => {
+    try {
+      const el = doctorChatScrollRef?.current;
+      if (el && typeof el.scrollTo === 'function') {
+        el.scrollTo({ top: el.scrollHeight + 9999, behavior: 'smooth' });
+      } else if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
+    } catch (_) {}
+  };
+
+  const doctorChatSenderIdentity = useMemo(() => {
+    const name = String(doctorInboxName || doctorName || 'Doctor').trim();
+    const spec = String(doctorSpecialization || '').trim();
+    const dept = spec ? spec.replace(/\b\w/g, (c) => c.toUpperCase()) : '';
+    return {
+      name,
+      dept,
+      displayName: dept ? `${name} • ${dept}` : name
+    };
+  }, [doctorInboxName, doctorName, doctorSpecialization]);
+
+  const normalizeSenderKey = (raw) => {
+    return String(raw || '').trim().toLowerCase().replace(/\s+/g, '');
+  };
+
+  const isDoctorChatMine = (msg) => {
+    const a = normalizeSenderKey(msg?.sender_name || msg?.senderName || '');
+    const b = normalizeSenderKey(doctorChatSenderIdentity.name);
+    if (a && b && a === b) return true;
+    const c = normalizeSenderKey(msg?.sender_email || msg?.senderEmail || msg?.sender_user || '');
+    const d = normalizeSenderKey(currentUser?.email || currentUser?.username || currentUser?.user || '');
+    return !!(c && d && c === d);
+  };
+
+  const formatDoctorChatTime = (ts) => {
+    if (!ts) return '';
+    try {
+      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (_) {
+      return '';
+    }
+  };
+
+  const formatDoctorChatDayKey = (ts) => {
+    if (!ts) return '';
+    try {
+      const d = new Date(ts);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    } catch (_) {
+      return '';
+    }
+  };
+
+  const formatDoctorChatDayLabel = (dayKey) => {
+    if (!dayKey) return '';
+    const today = formatDoctorChatDayKey(new Date());
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const yesterday = formatDoctorChatDayKey(y);
+    if (dayKey === today) return 'Today';
+    if (dayKey === yesterday) return 'Yesterday';
+    try {
+      const [yy, mm, dd] = dayKey.split('-').map(Number);
+      const d = new Date(yy, mm - 1, dd);
+      return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+    } catch (_) {
+      return dayKey;
+    }
+  };
+
   const sendDoctorChatMessage = async () => {
     const specialty = doctorChatSpecialty;
     const body = String(doctorChatText || '').trim();
-    if (!body) return;
+    if (!body) {
+      setDoctorChatInputInvalid(true);
+      setTimeout(() => setDoctorChatInputInvalid(false), 900);
+      return;
+    }
     if (!supabase) return;
     try {
       const { error } = await supabase
         .from('consultation_messages')
-        .insert([{ specialty, sender_role: 'doctor', body, sender_name: doctorName }]);
+        .insert([{
+          specialty,
+          sender_role: 'doctor',
+          body,
+          sender_name: doctorChatSenderIdentity.name,
+          sender_dept: doctorChatSenderIdentity.dept
+        }]);
       if (error) throw error;
       setDoctorChatText('');
+      setDoctorChatInputInvalid(false);
     } catch (e) {
       setToast({ type: 'error', message: String(e?.message || 'Failed to send message.') });
     }
@@ -1438,6 +1524,7 @@ function DoctorDashboard() {
             if (next.id && list.some((m) => String(m?.id || '') === String(next.id))) return list;
             return [...list, next];
           });
+          setTimeout(() => scrollDoctorChatToBottom(), 80);
         }
       )
       .subscribe();
@@ -1447,6 +1534,12 @@ function DoctorDashboard() {
       } catch (_) {}
     };
   }, [activeNav, doctorChatSpecialty]);
+
+  useEffect(() => {
+    if (activeNav !== 'doctor-chat') return;
+    const t = setTimeout(() => scrollDoctorChatToBottom(), 150);
+    return () => clearTimeout(t);
+  }, [activeNav, doctorChatMessages.length, doctorChatLoading]);
 
   useEffect(() => {
     if (activeNav === 'worklist') fetchWorklist();
@@ -4610,55 +4703,105 @@ function DoctorDashboard() {
               </div>
 
               {doctorChatLoading ? (
-                <div className="doc-muted">Loading…</div>
+                <div className="doc-muted" style={{ padding: '16px' }}>Loading…</div>
               ) : doctorChatError ? (
-                <div className="doc-muted">{doctorChatError}</div>
+                <div className="doc-muted" style={{ padding: '16px' }}>{doctorChatError}</div>
               ) : (
-                <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', background: '#f8fafc' }}>
+                <div ref={doctorChatScrollRef} className="dc-scroll-pane" style={{ flex: 1, overflowY: 'auto', padding: '18px 16px', background: '#f8fafc', scrollBehavior: 'smooth' }}>
                   {doctorChatMessages.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>No messages yet.</div>
+                    <div style={{ textAlign: 'center', padding: '28px 12px', color: '#64748b' }}>
+                      <MessageSquare size={28} style={{ opacity: 0.5, marginBottom: 10 }} />
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#334155' }}>No messages yet.</div>
+                      <div style={{ marginTop: 4, fontSize: '0.82rem' }}>Type a greeting below to start chatting with other doctors.</div>
+                    </div>
                   ) : (
-                    doctorChatMessages.map((msg, idx) => {
-                      const role = String(msg?.sender_role || msg?.senderRole || '').toLowerCase();
-                      const isMine = role === 'doctor';
-                      const ts = msg?.created_at || msg?.createdAt || null;
-                      const timeText = ts ? new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-                      const senderLabel = msg?.sender_name || msg?.senderName || (role ? role.toUpperCase() : 'USER');
-                      const body = String(msg?.body || '').trim();
-                      if (!body) return null;
-                      return (
-                        <div key={msg?.id || idx} style={{ marginBottom: 12, textAlign: isMine ? 'right' : 'left' }}>
+                    (() => {
+                      const items = [];
+                      let lastDay = '';
+                      let lastSenderKey = '';
+                      doctorChatMessages.forEach((msg, idx) => {
+                        const body = String(msg?.body || '').trim();
+                        if (!body) return;
+                        const ts = msg?.created_at || msg?.createdAt || null;
+                        const dayKey = formatDoctorChatDayKey(ts);
+                        if (dayKey && dayKey !== lastDay) {
+                          lastDay = dayKey;
+                          lastSenderKey = '';
+                          items.push(
+                            <div key={`day-${dayKey}-${idx}`} className="dc-divider-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '10px 0 18px' }}>
+                              <div className="dc-divider" style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                              <div className="dc-divider-label" style={{ margin: '0 12px', padding: '4px 12px', fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.02em', color: '#64748b', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 999 }}>
+                                {formatDoctorChatDayLabel(dayKey)}
+                              </div>
+                              <div className="dc-divider" style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                            </div>
+                          );
+                        }
+                        const mine = isDoctorChatMine(msg);
+                        const senderName = String(msg?.sender_name || msg?.senderName || 'Doctor').trim();
+                        const senderDeptRaw = String(msg?.sender_dept || msg?.senderDept || '').trim();
+                        const senderDept = senderDeptRaw || (() => {
+                          const specRaw = String(msg?.sender_specialization || msg?.senderSpecialization || '').trim();
+                          return specRaw ? specRaw.replace(/\b\w/g, (c) => c.toUpperCase()) : '';
+                        })();
+                        const senderKey = `${mine ? 'ME' : 'OTHER'}-${senderName}|${senderDept}`;
+                        const showHeader = !mine && senderKey !== lastSenderKey;
+                        lastSenderKey = senderKey;
+                        const timeText = formatDoctorChatTime(ts);
+                        items.push(
                           <div
-                            style={{
-                              display: 'inline-block',
-                              padding: '10px 12px',
-                              borderRadius: 14,
-                              background: isMine ? '#ea580c' : '#ffffff',
-                              color: isMine ? '#ffffff' : '#0f172a',
-                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                              maxWidth: '85%',
-                              whiteSpace: 'pre-wrap',
-                              overflowWrap: 'anywhere'
-                            }}
+                            key={msg?.id || idx}
+                            className={`dc-bubble-row ${mine ? 'dc-bubble-row-me' : 'dc-bubble-row-other'}`}
+                            style={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', marginBottom: 10 }}
                           >
-                            {body}
+                            {showHeader && (
+                              <div className="dc-name-label" style={{ fontSize: '0.76rem', fontWeight: 800, color: '#475569', marginBottom: 6, paddingLeft: 2, paddingRight: 2 }}>
+                                {senderName}{senderDept ? ` • ${senderDept}` : ''}
+                              </div>
+                            )}
+                            <div
+                              className={`dc-bubble ${mine ? 'dc-bubble-me' : 'dc-bubble-other'}`}
+                              style={{
+                                display: 'inline-block',
+                                padding: '11px 14px',
+                                borderRadius: mine ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                                background: mine ? 'var(--primary, #ea580c)' : '#ffffff',
+                                color: mine ? '#ffffff' : '#0f172a',
+                                boxShadow: '0 2px 6px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04)',
+                                maxWidth: '82%',
+                                whiteSpace: 'pre-wrap',
+                                overflowWrap: 'anywhere',
+                                lineHeight: 1.5,
+                                fontSize: '0.95rem',
+                                fontWeight: 500,
+                                border: mine ? '1px solid rgba(0,0,0,0.06)' : '1px solid #e2e8f0'
+                              }}
+                            >
+                              {body}
+                            </div>
+                            {timeText && (
+                              <div className="dc-time-label" style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 5, paddingLeft: 4, paddingRight: 4, fontWeight: 600 }}>
+                                {timeText}
+                              </div>
+                            )}
                           </div>
-                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 4 }}>
-                            {senderLabel}{timeText ? ` • ${timeText}` : ''}
-                          </div>
-                        </div>
-                      );
-                    })
+                        );
+                      });
+                      return items;
+                    })()
                   )}
                 </div>
               )}
 
-              <div className="doc-msg-compose">
+              <div className="doc-msg-compose" style={{ paddingTop: 14 }}>
                 <input
-                  className="doc-input"
+                  className={`doc-input ${doctorChatInputInvalid ? 'dc-input-shake' : ''}`}
                   placeholder={doctorChatSpecialty ? 'Type a message…' : 'Set specialization to enable chat…'}
                   value={doctorChatText}
-                  onChange={(e) => setDoctorChatText(e.target.value)}
+                  onChange={(e) => {
+                    setDoctorChatText(e.target.value);
+                    if (doctorChatInputInvalid && String(e.target.value || '').trim()) setDoctorChatInputInvalid(false);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
