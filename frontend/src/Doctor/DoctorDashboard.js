@@ -5643,7 +5643,7 @@ function DoctorDashboard() {
               </div>
 
               <div ref={doctorChatComposeRef} className="doc-msg-compose dc-compose-wrap" style={{ padding: '12px 16px 16px', background: '#fff', borderTop: '1px solid var(--border)' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'center' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'flex-end' }}>
                   <input
                     ref={doctorChatFileInputRef}
                     type="file"
@@ -5654,21 +5654,31 @@ function DoctorDashboard() {
                   <button
                     type="button"
                     className="doc-btn"
-                    style={{ height: 44, width: 44, minHeight: 0, padding: 0, borderRadius: 14, border: '1px solid var(--border)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#475569', background: '#fff' }}
+                    style={{ height: 44, width: 44, minHeight: 0, padding: 0, borderRadius: 14, border: '1px solid var(--border)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#475569', background: '#fff', flex: '0 0 auto' }}
                     title="📎 Attach image / PDF / video"
                     onClick={() => { try { doctorChatFileInputRef.current?.click(); } catch(_) {} }}
                   >
                     <Paperclip size={16} />
                   </button>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      className={`doc-input dc-compose-input ${doctorChatInputInvalid ? 'dc-input-shake' : ''}`}
+                  <div style={{ position: 'relative', minWidth: 0, width: '100%' }}>
+                    <textarea
+                      ref={(el) => { if (typeof doctorChatComposeRef === 'object' && doctorChatComposeRef) (doctorChatComposeRef._textarea = el); }}
+                      className={`doc-textarea dc-compose-input ${doctorChatInputInvalid ? 'dc-input-shake' : ''}`}
+                      rows={3}
                       placeholder={doctorChatSpecialty ? 'Type a message… (max 2000 chars) — Enter to send, ⇧ Enter for new line' : 'Set specialization to enable chat…'}
                       value={doctorChatText}
                       maxLength={2100}
                       onChange={(e) => {
                         const val = e.target.value;
                         setDoctorChatText(val);
+                        try {
+                          const el = e.target;
+                          if (el && typeof el.style !== 'undefined') {
+                            el.style.height = 'auto';
+                            const next = Math.max(62, Math.min(170, el.scrollHeight));
+                            el.style.height = next + 'px';
+                          }
+                        } catch (_) {}
                         const atPos = val.lastIndexOf('@');
                         if (atPos >= 0 && /(^|\s)@\w*$/.test(val.slice(atPos - 1))) {
                           const after = val.slice(atPos + 1).toLowerCase();
@@ -5686,6 +5696,10 @@ function DoctorDashboard() {
                           e.preventDefault();
                           if (doctorChatMentionOpen) return;
                           sendDoctorChatMessage();
+                          try {
+                            const el = (doctorChatComposeRef && doctorChatComposeRef._textarea) || document.querySelector('.dc-compose-input');
+                            if (el) { el.style.height = 'auto'; el.blur(); setTimeout(() => el.focus(), 20); }
+                          } catch(_) {}
                         } else if (e.key === 'Escape') {
                           if (doctorChatMentionOpen) setDoctorChatMentionOpen(false);
                           else if (doctorChatReplying) setDoctorChatReplying(null);
@@ -5695,13 +5709,13 @@ function DoctorDashboard() {
                         }
                       }}
                       disabled={!doctorChatSpecialty || doctorChatAttachmentUploading}
-                      style={{ paddingRight: 88 }}
+                      style={{ width: '100%', padding: '12px 110px 12px 16px', minHeight: 62, maxHeight: 170, borderRadius: 16, border: '1.5px solid #e2e8f0', fontSize: '0.95rem', resize: 'none', lineHeight: 1.5, background: '#fff', boxSizing: 'border-box' }}
                     />
-                    <div style={{ position: 'absolute', right: 12, bottom: 11, display: 'inline-flex', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
+                    <div style={{ position: 'absolute', right: 14, bottom: 10, display: 'inline-flex', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
                       {doctorChatAttachment && (
                         <Check size={11} style={{ color: '#22c55e', fontWeight: 800 }} title="Attachment queued" />
                       )}
-                      <span style={{ fontSize: '0.66rem', fontWeight: 800, color: String(doctorChatText || '').length >= 1900 ? '#dc2626' : (String(doctorChatText || '').length >= 1700 ? '#d97706' : '#94a3b8') }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 800, color: String(doctorChatText || '').length >= 1900 ? '#dc2626' : (String(doctorChatText || '').length >= 1700 ? '#d97706' : '#94a3b8') }}>
                         {String(doctorChatText || '').length}/2000
                       </span>
                     </div>
@@ -5709,7 +5723,7 @@ function DoctorDashboard() {
                     {doctorChatMentionOpen && (
                       <div
                         style={{
-                          position: 'absolute', bottom: 52, left: 0,
+                          position: 'absolute', bottom: 'calc(100% + 10px)', left: 0,
                           zIndex: 35, minWidth: 240, maxWidth: 360, maxHeight: 220, overflowY: 'auto',
                           background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12,
                           padding: 6,
@@ -5755,9 +5769,9 @@ function DoctorDashboard() {
                     type="button"
                     onClick={sendDoctorChatMessage}
                     disabled={!doctorChatSpecialty || doctorChatAttachmentUploading || (!String(doctorChatText || '').trim() && !doctorChatAttachment)}
-                    style={{ height: 44, padding: '0 18px', borderRadius: 14, gap: 6, display: 'inline-flex', alignItems: 'center', fontWeight: 800 }}
+                    style={{ height: 44, minHeight: 44, padding: '0 22px', borderRadius: 14, gap: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flex: '0 0 auto' }}
                   >
-                    <Send size={15} /> {doctorChatAttachment ? 'Send + Attach' : 'Send'}
+                    <Send size={16} /> {doctorChatAttachment ? 'Send + Attach' : 'Send'}
                   </button>
                 </div>
               </div>
