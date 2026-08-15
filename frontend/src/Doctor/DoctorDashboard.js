@@ -592,6 +592,11 @@ function DoctorDashboard() {
   const normalizeSenderKey = (raw) => String(raw || '').trim().toLowerCase().replace(/[\s._@-]+/g, '');
 
   const isDoctorChatMine = (msg) => {
+    // 1. PRIORITY — sender_id EXACT match (100% reliable)
+    const curId = String(currentUser?.id || currentUser?.uuid || '').trim();
+    const mId = String(msg?.sender_id || msg?.senderId || '').trim();
+    if (curId && mId && curId === mId) return true;
+    // 2. Username/email normalized match
     const names = [msg?.sender_name, msg?.senderName, msg?.sender_email, msg?.senderEmail, msg?.sender_user, msg?.sender_username];
     for (const raw of names) {
       const k = normalizeSenderKey(raw);
@@ -599,7 +604,17 @@ function DoctorDashboard() {
       if (doctorChatCurrentUsernameKeys.has(k)) return true;
       for (const mine of doctorChatCurrentUsernameKeys) if (mine && k.includes(mine)) return true;
     }
-    if (msg?.sender_id && String(msg.sender_id) === String(currentUser?.id || '')) return true;
+    // 3. Generic "Doctor" fallback — if sender_role doctor + same sender_dept + recent 2 hours → assume mine
+    const role = String(msg?.sender_role || '').toLowerCase();
+    if (role === 'doctor' && !String(msg?.sender_name || '').match(/nurse|n\.\s|\spt\s|physical|lab|rad|ecg|er/i)) {
+      const dept = String(msg?.sender_dept || '').trim();
+      const myDept = String(doctorChatSenderIdentity.dept || '').trim();
+      if (myDept && dept && myDept.toLowerCase() === dept.toLowerCase()) {
+        const created = msg?.created_at ? (new Date(msg.created_at).getTime()) : 0;
+        const now = Date.now();
+        if (created && Math.abs(now - created) < 1000 * 60 * 120) return true;
+      }
+    }
     return false;
   };
 
@@ -834,8 +849,12 @@ function DoctorDashboard() {
       const caption = String(doctorChatText || '').trim();
       const uDept = String(currentUser?.department || currentUser?.dept || currentUser?.departmentName || '').trim();
       const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || uDept || doctorChatSpecialty;
+      const senderId = String(currentUser?.id || currentUser?.uuid || '').trim() || null;
+      const senderEmail = String(currentUser?.email || '').trim() || null;
+      const senderUsername = String(currentUser?.username || doctorChatSenderIdentity.username || '').trim() || null;
       const payload = {
         specialty: doctorChatSpecialty, room: roomValue, sender_role: 'doctor',
+        sender_id: senderId, sender_email: senderEmail, sender_username: senderUsername,
         body: caption,
         sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept,
         attachment_kind: kind, attachment_name: file.name, attachment_size: file.size, attachment_mime: file.type || '',
@@ -846,28 +865,35 @@ function DoctorDashboard() {
         const m = String(errMsg || '').toLowerCase();
         return (m.includes('could not find') && m.includes('column')) ||
                m.includes('schema cache') ||
-               (m.includes('column') && (m.includes('room') || m.includes('attachment') || m.includes('reply_to'))) ||
+               (m.includes('column') && (m.includes('room') || m.includes('attachment') || m.includes('reply_to') || m.includes('sender_email') || m.includes('sender_username') || m.includes('sender_id'))) ||
                m.includes('violates not-null constraint');
       };
+      let hitTier = 1;
       let { error } = await supabase.from('consultation_messages').insert([payload]);
       if (error && isSchemaMissingColErrUp(error.message)) {
+        hitTier = 2;
         const midPayload = {
-          specialty: doctorChatSpecialty, room: roomValue, sender_role: 'doctor', body: caption,
+          specialty: doctorChatSpecialty, room: roomValue, sender_role: 'doctor',
+          sender_id: senderId, sender_email: senderEmail, sender_username: senderUsername,
+          body: caption,
           sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept,
           attachment_url: signedUrl || publicUrl
         };
         const mid = await supabase.from('consultation_messages').insert([midPayload]);
         if (!mid.error) { error = null; }
         else {
+          hitTier = 3;
           const legacyPayload = {
-            specialty: doctorChatSpecialty, sender_role: 'doctor', body: caption,
+            specialty: doctorChatSpecialty, sender_role: 'doctor',
+            sender_id: senderId, sender_username: senderUsername,
+            body: caption,
             attachment_url: signedUrl || publicUrl
           };
           const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
           error = legacy.error;
         }
-        if (!error) {
-          setToast({ type: 'warning', message: '📋 Migration 004 recommended! File attached (compat mode). Optional: run supabase/migrations/004_drop_notnull_defaults.sql in Supabase SQL Editor to eliminate future constraint warnings.' });
+        if (!error && hitTier === 3) {
+          setToast({ type: 'warning', message: '📋 Migration 004 needed! File attached (legacy compat). Run supabase/migrations/004_drop_notnull_defaults.sql to silence.' });
         }
       }
       if (error) throw error;
@@ -901,8 +927,13 @@ function DoctorDashboard() {
     try {
       const uDept = String(currentUser?.department || currentUser?.dept || currentUser?.departmentName || '').trim();
       const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || uDept || doctorChatSpecialty;
+      const senderId = String(currentUser?.id || currentUser?.uuid || '').trim() || null;
+      const senderEmail = String(currentUser?.email || '').trim() || null;
+      const senderUsername = String(currentUser?.username || doctorChatSenderIdentity.username || '').trim() || null;
       const payload = {
-      specialty, room: roomValue, sender_role: 'doctor', body,
+      specialty, room: roomValue, sender_role: 'doctor',
+      sender_id: senderId, sender_email: senderEmail, sender_username: senderUsername,
+      body,
       sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept
     };
     if (doctorChatReplying?.id) {
@@ -912,24 +943,31 @@ function DoctorDashboard() {
       const m = String(errMsg || '').toLowerCase();
       return (m.includes('could not find') && m.includes('column')) ||
              m.includes('schema cache') ||
-             (m.includes('column') && (m.includes('room') || m.includes('reply_to'))) ||
+             (m.includes('column') && (m.includes('room') || m.includes('reply_to') || m.includes('sender_email') || m.includes('sender_username') || m.includes('sender_id'))) ||
              m.includes('violates not-null constraint');
     };
+    let hitTier = 1;
     let { error } = await supabase.from('consultation_messages').insert([payload]);
     if (error && isSchemaMissingColErr(error.message)) {
+      hitTier = 2;
       const midPayload = {
-        specialty, room: roomValue, sender_role: 'doctor', body,
+        specialty, room: roomValue, sender_role: 'doctor',
+        sender_id: senderId, sender_email: senderEmail, sender_username: senderUsername,
+        body,
         sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept
       };
       const mid = await supabase.from('consultation_messages').insert([midPayload]);
       if (!mid.error) { error = null; }
       else {
-        const legacyPayload = { specialty, sender_role: 'doctor', body };
+        hitTier = 3;
+        const legacyPayload = {
+          specialty, sender_role: 'doctor', sender_id: senderId, sender_username: senderUsername, body
+        };
         const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
         error = legacy.error;
       }
-      if (!error) {
-        setToast({ type: 'warning', message: '📋 Migration 004 recommended! Message sent (compat mode). Optional: run supabase/migrations/004_drop_notnull_defaults.sql for zero-warning inserts.' });
+      if (!error && hitTier === 3) {
+        setToast({ type: 'warning', message: '📋 Migration 004 needed! Message sent (legacy compat). Run 004_drop_notnull_defaults.sql to silence.' });
       }
     }
     if (error) throw error;
@@ -5619,7 +5657,7 @@ function DoctorDashboard() {
                                 </div>
                             )}
 
-                            <div className="dc-message-wrap" style={{ position: 'relative', maxWidth: '100%' }}>
+                            <div className="dc-message-wrap" style={{ position: 'relative', maxWidth: '100%', width: 'auto' }}>
                               <div
                                 className={`dc-bubble ${mine ? 'dc-bubble-me' : 'dc-bubble-other'}`}
                                 title={fullTs}
@@ -5634,9 +5672,12 @@ function DoctorDashboard() {
                                     ? '0 6px 14px rgba(234,88,12,0.18), 0 2px 4px rgba(15,23,42,0.05)'
                                     : '0 2px 6px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04)',
                                   maxWidth: '82%',
-                                  minWidth: hasAttach ? 230 : 0,
+                                  minWidth: hasAttach ? 230 : 110,
+                                  width: 'auto',
+                                  boxSizing: 'border-box',
                                   whiteSpace: 'pre-wrap',
-                                  overflowWrap: 'anywhere',
+                                  overflowWrap: 'break-word',
+                                  wordBreak: 'normal',
                                   lineHeight: 1.5,
                                   fontSize: '0.95rem',
                                   fontWeight: 500,
@@ -5650,7 +5691,7 @@ function DoctorDashboard() {
                                     <Pin size={11} /> PINNED
                                   </div>
                                 )}
-                                {String(msg?.body || '').trim() && <div className="dc-bubble-body" style={{ marginTop: isPinned ? 2 : 0 }}>{searchHL(String(msg.body).trim())}</div>}
+                                {String(msg?.body || '').trim() && <div className="dc-bubble-body" style={{ marginTop: isPinned ? 2 : 0, whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'normal' }}>{searchHL(String(msg.body).trim())}</div>}
 
                                 {hasAttach && (
                                   <div
