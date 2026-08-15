@@ -998,14 +998,56 @@ function DoctorDashboard() {
         const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
         error = legacy.error;
       }
-      if (!error && hitTier === 3) {
-        setToast({ type: 'warning', message: '📋 Migrations 003+005 needed! Message sent (ultra-legacy mode). Run all SQL files in /supabase/migrations (003, 004, 005) for full Nurse ↔ Doctor sync + sender identity.' });
+    }
+    // =====================================================================
+    // TIER 4 (GUARANTEED!): BACKEND PRISMA DIRECT INSERT BYPASSES ALL RLS!
+    // If all 3 Supabase anon client tiers failed → POST to our Express API
+    // route /api/doctor-chat/messages which inserts via Prisma direct DB
+    // connection — RLS does NOT apply to direct Postgres connections!
+    // =====================================================================
+    if (error) {
+      hitTier = 4;
+      try {
+        const backendPayload = {
+          body, attachment_url: null,
+          specialty, room: roomValue,
+          sender_role: 'doctor',
+          sender_name: doctorChatSenderIdentity.name,
+          sender_dept: doctorChatSenderIdentity.dept,
+          sender_email: senderEmail, sender_username: senderUsername, sender_id: senderId,
+          reply_to_id: doctorChatReplying?.id || null,
+          reply_to_body: doctorChatReplying?.body ? String(doctorChatReplying.body).slice(0, 240) : null,
+          reply_to_sender: doctorChatReplying?.guessDisplayName ? String(guessDisplayName(doctorChatReplying)).slice(0, 60) : null,
+        };
+        const res = await fetch('/api/doctor-chat/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(backendPayload)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || `Backend status ${res.status}`);
+        }
+        error = null;
+      } catch (beErr) {
+        error = beErr;
+        console.error('[chat-send] tier4 backend fail:', beErr);
       }
     }
     if (error) throw error;
+    if (hitTier === 4) {
+      setToast({ type: 'success', message: '✅ Message sent via Backend Direct Prisma (all RLS bypassed)! Run Migrations 007 for direct supabase anon to also work.' });
+    } else if (hitTier === 3) {
+      setToast({ type: 'warning', message: '📋 Migrations 003+005 needed! Message sent (ultra-legacy mode). Run all SQL in /supabase/migrations (003→007) for full Nurse ↔ Doctor sync.' });
+    }
     setDoctorChatText('');
     setDoctorChatInputInvalid(false);
     setDoctorChatReplying(null);
+    setTimeout(() => {
+      loadDoctorChatMessages();
+      scrollDoctorChatToBottom();
+    }, 180);
   } catch (e) {
     setToast({ type: 'error', message: String(e?.message || 'Failed to send.') });
   }

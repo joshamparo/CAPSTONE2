@@ -267,6 +267,7 @@ const videoConsultRoutes = require('./routes/videoConsults');
 const assistantRoutes = require('./routes/assistant');
 const nurseWorkflowRoutes = require('./routes/nurseWorkflow');
 const systemSettingsRoutes = require('./routes/systemSettings');
+const doctorChatRoutes = require('./routes/doctorChat');
 
 app.use('/api/staff', staffRoutes);
 app.use('/api/activity-logs', activityLogRoutes);
@@ -301,6 +302,7 @@ app.use('/api/video-consults', videoConsultRoutes);
 app.use('/api/assistant', assistantRoutes);
 app.use('/api/nurse-workflow', nurseWorkflowRoutes);
 app.use('/api/system-settings', systemSettingsRoutes);
+app.use('/api/doctor-chat', doctorChatRoutes);
 
 app.get('/api/health', (_req, res) => {
   const dbConfigured = Boolean(String(process.env.DATABASE_URL || '').trim());
