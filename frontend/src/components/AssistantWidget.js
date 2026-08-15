@@ -21,11 +21,17 @@ const ROLE_LABELS = {
 
 const ROLE_QUICK_QUESTIONS = {
   public: [
-    'What services does the hospital offer?',
-    'Where is the hospital located?',
-    'How does the Pascualinga system work?',
-    'What is the emergency contact number?',
-    'What are your visiting hours?'
+    'May lagnat ang baby ko — ano gagawin?',
+    'Magkano ang CBC at Urinalysis?',
+    'Paano magpa-appointment o mag-WALK-IN bukas?',
+    'Nasaan ang result ng X-ray / lab ko?',
+    'Emergency contact number at location?'
+  ],
+  patient: [
+    'Nasaan ang result ng lab / x-ray ko?',
+    'Paano magpa-follow up na OPD check up?',
+    'Magkano ang follow up consultation?',
+    'What services does the hospital offer?'
   ],
   admin: [
     'How do I post announcements?',
@@ -72,10 +78,6 @@ const ROLE_QUICK_QUESTIONS = {
   staff: [
     'How do I use this page?',
     'What can I do in this dashboard?'
-  ],
-  patient: [
-    'How can I contact the hospital?',
-    'What services does the hospital offer?'
   ]
 };
 
@@ -190,12 +192,23 @@ export default function AssistantWidget({ pathname = '/' }) {
         ...buildAuthHeaders(currentUser, role === 'public' ? '' : role)
       };
 
+      const computePreferredLanguage = (lastText) => {
+        const text = String(lastText || '').toLowerCase();
+        if (!text) return 'english';
+        const tlSignals = [' ano ', ' paano ', ' bakit ', ' saan ', ' sino ', ' pwede ', ' puwede ', ' lagnat ', ' sipon ', ' ubo ', ' magkano ', ' presyo ', ' hospital ', ' ospital ', ' serbisyo ', ' appointment ', ' resulta ', ' ng ', ' mga ', ' yung ', ' lang ', ' naman ', ' kasi ', ' ba ', ' po ', ' opo ', ' salamat ', ' kamusta ', ' kumusta ', ' umaga ', ' hapon ', ' gabi '];
+        let hits = 0;
+        tlSignals.forEach((s) => { if (text.includes(s)) hits += 1; });
+        if (/\b(tagalog|taglish|filipino|nagtatagalog)\b/i.test(text) || hits >= 2) return 'tagalog';
+        return 'english';
+      };
+      const preferredLanguage = computePreferredLanguage(text);
       const res = await fetch(`${API_BASE}/api/assistant/chat`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           role,
           pathname,
+          preferredLanguage,
           messages: nextMessages.map((message) => ({
             role: message.role,
             content: message.content
