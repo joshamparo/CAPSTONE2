@@ -842,7 +842,24 @@ function DoctorDashboard() {
         attachment_path: path, attachment_url: signedUrl || publicUrl, attachment_public_url: publicUrl
       };
       if (doctorChatReplying?.id) { payload.reply_to_id = doctorChatReplying.id; payload.reply_to_body = String(doctorChatReplying.body || '').slice(0, 240); }
-      const { error } = await supabase.from('consultation_messages').insert([payload]);
+      const isSchemaMissingColErrUp = (errMsg) => {
+        const m = String(errMsg || '').toLowerCase();
+        return (m.includes('could not find') && m.includes('column')) ||
+               m.includes('schema cache') ||
+               (m.includes('column') && (m.includes('room') || m.includes('sender_role') || m.includes('sender_name') || m.includes('sender_dept') || m.includes('attachment') || m.includes('reply_to')));
+      };
+      let { error } = await supabase.from('consultation_messages').insert([payload]);
+      if (error && isSchemaMissingColErrUp(error.message)) {
+        const legacyPayload = {
+          specialty: doctorChatSpecialty, body: caption,
+          attachment_url: signedUrl || publicUrl
+        };
+        const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
+        error = legacy.error;
+        if (!error) {
+          setToast({ type: 'warning', message: '📋 Migration 003 needed! File attached (legacy mode). Run SQL in Supabase Editor: supabase/migrations/003_unified_inbox_room_role_columns.sql → enables Nurse App rooms + full dept badges.' });
+        }
+      }
       if (error) throw error;
       setDoctorChatAttachment(null);
       setDoctorChatAttachmentUploading(false);
@@ -881,7 +898,20 @@ function DoctorDashboard() {
     if (doctorChatReplying?.id) {
       payload.reply_to_id = doctorChatReplying.id; payload.reply_to_body = String(doctorChatReplying.body || '').slice(0, 240); payload.reply_to_sender = guessDisplayName(doctorChatReplying);
     }
-    const { error } = await supabase.from('consultation_messages').insert([payload]);
+    const isSchemaMissingColErr = (errMsg) => {
+      const m = String(errMsg || '').toLowerCase();
+      return (m.includes('could not find') && m.includes('column')) ||
+             m.includes('schema cache') || m.includes('column') && (m.includes('room') || m.includes('sender_role') || m.includes('sender_name') || m.includes('sender_dept') || m.includes('reply_to'));
+    };
+    let { error } = await supabase.from('consultation_messages').insert([payload]);
+    if (error && isSchemaMissingColErr(error.message)) {
+      const legacyPayload = { specialty, body };
+      const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
+      error = legacy.error;
+      if (!error) {
+        setToast({ type: 'warning', message: '📋 Migration 003 needed! Message sent (legacy mode). Run SQL in Supabase Editor: supabase/migrations/003_unified_inbox_room_role_columns.sql → enables Nurse App rooms + P avatars.' });
+      }
+    }
     if (error) throw error;
     setDoctorChatText('');
     setDoctorChatInputInvalid(false);
