@@ -196,6 +196,8 @@ async function syncHmoDataFromAppointmentToInvoice(tx, appointmentId, invoiceId,
   const philhealthOverride = Number.isFinite(Number(opts.philhealthDeduction)) ? Number(opts.philhealthDeduction) : null;
   const loaOverride = Number.isFinite(Number(opts.loaApprovedAmount)) ? Number(opts.loaApprovedAmount) : null;
   const requester = opts.requester || null;
+  const forceStatusRaw = opts.forceStatus ? String(opts.forceStatus).trim() : null;
+  const forceIsHmoFlag = Boolean(opts.isHmo) || Boolean(opts.forceIsHmo);
   const fallbackPatientLookup = async () => {
     if (!patientIdRaw) return null;
     const p = await tx.$queryRawUnsafe(`
@@ -220,7 +222,7 @@ async function syncHmoDataFromAppointmentToInvoice(tx, appointmentId, invoiceId,
     let notes = opts.notes || null;
     let patientFinalId = invPatientId || patientIdRaw || null;
     let patientFinalName = patientNameRaw || null;
-    let anyHmoActive = Boolean(hmoProvider) || Boolean(hmoCardNumber) || (philhealthOverride && philhealthOverride > 0) || (loaOverride && loaOverride > 0);
+    let anyHmoActive = Boolean(forceIsHmoFlag) || Boolean(hmoProvider) || Boolean(hmoCardNumber) || Boolean(hmoLoaOverride) || (philhealthOverride != null && philhealthOverride > 0) || (loaOverride != null && loaOverride > 0);
 
     if (appointmentId) {
       const apptRows = await tx.$queryRawUnsafe(`
@@ -229,8 +231,8 @@ async function syncHmoDataFromAppointmentToInvoice(tx, appointmentId, invoiceId,
         WHERE id = $1::bigint
       `, appointmentId.toString()).catch(() => []);
       const appt = Array.isArray(apptRows) && apptRows.length ? apptRows[0] : null;
-      if (appt && (appt.is_hmo || anyHmoActive)) {
-        anyHmoActive = anyHmoActive || Boolean(appt.is_hmo);
+      if (appt && (appt.is_hmo || anyHmoActive || forceIsHmoFlag)) {
+        anyHmoActive = anyHmoActive || Boolean(appt.is_hmo) || forceIsHmoFlag;
         hmoProvider = hmoProvider || appt.hmo_provider;
         hmoLoaNumber = hmoLoaNumber || appt.hmo_loa_number;
         hmoCardNumber = hmoCardNumber || appt.hmo_card_number;
@@ -241,7 +243,7 @@ async function syncHmoDataFromAppointmentToInvoice(tx, appointmentId, invoiceId,
       }
     } else if (!anyHmoActive) {
       const pRow = await fallbackPatientLookup();
-      if (pRow && pRow.is_hmo) {
+      if (pRow && (pRow.is_hmo || forceIsHmoFlag)) {
         anyHmoActive = true;
         hmoProvider = hmoProvider || pRow.hmo_provider;
         hmoCardNumber = hmoCardNumber || pRow.hmo_card_number;
@@ -251,12 +253,24 @@ async function syncHmoDataFromAppointmentToInvoice(tx, appointmentId, invoiceId,
 
     if (!anyHmoActive || !invoiceId) return;
 
+    const normalizeClaimStatus = (raw) => {
+      if (forceStatusRaw) return forceStatusRaw;
+      const val = String(raw || 'Approved').trim();
+      const low = val.toLowerCase();
+      if (!low) return 'Approved';
+      if (low === 'awaiting loa' || low === 'awaiting_loa') return 'Awaiting LOA';
+      if (low === 'partially approved' || low === 'partial' || low === 'partially_approved') return 'Partially Approved';
+      if (low === 'rejected' || low === 'denied') return 'Rejected';
+      return 'Approved';
+    };
+
     const existing = await tx.$queryRawUnsafe(`
       SELECT id, status FROM public.billing_hmo_claims WHERE invoice_id = $1::bigint
     `, invoiceId.toString()).catch(() => []);
 
     const finalPh = Math.max(0, Number(philhealthDeduction || 0));
     const finalLoa = Math.max(0, Number(loaApproved != null ? loaApproved : invTotal));
+    const desiredStatus = normalizeClaimStatus(forceStatusRaw || 'Approved');
 
     if (Array.isArray(existing) && existing.length > 0) {
       const firstRow = existing[0];
@@ -269,7 +283,8 @@ async function syncHmoDataFromAppointmentToInvoice(tx, appointmentId, invoiceId,
         firstStatus === 'for payment' ||
         firstStatus === 'billed' ||
         firstStatus === 'completed' ||
-        firstStatus === '';
+        firstStatus === '' ||
+        Boolean(forceStatusRaw);
       if (shouldReSync) {
         await tx.$executeRawUnsafe(`
           UPDATE public.billing_hmo_claims
@@ -278,14 +293,14 @@ async function syncHmoDataFromAppointmentToInvoice(tx, appointmentId, invoiceId,
               hmo_card_number = COALESCE($3::text, hmo_card_number),
               philhealth_deduction = CASE WHEN philhealth_deduction <= 0 THEN $4::numeric ELSE philhealth_deduction END,
               loa_approved_amount = CASE WHEN loa_approved_amount <= 0 THEN $5::numeric ELSE loa_approved_amount END,
-              status = CASE WHEN status = 'Rejected' THEN status ELSE 'Approved' END,
+              status = CASE WHEN status = 'Rejected' AND ${forceStatusRaw ? 'FALSE' : 'TRUE'} THEN status ELSE $11::text END,
               notes = COALESCE($6::text, notes),
               patient_id = COALESCE($7::uuid, patient_id),
               patient_name = COALESCE($8::text, patient_name),
               requested_by = COALESCE($9::text, requested_by),
               updated_at = now()
           WHERE invoice_id = $10::bigint
-        `, hmoProvider || null, hmoLoaNumber || null, hmoCardNumber || null, finalPh, finalLoa, notes || null, patientFinalId || null, patientFinalName || null, requester || null, invoiceId.toString()).catch(() => null);
+        `, hmoProvider || null, hmoLoaNumber || null, hmoCardNumber || null, finalPh, finalLoa, notes || null, patientFinalId || null, patientFinalName || null, requester || null, invoiceId.toString(), desiredStatus).catch(() => null);
       }
       return;
     }
@@ -296,7 +311,7 @@ async function syncHmoDataFromAppointmentToInvoice(tx, appointmentId, invoiceId,
         philhealth_deduction, loa_approved_amount, status, notes, requested_by, created_at, updated_at
       ) VALUES (
         $1::bigint, $2::bigint, $3::uuid, $4::text, $5::text, $6::text, $7::text,
-        $8::numeric, $9::numeric, 'Approved', $10::text, $11::text, now(), now()
+        $8::numeric, $9::numeric, $11::text, $10::text, $12::text, now(), now()
       )
     `,
       invoiceId.toString(),
@@ -309,6 +324,7 @@ async function syncHmoDataFromAppointmentToInvoice(tx, appointmentId, invoiceId,
       finalPh,
       finalLoa,
       notes || null,
+      desiredStatus,
       requester || null
     ).catch((e) => console.warn('[syncHmo] per-lab claim insert warn:', e?.message));
   } catch (err) {

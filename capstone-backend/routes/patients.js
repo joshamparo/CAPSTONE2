@@ -730,7 +730,8 @@ async function ensureWalkInHmoSupport() {
                 ['philhealth_number', 'VARCHAR(50)'],
                 ['philhealth_deduction', 'DECIMAL(12,2) DEFAULT 0'],
                 ['hmo_covered_json', 'JSONB'],
-                ['is_hmo', 'BOOLEAN DEFAULT FALSE']
+                ['is_hmo', 'BOOLEAN DEFAULT FALSE'],
+                ['hmo_status', 'VARCHAR(40) DEFAULT \'Awaiting LOA\'']
             ];
             for (const [name, type] of cols) {
                 await prisma.$executeRawUnsafe(`ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS ${name} ${type};`).catch(() => {});
@@ -1301,6 +1302,17 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         const requesterName = inferRequesterName(req);
         const normalizedEmail = payload.email ? normalizeEmail(payload.email) : '';
 
+        const hmoApprovalStatusRaw = String(payload.hmoApprovalStatus || '').trim().toLowerCase();
+        const hmoPaymentModeRaw = String(payload.hmoPaymentMode || '').trim().toLowerCase();
+        let desiredHmoStatus = null;
+        if (hmoApprovalStatusRaw === 'approved') desiredHmoStatus = 'Approved';
+        else if (hmoApprovalStatusRaw === 'awaiting_loa') desiredHmoStatus = 'Awaiting LOA';
+        const paymentModeNoteTag = (() => {
+          if (hmoPaymentModeRaw === 'temp_cash') return '[Patient temp paid full - refund HMO later]';
+          if (hmoPaymentModeRaw === 'guarantee') return '[Hospital Guarantee / Charge on Account]';
+          return '';
+        })();
+
         if (!routeMeta?.type) {
             return res.status(400).json({ message: 'Invalid walk-in destination.' });
         }
@@ -1661,12 +1673,16 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     const hmoProvider = String(payload.hmoProvider || '').trim() || null;
                     const hmoLoa = String(payload.hmoLoaNumber || '').trim() || null;
                     const hmoCard = String(payload.hmoCardNumber || '').trim() || null;
-                    const hmoNotesVal = String(payload.hmoNotes || '').trim() || null;
+                    const hmoNotesValRaw = String(payload.hmoNotes || '').trim() || null;
+                    const hmoNotesVal = paymentModeNoteTag
+                        ? [hmoNotesValRaw, paymentModeNoteTag].filter(Boolean).join(' · ')
+                        : hmoNotesValRaw;
                     const phNumber = String(payload.philhealthNumber || '').trim() || null;
                     const phDeduct = Number(payload.philhealthDeduction) || 0;
                     const coverageJson = payload.hmoCoveredServices && typeof payload.hmoCoveredServices === 'object'
                         ? JSON.stringify(payload.hmoCoveredServices)
                         : null;
+                    const finalHmoStatus = desiredHmoStatus || 'Awaiting LOA';
                     await tx.$executeRawUnsafe(`
                         UPDATE public.appointments
                         SET hmo_provider = ($1::text),
@@ -1676,9 +1692,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             philhealth_number = ($5::text),
                             philhealth_deduction = ($6::numeric),
                             hmo_covered_json = ($7::jsonb),
-                            is_hmo = TRUE
+                            is_hmo = TRUE,
+                            hmo_status = ($9::text)
                         WHERE id = ($8::bigint)
-                    `, hmoProvider, hmoLoa, hmoCard, hmoNotesVal, phNumber, phDeduct, coverageJson, Number(appointment.id)).catch(() => {});
+                    `, hmoProvider, hmoLoa, hmoCard, hmoNotesVal, phNumber, phDeduct, coverageJson, Number(appointment.id), finalHmoStatus).catch(() => {});
 
                     if (phNumber) {
                         await tx.patients.update({
@@ -1735,7 +1752,11 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             }).catch(() => null);
 
                             // Sync HMO data if applicable
-                            await syncHmoDataFromAppointmentToInvoice(tx, appointment.id, inv.id);
+                            await syncHmoDataFromAppointmentToInvoice(tx, appointment.id, inv.id, {
+                                forceStatus: desiredHmoStatus || null,
+                                isHmo: isHmoActive,
+                                notes: paymentModeNoteTag || undefined
+                            });
                         }
                     } catch (_) {}
                 }
@@ -1875,6 +1896,12 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                 try {
                                     const userLoa = Number(payload.hmoLoaApprovedAmount || 0);
                                     const fallbackLoa = coveredByHmo ? configuredUnitPrice : null;
+                                    const baseNote = coveredByHmo
+                                        ? `Walk-in ${kind} #${order.id}: HMO pre-covered at intake`
+                                        : `Walk-in ${kind} #${order.id}`;
+                                    const finalNote = paymentModeNoteTag
+                                        ? [baseNote, paymentModeNoteTag].filter(Boolean).join(' · ')
+                                        : baseNote;
                                     await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id, {
                                         patientId: patient.id,
                                         patientName,
@@ -1884,7 +1911,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                         philhealthDeduction: hmoSave ? Number(payload.philhealthDeduction || 0) : null,
                                         loaApprovedAmount: Number.isFinite(userLoa) && userLoa > 0 ? userLoa : fallbackLoa,
                                         requester: getRequesterEmail(req) || requesterName || null,
-                                        notes: coveredByHmo ? `Walk-in ${kind} #${order.id}: HMO pre-covered at intake` : `Walk-in ${kind} #${order.id}`
+                                        notes: finalNote,
+                                        forceStatus: desiredHmoStatus || null,
+                                        isHmo: true
                                     }).catch(() => null);
                                 } catch (_e1) {}
                             }
@@ -2036,6 +2065,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             }).catch(() => null);
                             if (!linkedInvoiceId) linkedInvoiceId = inv.id;
                             if (hmoActiveExtra) {
+                                const baseNote = covered ? `Walk-in Lab #${order.id}: HMO pre-covered at intake` : `Walk-in Lab #${order.id}`;
+                                const finalNote = paymentModeNoteTag
+                                    ? [baseNote, paymentModeNoteTag].filter(Boolean).join(' · ')
+                                    : baseNote;
                                 await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id, {
                                     patientId: patient.id,
                                     patientName,
@@ -2048,7 +2081,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                         return Number.isFinite(u) && u > 0 ? u : (covered ? configuredUnitPrice : null);
                                     })(),
                                     requester: getRequesterEmail(req) || requesterName || null,
-                                    notes: covered ? `Walk-in Lab #${order.id}: HMO pre-covered at intake` : `Walk-in Lab #${order.id}`
+                                    notes: finalNote,
+                                    forceStatus: desiredHmoStatus || null,
+                                    isHmo: true
                                 }).catch(() => null);
                             }
                         } catch (_einvoice) {
@@ -2131,6 +2166,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             }).catch(() => null);
                             if (!linkedInvoiceId) linkedInvoiceId = inv.id;
                             if (hmoActiveExtra) {
+                                const baseNote = covered ? `Walk-in ${kind} #${order.id}: HMO pre-covered at intake` : `Walk-in ${kind} #${order.id}`;
+                                const finalNote = paymentModeNoteTag
+                                    ? [baseNote, paymentModeNoteTag].filter(Boolean).join(' · ')
+                                    : baseNote;
                                 await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id, {
                                     patientId: patient.id,
                                     patientName,
@@ -2143,7 +2182,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                         return Number.isFinite(u) && u > 0 ? u : (covered ? configuredUnitPrice : null);
                                     })(),
                                     requester: getRequesterEmail(req) || requesterName || null,
-                                    notes: covered ? `Walk-in ${kind} #${order.id}: HMO pre-covered at intake` : `Walk-in ${kind} #${order.id}`
+                                    notes: finalNote,
+                                    forceStatus: desiredHmoStatus || null,
+                                    isHmo: true
                                 }).catch(() => null);
                             }
                         } catch (_einvoice) {

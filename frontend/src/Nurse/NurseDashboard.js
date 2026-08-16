@@ -504,6 +504,9 @@ function NurseDashboard() {
   const [appointmentModeFilter, setAppointmentModeFilter] = useState('All'); // All | Video | Onsite
   const [appointmentSearchText, setAppointmentSearchText] = useState('');
 
+  const [showHmoUnavailableModal, setShowHmoUnavailableModal] = useState(false);
+  const [hmoPaymentTempMode, setHmoPaymentTempMode] = useState('temp_cash'); // 'temp_cash' | 'guarantee'
+
   const [consultPriorityRows, setConsultPriorityRows] = useState([]);
   const [consultPriorityLoading, setConsultPriorityLoading] = useState(false);
   const [consultPriorityError, setConsultPriorityError] = useState('');
@@ -1141,8 +1144,8 @@ function NurseDashboard() {
     } catch (_) {}
   }, [addPatientData.doctorId, addPatientData.routeType, showAddPatientModal, walkInDoctorOptions]);
 
-  const handleAddPatientSubmit = async (e) => {
-    e.preventDefault();
+  const handleAddPatientSubmit = async (e, options = {}) => {
+    if (typeof e?.preventDefault === 'function') e.preventDefault();
     setAddPatientError("");
 
     if (addPatientStep === 1) {
@@ -1320,7 +1323,9 @@ function NurseDashboard() {
           hasPhilhealth: addPatientData.hasPhilhealth,
           philhealthNumber: addPatientData.philhealthNumber || null,
           philhealthDeduction: Number(addPatientData.philhealthDeduction) || 0,
-          hmoCoveredServices: addPatientData.hmoCoveredServices || null
+          hmoCoveredServices: addPatientData.hmoCoveredServices || null,
+          hmoApprovalStatus: options?.hmoApprovalStatus || null,
+          hmoPaymentMode: options?.hmoPaymentMode || null
         })
       });
 
@@ -11013,6 +11018,83 @@ function NurseDashboard() {
                       <div className="form-error-message" style={{marginTop: 10, marginBottom: 0}}>{addPatientError}</div>
                     )}
 
+                    {addPatientStep === 3 && (addPatientData.hasHmo || addPatientData.hasPhilhealth) ? (
+                      <div style={{
+                        marginTop: 14,
+                        padding: '14px 14px',
+                        borderRadius: 14,
+                        border: '1px solid #fde68a',
+                        background: '#fffbeb',
+                        display: 'grid',
+                        gap: 10
+                      }}>
+                        <div style={{
+                          fontSize: 12.5,
+                        fontWeight: 900,
+                        color: '#92400e',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8
+                        }}>
+                          <ShieldAlert size={14} /> HMO / PhilHealth Coverage
+                        </div>
+                        <div style={{
+                          fontSize: 12.5,
+                          color: '#78350f',
+                          fontWeight: 700,
+                          lineHeight: 1.6
+                        }}>
+                          If HMO already confirmed and LOA approved, click <strong style={{color:'#b45309'}}>Send Approved</strong> below to instantly push the claim into Cashier HMO Monitoring (Approved tab).
+                          If HMO not answering yet, click <strong style={{color:'#78350f'}}>Awaiting LOA</strong> and choose patient payment option (patient will proceed normally, claim will appear in All Claims·Audit tab until updated approved later).
+                        </div>
+                        <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'space-between'}}>
+                          <button
+                            type="button"
+                            style={{
+                              flex: '1 1 180px',
+                              padding: '10px 14px',
+                              borderRadius: 10,
+                              border: '1px solid #fbbf24',
+                              background: '#ffffff',
+                              color: '#b45309',
+                              fontWeight: 900,
+                              fontSize: 13,
+                              cursor: addPatientSaving ? 'not-allowed' : 'pointer',
+                              boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+                              opacity: addPatientSaving ? 0.6 : 1
+                            }}
+                            disabled={addPatientSaving}
+                            onClick={() => {
+                              setHmoPaymentTempMode('temp_cash');
+                              setShowHmoUnavailableModal(true);
+                            }}
+                          >
+                            ⏳ Awaiting LOA (HMO not reachable yet)
+                          </button>
+                          <button
+                            type="button"
+                            style={{
+                              flex: '1 1 220px',
+                              padding: '10px 16px',
+                              borderRadius: 10,
+                              border: '1px solid #ea580c',
+                              background: 'linear-gradient(180deg,#f97316 0%, #ea580c 100%)',
+                              color: '#fffbeb',
+                              fontWeight: 950,
+                              fontSize: 13,
+                              cursor: addPatientSaving ? 'not-allowed' : 'pointer',
+                              boxShadow: '0 1px 2px rgba(15,23,42,0.08)',
+                              opacity: addPatientSaving ? 0.6 : 1
+                            }}
+                            disabled={addPatientSaving}
+                            onClick={(e) => handleAddPatientSubmit(e, { hmoApprovalStatus: 'approved', hmoPaymentMode: null })}
+                          >
+                            ✅ Approve & Send to Cashier HMO Monitoring
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
                     <div className="walkin-right-actions">
                       <button
                         type="button"
@@ -11025,13 +11107,21 @@ function NurseDashboard() {
                       >
                         {addPatientStep === 1 ? 'Cancel' : 'Back'}
                       </button>
-                      <button type="submit" className="btn-modal-submit" disabled={addPatientSaving}>
-                        {addPatientStep === 1
-                          ? 'Next: Clinical Intake'
-                          : addPatientStep === 2
-                            ? 'Next: Review'
-                            : (addPatientSaving ? 'Routing...' : 'Complete Intake')}
-                      </button>
+                      {(addPatientStep !== 3 || !(addPatientData.hasHmo || addPatientData.hasPhilhealth)) ? (
+                        <button type="submit" className="btn-modal-submit" disabled={addPatientSaving}>
+                          {addPatientStep === 1
+                            ? 'Next: Clinical Intake'
+                            : addPatientStep === 2
+                              ? 'Next: Review'
+                              : (addPatientSaving ? 'Routing...' : 'Complete Intake')}
+                        </button>
+                      ) : (
+                        <div style={{display:'flex',flexDirection:'column',gap:6,alignItems:'flex-end'}}>
+                          <div style={{fontSize:12,fontWeight:800,color:'#94a3b8'}}>
+                            Use the HMO buttons above to finalize this patient.
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -11040,6 +11130,96 @@ function NurseDashboard() {
           </div>
         </div>
       )}
+
+      {showHmoUnavailableModal ? (
+        <div className="modal-overlay" onClick={() => setShowHmoUnavailableModal(false)}>
+          <div className="modal-shell" style={{maxWidth: 560}} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div className="modal-title">
+              <ShieldAlert size={18} /> HMO Hotline Unavailable
+              </div>
+              <button type="button" className="btn-modal-cancel" onClick={() => setShowHmoUnavailableModal(false)}>Close</button>
+            </div>
+            <div style={{padding: '14px 18px'}}>
+              <div style={{fontWeight: 900, color:'#0f172a', marginBottom: 10}}>
+                Patient will proceed — claim saved with status <span style={{color:'#9a3412'}}>Awaiting LOA</span>. Choose payment handling:
+              </div>
+              <div style={{display:'grid', gap: 10}}>
+                <label style={{
+                  cursor: addPatientSaving ? 'not-allowed' : 'pointer',
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  border: hmoPaymentTempMode === 'temp_cash' ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                  background: hmoPaymentTempMode === 'temp_cash' ? '#eff6ff' : '#fff',
+                  color: addPatientSaving ? 0.6 : 1,
+                  display:'flex',
+                  alignItems:'flex-start',
+                  gap:10
+                }}>
+                  <input
+                    type="radio"
+                    name="hmoPayTemp"
+                    disabled={addPatientSaving}
+                    checked={hmoPaymentTempMode === 'temp_cash'}
+                    onChange={() => setHmoPaymentTempMode('temp_cash')}
+                    style={{marginTop: 3}}
+                  />
+                  <div>
+                    <div style={{fontWeight: 900, color:'#1e3a8a'}}>Patient pays full cash (refundable later</div>
+                    <div style={{fontSize: 12.5, color: '#475569', fontWeight:700}}>
+                      Recommended. Patient will settle full balance at cashier. When HMO approves later, reimburse excess automatically and adjust claim will be refunded patient. Claim still tracked in HMO Monitoring (Awaiting LOA) until Approved.
+                    </div>
+                  </div>
+                </label>
+                <label style={{
+                  cursor: addPatientSaving ? 'not-allowed' : 'pointer',
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  border: hmoPaymentTempMode === 'guarantee' ? '2px solid #7c3aed' : '1px solid #e2e8f0',
+                  background: hmoPaymentTempMode === 'guarantee' ? '#f5f3ff' : '#fff',
+                  opacity: addPatientSaving ? 0.6 : 1,
+                  display:'flex',
+                  alignItems:'flex-start',
+                  gap: 10
+                }}>
+                  <input
+                    type="radio"
+                    name="hmoPayTemp"
+                    disabled={addPatientSaving}
+                    checked={hmoPaymentTempMode === 'guarantee'}
+                    onChange={() => setHmoPaymentTempMode('guarantee')}
+                    style={{marginTop: 3}}
+                  />
+                  <div>
+                    <div style={{fontWeight: 900, color:'#6d28d9'}}>Hospital Guarantee / Charge on Account</div>
+                    <div style={{fontSize: 12.5, color: '#475569', fontWeight:700}}>
+                      Hospital shoulders payment temporarily; patient signs guarantee form. Nurse will receive reminders to call HMO back for LOA approval.
+                    </div>
+                  </div>
+                </label>
+              </div>
+              <div style={{marginTop: 14, display:'flex', gap: 10, justifyContent: 'flex-end'}}>
+                <button type="button" className="btn-modal-cancel" onClick={() => setShowHmoUnavailableModal(false)} disabled={addPatientSaving}>Cancel</button>
+                <button
+                  type="button"
+                  className="btn-modal-submit"
+                  disabled={addPatientSaving}
+                  style={{background: '#f59e0b', borderColor:'#d97706'}}
+                  onClick={(e) => {
+                    setShowHmoUnavailableModal(false);
+                    handleAddPatientSubmit(e, {
+                      hmoApprovalStatus: 'awaiting_loa',
+                      hmoPaymentMode: hmoPaymentTempMode
+                    });
+                  }}
+                >
+                  {addPatientSaving ? 'Routing...' : 'Save & Proceed Patient (Awaiting LOA)'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

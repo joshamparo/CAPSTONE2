@@ -289,10 +289,10 @@ function buildReceiptNumber(payment, source) {
 function normalizeHmoStatus(value) {
   const normalized = String(value || '').trim().toLowerCase();
   if (!normalized) return 'Pending';
-  if (normalized === 'approved' || normalized === 'ok' || normalized === 'accepted' || normalized === 'cleared') return 'Approved';
-  if (normalized === 'partially approved' || normalized === 'partial' || normalized === 'partially_approved') return 'Partially Approved';
-  if (normalized === 'awaiting loa' || normalized === 'awaiting_loa') return 'Awaiting LOA';
-  if (normalized === 'rejected' || normalized === 'denied') return 'Rejected';
+  if (['approved', 'ok', 'accepted', 'cleared', 'confirmed', 'sent', 'submitted', 'approved by hmo', 'forwarded', 'authorized', 'validated', 'pre-approved', 'preapproved'].includes(normalized)) return 'Approved';
+  if (['partially approved', 'partial', 'partially_approved', 'partially ok', 'partially confirmed'].includes(normalized)) return 'Partially Approved';
+  if (['awaiting loa', 'awaiting_loa', 'pending - nurse intake', 'pending for loa', 'pending loa', 'to follow up', 'for hmo callback', 'hmo callback', 'calling hmo', 'hold hmo', 'hmo hold'].includes(normalized)) return 'Awaiting LOA';
+  if (['rejected', 'denied', 'declined', 'disapproved', 'not approved'].includes(normalized)) return 'Rejected';
   if (['paid', 'settled', 'closed', 'for payment', 'ready', 'billed', 'completed'].includes(normalized)) return 'Approved';
   return 'Pending';
 }
