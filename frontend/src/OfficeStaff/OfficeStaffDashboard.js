@@ -1459,30 +1459,52 @@ export default function OfficeStaffDashboard({ mode }) {
       </aside>
 
       <main className="office-main">
-        <div className="office-header">
-          <div className="office-header-left">
-            <div>
-              <div className="office-title">{roleLabel}</div>
-              <div className="office-subtitle">
-                {view === 'dashboard' ? 'Overview' :
-                 view === 'profile' ? 'My Profile' :
-                 view === 'hmo' ? 'HMO Monitoring' :
-                 view === 'lab-payments' ? 'Lab Payments' :
-                 view === 'closeout' ? 'Daily Closeout' :
-                 view.charAt(0).toUpperCase() + view.slice(1)}
+        <div style={{ width: '100%', maxWidth: 1500, margin: '0 auto', flex: 1, minWidth: 0 }}>
+          <div className="office-header">
+            <div className="office-header-left">
+              <div>
+                <div className="office-title">{roleLabel}</div>
+                <div className="office-subtitle">
+                  {view === 'dashboard' ? 'Overview' :
+                   view === 'profile' ? 'My Profile' :
+                   view === 'hmo' ? 'HMO Monitoring' :
+                   view === 'lab-payments' ? 'Lab Payments' :
+                   view === 'closeout' ? 'Daily Closeout' :
+                   view.charAt(0).toUpperCase() + view.slice(1)}
+                </div>
               </div>
             </div>
+            <div className="office-header-right">
+              <button
+                type="button"
+                className="office-btn ghost"
+                onClick={async () => {
+                  if (!user) return;
+                  try {
+                    if (view === 'hmo') {
+                      await refreshHmoQueue();
+                    } else if (view === 'patients' || (view === 'billing' && role === 'doctor_secretary')) {
+                      await refreshPatients();
+                    } else if (view === 'lab-payments') {
+                      await refreshLabOrders();
+                    } else if (view === 'appointments') {
+                      await refreshAppointments();
+                    } else {
+                      await Promise.all([refreshInvoices(), refreshDashboardKpis()]);
+                    }
+                  } catch (_) {}
+                }}
+                disabled={!user}
+                title="Refresh"
+              >
+                <RefreshCw size={16} />
+                Refresh
+              </button>
+              <AccountHeaderActions user={user} roleLabel={roleLabel} showChangePasswordMenu={false} onSignOut={() => setShowLogoutConfirm(true)} onMyProfile={() => setView('profile')} />
+            </div>
           </div>
-          <div className="office-header-right">
-            <button type="button" className="office-btn ghost" onClick={refreshInvoices} disabled={!user || invoiceLoading} title="Refresh">
-              <RefreshCw size={16} />
-              Refresh
-            </button>
-            <AccountHeaderActions user={user} roleLabel={roleLabel} showChangePasswordMenu={false} onSignOut={() => setShowLogoutConfirm(true)} onMyProfile={() => setView('profile')} />
-          </div>
-        </div>
 
-        {view === 'dashboard' ? (
+          {view === 'dashboard' ? (
           <>
             <div className="office-grid-4">
               <div className="office-kpi">
@@ -1779,8 +1801,7 @@ export default function OfficeStaffDashboard({ mode }) {
         ) : null}
 
         {view === 'patients' ? (
-          <div style={{ width: '100%', maxWidth: 1500, margin: '0 auto' }}>
-            <div className="office-card">
+          <div className="office-card">
             <div className="office-row" style={{ justifyContent: 'space-between' }}>
               <div className="office-row">
                 <div className="input-wrapper-relative">
@@ -1851,7 +1872,6 @@ export default function OfficeStaffDashboard({ mode }) {
                 </tbody>
               </table>
             </div>
-          </div>
           </div>
         ) : null}
 
@@ -2687,7 +2707,6 @@ export default function OfficeStaffDashboard({ mode }) {
             </div>
           </div>
         ) : null}
-      </main>
 
       {selectedLabOrder ? (
         <div className="office-modal-overlay" onClick={() => setSelectedLabOrder(null)}>
@@ -2832,7 +2851,6 @@ export default function OfficeStaffDashboard({ mode }) {
       ) : null}
 
       {view === 'hmo' ? (
-        <div style={{ width: '100%', maxWidth: 1500, margin: '0 auto' }}>
           <div className="office-card">
           <div className="office-row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div className="office-row" style={{ gap: 10, alignItems: 'center' }}>
@@ -3094,7 +3112,6 @@ export default function OfficeStaffDashboard({ mode }) {
               </div>
             </div>
           ) : null}
-        </div>
         </div>
       ) : null}
 
@@ -4071,6 +4088,9 @@ export default function OfficeStaffDashboard({ mode }) {
           </div>
         </div>
       ) : null}
+
+        </div>
+      </main>
 
       <PatientFullRecordModal
         open={centralRecordOpen}
