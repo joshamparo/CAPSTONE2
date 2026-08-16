@@ -10785,6 +10785,82 @@ function NurseDashboard() {
                         </div>
                       </div>
                     ) : null}
+
+                    {(addPatientData.hasHmo || addPatientData.hasPhilhealth) ? (
+                      <div style={{
+                        marginTop: 14,
+                        padding: '16px 16px',
+                        borderRadius: 14,
+                        border: '1px solid #fde68a',
+                        background: 'linear-gradient(180deg,#fffbeb 0%, #fef3c7 100%)',
+                        display: 'grid',
+                        gap: 12
+                      }}>
+                        <div style={{
+                          fontSize: 13.5,
+                          fontWeight: 950,
+                          color: '#92400e',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8
+                        }}>
+                          <ShieldAlert size={15} /> HMO / PhilHealth Claim Submission
+                        </div>
+                        <div style={{
+                          fontSize: 12.5,
+                          color: '#78350f',
+                          fontWeight: 800,
+                          lineHeight: 1.7
+                        }}>
+                          If you already called the HMO hotline and they have approved the LOA/coverage, click <strong style={{color:'#b45309', background:'#fde68a', padding:'1px 6px', borderRadius:6}}>Send Approved</strong> below. The patient will instantly appear on Cashier HMO Monitoring in the <strong>Approved Only</strong> default tab.
+                          <br />
+                          If HMO is busy/not answering and you need to call back later, click <strong style={{color:'#78350f'}}>Awaiting LOA</strong> and choose temporary payment handling.
+                        </div>
+                        <div style={{display: 'grid', gap: 10}}>
+                          <button
+                            type="button"
+                            style={{
+                              padding: '12px 16px',
+                              borderRadius: 12,
+                              border: '1px solid #f97316',
+                              background: 'linear-gradient(180deg,#fb923c 0%, #ea580c 100%)',
+                              color: '#fff7ed',
+                              fontWeight: 950,
+                              fontSize: 13.5,
+                              cursor: addPatientSaving ? 'not-allowed' : 'pointer',
+                              boxShadow: '0 4px 10px -4px rgba(249,115,22,0.35)',
+                              opacity: addPatientSaving ? 0.6 : 1
+                            }}
+                            disabled={addPatientSaving}
+                            onClick={(e) => handleAddPatientSubmit(e, { hmoApprovalStatus: 'approved', hmoPaymentMode: null })}
+                          >
+                            ✅ APPROVE & SEND TO CASHIER HMO MONITORING
+                          </button>
+                          <button
+                            type="button"
+                            style={{
+                              padding: '11px 16px',
+                              borderRadius: 12,
+                              border: '1px solid #f59e0b',
+                              background: '#ffffff',
+                              color: '#b45309',
+                              fontWeight: 900,
+                              fontSize: 13,
+                              cursor: addPatientSaving ? 'not-allowed' : 'pointer',
+                              boxShadow: '0 1px 2px rgba(15,23,42,0.05)',
+                              opacity: addPatientSaving ? 0.6 : 1
+                            }}
+                            disabled={addPatientSaving}
+                            onClick={() => {
+                              setHmoPaymentTempMode('temp_cash');
+                              setShowHmoUnavailableModal(true);
+                            }}
+                          >
+                            ⏳ Awaiting LOA (HMO not reachable — set payment option)
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -11017,83 +11093,6 @@ function NurseDashboard() {
                     {addPatientError && (
                       <div className="form-error-message" style={{marginTop: 10, marginBottom: 0}}>{addPatientError}</div>
                     )}
-
-                    {addPatientStep === 3 && (addPatientData.hasHmo || addPatientData.hasPhilhealth) ? (
-                      <div style={{
-                        marginTop: 14,
-                        padding: '14px 14px',
-                        borderRadius: 14,
-                        border: '1px solid #fde68a',
-                        background: '#fffbeb',
-                        display: 'grid',
-                        gap: 10
-                      }}>
-                        <div style={{
-                          fontSize: 12.5,
-                        fontWeight: 900,
-                        color: '#92400e',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8
-                        }}>
-                          <ShieldAlert size={14} /> HMO / PhilHealth Coverage
-                        </div>
-                        <div style={{
-                          fontSize: 12.5,
-                          color: '#78350f',
-                          fontWeight: 700,
-                          lineHeight: 1.6
-                        }}>
-                          If HMO already confirmed and LOA approved, click <strong style={{color:'#b45309'}}>Send Approved</strong> below to instantly push the claim into Cashier HMO Monitoring (Approved tab).
-                          If HMO not answering yet, click <strong style={{color:'#78350f'}}>Awaiting LOA</strong> and choose patient payment option (patient will proceed normally, claim will appear in All Claims·Audit tab until updated approved later).
-                        </div>
-                        <div style={{display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'space-between'}}>
-                          <button
-                            type="button"
-                            style={{
-                              flex: '1 1 180px',
-                              padding: '10px 14px',
-                              borderRadius: 10,
-                              border: '1px solid #fbbf24',
-                              background: '#ffffff',
-                              color: '#b45309',
-                              fontWeight: 900,
-                              fontSize: 13,
-                              cursor: addPatientSaving ? 'not-allowed' : 'pointer',
-                              boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
-                              opacity: addPatientSaving ? 0.6 : 1
-                            }}
-                            disabled={addPatientSaving}
-                            onClick={() => {
-                              setHmoPaymentTempMode('temp_cash');
-                              setShowHmoUnavailableModal(true);
-                            }}
-                          >
-                            ⏳ Awaiting LOA (HMO not reachable yet)
-                          </button>
-                          <button
-                            type="button"
-                            style={{
-                              flex: '1 1 220px',
-                              padding: '10px 16px',
-                              borderRadius: 10,
-                              border: '1px solid #ea580c',
-                              background: 'linear-gradient(180deg,#f97316 0%, #ea580c 100%)',
-                              color: '#fffbeb',
-                              fontWeight: 950,
-                              fontSize: 13,
-                              cursor: addPatientSaving ? 'not-allowed' : 'pointer',
-                              boxShadow: '0 1px 2px rgba(15,23,42,0.08)',
-                              opacity: addPatientSaving ? 0.6 : 1
-                            }}
-                            disabled={addPatientSaving}
-                            onClick={(e) => handleAddPatientSubmit(e, { hmoApprovalStatus: 'approved', hmoPaymentMode: null })}
-                          >
-                            ✅ Approve & Send to Cashier HMO Monitoring
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
 
                     <div className="walkin-right-actions">
                       <button
