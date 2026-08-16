@@ -22,7 +22,7 @@
     }
   ],
   "rewrites": [
-    { "source": "/((?!.*\\..*|_next).*)", "destination": "/" },
-    { "source": "/(.*)", "destination": "/" }
+    { "source": "/((?!.*\\..*|_next).*)", "destination": "/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
