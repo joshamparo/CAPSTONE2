@@ -502,7 +502,7 @@ export default function OfficeStaffDashboard({ mode }) {
     setLabOrdersError('');
     try {
       const params = new URLSearchParams();
-      params.set('status', 'For Payment');
+      params.set('status', 'hmo_lab_queue');
       params.set('take', '200');
       const data = await fetchJson(`/api/clinical-orders?${params.toString()}`, { apiBase: API_BASE, headers: buildHeaders(user) });
       setLabOrders(Array.isArray(data) ? data : []);
@@ -1094,42 +1094,53 @@ export default function OfficeStaffDashboard({ mode }) {
   const recordLabPayment = async () => {
     if (!user || role !== 'cashier' || !selectedLabOrder?.id) return;
     const amountReceived = Number(labPaymentAmount || 0);
-    const amountDue = Number(selectedLabOrder?.amountDue ?? selectedLabOrder?.unitPrice ?? 0);
+    const amountDue = Number(selectedLabOrder?.amountDue ?? selectedLabOrder?.patientPayable ?? selectedLabOrder?.unitPrice ?? 0);
+    const grossAmount = Number(selectedLabOrder?.configuredUnitPrice ?? selectedLabOrder?.unitPrice ?? 0);
     const method = String(labPaymentMethod || 'Cash').trim();
     const ref = String(labPaymentReference || '').trim();
-    if (!selectedLabOrder?.priceConfigured || !(amountDue > 0)) {
+    if (!selectedLabOrder?.priceConfigured) {
       setLabPaymentError('No configured cashier price is available for this lab service yet.');
       return;
     }
-    if (method !== 'Cash' && !ref) {
-      setLabPaymentError('Receipt/reference is required.');
-      return;
-    }
-    if (!Number.isFinite(amountReceived) || amountReceived <= 0) {
-      setLabPaymentError('Enter the amount received.');
-      return;
-    }
-    if (amountReceived + 0.0001 < amountDue) {
-      setLabPaymentError(`Amount received is below the amount due of PHP ${toMoney(amountDue)}.`);
-      return;
+    const hmoCoveredZeroPay = Number(amountDue) <= 0.0099;
+    if (!hmoCoveredZeroPay) {
+      if (method !== 'Cash' && !ref) {
+        setLabPaymentError('Receipt/reference is required.');
+        return;
+      }
+      if (!Number.isFinite(amountReceived) || amountReceived <= 0) {
+        setLabPaymentError('Enter the amount received.');
+        return;
+      }
+      if (amountReceived + 0.0001 < amountDue) {
+        setLabPaymentError(`Amount received is below the amount due of PHP ${toMoney(amountDue)}.`);
+        return;
+      }
+    } else {
+      if (!ref) {
+        setLabPaymentError('Reference / LOA number is required for HMO-covered transactions.');
+        return;
+      }
     }
     setLabPaymentLoading(true);
     setLabPaymentError('');
     try {
+      const phDed = Number(selectedLabOrderHmo?.philhealth_deduction || selectedLabOrder?.philhealthApplied || 0);
+      const hmoCov = Number(selectedLabOrderHmo?.applied_hmo_amount || selectedLabOrderHmo?.loa_approved_amount || selectedLabOrder?.hmoCoverageApplied || 0);
       const receiptPayload = {
         orderId: String(selectedLabOrder.id),
         patientName: selectedLabOrder.patientName || 'Patient',
         serviceLabel: selectedLabOrder.priceLabel || selectedLabOrder.service || selectedLabOrder.kind || 'Lab Service',
-        amountDue: Number(selectedLabOrder?.amountDue ?? selectedLabOrder?.unitPrice ?? 0),
-        philhealthDeduction: Number(selectedLabOrderHmo?.philhealth_deduction || 0),
-        hmoCoverage: Number(selectedLabOrderHmo?.applied_hmo_amount || selectedLabOrderHmo?.loa_approved_amount || 0),
-        hmoProvider: selectedLabOrderHmo?.hmo_provider || '',
-        loaNumber: selectedLabOrderHmo?.loa_number || selectedLabOrderHmo?.hmo_loa_number || '',
-        netAmountDue: amountDue,
-        amountReceived,
-        change: Math.max(0, amountReceived - amountDue),
-        method,
-        reference: ref || '—',
+        amountDue: Number(grossAmount || 0),
+        philhealthDeduction: phDed,
+        hmoCoverage: hmoCov,
+        hmoProvider: selectedLabOrderHmo?.hmo_provider || (selectedLabOrder?.hmoIndicators?.provider) || '',
+        loaNumber: selectedLabOrderHmo?.loa_number || selectedLabOrderHmo?.hmo_loa_number || (selectedLabOrder?.hmoIndicators?.loaNumber) || '',
+        netAmountDue: Number(amountDue || 0),
+        amountReceived: hmoCoveredZeroPay ? 0 : amountReceived,
+        change: hmoCoveredZeroPay ? 0 : Math.max(0, amountReceived - amountDue),
+        method: hmoCoveredZeroPay ? 'HMO' : method,
+        reference: ref || 'HMO COVERED',
         cashierName: user.name || user.first_name || user.firstName || user.email || 'Cashier',
         paidAt: new Date().toISOString()
       };
@@ -1141,19 +1152,21 @@ export default function OfficeStaffDashboard({ mode }) {
         headers: buildHeaders(user),
         body: JSON.stringify({
           status: 'Paid',
-          paymentReference: ref,
-          paymentMethod: labPaymentMethod || null,
-          paymentAmount: amountReceived,
+          paymentReference: ref || 'HMO COVERED',
+          paymentMethod: hmoCoveredZeroPay ? 'HMO' : (labPaymentMethod || null),
+          paymentAmount: hmoCoveredZeroPay ? 0 : amountReceived,
           actorName: user.name || user.first_name || user.firstName || user.email || 'Cashier',
           actorRole: 'cashier',
-          eventNote: `Payment recorded • ${labPaymentMethod || 'method'} • ${ref}`
+          eventNote: hmoCoveredZeroPay
+            ? `HMO-authorized • No cash collection • ${ref || 'HMO COVERED'}`
+            : `Payment recorded • ${labPaymentMethod || 'method'} • ${ref}`
         })
       });
       setSelectedLabOrder(null);
       setLabPaymentMethod('Cash');
       setLabPaymentAmount('');
       setLabPaymentReference('');
-      setPaymentReceipt({ ...receiptPayload, source: 'Lab Payment' });
+      setPaymentReceipt({ ...receiptPayload, source: hmoCoveredZeroPay ? 'Lab Payment (HMO)' : 'Lab Payment' });
       await refreshLabOrders();
       await refreshPaymentHistory();
       if (role === 'cashier') await fetchCloseout({ date: closeoutDate });
@@ -2253,7 +2266,7 @@ export default function OfficeStaffDashboard({ mode }) {
             <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div className="office-title" style={{ fontSize: '1.05rem' }}>Lab Payments</div>
-                <div className="office-subtitle">Orders waiting for pay-before-exam</div>
+                <div className="office-subtitle">Orders for pay-before-exam (laboratory / ECG / radiology / imaging). HMO-approved rows show green PAID(HMO) badge with no further payment needed.</div>
               </div>
               <div className="office-row">
                 <input className="office-input" value={labOrdersQuery} onChange={(e) => setLabOrdersQuery(e.target.value)} placeholder="Search patient/service" />
@@ -2291,7 +2304,7 @@ export default function OfficeStaffDashboard({ mode }) {
                     </tr>
                   ) : displayedLabOrders.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="text-center py-8 text-slate-500">No lab orders waiting for payment.</td>
+                      <td colSpan="7" className="text-center py-8 text-slate-500">No lab/imaging orders found. Check filters or create a walk-in patient with lab/imaging services.</td>
                     </tr>
                   ) : (
                     displayedLabOrders.slice(0, 120).map((o) => {
@@ -2349,11 +2362,28 @@ export default function OfficeStaffDashboard({ mode }) {
                         <td className="inc-right">
                           {isPrePaid ? (
                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              {(o.linkedInvoiceId || (o.hmoIndicators && o.hmoIndicators.hasHmo)) ? (
+                                <button
+                                  type="button"
+                                  className="office-btn"
+                                  style={{ color: '#fff', background: '#16a34a', fontWeight: 800, border: '1px solid #15803d' }}
+                                  onClick={async () => {
+                                    if (o.linkedInvoiceId) {
+                                      await openInvoice(String(o.linkedInvoiceId));
+                                      setView('billing');
+                                    } else {
+                                      await openLabOrderPos(o);
+                                    }
+                                  }}
+                                >
+                                  <FileText size={14} style={{ marginRight: 4 }} />
+                                  View Invoice
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 className="office-btn ghost"
-                                style={{ color: '#16a34a', fontWeight: 800, border: '1px solid #86efac', background: '#ecfccb' }}
-                                onClick={() => openLabOrderPos(o)}
+                                onClick={async () => { await openLabOrderPos(o); }}
                               >
                                 View Receipt
                               </button>

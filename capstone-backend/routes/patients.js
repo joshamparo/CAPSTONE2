@@ -1788,9 +1788,11 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 const coverage = payload.hmoCoveredServices && typeof payload.hmoCoveredServices === 'object' ? payload.hmoCoveredServices : {};
                 const serviceType = routeMeta.type === 'lab' ? 'lab' : 'imaging';
                 const coveredByHmo = hmoActive && Boolean(coverage[serviceType]);
-                const baseStatus = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
+                const configuredUnitPrice = Number(pricing?.unitPrice || 0);
+                const patientNeedsPay = !(pricing?.configured && configuredUnitPrice > 0 && coveredByHmo);
+                const baseStatus = pricing?.configured && configuredUnitPrice > 0 ? 'For Payment' : 'Pending';
                 const status = coveredByHmo ? 'Paid' : baseStatus;
-                if (coveredByHmo) mainClinicalOrderHmoCoveredCents = Number(pricing?.unitPrice || 0);
+                if (coveredByHmo) mainClinicalOrderHmoCoveredCents = configuredUnitPrice;
                 const priority = triage.level <= 2 ? 'urgent' : 'routine';
 
                 const detailLines = [
@@ -1804,7 +1806,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
 
                 try {
                     const { ticket: orderTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], routeMeta.type === 'lab' ? 'LAB' : isEcg ? 'ECG' : 'IMG');
-                    
+
                     const order = await tx.clinical_orders.create({
                         data: {
                             patient_id: patient.id,
@@ -1822,6 +1824,45 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             updated_at: new Date()
                         }
                     });
+
+                    // PROMPT L13 FIX: Always create a REAL billing_invoice PER LAB/IMAGING service so:
+                    //   (a) counted sa Billing list, (b) linked sa HMO claim monitoring, (c) Lab Payments modal jump possible
+                    if (pricing?.configured && configuredUnitPrice > 0) {
+                        try {
+                            await ensureBillingTablesExist(tx).catch(() => null);
+                            const unitPriceMoney = toMoney(configuredUnitPrice);
+                            const invoiceMarker = `Walk-in Lab Order #${String(order.id)}`;
+                            const hmoCoveredNow = coveredByHmo;
+                            const invStatusNow = hmoCoveredNow ? (patientNeedsPay ? 'Ready' : 'Paid') : (status === 'Pending' ? 'Draft' : status);
+                            const inv = await tx.billing_invoices.create({
+                                data: {
+                                    patient_id: patient.id,
+                                    status: invStatusNow,
+                                    notes: `${invoiceMarker} • ${kind} - ${service} • Nurse Walk-in Intake`,
+                                    created_by: getRequesterEmail(req) || requesterName || null,
+                                    total_amount: unitPriceMoney
+                                }
+                            });
+                            await tx.billing_invoice_items.create({
+                                data: {
+                                    invoice_id: inv.id,
+                                    description: `${kind} - ${service}${hmoCoveredNow ? ' • HMO Covered' : ''}`,
+                                    quantity: 1,
+                                    unit_price: unitPriceMoney,
+                                    line_total: unitPriceMoney
+                                }
+                            }).catch(() => null);
+                            if (!linkedInvoiceId) linkedInvoiceId = inv.id;
+                            // Auto-create HMO claim linkage if HMO active:
+                            if (hmoActive) {
+                                try {
+                                    await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id).catch(() => null);
+                                } catch (_e1) {}
+                            }
+                        } catch (_invCreateErr) {
+                            console.warn('[Walk-in] Lab order invoice create failed (non-fatal):', _invCreateErr);
+                        }
+                    }
 
                     createdRecord = {
                         kind: 'clinical_order',
@@ -1889,22 +1930,24 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             // This now runs for ALL walk-in intakes if checkboxes were checked
             const generatedExtraTickets = [];
             const commonDetailLines = [
-                `Vitals: Temp ${intakeEntry.vitals.temperature ?? '—'}, BP ${intakeEntry.vitals.bloodPressure || '—'}, HR ${intakeEntry.vitals.heartRate ?? '—'}`,
+                `Vitals: Temp ${intakeEntry.vitals.temperature ?? '—'}, BP ${intakeEntry.vitals.bloodPressure || '—'}, HR ${intakeEntry.vitals.heartRate ?? '—'}, SpO2 ${intakeEntry.vitals.spo2 ?? '—'}`,
                 `Main Concern: ${String(payload.mainConcern || '').trim() || 'Walk-in'}`
             ];
+            const hmoSave = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
             const hmoActiveExtra = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
             const coverageExtra = payload.hmoCoveredServices && typeof payload.hmoCoveredServices === 'object' ? payload.hmoCoveredServices : {};
 
             if (Array.isArray(payload.selectedLabServices) && payload.selectedLabServices.length > 0) {
                 for (const service of payload.selectedLabServices) {
                     const pricing = resolveClinicalServicePricing({ kind: 'Laboratory', service });
-                    const baseStatus = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
+                    const configuredUnitPrice = Number(pricing?.unitPrice || 0);
+                    const baseStatus = pricing?.configured && configuredUnitPrice > 0 ? 'For Payment' : 'Pending';
                     const covered = hmoActiveExtra && Boolean(coverageExtra.lab);
                     const status = covered ? 'Paid' : baseStatus;
-                    if (covered) extraHmoTotalCents += Number(pricing?.unitPrice || 0);
+                    if (covered) extraHmoTotalCents += configuredUnitPrice;
                     const { ticket: labTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], 'LAB');
                     generatedExtraTickets.push(labTicket);
-                    await tx.clinical_orders.create({
+                    const order = await tx.clinical_orders.create({
                         data: {
                             patient_id: patient.id,
                             patient_name: patientName,
@@ -1921,6 +1964,50 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             updated_at: new Date()
                         }
                     });
+
+                    // PROMPT L13: per-lab invoice create so counted properly
+                    if (pricing?.configured && configuredUnitPrice > 0) {
+                        try {
+                            await ensureBillingTablesExist(tx).catch(() => null);
+                            const unitPriceMoney = toMoney(configuredUnitPrice);
+                            const invoiceMarker = `Walk-in Lab Order #${String(order.id)}`;
+                            const invStatusNow = covered ? 'Paid' : (status === 'Pending' ? 'Draft' : status);
+                            const inv = await tx.billing_invoices.create({
+                                data: {
+                                    patient_id: patient.id,
+                                    status: invStatusNow,
+                                    notes: `${invoiceMarker} • Laboratory - ${service} • Nurse Walk-in Intake Extra`,
+                                    created_by: getRequesterEmail(req) || requesterName || null,
+                                    total_amount: unitPriceMoney
+                                }
+                            });
+                            await tx.billing_invoice_items.create({
+                                data: {
+                                    invoice_id: inv.id,
+                                    description: `Laboratory - ${service}${covered ? ' • HMO Covered' : ''}`,
+                                    quantity: 1,
+                                    unit_price: unitPriceMoney,
+                                    line_total: unitPriceMoney
+                                }
+                            }).catch(() => null);
+                            if (!linkedInvoiceId) linkedInvoiceId = inv.id;
+                            if (hmoActiveExtra) {
+                                await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id, {
+                                    patientId: patient.id,
+                                    patientName,
+                                    hmoProvider: hmoSave ? (String(payload.hmoProvider || '').trim() || null) : null,
+                                    hmoLoaNumber: hmoSave ? (String(payload.hmoLoaNumber || '').trim() || null) : null,
+                                    hmoCardNumber: hmoSave ? (String(payload.hmoCardNumber || '').trim() || null) : null,
+                                    philhealthDeduction: hmoSave ? Number(payload.philhealthDeduction || 0) : null,
+                                    loaApprovedAmount: covered ? configuredUnitPrice : null,
+                                    requester: getRequesterEmail(req) || requesterName || null,
+                                    notes: covered ? `Walk-in Lab #${order.id}: HMO pre-covered at intake` : `Walk-in Lab #${order.id}`
+                                }).catch(() => null);
+                            }
+                        } catch (_einvoice) {
+                            console.warn('[Walk-in] Extra Lab invoice create warn:', _einvoice);
+                        }
+                    }
                 }
             }
 
@@ -1930,13 +2017,14 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     const kind = isECG ? 'ECG' : 'Radiology';
                     const assignedRole = isECG ? 'ecg_operator' : 'radiographer';
                     const pricing = resolveClinicalServicePricing({ kind, service });
-                    const baseStatus = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
+                    const configuredUnitPrice = Number(pricing?.unitPrice || 0);
+                    const baseStatus = pricing?.configured && configuredUnitPrice > 0 ? 'For Payment' : 'Pending';
                     const covered = hmoActiveExtra && Boolean(coverageExtra.imaging);
                     const status = covered ? 'Paid' : baseStatus;
-                    if (covered) extraHmoTotalCents += Number(pricing?.unitPrice || 0);
+                    if (covered) extraHmoTotalCents += configuredUnitPrice;
                     const { ticket: imgTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], isECG ? 'ECG' : 'IMG');
                     generatedExtraTickets.push(imgTicket);
-                    await tx.clinical_orders.create({
+                    const order = await tx.clinical_orders.create({
                         data: {
                             patient_id: patient.id,
                             patient_name: patientName,
@@ -1953,6 +2041,50 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             updated_at: new Date()
                         }
                     });
+
+                    // PROMPT L13: per-imaging invoice create
+                    if (pricing?.configured && configuredUnitPrice > 0) {
+                        try {
+                            await ensureBillingTablesExist(tx).catch(() => null);
+                            const unitPriceMoney = toMoney(configuredUnitPrice);
+                            const invoiceMarker = `Walk-in Lab Order #${String(order.id)}`;
+                            const invStatusNow = covered ? 'Paid' : (status === 'Pending' ? 'Draft' : status);
+                            const inv = await tx.billing_invoices.create({
+                                data: {
+                                    patient_id: patient.id,
+                                    status: invStatusNow,
+                                    notes: `${invoiceMarker} • ${kind} - ${service} • Nurse Walk-in Intake Extra`,
+                                    created_by: getRequesterEmail(req) || requesterName || null,
+                                    total_amount: unitPriceMoney
+                                }
+                            });
+                            await tx.billing_invoice_items.create({
+                                data: {
+                                    invoice_id: inv.id,
+                                    description: `${kind} - ${service}${covered ? ' • HMO Covered' : ''}`,
+                                    quantity: 1,
+                                    unit_price: unitPriceMoney,
+                                    line_total: unitPriceMoney
+                                }
+                            }).catch(() => null);
+                            if (!linkedInvoiceId) linkedInvoiceId = inv.id;
+                            if (hmoActiveExtra) {
+                                await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id, {
+                                    patientId: patient.id,
+                                    patientName,
+                                    hmoProvider: hmoSave ? (String(payload.hmoProvider || '').trim() || null) : null,
+                                    hmoLoaNumber: hmoSave ? (String(payload.hmoLoaNumber || '').trim() || null) : null,
+                                    hmoCardNumber: hmoSave ? (String(payload.hmoCardNumber || '').trim() || null) : null,
+                                    philhealthDeduction: hmoSave ? Number(payload.philhealthDeduction || 0) : null,
+                                    loaApprovedAmount: covered ? configuredUnitPrice : null,
+                                    requester: getRequesterEmail(req) || requesterName || null,
+                                    notes: covered ? `Walk-in ${kind} #${order.id}: HMO pre-covered at intake` : `Walk-in ${kind} #${order.id}`
+                                }).catch(() => null);
+                            }
+                        } catch (_einvoice) {
+                            console.warn('[Walk-in] Extra Imaging invoice create warn:', _einvoice);
+                        }
+                    }
                 }
             }
 
@@ -2006,7 +2138,6 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 }
             }).catch(() => null);
 
-            const hmoSave = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
             if (hmoSave) {
                 // Ensure patient registry row has HMO flags so fallback 3rd UNION ALL hmo-queue leg picks it up
                 try {

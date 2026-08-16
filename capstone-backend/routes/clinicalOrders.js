@@ -151,6 +151,21 @@ function enrichClinicalOrder(order) {
   const statusNorm = String(row.status || '').toLowerCase();
   const statusIsForPayment = statusNorm === 'for payment';
   const statusIsPaid = statusNorm === 'paid';
+  const linkedInvoiceTotal = Number(row.linkedInvoiceTotal || 0);
+  const realTotal = pricing.unitPrice > 0 ? pricing.unitPrice : (linkedInvoiceTotal > 0 ? linkedInvoiceTotal : 0);
+  const h = row.linkedHmoClaim && typeof row.linkedHmoClaim === 'object' ? row.linkedHmoClaim : null;
+  const hmoProvider = h && String(h.hmo_provider || '').trim();
+  const hmoLoa = h && String(h.hmo_loa_number || '').trim();
+  const hmoCard = h && String(h.hmo_card_number || '').trim();
+  const phDed = h ? Math.max(0, Number(h.philhealth_deduction || 0)) : 0;
+  const hmoLoaAmt = h ? Math.max(0, Number(h.loa_approved_amount || 0)) : 0;
+  const hmoClaimStatus = h ? String(h.status || '') : '';
+  const hmoApplied = !!(hmoProvider || hmoLoa || hmoCard || (phDed + hmoLoaAmt > 0));
+  const hmoStatusApplied = ['Approved', 'Partially Approved', 'Pending', 'Ready', 'Paid', 'approved', 'partially approved'].includes(String(hmoClaimStatus || '').trim());
+  const maxAfterPh = Math.max(0, realTotal - phDed);
+  const realHmoCovered = hmoStatusApplied && hmoApplied ? Math.min(maxAfterPh, hmoLoaAmt) : (statusIsPaid && hmoApplied ? realTotal - phDed : 0);
+  const patientPayable = Math.max(0, realTotal - phDed - realHmoCovered);
+  const isHmoPrePaid = !!(statusIsPaid && hmoApplied);
   return {
     ...row,
     pricing,
@@ -159,11 +174,21 @@ function enrichClinicalOrder(order) {
     priceLabel: pricing.serviceLabel,
     currency: pricing.currency,
     unitPrice: pricing.unitPrice,
-    amountDue: statusIsForPayment ? pricing.unitPrice : 0,
-    configuredUnitPrice: pricing.unitPrice,
-    patientPayable: statusIsPaid ? 0 : pricing.unitPrice,
+    amountDue: statusIsPaid
+      ? Math.max(0, patientPayable)
+      : (statusIsForPayment && hmoApplied ? Math.max(0, patientPayable) : realTotal),
+    configuredUnitPrice: realTotal,
+    patientPayable: Math.max(0, patientPayable),
+    originalTotal: realTotal,
+    philhealthApplied: phDed,
+    hmoCoverageApplied: realHmoCovered,
     hmoIndicators: {
-      isHmoPrePaid: statusIsPaid
+      isHmoPrePaid,
+      hasHmo: hmoApplied,
+      provider: hmoProvider || '',
+      loaNumber: hmoLoa || '',
+      cardNumber: hmoCard || '',
+      status: hmoClaimStatus || (statusIsPaid ? 'Approved' : '')
     }
   };
 }
@@ -232,6 +257,23 @@ router.get('/', async (req, res) => {
             ];
             delete where.status;
             delete where.OR;
+          } else if (requestedStatus === 'hmo_lab_queue') {
+            const base = { ...where };
+            delete base.status;
+            delete base.OR;
+            where.AND = [
+              base,
+              {
+                OR: [
+                  { status: 'For Payment' },
+                  { status: 'Paid' },
+                  { status: 'Pending', assigned_role: { in: Array.from(SCHEDULABLE_ROLE_SET) } }
+                ]
+              },
+              { assigned_role: { in: ['medtech', 'radiographer', 'ecg_operator', 'lab_technician', 'laboratory_technician', 'imaging_technician'] } }
+            ];
+            delete where.status;
+            delete where.OR;
           } else if (!where.status) {
             where.status = { in: ['For Payment', 'Paid'] };
           }
@@ -275,25 +317,69 @@ router.get('/', async (req, res) => {
       }
     });
 
-    const mapped = (Array.isArray(rows) ? rows : []).map((r) => enrichClinicalOrder({
-      id: r.id != null ? String(r.id) : '',
-      patientId: r.patient_id || null,
-      patientName: r.patient_name || null,
-      kind: r.kind || null,
-      service: r.service || null,
-      priority: r.priority || null,
-      status: r.status || null,
-      notes: r.notes || null,
-      orderedByName: r.ordered_by_name || null,
-      orderedByRole: r.ordered_by_role || null,
-      assignedRole: r.assigned_role || null,
-      assignedTo: r.assigned_to || null,
-      scheduledAt: r.scheduled_at || null,
-      completedAt: r.completed_at || null,
-      acknowledgedAt: r.acknowledged_at || null,
-      acknowledgedBy: r.acknowledged_by || null,
-      createdAt: r.created_at || null,
-      updatedAt: r.updated_at || null
+    const orderIdsForLookup = (Array.isArray(rows) ? rows : [])
+      .map((r) => String(r.id || ''))
+      .filter((x) => x);
+
+    const linkedInvoicesMap = new Map();
+    if (orderIdsForLookup.length > 0) {
+      try {
+        const noteMatches = orderIdsForLookup.map((id) => `'%Lab Order #${id}%'`).join(' OR notes ILIKE ');
+        const invRows = await prisma.$queryRawUnsafe(
+          `SELECT id::text AS invoice_id, notes, total_amount, status, patient_id
+           FROM public.billing_invoices
+           WHERE notes ILIKE ${noteMatches.length ? noteMatches : "''"}
+          `
+        ).catch(() => []);
+        (Array.isArray(invRows) ? invRows : []).forEach((inv) => {
+          const m = String(inv.notes || '').match(/Lab Order #(\d+)/);
+          if (m && m[1]) linkedInvoicesMap.set(m[1], inv);
+        });
+      } catch (_lookup) {
+        console.warn('[clinicalOrders] invoice lookup warn:', _lookup?.message || _lookup);
+      }
+    }
+
+    const mapped = await Promise.all((Array.isArray(rows) ? rows : []).map(async (r) => {
+      const idStr = r.id != null ? String(r.id) : '';
+      const inv = linkedInvoicesMap.get(idStr) || null;
+      const hmoClaimSummary = inv && inv.invoice_id
+        ? await (async () => {
+            try {
+              const h = await prisma.$queryRawUnsafe(
+                `SELECT hmo_provider, hmo_loa_number, hmo_card_number, philhealth_deduction, loa_approved_amount, status
+                 FROM public.billing_hmo_claims
+                 WHERE invoice_id = $1::bigint LIMIT 1`,
+                String(inv.invoice_id)
+              ).catch(() => []);
+              return Array.isArray(h) && h.length ? h[0] : null;
+            } catch (_hc) { return null; }
+          })()
+        : null;
+      return enrichClinicalOrder({
+        id: idStr,
+        patientId: r.patient_id || null,
+        patientName: r.patient_name || null,
+        kind: r.kind || null,
+        service: r.service || null,
+        priority: r.priority || null,
+        status: r.status || null,
+        notes: r.notes || null,
+        orderedByName: r.ordered_by_name || null,
+        orderedByRole: r.ordered_by_role || null,
+        assignedRole: r.assigned_role || null,
+        assignedTo: r.assigned_to || null,
+        scheduledAt: r.scheduled_at || null,
+        completedAt: r.completed_at || null,
+        acknowledgedAt: r.acknowledged_at || null,
+        acknowledgedBy: r.acknowledged_by || null,
+        createdAt: r.created_at || null,
+        updatedAt: r.updated_at || null,
+        linkedInvoiceId: inv?.invoice_id ? String(inv.invoice_id) : null,
+        linkedInvoiceStatus: inv?.status || null,
+        linkedInvoiceTotal: inv?.total_amount != null ? Number(inv.total_amount || 0) : null,
+        linkedHmoClaim: hmoClaimSummary || null
+      });
     }));
 
     res.json(mapped);
@@ -651,14 +737,48 @@ router.patch('/:id', async (req, res) => {
         if (!pricing.configured || !(Number(pricing.unitPrice) > 0)) {
           return res.status(400).json({ message: 'No cashier price is configured for this service yet.' });
         }
+        const orderIdBigInt = String(orderId);
+        let hmoPh = 0;
+        let hmoLoaAmt = 0;
+        let hmoApplied = false;
+        try {
+          const invLookup = await prisma.$queryRawUnsafe(
+            `SELECT i.id::text AS inv_id, c.philhealth_deduction, c.loa_approved_amount, c.hmo_provider, c.hmo_loa_number, c.status AS claim_status
+             FROM public.billing_invoices i
+             LEFT JOIN public.billing_hmo_claims c ON c.invoice_id = i.id
+             WHERE i.notes ILIKE $1 LIMIT 1`,
+            `%Lab Order #${orderIdBigInt}%`
+          ).catch(() => []);
+          const f = Array.isArray(invLookup) && invLookup.length ? invLookup[0] : null;
+          if (f) {
+            hmoPh = Math.max(0, Number(f.philhealth_deduction || 0));
+            hmoLoaAmt = Math.max(0, Number(f.loa_approved_amount || 0));
+            const status = String(f.claim_status || '').toLowerCase();
+            const hasAny = !!(f.hmo_provider || f.hmo_loa_number || hmoPh + hmoLoaAmt > 0);
+            if (hasAny && ['approved', 'partially approved', 'pending', 'ready', 'paid'].includes(status)) {
+              hmoApplied = true;
+            } else if (hasAny && status === '' && hmoPh + hmoLoaAmt > 0) {
+              hmoApplied = true;
+            }
+          }
+        } catch (_h) {}
+        const gross = Number(pricing.unitPrice || 0);
+        const afterPh = Math.max(0, gross - hmoPh);
+        const realHmoCovered = hmoApplied ? Math.min(afterPh, hmoLoaAmt) : 0;
+        const patientPayable = Math.max(0, gross - hmoPh - realHmoCovered);
+
         const ref = String(paymentReference || '').trim() || String(eventNote || '').trim();
         if (!ref) return res.status(400).json({ message: 'Receipt/reference is required to mark as Paid' });
         const paymentAmount = Number(req.body?.paymentAmount ?? req.body?.amountReceived ?? 0);
-        if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
-          return res.status(400).json({ message: 'Amount received is required.' });
-        }
-        if (paymentAmount + 0.0001 < Number(pricing.unitPrice)) {
-          return res.status(400).json({ message: `Amount received is below the amount due of PHP ${Number(pricing.unitPrice).toFixed(2)}.` });
+        if (patientPayable <= 0) {
+          if (!ref) return res.status(400).json({ message: 'Receipt/reference is required for HMO-covered order.' });
+        } else {
+          if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+            return res.status(400).json({ message: 'Amount received is required.' });
+          }
+          if (paymentAmount + 0.0001 < patientPayable) {
+            return res.status(400).json({ message: `Amount received is below amount due of PHP ${patientPayable.toFixed(2)} (gross ${gross.toFixed(2)}${hmoPh > 0 ? ` - PH ${hmoPh.toFixed(2)}` : ''}${realHmoCovered > 0 ? ` - HMO ${realHmoCovered.toFixed(2)}` : ''}).` });
+          }
         }
       }
       data.status = newStatus;
