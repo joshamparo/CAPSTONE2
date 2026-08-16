@@ -1,27 +1,55 @@
 import { useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+const API_BASE = (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_BASE_URL) || 'http://localhost:5000';
+
+function safeGetUser() {
+  try {
+    const raw = localStorage.getItem('currentUser');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch (error) {
+    try {
+      // eslint-disable-next-line no-console
+      console.error('Failed to parse currentUser from localStorage', error);
+    } catch (_) {}
+    try { localStorage.removeItem('currentUser'); } catch (_) {}
+    return null;
+  }
+}
+
+function safeNormalizeRole(value) {
+  if (value == null) return '';
+  const s = String(value);
+  return s.trim().toLowerCase();
+}
+
+function safeNormalizeArray(value) {
+  if (Array.isArray(value)) {
+    return value.filter(v => typeof v === 'string' || typeof v === 'number').map(v => String(v).trim().toLowerCase());
+  }
+  if (typeof value === 'string') {
+    return value.split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
+  }
+  return [];
+}
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
-  let user = null;
-  try {
-    // Attempt to get the user session from localStorage
-    user = JSON.parse(localStorage.getItem('currentUser'));
-  } catch (error) {
-    console.error("Failed to parse currentUser from localStorage", error);
-  }
+  const user = safeGetUser();
+  const userRole = safeNormalizeRole(user?.role);
+  const normalizedRoles = safeNormalizeArray(allowedRoles);
 
   useEffect(() => {
+    if (!userRole || userRole === 'patient') return undefined;
     const u = user || {};
-    const role = String(u.role || '').toLowerCase();
-    if (!role || role === 'patient') return undefined;
     const email = String(u.email || '').trim();
 
     const payload = {
       id: u.id || u._id || null,
       email: email || null,
-      accountType: role
+      accountType: userRole
     };
 
     let stopped = false;
@@ -31,7 +59,11 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
       try {
         await fetch(`${API_BASE}/api/staff/heartbeat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-user-role': role, ...(email ? { 'x-user-email': email } : {}) },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-role': userRole,
+            ...(email ? { 'x-user-email': email } : {})
+          },
           body: JSON.stringify(payload)
         });
       } catch (_) {}
@@ -43,19 +75,16 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
       stopped = true;
       clearInterval(t);
     };
-  }, [user]);
+  }, [user, userRole]);
 
   if (!user) {
-    // If no user is logged in, redirect them to the login page.
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    // If the user is logged in but doesn't have the required role, redirect them to the homepage.
+  if (normalizedRoles.length > 0 && !normalizedRoles.includes(userRole)) {
     return <Navigate to="/" replace />;
   }
 
-  // If the user is logged in and has the correct role, show them the page.
   return children;
 };
 

@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { Component, useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ServerCrash, X, Clock } from 'lucide-react';
+import { AlertTriangle, ServerCrash, X, Clock, RefreshCw, Home as HomeIcon } from 'lucide-react';
 // Auth Wrapper
 import ProtectedRoute from './login/ProtectedRoute';
 // Import your components
@@ -23,6 +23,114 @@ import Recovery from './login/Recovery';
 import ResetPassword from './login/ResetPassword';
 import Appointment from './appointment/Appointment';
 import AssistantWidget from './components/AssistantWidget';
+
+class AppErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, errorMessage: '', errorInfo: '' };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, errorMessage: error?.message || String(error || 'Unexpected error') };
+  }
+
+  componentDidCatch(error, info) {
+    try {
+      // eslint-disable-next-line no-console
+      console.error('[AppErrorBoundary] caught:', error, info);
+      this.setState({ errorInfo: info?.componentStack || '' });
+    } catch (_) {}
+  }
+
+  handleReset() {
+    try { window.sessionStorage.clear(); } catch (_) {}
+    try { window.localStorage.removeItem('currentUser'); } catch (_) {}
+    this.setState({ hasError: false, errorMessage: '', errorInfo: '' });
+    setTimeout(() => { try { window.location.href = '/'; } catch (_) {} }, 250);
+  }
+
+  handleReload() {
+    try { window.location.reload(); } catch (_) {}
+  }
+
+  render() {
+    if (this.state.hasError) {
+      const msg = String(this.state.errorMessage || 'Something went wrong while loading this page.').slice(0, 260);
+      return (
+        <div style={{
+          minHeight: '100vh', background: '#f8fafc', color: '#0f172a',
+          fontFamily: 'Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24
+        }}>
+          <div style={{
+            maxWidth: 560, width: '100%', borderRadius: 18, background: '#ffffff',
+            boxShadow: '0 22px 70px rgba(15,23,42,.10)', border: '1px solid #e2e8f0', padding: 28
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <span style={{
+                width: 44, height: 44, borderRadius: 12, display: 'inline-flex',
+                alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(234,88,12,0.12)', color: '#ea580c'
+              }}><AlertTriangle size={20} /></span>
+              <div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#9a3412', letterSpacing: '.2px' }}>
+                  PASCUALINGA MEDICAL LINK
+                </div>
+                <h1 style={{ margin: 0, fontSize: '1.3rem' }}>Something came up</h1>
+              </div>
+            </div>
+            <p style={{ margin: '8px 0 14px', fontSize: '.92rem', color: '#334155', lineHeight: 1.6 }}>
+              The page hit a temporary issue and stopped rendering. This usually fixes itself after a quick reset.
+              Try the actions below in order.
+            </p>
+            <div style={{
+              background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12,
+              padding: '10px 12px', marginBottom: 18, fontSize: '.85rem', color: '#7c2d12'
+            }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Error details</div>
+              <code style={{ wordBreak: 'break-word', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                {msg}
+              </code>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              <button
+                onClick={() => this.handleReset()}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '10px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                  background: 'linear-gradient(135deg,#ea580c,#c2410c)', color: '#fff',
+                  fontWeight: 600, fontSize: '.9rem', boxShadow: '0 10px 24px rgba(234,88,12,.22)'
+                }}>
+                <RefreshCw size={14} /> Reset session
+              </button>
+              <a href="/" style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                padding: '10px 16px', borderRadius: 10, textDecoration: 'none',
+                background: '#f1f5f9', color: '#0f172a', fontWeight: 600, fontSize: '.9rem'
+              }}>
+                <HomeIcon size={14} /> Go to homepage
+              </a>
+              <button
+                onClick={() => this.handleReload()}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '10px 16px', borderRadius: 10, border: '1px solid #cbd5e1', cursor: 'pointer',
+                  background: '#ffffff', color: '#0f172a', fontWeight: 600, fontSize: '.9rem'
+                }}>
+                Reload page
+              </button>
+            </div>
+            <div style={{ marginTop: 18, fontSize: '.78rem', color: '#64748b' }}>
+              If this keeps happening, please clear your browser storage and try logging in again.
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const fetchJsonSimple = async (url, opts = {}) => {
   try {
@@ -340,7 +448,9 @@ function AppShell() {
 function App() {
   return (
     <Router>
-      <AppShell />
+      <AppErrorBoundary>
+        <AppShell />
+      </AppErrorBoundary>
     </Router>
   );
 }
