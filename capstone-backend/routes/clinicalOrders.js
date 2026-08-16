@@ -322,40 +322,54 @@ router.get('/', async (req, res) => {
       .filter((x) => x);
 
     const linkedInvoicesMap = new Map();
+    const claimPerInvoice = new Map();
     if (orderIdsForLookup.length > 0) {
       try {
-        const noteMatches = orderIdsForLookup.map((id) => `'%Lab Order #${id}%'`).join(' OR notes ILIKE ');
+        const placeholders = orderIdsForLookup.map((_, i) => `$${i + 1}`).join(',');
+        const params = orderIdsForLookup.map((id) => BigInt(id));
         const invRows = await prisma.$queryRawUnsafe(
-          `SELECT id::text AS invoice_id, notes, total_amount, status, patient_id
+          `SELECT id::text AS invoice_id, notes, total_amount, status, patient_id::text AS patient_id
            FROM public.billing_invoices
-           WHERE notes ILIKE ${noteMatches.length ? noteMatches : "''"}
-          `
+           WHERE EXISTS (
+             SELECT 1 FROM (VALUES ${placeholders
+               .split(',')
+               .map((p, i) => `(${p})`)
+               .join(',')}
+             ) AS v(id)
+             WHERE notes ILIKE '%Lab Order #' || v.id::text || '%'
+           )
+           LIMIT 500`,
+          ...params
         ).catch(() => []);
         (Array.isArray(invRows) ? invRows : []).forEach((inv) => {
           const m = String(inv.notes || '').match(/Lab Order #(\d+)/);
           if (m && m[1]) linkedInvoicesMap.set(m[1], inv);
         });
+
+        const invoiceIds = Array.from(new Set((Array.isArray(invRows) ? invRows : []).map((inv) => String(inv.invoice_id || '')).filter(Boolean)));
+        if (invoiceIds.length > 0) {
+          const claimPlaceholders = invoiceIds.map((_, i) => `$${i + 1}`).join(',');
+          const claimParams = invoiceIds.map((id) => BigInt(id));
+          const claimRows = await prisma.$queryRawUnsafe(
+            `SELECT invoice_id::text AS invoice_id, hmo_provider, hmo_loa_number, hmo_card_number, philhealth_deduction, loa_approved_amount, status
+             FROM public.billing_hmo_claims
+             WHERE invoice_id IN (${claimPlaceholders})`,
+            ...claimParams
+          ).catch(() => []);
+          (Array.isArray(claimRows) ? claimRows : []).forEach((c) => {
+            if (c && c.invoice_id) claimPerInvoice.set(String(c.invoice_id), c);
+          });
+        }
       } catch (_lookup) {
         console.warn('[clinicalOrders] invoice lookup warn:', _lookup?.message || _lookup);
       }
     }
 
-    const mapped = await Promise.all((Array.isArray(rows) ? rows : []).map(async (r) => {
+    const mapped = (Array.isArray(rows) ? rows : []).map((r) => {
       const idStr = r.id != null ? String(r.id) : '';
       const inv = linkedInvoicesMap.get(idStr) || null;
-      const hmoClaimSummary = inv && inv.invoice_id
-        ? await (async () => {
-            try {
-              const h = await prisma.$queryRawUnsafe(
-                `SELECT hmo_provider, hmo_loa_number, hmo_card_number, philhealth_deduction, loa_approved_amount, status
-                 FROM public.billing_hmo_claims
-                 WHERE invoice_id = $1::bigint LIMIT 1`,
-                String(inv.invoice_id)
-              ).catch(() => []);
-              return Array.isArray(h) && h.length ? h[0] : null;
-            } catch (_hc) { return null; }
-          })()
-        : null;
+      const invId = inv && inv.invoice_id ? String(inv.invoice_id) : '';
+      const hmoClaimSummary = invId ? claimPerInvoice.get(invId) || null : null;
       return enrichClinicalOrder({
         id: idStr,
         patientId: r.patient_id || null,
@@ -380,7 +394,7 @@ router.get('/', async (req, res) => {
         linkedInvoiceTotal: inv?.total_amount != null ? Number(inv.total_amount || 0) : null,
         linkedHmoClaim: hmoClaimSummary || null
       });
-    }));
+    });
 
     res.json(mapped);
   } catch (err) {
@@ -742,12 +756,13 @@ router.patch('/:id', async (req, res) => {
         let hmoLoaAmt = 0;
         let hmoApplied = false;
         try {
+          const marker = `%Lab Order #${orderIdBigInt}%`;
           const invLookup = await prisma.$queryRawUnsafe(
             `SELECT i.id::text AS inv_id, c.philhealth_deduction, c.loa_approved_amount, c.hmo_provider, c.hmo_loa_number, c.status AS claim_status
              FROM public.billing_invoices i
              LEFT JOIN public.billing_hmo_claims c ON c.invoice_id = i.id
              WHERE i.notes ILIKE $1 LIMIT 1`,
-            `%Lab Order #${orderIdBigInt}%`
+            marker
           ).catch(() => []);
           const f = Array.isArray(invLookup) && invLookup.length ? invLookup[0] : null;
           if (f) {

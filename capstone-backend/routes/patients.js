@@ -2281,9 +2281,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 if (linkedInvoiceId) {
                     try {
                         await ensureBillingTablesExist(tx).catch(() => null);
+                        const invIdP1 = BigInt(linkedInvoiceId);
                         const invRows = await tx.$queryRawUnsafe(`
                             SELECT id, total_amount, status FROM public.billing_invoices WHERE id = $1::bigint
-                        `, String(linkedInvoiceId)).catch(() => []);
+                        `, invIdP1).catch(() => []);
                         const inv = Array.isArray(invRows) && invRows.length ? invRows[0] : null;
                         if (inv) {
                             const totalAmt = Math.max(0, Number(inv.total_amount || 0));
@@ -2292,11 +2293,12 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             const appliedHmo = Math.min(afterPh, Math.max(0, Number(autoApproveAmount || 0)));
                             const patientPay = Math.max(0, totalAmt - maxPh - appliedHmo);
                             const newStatus = patientPay <= 0.0001 ? 'Paid' : 'Ready';
+                            const invIdP2 = BigInt(linkedInvoiceId);
                             await tx.$executeRawUnsafe(`
                                 UPDATE public.billing_invoices
                                 SET status = $1::text, updated_at = now()
                                 WHERE id = $2::bigint AND status IN ('Draft', 'For Payment', 'Pending')
-                            `, newStatus, String(linkedInvoiceId)).catch(() => {});
+                            `, newStatus, invIdP2).catch(() => {});
                         }
                     } catch (invoiceUpdateErr) {
                         console.error('[HMO Intake] Failed to sync invoice status:', invoiceUpdateErr);
@@ -2317,7 +2319,11 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     let totalAmt = 0;
                     let invStatus = null;
                     if (linkedInvoiceId) {
-                        const qRows = await tx.$queryRawUnsafe(`SELECT total_amount, status FROM public.billing_invoices WHERE id = $1::bigint`, String(linkedInvoiceId)).catch(() => []);
+                        const invIdParam = BigInt(linkedInvoiceId);
+                        const qRows = await tx.$queryRawUnsafe(
+                            `SELECT total_amount, status FROM public.billing_invoices WHERE id = $1::bigint`,
+                            invIdParam
+                        ).catch(() => []);
                         if (Array.isArray(qRows) && qRows.length) {
                             totalAmt = Math.max(0, Number(qRows[0].total_amount || 0));
                             invStatus = String(qRows[0].status || null);
