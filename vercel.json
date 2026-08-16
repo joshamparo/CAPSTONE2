@@ -21,7 +21,6 @@
     }
   ],
   "routes": [
-    { "handle": "filesystem" },
     { "src": "^/cashier(?:/.*)?$", "dest": "/index.html", "status": 200 },
     { "src": "^/doctor(?:/.*)?$", "dest": "/index.html", "status": 200 },
     { "src": "^/nurse(?:/.*)?$", "dest": "/index.html", "status": 200 },
@@ -40,6 +39,7 @@
     { "src": "^/otp(?:/.*)?$", "dest": "/index.html", "status": 200 },
     { "src": "^/recovery(?:/.*)?$", "dest": "/index.html", "status": 200 },
     { "src": "^/reset-password(?:/.*)?$", "dest": "/index.html", "status": 200 },
+    { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html", "status": 200 }
   ],
   "rewrites": [

@@ -2,46 +2,351 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <link rel="icon" href="/images/pgh logo.png" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#0f172a" />
-    <title>Pascualinga Medical Link</title>
-    <style>
-      html,body{margin:0;padding:0;height:100%;background:#f8fafc;color:#0f172a;
-        font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-        display:flex;align-items:center;justify-content:center;text-align:center}
-      .card{max-width:480px;padding:28px 24px;border-radius:16px;
-        background:#ffffff;box-shadow:0 18px 60px rgba(15,23,42,.08);
-        border:1px solid #e2e8f0}
-      .pill{display:inline-block;padding:4px 10px;border-radius:999px;
-        background:#fff7ed;color:#9a3412;font-size:.78rem;font-weight:600;letter-spacing:.2px;margin-bottom:14px}
-      h1{margin:0 0 8px;font-size:1.35rem}
-      p{margin:0 0 16px;font-size:.94rem;color:#475569;line-height:1.55}
-      a.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;
-        border-radius:10px;background:linear-gradient(135deg,#ea580c,#c2410c);color:#fff;
-        text-decoration:none;font-weight:600;font-size:.9rem;box-shadow:0 10px 24px rgba(234,88,12,.22)}
-    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <meta name="description" content="Pascual General Hospital — Pascualinga Medical Link" />
+    <link rel="apple-touch-icon" href="/images/pgh logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>Pascualinga</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f8fafc;color:#0f172a;">
+
+    <!-- ⚡ LAYER 0 – PURE HTML BOOT FALLBACK. PAINTED BEFORE FIRST BYTE OF JS. NO JS NEEDED. EVER. -->
+    <div id="__pascualinga_boot" data-state="loading" aria-live="polite"
+      style="position:fixed;inset:0;z-index:2147483000;display:block!important;margin:0;padding:0;
+             background:radial-gradient(1200px 600px at 10% -10%, rgba(234,88,12,.18), transparent 60%),
+                        radial-gradient(900px 500px at 110% 10%, rgba(14,165,233,.16), transparent 60%), #f8fafc;
+             font-family: Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+             color:#0f172a;">
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;">
+        <div style="width:100%;max-width:640px;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;
+                    box-shadow:0 24px 80px rgba(15,23,42,.10);padding:28px 28px 24px;box-sizing:border-box;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+            <div style="width:44px;height:44px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;
+                        background:linear-gradient(135deg,#ea580c,#c2410c);color:#fff;font-weight:800;font-size:18px;letter-spacing:.3px;
+                        box-shadow:0 10px 26px rgba(234,88,12,.26);">PGH</div>
+            <div>
+              <div style="font-size:.78rem;font-weight:700;color:#9a3412;letter-spacing:.3px;">PASCUALINGA MEDICAL LINK</div>
+              <h1 id="__pascualinga_title" style="margin:0;font-size:1.28rem;line-height:1.25;color:#0f172a;">Preparing Pascualinga…</h1>
+            </div>
+          </div>
+          <div id="__pascualinga_sub" style="margin-top:6px;color:#64748b;font-size:.88rem;">
+            Loading the secure dashboard. This usually takes 1-3 seconds.
+          </div>
+          <div id="__pascualinga_pills" style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 6px;">
+            <span style="padding:6px 10px;border-radius:999px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;
+                         font-size:.75rem;font-weight:600;letter-spacing:.2px;">Starting dashboard</span>
+            <span style="padding:6px 10px;border-radius:999px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;
+                         font-size:.75rem;font-weight:600;letter-spacing:.2px;">Secured session</span>
+            <span style="padding:6px 10px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;color:#334155;
+                         font-size:.75rem;font-weight:600;letter-spacing:.2px;">Pascualinga · v1.0</span>
+          </div>
+          <div style="width:38px;height:38px;border-radius:999px;border:3px solid #e2e8f0;border-top-color:#ea580c;
+                      animation:__pascualinga_spin .9s linear infinite;margin:18px auto 0;"></div>
+          <style>@keyframes __pascualinga_spin{to{transform:rotate(360deg);}}</style>
+
+          <div id="__pascualinga_error" style="margin-top:14px;background:#fff1f2;border:1px solid #fecdd3;color:#881337;
+                                               border-radius:12px;padding:10px 12px;font-size:.82rem;line-height:1.55;display:none;">
+          </div>
+
+          <!-- ✅ NO-JS FALLBACK BUTTONS (pure anchors). WORK EVEN IF MAIN.JS FAILS TO LOAD/EVAL. -->
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;">
+            <a id="__pascualinga_reset_link" href="/"
+              style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;text-decoration:none;
+                     background:linear-gradient(135deg,#ea580c,#c2410c);color:#fff;font-weight:600;font-size:.88rem;
+                     box-shadow:0 10px 24px rgba(234,88,12,.22);">🔄 Reset &amp; go home</a>
+            <a href="/"
+              style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;text-decoration:none;
+                     background:#f1f5f9;color:#0f172a;font-weight:600;font-size:.88rem;border:1px solid #e2e8f0;">🏠 Back to homepage</a>
+            <a href="" onclick="event.preventDefault();try{window.location.reload(true);}catch(_){window.location.href='/'}"
+              style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;text-decoration:none;
+                     background:#ffffff;color:#0f172a;font-weight:600;font-size:.88rem;border:1px solid #cbd5e1;">↻ Reload page</a>
+          </div>
+
+          <!-- JS POWERED BUTTON HANDLERS (only if JS works) -->
+          <div id="__pascualinga_btn_row" style="display:none;">
+            <button id="__pascualinga_reset" type="button"
+              style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;cursor:pointer;
+                     font-weight:600;font-size:.88rem;border:none;
+                     background:linear-gradient(135deg,#ea580c,#c2410c);color:#fff;
+                     box-shadow:0 10px 24px rgba(234,88,12,.22);">🔄 Reset session</button>
+            <button id="__pascualinga_home" type="button"
+              style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;cursor:pointer;
+                     font-weight:600;font-size:.88rem;background:#f1f5f9;color:#0f172a;border:1px solid #e2e8f0;">🏠 Back to homepage</button>
+            <button id="__pascualinga_reload" type="button"
+              style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;cursor:pointer;
+                     font-weight:600;font-size:.88rem;background:#ffffff;color:#0f172a;border:1px solid #cbd5e1;">↻ Reload page</button>
+          </div>
+
+          <div style="height:1px;background:#e2e8f0;margin:16px 0 4px;"></div>
+          <div style="margin-top:14px;color:#475569;font-size:.8rem;line-height:1.55;">
+            <strong>Tips if the app does not start:</strong>
+            <ol style="margin:6px 0 0 18px;padding:0;">
+              <li style="margin-bottom:4px;">Tap <strong>Reset &amp; go home</strong> to clear the current cached session and start fresh.</li>
+              <li style="margin-bottom:4px;">Tap <strong>Reload page</strong> if a network issue blocked the latest deployed version.</li>
+              <li>Still blank? Clear site storage from your browser settings for <code>pascualinga.com</code>.</li>
+            </ol>
+          </div>
+          <div style="font-size:.74rem;color:#64748b;margin-top:10px;">
+            If you continue seeing this screen after 3 attempts, please take a screenshot and forward it to support.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <noscript>
+      <div style="padding:28px;font-family:Inter,system-ui,Arial,sans-serif;color:#0f172a;">
+        <h1 style="margin:0 0 8px;">JavaScript is disabled</h1>
+        <p style="margin:0;color:#475569;max-width:720px;line-height:1.6;">
+          Pascualinga needs JavaScript to run the clinical dashboard and appointment workflow.
+          Please enable JavaScript in your browser settings, then refresh this page.
+        </p>
+      </div>
+    </noscript>
+
+    <script>
+      (function(){
+        try{
+          window.__PASCUALINGA_BOOT = { startedAt: Date.now(), error: null, state: 'loading' };
+        }catch(e){ window.__PASCUALINGA_BOOT = { startedAt: 0, error:null, state:'loading' }; }
+
+        function $(id){ try{ return document.getElementById(id); }catch(_){ return null; } }
+        function setAttr(elem, attr, val){ try{ elem.setAttribute(attr, val); }catch(_){} }
+        function setText(elem, text){ try{ if(elem) elem.textContent = text; }catch(_){} }
+        function setHTML(elem, html){ try{ if(elem) elem.innerHTML = html; }catch(_){} }
+        function showRecoveryUI(errorMessage){
+          try{
+            var boot = $('__pascualinga_boot');
+            if(!boot) return;
+            setAttr(boot,'data-state', errorMessage ? 'error' : 'recover');
+            if(errorMessage){
+              try{ window.__PASCUALINGA_BOOT.state = 'error'; window.__PASCUALINGA_BOOT.error = String(errorMessage || ''); }catch(_){}
+            }
+            var title = $('__pascualinga_title');
+            var sub = $('__pascualinga_sub');
+            var pills = $('__pascualinga_pills');
+            var err = $('__pascualinga_error');
+            if(title){ setText(title, errorMessage ? 'The app could not start right now' : 'App is taking longer than usual to start'); }
+            if(sub){ setText(sub, errorMessage
+              ? 'We caught the issue below. Try the quick recovery actions — most are fixed in under 10 seconds.'
+              : 'If this keeps showing, try clearing storage or refreshing the page.');
+            }
+            if(pills){
+              setHTML(pills,
+                '<span style="padding:6px 10px;border-radius:999px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:.75rem;font-weight:600;letter-spacing:.2px;">Patient-safe mode</span>' +
+                '<span style="padding:6px 10px;border-radius:999px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:.75rem;font-weight:600;letter-spacing:.2px;margin:0 8px;">Recovery ready</span>' +
+                '<span style="padding:6px 10px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;color:#334155;font-size:.75rem;font-weight:600;letter-spacing:.2px;">Pascualinga · v1.0</span>'
+              );
+            }
+            if(err){
+              if(errorMessage){
+                try{ err.style.display = 'block'; }catch(_){}
+                var now = new Date().toLocaleString();
+                setHTML(err, '<div style="font-weight:600;">What went wrong</div>' +
+                  '<pre style="display:block;white-space:pre-wrap;word-break:break-word;margin-top:6px;max-height:220px;overflow:auto;' +
+                  'font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,\'Liberation Mono\',\'Courier New\',monospace;' +
+                  'font-size:.78rem;background:rgba(136,19,55,.06);border-radius:8px;padding:8px 10px;">' +
+                  String(errorMessage || 'No details.').replace(/[<>&]/g,'') + '\n\n' +
+                  '— reported at: ' + now + '\n' +
+                  '— url: ' + (typeof location !== 'undefined' ? String(location.href||'') : '') + '</pre>');
+              }else{
+                try{ err.style.display = 'none'; }catch(_){}
+              }
+            }
+            // show JS button row
+            try{
+              var r = $('__pascualinga_btn_row');
+              if(r) r.style.display = 'flex';
+            }catch(_){}
+          }catch(e){}
+        }
+
+        function clearSessionStorage(){ try{ window.sessionStorage.clear(); }catch(_){} }
+        function clearAuth(){
+          try{
+            var keys = ['currentUser','token','tempLoginEmail','tempLoginRole','generatedOTP','displayOtpCode','otpEmailFailed','otp_bypass','tempUserDetails','app_global_be_down','app_global_maint','loginAttempts','loginLockoutTime','tempUser'];
+            for(var i=0;i<keys.length;i++){ try{ window.localStorage.removeItem(keys[i]); }catch(_){} }
+          }catch(_){}
+        }
+        function hardReset(){
+          clearSessionStorage();
+          clearAuth();
+          setTimeout(function(){ try{ window.location.href = '/'; }catch(_){ try{ window.location.reload(true); }catch(e){} } }, 280);
+        }
+
+        function bindButtons(){
+          try{
+            var b1 = $('__pascualinga_reset');
+            var b2 = $('__pascualinga_home');
+            var b3 = $('__pascualinga_reload');
+            if(b1) b1.addEventListener('click', function(){ hardReset(); });
+            if(b2) b2.addEventListener('click', function(){ try{ window.location.href = '/'; }catch(_){} });
+            if(b3) b3.addEventListener('click', function(){ try{ window.location.reload(true); }catch(_){} });
+          }catch(e){}
+        }
+
+        // Capture boot errors BEFORE React even loads (global capture phase)
+        var capturedFirstError = false;
+        window.addEventListener('error', function(e){
+          try{
+            if(capturedFirstError) return;
+            capturedFirstError = true;
+            var message = e && e.message ? String(e.message) : '';
+            var file = e && e.filename ? ('\nfile: ' + String(e.filename)) : '';
+            var line = (e && typeof e.lineno !== 'undefined') ? (' line: ' + String(e.lineno)) : '';
+            var col = (e && typeof e.colno !== 'undefined') ? (':' + String(e.colno)) : '';
+            var stack = (e && e.error && e.error.stack) ? ('\n' + String(e.error.stack).slice(0,1600)) : '';
+            showRecoveryUI(message + file + line + col + stack);
+          }catch(_){}
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e){
+          try{
+            if(capturedFirstError) return;
+            var reason = '';
+            if(e && e.reason){
+              try{ reason = (e.reason.message || String(e.reason)) + (e.reason.stack ? ('\n' + String(e.reason.stack).slice(0,1600)) : ''); }
+              catch(_){ reason = String(e.reason); }
+            }
+            showRecoveryUI('Unhandled promise rejection: ' + (reason || 'no details'));
+          }catch(_){}
+        }, true);
+
+        document.addEventListener('DOMContentLoaded', function(){
+          try{ bindButtons(); }catch(_){}
+          // Watchdog timers:
+          // - 6s: avoid false positives on Vercel cold start / heavy bundle parse
+          // - 14s: hard recovery UI (app truly stuck
+          setTimeout(function(){
+            try{
+              var boot = $('__pascualinga_boot');
+              if(!boot) return;
+              if(boot.hasAttribute('hidden')) return;
+              if(window.__PASCUALINGA_APP_MOUNTED_SUCCESSFULLY__ === true) return;
+              if(window.__PASCUALINGA_RECOVERY_UI_SHOWN__) return;
+              // Not yet mounted, show the RECOVERY MODE info
+              showRecoveryUI(null);
+              window.__PASCUALINGA_RECOVERY_UI_SHOWN__ = true;
+            }catch(_){}
+          }, 6000);
+          setTimeout(function(){
+            try{
+              var boot = $('__pascualinga_boot');
+              if(!boot) return;
+              if(boot.hasAttribute('hidden')) return;
+              if(window.__PASCUALINGA_APP_MOUNTED_SUCCESSFULLY__ === true) return;
+              var title = $('__pascualinga_title');
+              var sub = $('__pascualinga_sub');
+              if(title) setText(title, 'App is stuck during startup');
+              if(sub) setText(sub, 'Main JS bundle may have failed to load. Please use the buttons below to recover quickly.');
+              try{
+                var err = $('__pascualinga_error');
+                if(err){
+                  err.style.display = 'block';
+                  setHTML(err, '<div style="font-weight:600;">What happened</div>' +
+                    '<pre style="display:block;white-space:pre-wrap;word-break:break-word;margin-top:6px;max-height:220px;overflow:auto;' +
+                    'font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;' +
+                    'font-size:.78rem;background:rgba(136,19,55,.06);border-radius:8px;padding:8px 10px;">' +
+                    'App shell loaded successfully, but React /static/ could not be parsed or React did not finish loading. This is almost always because main.js failed to load.\n\n' +
+                    'Check your browser console (F12 → Console) for red errors.\n\n' +
+                    'Try: Reset & go home → Reload page → Clear site storage.</pre>');
+                }
+              }catch(_){}
+            }catch(_){}
+          }, 14000);
+        });
+
+        // Expose helpers for index.js to call in case of a caught boot error
+        window.__PASCUALINGA_RECOVERY__ = {
+          show: showRecoveryUI,
+          clearAuth: clearAuth,
+          clearSessionStorage: clearSessionStorage,
+          hardReset: hardReset
+        };
+      })();
+    </script>
+
+    <div id="root"></div>
+    <!-- ?? STATIC ALIAS AUTO-BOOTSTRAP � loads CRA's hashed main.css / main.js via asset-manifest.json.
+         Only needed when this HTML is served DIRECTLY as static file (e.g. cleanUrls alias /cashier.html instead of rewrite to /index.html).
+         If CRA already injected <script src=/static/js/main.HASH.js> above (real index.html), the guards below turn this into a no-op. -->
     <script>
       (function () {
         try {
-          var key = 'pascualinga_404_restore_path';
-          var path = window.location.pathname + window.location.search + window.location.hash;
-          if (path && path !== '/') {
-            window.sessionStorage.setItem(key, path);
-          }
-          window.location.replace('/?p404=1');
-        } catch (err) {
-          window.location.replace('/');
-        }
+          // Guard: if CRA already injected a main script tag anywhere (real entry index.html), skip entirely.
+          var hasMain = false;
+          try {
+            var scripts = document.getElementsByTagName('script');
+            for (var i = 0; i < scripts.length; i++) {
+              var s = scripts[i] && scripts[i].src ? String(scripts[i].src || '') : '';
+              if (/\/static\/js\/main\.[a-z0-9]+\.js(\?|$)/i.test(s)) { hasMain = true; break; }
+            }
+          } catch (_) {}
+          if (hasMain) return;
+
+          var already = window.__PASCUALINGA_ALIAS_INJECTED__;
+          if (already) return;
+          window.__PASCUALINGA_ALIAS_INJECTED__ = true;
+
+          var injectCSS = function (href) {
+            try {
+              var l = document.createElement('link');
+              l.rel = 'stylesheet';
+              l.href = href;
+              document.getElementsByTagName('head')[0].appendChild(l);
+            } catch (_) {}
+          };
+          var injectJS = function (src) {
+            try {
+              var s2 = document.createElement('script');
+              s2.src = src;
+              s2.defer = true;
+              document.body.appendChild(s2);
+            } catch (_) {}
+          };
+          var runFallback = function () {
+            // Best-effort: if manifest fetch fails (shouldn't), try to find latest main.*/static/css/main.*.
+            try { injectCSS('/static/css/main.css'); } catch (_) {}
+            try { injectJS('/static/js/main.js'); } catch (_) {}
+            try {
+              if (window.__PASCUALINGA_RECOVERY__ && typeof window.__PASCUALINGA_RECOVERY__.show === 'function') {
+                window.__PASCUALINGA_RECOVERY__.show('Failed to load entrypoint files. Press Reload or Reset & go home.');
+              }
+            } catch (_) {}
+          };
+          var done = false;
+          try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/asset-manifest.json', true);
+            xhr.timeout = 4500;
+            xhr.overrideMimeType('application/json');
+            xhr.onload = function () {
+              if (done) return;
+              done = true;
+              try {
+                var data = (xhr.status >= 200 && xhr.status < 300) ? JSON.parse(xhr.responseText || '{}') : null;
+                if (!data) { runFallback(); return; }
+                var files = (data && data.files && typeof data.files === 'object') ? data.files : {};
+                var mainCSS = files['main.css'] || '';
+                var mainJS  = files['main.js'] || '';
+                if (mainCSS) injectCSS(String(mainCSS));
+                if (mainJS)  injectJS(String(mainJS));
+                if (!mainCSS && !mainJS) runFallback();
+              } catch (_) { runFallback(); }
+            };
+            xhr.onerror = function () { if (!done) { done = true; runFallback(); } };
+            xhr.ontimeout = function () { if (!done) { done = true; runFallback(); } };
+            xhr.send(null);
+          } catch (_) { try { runFallback(); } catch (_) {} }
+        } catch (_) {}
       })();
     </script>
-  </head>
-  <body>
-    <div class="card">
-      <span class="pill">Redirecting…</span>
-      <h1>Pascualinga Medical Link</h1>
-      <p>Preparing your requested page. If you are not redirected automatically,
-         tap Continue to go back to the homepage.</p>
-      <a class="btn" href="/">Continue</a>
-    </div>
   </body>
 </html>
