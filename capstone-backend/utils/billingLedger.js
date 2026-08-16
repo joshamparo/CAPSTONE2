@@ -88,6 +88,22 @@ async function recordLabOrderPayment(prisma, {
       }
     });
 
+    // Attempt to sync HMO data from the latest appointment for this patient
+    if (patientId) {
+      try {
+        const latestAppt = await tx.appointments.findFirst({
+          where: { patient_id: patientId },
+          orderBy: { created_at: 'desc' },
+          select: { id: true, is_hmo: true }
+        });
+        if (latestAppt && latestAppt.is_hmo) {
+          await syncHmoDataFromAppointmentToInvoice(tx, latestAppt.id, invoice.id);
+        }
+      } catch (syncErr) {
+        console.error('[Lab Payment Sync] Failed to sync HMO:', syncErr);
+      }
+    }
+
     return invoice.id;
   });
 }
@@ -163,13 +179,70 @@ async function recordVideoConsultationPayment(prisma, {
       }
     });
 
+    if (appointmentId) {
+      await syncHmoDataFromAppointmentToInvoice(tx, appointmentId, invoice.id);
+    }
+
     return invoice.id;
   });
+}
+
+async function syncHmoDataFromAppointmentToInvoice(tx, appointmentId, invoiceId) {
+  if (!appointmentId || !invoiceId) return;
+  try {
+    const apptRows = await tx.$queryRawUnsafe(`
+      SELECT is_hmo, hmo_provider, hmo_loa_number, hmo_card_number, philhealth_number, philhealth_deduction, hmo_notes
+      FROM public.appointments
+      WHERE id = $1::bigint
+    `, appointmentId.toString());
+    const appt = Array.isArray(apptRows) && apptRows.length ? apptRows[0] : null;
+
+    if (appt && appt.is_hmo) {
+      // Get invoice total to set as default approved amount for consultation fees
+      const invRows = await tx.$queryRawUnsafe(`
+        SELECT total_amount FROM public.billing_invoices WHERE id = $1::bigint
+      `, invoiceId.toString());
+      const invTotal = Array.isArray(invRows) && invRows.length ? Number(invRows[0].total_amount || 0) : 0;
+
+      const existing = await tx.$queryRawUnsafe(`
+        SELECT id FROM public.billing_hmo_claims WHERE invoice_id = $1::bigint
+      `, invoiceId.toString());
+
+      if (Array.isArray(existing) && existing.length > 0) {
+        // Update existing claim if it's still pending
+        await tx.$executeRawUnsafe(`
+          UPDATE public.billing_hmo_claims
+          SET hmo_provider = COALESCE(hmo_provider, $1::text),
+              hmo_loa_number = COALESCE(hmo_loa_number, $2::text),
+              hmo_card_number = COALESCE(hmo_card_number, $3::text),
+              philhealth_deduction = CASE WHEN philhealth_deduction = 0 THEN $4::numeric ELSE philhealth_deduction END,
+              loa_approved_amount = CASE WHEN loa_approved_amount = 0 THEN $5::numeric ELSE loa_approved_amount END,
+              notes = COALESCE(notes, $6::text),
+              updated_at = now()
+          WHERE invoice_id = $7::bigint AND status = 'Pending'
+        `, appt.hmo_provider, appt.hmo_loa_number, appt.hmo_card_number, appt.philhealth_deduction || 0, invTotal, appt.hmo_notes, invoiceId.toString());
+      } else {
+        // Create new claim from appointment data
+        await tx.$executeRawUnsafe(`
+          INSERT INTO public.billing_hmo_claims (
+            invoice_id, hmo_provider, hmo_loa_number, hmo_card_number, 
+            philhealth_deduction, loa_approved_amount, status, notes, created_at, updated_at
+          ) VALUES (
+            $1::bigint, $2::text, $3::text, $4::text, 
+            $5::numeric, $6::numeric, 'Approved', $7::text, now(), now()
+          )
+        `, invoiceId.toString(), appt.hmo_provider, appt.hmo_loa_number, appt.hmo_card_number, appt.philhealth_deduction || 0, invTotal, appt.hmo_notes);
+      }
+    }
+  } catch (err) {
+    console.error('[Billing Sync] Failed to sync HMO data:', err);
+  }
 }
 
 module.exports = {
   ensureBillingTablesExist,
   recordLabOrderPayment,
   recordVideoConsultationPayment,
+  syncHmoDataFromAppointmentToInvoice,
   toMoney
 };

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, CreditCard, FileText, LogOut, Plus, RefreshCw, Search, User, Upload, Save, KeyRound, Eye, EyeOff, ShieldAlert, Menu, Mail, Briefcase, Phone, Key, Shield, Check, X, Edit2 } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, CreditCard, FileText, LogOut, Plus, RefreshCw, Search, User, Upload, Save, KeyRound, Eye, EyeOff, ShieldAlert, Menu, Mail, Briefcase, Phone, Key, Shield, Check, X, Edit2, IdCard } from 'lucide-react';
 import '../Admin/AdminDashboard.css';
 import './OfficeStaffDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
@@ -382,6 +382,7 @@ export default function OfficeStaffDashboard({ mode }) {
 
   // HMO & Deductions UI state
   const [hmoProvider, setHmoProvider] = useState('');
+  const [hmoCardNumber, setHmoCardNumber] = useState('');
   const [philhealthDeduction, setPhilhealthDeduction] = useState('');
   const [hmoCoverage, setHmoCoverage] = useState('');
   const [loaNumber, setLoaNumber] = useState('');
@@ -403,6 +404,7 @@ export default function OfficeStaffDashboard({ mode }) {
   const [labOrdersRange, setLabOrdersRange] = useState('All');
   const [labOrdersQuery, setLabOrdersQuery] = useState('');
   const [selectedLabOrder, setSelectedLabOrder] = useState(null);
+  const [selectedLabOrderHmo, setSelectedLabOrderHmo] = useState(null);
   const [labPaymentMethod, setLabPaymentMethod] = useState('Cash');
   const [labPaymentAmount, setLabPaymentAmount] = useState('');
   const [labPaymentReference, setLabPaymentReference] = useState('');
@@ -561,14 +563,47 @@ export default function OfficeStaffDashboard({ mode }) {
     };
   }, []);
 
-  const openLabOrderPos = useCallback((order) => {
+  const openLabOrderPos = useCallback(async (order) => {
     const due = Number(order?.amountDue ?? order?.unitPrice ?? 0);
     setSelectedLabOrder(order || null);
+    setSelectedLabOrderHmo(null); // Reset
     setLabPaymentMethod('Cash');
     setLabPaymentAmount(Number.isFinite(due) && due > 0 ? due.toFixed(2) : '');
     setLabPaymentReference('');
     setLabPaymentError('');
-  }, []);
+
+    // Try to fetch HMO coverage for this patient/order
+    if (order?.patientId && user) {
+      try {
+        const q = order.patientName || '';
+        const claims = await fetchJson(`/api/billing/hmo-queue?q=${encodeURIComponent(q)}`, {
+          apiBase: API_BASE,
+          headers: buildHeaders(user)
+        });
+        if (Array.isArray(claims) && claims.length > 0) {
+          // Find a claim that matches this order (either via note or just the most recent one for walk-in)
+          const orderIdStr = String(order.id);
+          const match = claims.find(c => 
+            String(c.hmo_claim?.notes || '').includes(orderIdStr) || 
+            String(c.hmo_claim?.notes || '').toLowerCase().includes('walk-in service')
+          ) || claims[0];
+          
+          if (match) {
+            setSelectedLabOrderHmo(match.hmo_claim);
+            // If HMO covers everything, set payment amount to 0
+            const hmoAmt = Number(match.hmo_claim?.applied_hmo_amount || match.hmo_claim?.loa_approved_amount || 0);
+            const phAmt = Number(match.hmo_claim?.philhealth_deduction || 0);
+            const netDue = Math.max(0, due - hmoAmt - phAmt);
+            setLabPaymentAmount(netDue.toFixed(2));
+            if (netDue <= 0) {
+              setLabPaymentMethod('Card'); // Set to something else to imply non-cash if free
+              setLabPaymentReference(match.hmo_claim?.loa_number || match.hmo_claim?.hmo_card_number || 'HMO COVERED');
+            }
+          }
+        }
+      } catch (_) {}
+    }
+  }, [user]);
 
   const printPaymentReceipt = useCallback((receipt) => {
     if (!receipt || typeof window === 'undefined') return;
@@ -677,13 +712,14 @@ export default function OfficeStaffDashboard({ mode }) {
     if (!user) return Promise.resolve(null);
     const providerRaw = String(opts.provider ?? hmoProvider ?? '').trim();
     const loaNumberRaw = String(opts.loaNumber ?? loaNumber ?? '').trim();
+    const cardNumberRaw = String(opts.hmoCardNumber ?? hmoCardNumber ?? '').trim();
     const statusRaw = String(opts.status ?? hmoStatus ?? 'Pending').trim();
     const notesRaw = String(opts.notes ?? hmoNotes ?? '').trim();
     const philhealth = Number(opts.philhealthDeduction ?? philhealthDeduction ?? 0) || 0;
     const loaApproved = Number(opts.loaApprovedAmount ?? hmoCoverage ?? 0) || 0;
 
     const hasAnything = Boolean(
-      providerRaw || loaNumberRaw || notesRaw ||
+      providerRaw || loaNumberRaw || cardNumberRaw || notesRaw ||
       philhealth > 0 || loaApproved > 0 ||
       (statusRaw && statusRaw !== 'Pending')
     );
@@ -698,6 +734,7 @@ export default function OfficeStaffDashboard({ mode }) {
       body: JSON.stringify({
         provider: providerRaw || null,
         loaNumber: loaNumberRaw || null,
+        hmoCardNumber: cardNumberRaw || null,
         status: statusRaw || 'Pending',
         notes: notesRaw || null,
         philhealthDeduction: philhealth,
@@ -715,6 +752,7 @@ export default function OfficeStaffDashboard({ mode }) {
     setHmoCoverage('');
     setHmoProvider('');
     setLoaNumber('');
+    setHmoCardNumber('');
     setHmoStatus('Pending');
     setHmoNotes('');
     try {
@@ -722,8 +760,9 @@ export default function OfficeStaffDashboard({ mode }) {
       setSelectedInvoice(data);
       const claim = data?.hmo_claim || null;
       if (claim) {
-        if (claim.provider) setHmoProvider(String(claim.provider));
-        if (claim.loa_number) setLoaNumber(String(claim.loa_number));
+        if (claim.hmo_provider || claim.provider) setHmoProvider(String(claim.hmo_provider || claim.provider));
+        if (claim.hmo_loa_number || claim.loa_number) setLoaNumber(String(claim.hmo_loa_number || claim.loa_number));
+        if (claim.hmo_card_number) setHmoCardNumber(String(claim.hmo_card_number));
         if (claim.notes) setHmoNotes(String(claim.notes));
         if (claim.status) setHmoStatus(String(claim.status));
         const ph = Number(claim.philhealth_deduction || 0);
@@ -1081,7 +1120,12 @@ export default function OfficeStaffDashboard({ mode }) {
         orderId: String(selectedLabOrder.id),
         patientName: selectedLabOrder.patientName || 'Patient',
         serviceLabel: selectedLabOrder.priceLabel || selectedLabOrder.service || selectedLabOrder.kind || 'Lab Service',
-        amountDue,
+        amountDue: Number(selectedLabOrder?.amountDue ?? selectedLabOrder?.unitPrice ?? 0),
+        philhealthDeduction: Number(selectedLabOrderHmo?.philhealth_deduction || 0),
+        hmoCoverage: Number(selectedLabOrderHmo?.applied_hmo_amount || selectedLabOrderHmo?.loa_approved_amount || 0),
+        hmoProvider: selectedLabOrderHmo?.hmo_provider || '',
+        loaNumber: selectedLabOrderHmo?.loa_number || selectedLabOrderHmo?.hmo_loa_number || '',
+        netAmountDue: amountDue,
         amountReceived,
         change: Math.max(0, amountReceived - amountDue),
         method,
@@ -1340,9 +1384,12 @@ export default function OfficeStaffDashboard({ mode }) {
   }, [labOrders, labOrdersQuery, labOrdersRange]);
 
   const selectedLabOrderDue = useMemo(() => {
-    const due = Number(selectedLabOrder?.amountDue ?? selectedLabOrder?.unitPrice ?? 0);
+    const gross = Number(selectedLabOrder?.amountDue ?? selectedLabOrder?.unitPrice ?? 0);
+    const hmoAmt = Number(selectedLabOrderHmo?.applied_hmo_amount || selectedLabOrderHmo?.loa_approved_amount || 0);
+    const phAmt = Number(selectedLabOrderHmo?.philhealth_deduction || 0);
+    const due = Math.max(0, gross - hmoAmt - phAmt);
     return Number.isFinite(due) ? due : 0;
-  }, [selectedLabOrder]);
+  }, [selectedLabOrder, selectedLabOrderHmo]);
 
   const selectedLabOrderReceived = useMemo(() => {
     const received = Number(labPaymentAmount || 0);
@@ -2535,7 +2582,27 @@ export default function OfficeStaffDashboard({ mode }) {
 
                 <div className="office-pos-summary">
                   <div className="office-pos-metric">
-                    <div className="office-pos-label">Amount Due</div>
+                    <div className="office-pos-label">Gross Amount</div>
+                    <div className="office-pos-value">₱ {toMoney(Number(selectedLabOrder?.amountDue ?? selectedLabOrder?.unitPrice ?? 0))}</div>
+                  </div>
+                  {selectedLabOrderHmo ? (
+                    <>
+                      {Number(selectedLabOrderHmo.philhealth_deduction || 0) > 0 && (
+                        <div className="office-pos-metric" style={{ color: '#059669' }}>
+                          <div className="office-pos-label">PhilHealth</div>
+                          <div className="office-pos-value">- ₱ {toMoney(selectedLabOrderHmo.philhealth_deduction)}</div>
+                        </div>
+                      )}
+                      {Number(selectedLabOrderHmo.applied_hmo_amount || selectedLabOrderHmo.loa_approved_amount || 0) > 0 && (
+                        <div className="office-pos-metric" style={{ color: '#059669' }}>
+                          <div className="office-pos-label">HMO ({selectedLabOrderHmo.hmo_provider || 'Provider'})</div>
+                          <div className="office-pos-value">- ₱ {toMoney(selectedLabOrderHmo.applied_hmo_amount || selectedLabOrderHmo.loa_approved_amount)}</div>
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+                  <div className="office-pos-metric">
+                    <div className="office-pos-label">Net Due</div>
                     <div className="office-pos-value">₱ {toMoney(selectedLabOrderDue)}</div>
                   </div>
                   <div className="office-pos-metric">
@@ -2682,6 +2749,7 @@ export default function OfficeStaffDashboard({ mode }) {
                     <th>Invoice</th>
                     <th>Patient</th>
                     <th>HMO Provider</th>
+                    <th>Card Number</th>
                     <th>LOA #</th>
                     <th>Status</th>
                     <th style={{ textAlign: 'right' }}>Total Bill</th>
@@ -2694,11 +2762,11 @@ export default function OfficeStaffDashboard({ mode }) {
                 <tbody>
                   {hmoQueueLoading ? (
                     <tr>
-                      <td colSpan="10" className="text-center py-8 text-slate-500">Loading claims queue…</td>
+                      <td colSpan="11" className="text-center py-8 text-slate-500">Loading claims queue…</td>
                     </tr>
                   ) : hmoQueue.length === 0 ? (
                     <tr>
-                      <td colSpan="10" className="text-center py-12 text-slate-500">
+                      <td colSpan="11" className="text-center py-12 text-slate-500">
                         <div style={{ opacity: 0.7 }}>
                           <Shield size={32} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
                           <div style={{ fontWeight: 700 }}>No HMO claims yet</div>
@@ -2756,6 +2824,13 @@ export default function OfficeStaffDashboard({ mode }) {
                         </td>
                         <td className="text-sm" style={{ color: claim.provider ? '#0f172a' : '#cbd5e1' }}>
                           {claim.provider ? String(claim.provider) : '—'}
+                        </td>
+                        <td className="text-sm">
+                          {claim.hmo_card_number ? (
+                            <span style={{ color: '#475569', fontWeight: 500 }}>{String(claim.hmo_card_number)}</span>
+                          ) : (
+                            <span style={{ color: '#cbd5e1' }}>—</span>
+                          )}
                         </td>
                         <td>
                           {claim.loa_number ? (
@@ -2886,6 +2961,20 @@ export default function OfficeStaffDashboard({ mode }) {
                 </div>
                 <div className="office-hmo-field-pro">
                   <label className="office-hmo-field-label-pro">
+                    <span className="label-dot-hmo"></span> HMO Card Number
+                  </label>
+                  <div className="office-hmo-input-wrap-pro">
+                    <IdCard size={15} className="office-hmo-input-icon-pro" />
+                    <input
+                      className="office-hmo-input-pro"
+                      value={hmoQuickEdit._hmoCardNumber ?? String(hmoQuickEdit?.hmo_claim?.hmo_card_number || '')}
+                      onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _hmoCardNumber: e.target.value })}
+                      placeholder="e.g. 1234-5678-9012"
+                    />
+                  </div>
+                </div>
+                <div className="office-hmo-field-pro">
+                  <label className="office-hmo-field-label-pro">
                     <span className="label-dot-ph"></span> PhilHealth Share
                   </label>
                   <div className="office-hmo-input-wrap-pro">
@@ -2945,6 +3034,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   const hmoWarn = statusQ !== 'Approved' && statusQ !== 'Partially Approved' && hmoRaw > 0;
                   const providerNow = hmoQuickEdit._provider ?? String(hmoQuickEdit?.hmo_claim?.provider || '');
                   const loaNow = hmoQuickEdit._loa ?? String(hmoQuickEdit?.hmo_claim?.loa_number || '');
+                  const cardNow = hmoQuickEdit._hmoCardNumber ?? String(hmoQuickEdit?.hmo_claim?.hmo_card_number || '');
                   const totalDeduct = phSafe + hmoAmt;
                   return (
                     <>
@@ -2997,6 +3087,12 @@ export default function OfficeStaffDashboard({ mode }) {
                           LOA Reference: <span style={{ fontWeight: 900, color: '#4c1d95' }}>{String(loaNow)}</span>
                         </div>
                       ) : null}
+                      {cardNow ? (
+                        <div className="office-hmo-loa-pro" style={{ marginTop: 4, background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0' }}>
+                          <IdCard size={12} />
+                          HMO Card No: <span style={{ fontWeight: 700, color: '#0f172a' }}>{String(cardNow)}</span>
+                        </div>
+                      ) : null}
                     </>
                   );
                 })()}
@@ -3015,6 +3111,7 @@ export default function OfficeStaffDashboard({ mode }) {
                     await saveHmoClaim(String(hmoQuickEdit.invoice_id), {
                       provider: hmoQuickEdit._provider ?? String(hmoQuickEdit?.hmo_claim?.provider || ''),
                       loaNumber: hmoQuickEdit._loa ?? String(hmoQuickEdit?.hmo_claim?.loa_number || ''),
+                      hmoCardNumber: hmoQuickEdit._hmoCardNumber ?? String(hmoQuickEdit?.hmo_claim?.hmo_card_number || ''),
                       status: hmoQuickEdit._status ?? String(hmoQuickEdit?.hmo_claim?.status || 'Pending'),
                       notes: hmoQuickEdit._notes ?? String(hmoQuickEdit?.hmo_claim?.notes || ''),
                       philhealthDeduction: Number(hmoQuickEdit._ph ?? hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? 0) || 0,
@@ -3514,6 +3611,21 @@ export default function OfficeStaffDashboard({ mode }) {
                               </div>
                               <div className="office-hmo-field-pro">
                                 <label className="office-hmo-field-label-pro">
+                                  <span className="label-dot-hmo"></span> HMO Card Number
+                                </label>
+                                <div className="office-hmo-input-wrap-pro">
+                                  <IdCard size={15} className="office-hmo-input-icon-pro" />
+                                  <input
+                                    className="office-hmo-input-pro"
+                                    type="text"
+                                    value={hmoCardNumber}
+                                    onChange={(e) => setHmoCardNumber(e.target.value)}
+                                    placeholder="e.g. 1234-5678-9012"
+                                  />
+                                </div>
+                              </div>
+                              <div className="office-hmo-field-pro">
+                                <label className="office-hmo-field-label-pro">
                                   <span className="label-dot-st"></span> Claim Status
                                 </label>
                                 <div className="office-hmo-input-wrap-pro">
@@ -3609,6 +3721,12 @@ export default function OfficeStaffDashboard({ mode }) {
                                       <div className="office-hmo-loa-pro">
                                         <FileText size={12} />
                                         LOA: <span style={{ fontWeight: 900, color: '#4c1d95' }}>{String(loaNumber)}</span>
+                                      </div>
+                                    ) : null}
+                                    {hmoCardNumber ? (
+                                      <div className="office-hmo-loa-pro" style={{ marginTop: 4, background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0' }}>
+                                        <IdCard size={12} />
+                                        HMO Card: <span style={{ fontWeight: 700, color: '#0f172a' }}>{String(hmoCardNumber)}</span>
                                       </div>
                                     ) : null}
                                   </div>

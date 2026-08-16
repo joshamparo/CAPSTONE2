@@ -12,9 +12,9 @@ import { checkBackendHealth, fetchJson } from "../utils/api";
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const WEB_ORIGIN = String(process.env.REACT_APP_WEB_ORIGIN || '').trim() || 'https://pascualinga.com';
 const LOGIN_LINK = 'https://pascualinga.com/login';
-const EMAILJS_SERVICE_ID = process.env.REACT_APP_EMAILJS_SERVICE_ID || 'service_ur884qv';
-const EMAILJS_PUBLIC_KEY = process.env.REACT_APP_EMAILJS_PUBLIC_KEY || '45tRyW8WG36pIFeBo';
-const EMAILJS_STAFF_TEMPLATE_ID = String(process.env.REACT_APP_EMAILJS_STAFF_TEMPLATE_ID || '').trim() || 'template_zkps5b8';
+const EMAILJS_SERVICE_ID = 'service_ur884qv';
+const EMAILJS_PUBLIC_KEY = '45tRyW8WG36pIFeBo';
+const EMAILJS_STAFF_TEMPLATE_ID = 'template_zkps5b8';
 
 const ADMIN_WARD_ROOM_PLAN = [
   { id: 'icu', name: 'ICU', total: 5, color: '#ef4444', shortCode: 'ICU', aliases: ['icu'] },

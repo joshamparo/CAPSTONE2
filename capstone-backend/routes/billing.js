@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { normalizeEmail, parseLimit, parseOffset } = require('../utils/normalize');
+const { syncHmoDataFromAppointmentToInvoice } = require('../utils/billingLedger');
 
 
 const STAFF_ROLE_SET = new Set(['doctor_secretary', 'cashier', 'admin', 'doctor']);
@@ -167,10 +168,11 @@ async function ensureBillingHmoClaimsTableExist() {
     CREATE TABLE IF NOT EXISTS public.billing_hmo_claims (
       id bigserial PRIMARY KEY,
       invoice_id bigint NOT NULL UNIQUE REFERENCES public.billing_invoices(id) ON DELETE CASCADE,
-      provider text NULL,
-      loa_number text NULL,
-      philhealth_deduction numeric(12,2) NOT NULL DEFAULT 0,
-      loa_approved_amount numeric(12,2) NOT NULL DEFAULT 0,
+      hmo_provider text NULL,
+    hmo_loa_number text NULL,
+    hmo_card_number text NULL,
+    philhealth_deduction numeric(12,2) NOT NULL DEFAULT 0,
+    loa_approved_amount numeric(12,2) NOT NULL DEFAULT 0,
       status text NOT NULL DEFAULT 'Pending',
       notes text NULL,
       requested_by text NULL,
@@ -296,7 +298,8 @@ function normalizeHmoStatus(value) {
 
 function isHmoCoverageApplied(status) {
   const normalized = normalizeHmoStatus(status);
-  return normalized === 'Approved' || normalized === 'Partially Approved';
+  // Auto-apply for Approved, Partially Approved, and Pending (if LOA amount is set)
+  return normalized === 'Approved' || normalized === 'Partially Approved' || normalized === 'Pending';
 }
 
 function summarizeHmoClaim(row, totalAmount) {
@@ -306,7 +309,10 @@ function summarizeHmoClaim(row, totalAmount) {
       id: null,
       invoice_id: null,
       provider: '',
+      hmo_provider: '',
       loa_number: '',
+      hmo_loa_number: '',
+      hmo_card_number: '',
       philhealth_deduction: 0,
       loa_approved_amount: 0,
       status: 'Pending',
@@ -331,8 +337,11 @@ function summarizeHmoClaim(row, totalAmount) {
   return {
     id: row.id != null ? String(row.id) : null,
     invoice_id: row.invoice_id != null ? String(row.invoice_id) : null,
-    provider: String(row.provider || '').trim(),
-    loa_number: String(row.loa_number || '').trim(),
+    provider: String(row.hmo_provider || row.provider || '').trim(),
+    hmo_provider: String(row.hmo_provider || row.provider || '').trim(),
+    loa_number: String(row.hmo_loa_number || row.loa_number || '').trim(),
+    hmo_loa_number: String(row.hmo_loa_number || row.loa_number || '').trim(),
+    hmo_card_number: String(row.hmo_card_number || '').trim(),
     philhealth_deduction: philhealthDeduction,
     loa_approved_amount: approvedAmount,
     status: normalizeHmoStatus(row.status),
@@ -355,7 +364,7 @@ async function fetchHmoClaimsByInvoiceIds(tx, invoiceIds) {
   return tx
     .$queryRawUnsafe(
       `
-        SELECT id, invoice_id, provider, loa_number, philhealth_deduction, loa_approved_amount,
+        SELECT id, invoice_id, hmo_provider, hmo_loa_number, hmo_card_number, philhealth_deduction, loa_approved_amount,
                status, notes, requested_by, updated_by, created_at, updated_at
         FROM public.billing_hmo_claims
         WHERE invoice_id = ANY($1::bigint[])
@@ -953,8 +962,9 @@ router.put('/invoices/:id/hmo', async (req, res) => {
     if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
 
     const total = Math.max(0, Number(invoice.total_amount || 0));
-    const provider = String(req.body?.provider || '').trim();
-    const loaNumber = String(req.body?.loaNumber || req.body?.loa_number || '').trim();
+    const provider = String(req.body?.provider || req.body?.hmo_provider || '').trim();
+    const loaNumber = String(req.body?.loaNumber || req.body?.hmo_loa_number || req.body?.loa_number || '').trim();
+    const cardNumber = String(req.body?.cardNumber || req.body?.hmo_card_number || req.body?.card_number || '').trim();
     const notes = String(req.body?.notes || '').trim();
     const status = normalizeHmoStatus(req.body?.status);
     const requestedBy = normalizeEmail(req.headers['x-user-email'] || req.body?.requestedBy || '');
@@ -990,21 +1000,22 @@ router.put('/invoices/:id/hmo', async (req, res) => {
       return res.status(400).json({ message: 'HMO provider is required when saving an HMO claim' });
     }
 
-    if (!hasClaimPayload) {
+    if (!hasClaimPayload && !cardNumber) {
       await prisma.$queryRaw`DELETE FROM public.billing_hmo_claims WHERE invoice_id = ${invoiceId}`;
     } else {
       await prisma.$queryRaw`
         INSERT INTO public.billing_hmo_claims (
-          invoice_id, provider, loa_number, philhealth_deduction, loa_approved_amount, status, notes, requested_by, updated_by, created_at, updated_at
+          invoice_id, hmo_provider, hmo_loa_number, hmo_card_number, philhealth_deduction, loa_approved_amount, status, notes, requested_by, updated_by, created_at, updated_at
         )
         VALUES (
-          ${invoiceId}, ${provider || null}, ${loaNumber || null}, ${toMoney(philhealthDeduction)}::numeric, ${toMoney(loaApprovedAmount)}::numeric,
+          ${invoiceId}, ${provider || null}, ${loaNumber || null}, ${cardNumber || null}, ${toMoney(philhealthDeduction)}::numeric, ${toMoney(loaApprovedAmount)}::numeric,
           ${status}, ${notes || null}, ${requestedBy || null}, ${updatedBy || null}, now(), now()
         )
         ON CONFLICT (invoice_id)
         DO UPDATE SET
-          provider = EXCLUDED.provider,
-          loa_number = EXCLUDED.loa_number,
+          hmo_provider = EXCLUDED.hmo_provider,
+          hmo_loa_number = EXCLUDED.hmo_loa_number,
+          hmo_card_number = EXCLUDED.hmo_card_number,
           philhealth_deduction = EXCLUDED.philhealth_deduction,
           loa_approved_amount = EXCLUDED.loa_approved_amount,
           status = EXCLUDED.status,
@@ -1072,8 +1083,9 @@ router.get('/hmo-queue', async (req, res) => {
         SELECT
           h.id,
           h.invoice_id,
-          h.provider,
-          h.loa_number,
+          h.hmo_provider,
+          h.hmo_loa_number,
+          h.hmo_card_number,
           h.philhealth_deduction,
           h.loa_approved_amount,
           h.status,
@@ -1092,7 +1104,7 @@ router.get('/hmo-queue', async (req, res) => {
         FROM public.billing_hmo_claims h
         JOIN (
           SELECT bi.id, bi.patient_id, bi.status, bi.total_amount, bi.updated_at, bi.created_at, bi.notes,
-                 0::numeric AS balance_amount
+                 (bi.total_amount - COALESCE((SELECT SUM(amount) FROM public.billing_payments WHERE invoice_id = bi.id), 0)) AS balance_amount
           FROM public.billing_invoices bi
         ) i ON i.id = h.invoice_id
         LEFT JOIN public.patients p ON p.id = i.patient_id
@@ -1127,6 +1139,7 @@ router.get('/hmo-queue', async (req, res) => {
           row.contact_number,
           row.hmo_claim?.provider,
           row.hmo_claim?.loa_number,
+          row.hmo_claim?.hmo_card_number,
           row.hmo_claim?.status
         ]
           .map((value) => String(value || '').toLowerCase())
@@ -1694,6 +1707,8 @@ router.post('/collect-onsite', async (req, res) => {
         data: { status: 'Paid', updated_at: new Date() }
       });
 
+      await syncHmoDataFromAppointmentToInvoice(tx, appointmentId, inv.id);
+
       await tx.appointments.update({
         where: { id: appointmentId },
         data: {
@@ -1855,6 +1870,8 @@ router.post('/charge-onsite', async (req, res) => {
           data: { payment_status: 'for_payment', patient_id: patientId ? patientId : undefined }
         })
         .catch(() => null);
+
+      await syncHmoDataFromAppointmentToInvoice(tx, appointmentId, inv.id);
 
       const full = await tx.billing_invoices.findUnique({ where: { id: inv.id } }).catch(() => null);
       return full || inv;

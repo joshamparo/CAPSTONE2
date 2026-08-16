@@ -637,6 +637,7 @@ function NurseDashboard() {
     hasHmo: false,
     hmoProvider: '',
     hmoLoaNumber: '',
+    hmoCardNumber: '',
     hmoNotes: '',
     hasPhilhealth: false,
     philhealthNumber: '',
@@ -1312,6 +1313,7 @@ function NurseDashboard() {
           hasHmo: addPatientData.hasHmo,
           hmoProvider: addPatientData.hmoProvider || null,
           hmoLoaNumber: addPatientData.hmoLoaNumber || null,
+          hmoCardNumber: addPatientData.hmoCardNumber || null,
           hmoNotes: addPatientData.hmoNotes || null,
           hasPhilhealth: addPatientData.hasPhilhealth,
           philhealthNumber: addPatientData.philhealthNumber || null,
@@ -1391,7 +1393,16 @@ function NurseDashboard() {
         nextStepImaging: false,
         nextStepPharmacy: false,
         selectedLabServices: [],
-        selectedImagingServices: []
+        selectedImagingServices: [],
+        hasHmo: false,
+        hmoProvider: "",
+        hmoLoaNumber: "",
+        hmoCardNumber: "",
+        hmoNotes: "",
+        hasPhilhealth: false,
+        philhealthNumber: "",
+        philhealthDeduction: "",
+        hmoCoveredServices: null
       });
       await fetchPatientRecords();
       await fetchAppointments();
@@ -10120,6 +10131,17 @@ function NurseDashboard() {
                                   onChange={handleAddPatientChange}
                                   className="white-input"
                                   placeholder="e.g., LOA-2026-04128"
+                                />
+                              </div>
+                              <div className="input-group">
+                                <label>HMO Card Number</label>
+                                <input
+                                  type="text"
+                                  name="hmoCardNumber"
+                                  value={addPatientData.hmoCardNumber || ''}
+                                  onChange={handleAddPatientChange}
+                                  className="white-input"
+                                  placeholder="e.g., 1234-5678-9012"
                                 />
                               </div>
                             </div>

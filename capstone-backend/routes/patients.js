@@ -4,7 +4,7 @@ const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { normalizeEmail, parseLimit, parseOffset } = require('../utils/normalize');
 const { resolveClinicalServicePricing } = require('../utils/clinicalServiceCatalog');
-const { ensureBillingTablesExist, toMoney } = require('../utils/billingLedger');
+const { ensureBillingTablesExist, toMoney, syncHmoDataFromAppointmentToInvoice } = require('../utils/billingLedger');
 const { createClient } = require('@supabase/supabase-js');
 
 let _supabaseAdmin = null;
@@ -725,6 +725,7 @@ async function ensureWalkInHmoSupport() {
             const cols = [
                 ['hmo_provider', 'VARCHAR(100)'],
                 ['hmo_loa_number', 'VARCHAR(100)'],
+                ['hmo_card_number', 'VARCHAR(100)'],
                 ['hmo_notes', 'TEXT'],
                 ['philhealth_number', 'VARCHAR(50)'],
                 ['philhealth_deduction', 'DECIMAL(12,2) DEFAULT 0'],
@@ -742,7 +743,8 @@ async function ensureWalkInHmoSupport() {
                     patient_id uuid NULL,
                     patient_name text NULL,
                     hmo_provider text NULL,
-                    loa_number text NULL,
+                    hmo_loa_number text NULL,
+                    hmo_card_number text NULL,
                     hmo_amount numeric(12,2) NOT NULL DEFAULT 0,
                     philhealth_amount numeric(12,2) NOT NULL DEFAULT 0,
                     claim_status text NOT NULL DEFAULT 'Pending - Nurse Intake',
@@ -1447,6 +1449,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
 
             const patientName = `${String(patient.first_name || '').trim()} ${String(patient.last_name || '').trim()}`.trim() || 'Walk-in Patient';
             let createdRecord = null;
+            let linkedInvoiceId = null;
 
             if (routeMeta.creates === 'appointment') {
                 const selectedSpecialization = String(payload.selectedSpecialization || '').trim() || null;
@@ -1655,6 +1658,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 if (isHmoActive) {
                     const hmoProvider = String(payload.hmoProvider || '').trim() || null;
                     const hmoLoa = String(payload.hmoLoaNumber || '').trim() || null;
+                    const hmoCard = String(payload.hmoCardNumber || '').trim() || null;
                     const hmoNotesVal = String(payload.hmoNotes || '').trim() || null;
                     const phNumber = String(payload.philhealthNumber || '').trim() || null;
                     const phDeduct = Number(payload.philhealthDeduction) || 0;
@@ -1665,13 +1669,14 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                         UPDATE public.appointments
                         SET hmo_provider = ($1::text),
                             hmo_loa_number = ($2::text),
-                            hmo_notes = ($3::text),
-                            philhealth_number = ($4::text),
-                            philhealth_deduction = ($5::numeric),
-                            hmo_covered_json = ($6::jsonb),
+                            hmo_card_number = ($3::text),
+                            hmo_notes = ($4::text),
+                            philhealth_number = ($5::text),
+                            philhealth_deduction = ($6::numeric),
+                            hmo_covered_json = ($7::jsonb),
                             is_hmo = TRUE
-                        WHERE id = ($7::bigint)
-                    `, hmoProvider, hmoLoa, hmoNotesVal, phNumber, phDeduct, coverageJson, Number(appointment.id)).catch(() => {});
+                        WHERE id = ($8::bigint)
+                    `, hmoProvider, hmoLoa, hmoCard, hmoNotesVal, phNumber, phDeduct, coverageJson, Number(appointment.id)).catch(() => {});
 
                     if (phNumber) {
                         await tx.patients.update({
@@ -1716,6 +1721,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                     total_amount: amountMoney
                                 }
                             });
+                            linkedInvoiceId = inv.id;
                             await tx.billing_invoice_items.create({
                                 data: {
                                     invoice_id: inv.id,
@@ -1725,6 +1731,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                     line_total: amountMoney
                                 }
                             }).catch(() => null);
+
+                            // Sync HMO data if applicable
+                            await syncHmoDataFromAppointmentToInvoice(tx, appointment.id, inv.id);
                         }
                     } catch (_) {}
                 }
@@ -1959,6 +1968,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                         total_amount: amountMoney
                     }
                 });
+                linkedInvoiceId = inv.id;
                 await tx.billing_invoice_items.create({
                     data: {
                         invoice_id: inv.id,
@@ -1984,37 +1994,47 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             if (hmoSave) {
                 const hmoProv = String(payload.hmoProvider || '').trim() || null;
                 const loaNum = String(payload.hmoLoaNumber || '').trim() || null;
+                const hmoCard = String(payload.hmoCardNumber || '').trim() || null;
                 const hmoNts = String(payload.hmoNotes || '').trim() || null;
                 const phAmt = Number(payload.philhealthDeduction) || 0;
-                const cov = payload.hmoCoveredServices && typeof payload.hmoCoveredServices === 'object'
-                    ? JSON.stringify(payload.hmoCoveredServices)
-                    : null;
-                const apptId = routeMeta.creates === 'appointment' && createdRecord?.id
-                    ? Number(createdRecord.id)
-                    : null;
+                
+                // Ensure we have an invoice to link to
+                if (!linkedInvoiceId) {
+                    await ensureBillingTablesExist(tx).catch(() => null);
+                    const inv = await tx.billing_invoices.create({
+                        data: {
+                            patient_id: patient.id,
+                            status: 'Draft',
+                            notes: `HMO Monitoring Record • ${routeMeta.label} Intake`,
+                            created_by: getRequesterEmail(req) || requesterName || null,
+                            total_amount: 0
+                        }
+                    });
+                    linkedInvoiceId = inv.id;
+                }
+
+                // Insert into billing_hmo_claims using the unified schema
+                const autoApproveAmount = hasServices ? 100 : 0; // Flat fee is 100
                 await tx.$executeRawUnsafe(`
                     INSERT INTO public.billing_hmo_claims
-                        (invoice_id, appointment_id, patient_id, patient_name,
-                         hmo_provider, loa_number, hmo_amount, philhealth_amount,
-                         claim_status, coverage_json, notes, created_by, created_at, updated_at)
+                        (invoice_id, hmo_provider, hmo_loa_number, hmo_card_number, 
+                         philhealth_deduction, loa_approved_amount, status, notes, requested_by, created_at, updated_at)
                     VALUES
-                        (NULL,
-                         ${apptId != null ? `${apptId}::bigint` : 'NULL'},
-                         $1::uuid,
-                         $2::text,
-                         $3::text,
-                         $4::text,
-                         0::numeric,
-                         $5::numeric,
-                         'Pending - Nurse Intake',
-                         $6::jsonb,
-                         $7::text,
-                         $8::text,
-                         now(),
-                         now())
-                `, patient.id, patientName, hmoProv, loaNum, phAmt, cov, hmoNts,
+                        ($1::bigint, $2::text, $3::text, $4::text, 
+                         $5::numeric, $6::numeric, 'Approved', $7::text, $8::text, now(), now())
+                    ON CONFLICT (invoice_id) DO UPDATE SET
+                        hmo_provider = EXCLUDED.hmo_provider,
+                        hmo_loa_number = EXCLUDED.hmo_loa_number,
+                        hmo_card_number = EXCLUDED.hmo_card_number,
+                        philhealth_deduction = EXCLUDED.philhealth_deduction,
+                        loa_approved_amount = CASE WHEN public.billing_hmo_claims.loa_approved_amount = 0 THEN EXCLUDED.loa_approved_amount ELSE public.billing_hmo_claims.loa_approved_amount END,
+                        notes = EXCLUDED.notes,
+                        updated_at = now()
+                `, linkedInvoiceId, hmoProv, loaNum, hmoCard, phAmt, autoApproveAmount, hmoNts,
                     getRequesterEmail(req) || requesterName || null
-                ).catch(() => null);
+                ).catch((err) => {
+                    console.error('[HMO Intake] Failed to record claim:', err);
+                });
             }
 
             return { patient, createdRecord };
