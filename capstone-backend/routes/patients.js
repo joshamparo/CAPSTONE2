@@ -1450,6 +1450,8 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             const patientName = `${String(patient.first_name || '').trim()} ${String(patient.last_name || '').trim()}`.trim() || 'Walk-in Patient';
             let createdRecord = null;
             let linkedInvoiceId = null;
+            let mainClinicalOrderHmoCoveredCents = 0;
+            let extraHmoTotalCents = 0;
 
             if (routeMeta.creates === 'appointment') {
                 const selectedSpecialization = String(payload.selectedSpecialization || '').trim() || null;
@@ -1886,14 +1888,12 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             // --- COMMON LOGIC FOR SELECTED LAB/IMAGING SERVICES ---
             // This now runs for ALL walk-in intakes if checkboxes were checked
             const generatedExtraTickets = [];
-            let mainClinicalOrderHmoCoveredCents = 0;
             const commonDetailLines = [
                 `Vitals: Temp ${intakeEntry.vitals.temperature ?? '—'}, BP ${intakeEntry.vitals.bloodPressure || '—'}, HR ${intakeEntry.vitals.heartRate ?? '—'}`,
                 `Main Concern: ${String(payload.mainConcern || '').trim() || 'Walk-in'}`
             ];
             const hmoActiveExtra = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
             const coverageExtra = payload.hmoCoveredServices && typeof payload.hmoCoveredServices === 'object' ? payload.hmoCoveredServices : {};
-            let extraHmoTotalCents = 0;
 
             if (Array.isArray(payload.selectedLabServices) && payload.selectedLabServices.length > 0) {
                 for (const service of payload.selectedLabServices) {
