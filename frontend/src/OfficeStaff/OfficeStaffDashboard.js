@@ -1779,7 +1779,8 @@ export default function OfficeStaffDashboard({ mode }) {
         ) : null}
 
         {view === 'patients' ? (
-          <div className="office-card">
+          <div style={{ width: '100%', maxWidth: 1500, margin: '0 auto' }}>
+            <div className="office-card">
             <div className="office-row" style={{ justifyContent: 'space-between' }}>
               <div className="office-row">
                 <div className="input-wrapper-relative">
@@ -1850,6 +1851,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 </tbody>
               </table>
             </div>
+          </div>
           </div>
         ) : null}
 
@@ -2830,7 +2832,8 @@ export default function OfficeStaffDashboard({ mode }) {
       ) : null}
 
       {view === 'hmo' ? (
-        <div className="office-card">
+        <div style={{ width: '100%', maxWidth: 1500, margin: '0 auto' }}>
+          <div className="office-card">
           <div className="office-row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div className="office-row" style={{ gap: 10, alignItems: 'center' }}>
               <div className="input-wrapper-relative">
@@ -3091,6 +3094,7 @@ export default function OfficeStaffDashboard({ mode }) {
               </div>
             </div>
           ) : null}
+        </div>
         </div>
       ) : null}
 

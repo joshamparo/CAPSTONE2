@@ -289,10 +289,11 @@ function buildReceiptNumber(payment, source) {
 function normalizeHmoStatus(value) {
   const normalized = String(value || '').trim().toLowerCase();
   if (!normalized) return 'Pending';
-  if (normalized === 'approved') return 'Approved';
+  if (normalized === 'approved' || normalized === 'ok' || normalized === 'accepted' || normalized === 'cleared') return 'Approved';
   if (normalized === 'partially approved' || normalized === 'partial' || normalized === 'partially_approved') return 'Partially Approved';
   if (normalized === 'awaiting loa' || normalized === 'awaiting_loa') return 'Awaiting LOA';
-  if (normalized === 'rejected') return 'Rejected';
+  if (normalized === 'rejected' || normalized === 'denied') return 'Rejected';
+  if (['paid', 'settled', 'closed', 'for payment', 'ready', 'billed', 'completed'].includes(normalized)) return 'Approved';
   return 'Pending';
 }
 

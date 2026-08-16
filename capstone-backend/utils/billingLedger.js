@@ -260,20 +260,31 @@ async function syncHmoDataFromAppointmentToInvoice(tx, appointmentId, invoiceId,
 
     if (Array.isArray(existing) && existing.length > 0) {
       const firstRow = existing[0];
-      if (String(firstRow.status || '').toLowerCase() === 'pending') {
+      const firstStatus = String(firstRow.status || '').toLowerCase();
+      const shouldReSync =
+        firstStatus === 'pending' ||
+        firstStatus === 'awaiting loa' ||
+        firstStatus === 'paid' ||
+        firstStatus === 'ready' ||
+        firstStatus === 'for payment' ||
+        firstStatus === 'billed' ||
+        firstStatus === 'completed' ||
+        firstStatus === '';
+      if (shouldReSync) {
         await tx.$executeRawUnsafe(`
           UPDATE public.billing_hmo_claims
           SET hmo_provider = COALESCE($1::text, hmo_provider),
               hmo_loa_number = COALESCE($2::text, hmo_loa_number),
               hmo_card_number = COALESCE($3::text, hmo_card_number),
-              philhealth_deduction = CASE WHEN philhealth_deduction = 0 THEN $4::numeric ELSE philhealth_deduction END,
-              loa_approved_amount = CASE WHEN loa_approved_amount = 0 THEN $5::numeric ELSE loa_approved_amount END,
+              philhealth_deduction = CASE WHEN philhealth_deduction <= 0 THEN $4::numeric ELSE philhealth_deduction END,
+              loa_approved_amount = CASE WHEN loa_approved_amount <= 0 THEN $5::numeric ELSE loa_approved_amount END,
+              status = CASE WHEN status = 'Rejected' THEN status ELSE 'Approved' END,
               notes = COALESCE($6::text, notes),
               patient_id = COALESCE($7::uuid, patient_id),
               patient_name = COALESCE($8::text, patient_name),
               requested_by = COALESCE($9::text, requested_by),
               updated_at = now()
-          WHERE invoice_id = $10::bigint AND status = 'Pending'
+          WHERE invoice_id = $10::bigint
         `, hmoProvider || null, hmoLoaNumber || null, hmoCardNumber || null, finalPh, finalLoa, notes || null, patientFinalId || null, patientFinalName || null, requester || null, invoiceId.toString()).catch(() => null);
       }
       return;
