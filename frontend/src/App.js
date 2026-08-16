@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ServerCrash, X, Clock } from 'lucide-react';
 // Auth Wrapper
 import ProtectedRoute from './login/ProtectedRoute';
@@ -45,10 +45,33 @@ const fetchJsonSimple = async (url, opts = {}) => {
 };
 
 function AppShell() {
+  const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname || '/';
   const hideAssistant = ['/login', '/otp', '/recovery', '/reset-password'].includes(pathname);
   const isAuthRoute = ['/', '/login', '/otp', '/recovery', '/reset-password'].includes(pathname);
+
+  useEffect(() => {
+    try {
+      const key = 'pascualinga_404_restore_path';
+      const pending = window.sessionStorage.getItem(key);
+      if (pending && typeof pending === 'string' && pending !== '/') {
+        window.sessionStorage.removeItem(key);
+        if (pending !== pathname) {
+          navigate(pending, { replace: true });
+        }
+        return;
+      }
+      const q = new URLSearchParams(window.location.search);
+      if (q.get('p404') === '1') {
+        const target = window.sessionStorage.getItem(key) || '/';
+        window.sessionStorage.removeItem(key);
+        if (target && target !== pathname) {
+          navigate(target, { replace: true });
+        }
+      }
+    } catch (_) {}
+  }, [navigate, pathname]);
 
   const [backendDown, setBackendDown] = useState(() => {
     try { return localStorage.getItem('app_global_be_down') === '1'; } catch (_) { return false; }
