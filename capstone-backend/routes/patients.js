@@ -2008,6 +2008,24 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
 
             const hmoSave = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
             if (hmoSave) {
+                // Ensure patient registry row has HMO flags so fallback 3rd UNION ALL hmo-queue leg picks it up
+                try {
+                    const hmoProv = String(payload.hmoProvider || '').trim() || null;
+                    const hmoCard = String(payload.hmoCardNumber || '').trim() || null;
+                    const phAmt = Number(payload.philhealthDeduction) || 0;
+                    await tx.patients.update({
+                        where: { id: patient.id },
+                        data: {
+                            is_hmo: true,
+                            hmo_provider: hmoProv,
+                            hmo_card_number: hmoCard,
+                            philhealth_amount: phAmt
+                        }
+                    }).catch(() => null);
+                } catch (_hpat) {
+                    console.warn('[HMO Intake] Patient HMO flag update failed (non-fatal):', _hpat);
+                }
+
                 const hmoProv = String(payload.hmoProvider || '').trim() || null;
                 const loaNum = String(payload.hmoLoaNumber || '').trim() || null;
                 const hmoCard = String(payload.hmoCardNumber || '').trim() || null;

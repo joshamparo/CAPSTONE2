@@ -1083,6 +1083,8 @@ router.get('/hmo-queue', async (req, res) => {
         SELECT
           h.id,
           h.invoice_id,
+          h.appointment_id,
+          h.patient_id,
           h.hmo_provider,
           h.hmo_loa_number,
           h.hmo_card_number,
@@ -1094,26 +1096,44 @@ router.get('/hmo-queue', async (req, res) => {
           h.updated_by,
           h.created_at,
           h.updated_at,
-          i.total_amount,
-          i.balance_amount,
-          i.status AS invoice_status,
-          p.first_name,
-          p.last_name,
-          p.email,
-          p.contact_number
+          COALESCE(i.total_amount, 0) AS total_amount,
+          COALESCE(i.balance_amount, 0) AS balance_amount,
+          COALESCE(i.status, 'Draft') AS invoice_status,
+          COALESCE(p.first_name, pp.first_name) AS first_name,
+          COALESCE(p.last_name, pp.last_name) AS last_name,
+          COALESCE(p.email, pp.email) AS email,
+          COALESCE(p.contact_number, pp.contact_number) AS contact_number,
+          COALESCE(i.workups_list,
+            (SELECT STRING_AGG(c.kind || ': ' || c.service, ', ' ORDER BY c.created_at)
+             FROM public.clinical_orders c
+             WHERE c.patient_id = COALESCE(i.patient_id, h.patient_id, pp.id)
+               AND c.created_at >= h.created_at - INTERVAL '6 hours'
+               AND c.created_at <= h.created_at + INTERVAL '2 days')
+          ) AS workups_list,
+          'claim' AS source_type,
+          h.created_at AS stage_timestamp
         FROM public.billing_hmo_claims h
-        JOIN (
+        LEFT JOIN (
           SELECT bi.id, bi.patient_id, bi.status, bi.total_amount, bi.updated_at, bi.created_at, bi.notes,
-                 (bi.total_amount - COALESCE((SELECT SUM(amount) FROM public.billing_payments WHERE invoice_id = bi.id), 0)) AS balance_amount
+                 (bi.total_amount - COALESCE((SELECT SUM(amount) FROM public.billing_payments WHERE invoice_id = bi.id), 0)) AS balance_amount,
+                 (SELECT STRING_AGG(c.kind || ': ' || c.service, ', ' ORDER BY c.created_at)
+                  FROM public.clinical_orders c
+                  WHERE c.patient_id = bi.patient_id
+                    AND c.created_at >= bi.created_at - INTERVAL '6 hours'
+                    AND c.created_at <= bi.created_at + INTERVAL '2 days'
+                  LIMIT 20) AS workups_list
           FROM public.billing_invoices bi
         ) i ON i.id = h.invoice_id
         LEFT JOIN public.patients p ON p.id = i.patient_id
+        LEFT JOIN public.patients pp ON pp.id = h.patient_id
 
         UNION ALL
 
         SELECT
           -a.id AS id,
           NULL AS invoice_id,
+          a.id AS appointment_id,
+          a.patient_id,
           a.hmo_provider,
           a.hmo_loa_number,
           a.hmo_card_number,
@@ -1123,9 +1143,9 @@ router.get('/hmo-queue', async (req, res) => {
             THEN COALESCE((SELECT SUM(c.unit_price) FROM public.clinical_orders c WHERE c.patient_id = a.patient_id AND c.created_at >= a.created_at - INTERVAL '2 hours'), 0)
             ELSE 0
           END AS loa_approved_amount,
-          'Approved' AS status,
+          COALESCE(NULLIF(a.hmo_status, ''), 'Awaiting LOA') AS status,
           CONCAT_WS(' • ', 'Walk-in HMO Intake', a.purpose, a.route_type) AS notes,
-          NULL AS requested_by,
+          CONCAT_WS(' · ', a.created_by, 'Appointment created') AS requested_by,
           NULL AS updated_by,
           a.created_at AS created_at,
           a.updated_at AS updated_at,
@@ -1135,7 +1155,13 @@ router.get('/hmo-queue', async (req, res) => {
           p.first_name,
           p.last_name,
           p.email,
-          p.contact_number
+          p.contact_number,
+          (SELECT STRING_AGG(c.kind || ': ' || c.service, ', ' ORDER BY c.created_at)
+           FROM public.clinical_orders c
+           WHERE c.patient_id = a.patient_id
+             AND c.created_at >= a.created_at - INTERVAL '2 hours') AS workups_list,
+          'appointment' AS source_type,
+          a.created_at AS stage_timestamp
         FROM public.appointments a
         LEFT JOIN public.patients p ON p.id = a.patient_id
         WHERE a.is_hmo = TRUE
@@ -1150,7 +1176,53 @@ router.get('/hmo-queue', async (req, res) => {
               AND bi.created_at <= a.created_at + INTERVAL '4 hours'
           )
 
-        ORDER BY updated_at DESC, created_at DESC
+        UNION ALL
+
+        SELECT
+          -(10000000 + CAST(p2.id AS bigint)) AS id,
+          NULL AS invoice_id,
+          NULL AS appointment_id,
+          p2.id AS patient_id,
+          p2.hmo_provider,
+          NULL AS hmo_loa_number,
+          p2.hmo_card_number,
+          COALESCE(p2.philhealth_amount, 0) AS philhealth_deduction,
+          0 AS loa_approved_amount,
+          'Awaiting LOA' AS status,
+          'Patient flagged HMO-active — no linked invoice/appointment claim yet' AS notes,
+          CONCAT_WS(' · ', 'Patient registry HMO flag', p2.created_by) AS requested_by,
+          NULL AS updated_by,
+          COALESCE(p2.updated_at, p2.created_at, CURRENT_TIMESTAMP) AS created_at,
+          COALESCE(p2.updated_at, p2.created_at, CURRENT_TIMESTAMP) AS updated_at,
+          0 AS total_amount,
+          0 AS balance_amount,
+          'Draft' AS invoice_status,
+          p2.first_name,
+          p2.last_name,
+          p2.email,
+          p2.contact_number,
+          (SELECT STRING_AGG(c.kind || ': ' || c.service, ', ' ORDER BY c.created_at)
+           FROM public.clinical_orders c
+           WHERE c.patient_id = p2.id
+             AND c.created_at >= COALESCE(p2.updated_at, p2.created_at, CURRENT_TIMESTAMP) - INTERVAL '48 hours'
+          ) AS workups_list,
+          'patient' AS source_type,
+          COALESCE(p2.updated_at, p2.created_at, CURRENT_TIMESTAMP) AS stage_timestamp
+        FROM public.patients p2
+        WHERE p2.is_hmo = TRUE
+          AND NOT EXISTS (
+            SELECT 1 FROM public.billing_hmo_claims hc3 WHERE hc3.patient_id = p2.id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM public.appointments a2 WHERE a2.patient_id = p2.id AND a2.is_hmo = TRUE
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM public.billing_hmo_claims hc4
+            JOIN public.billing_invoices bi2 ON bi2.id = hc4.invoice_id
+            WHERE bi2.patient_id = p2.id
+          )
+
+        ORDER BY COALESCE(updated_at, created_at, stage_timestamp) DESC, created_at DESC
       `
     ).catch(() => []);
 
@@ -1158,6 +1230,15 @@ router.get('/hmo-queue', async (req, res) => {
       .map((row) => {
         const total = Number(row.total_amount || 0);
         const claim = summarizeHmoClaim(row, total);
+        const rowStatusNorm = String(claim.status || '').toLowerCase();
+        const loaFilled = Boolean(claim.loa_number);
+        const covered = (Number(claim.applied_hmo_amount || 0) + Number(claim.philhealth_deduction || 0));
+        const stageLabel =
+          ['awaiting loa', 'pending', 'rejected', ''].includes(rowStatusNorm) && !loaFilled
+            ? 'Stage 1 · Call HMO'
+            : (rowStatusNorm === 'partially approved' || rowStatusNorm === 'loa received' || (loaFilled && covered <= 0.0001))
+              ? 'Stage 2 · Encode LOA'
+              : 'Stage 3 · Discharge Billing';
         return {
           id: claim.id,
           invoice_id: claim.invoice_id,
@@ -1167,10 +1248,21 @@ router.get('/hmo-queue', async (req, res) => {
           contact_number: row.contact_number || null,
           total_amount: toMoney(total),
           patient_due_amount: toMoney(claim.patient_payable),
+          workups_list: row.workups_list ? String(row.workups_list).slice(0, 400) : null,
+          requested_by: row.requested_by ? String(row.requested_by).slice(0, 200) : null,
+          stage: stageLabel,
+          source_type: row.source_type || null,
           hmo_claim: claim
         };
       })
-      .filter((row) => !statusFilter || String(row.hmo_claim?.status || '').toLowerCase() === statusFilter.toLowerCase())
+      .filter((row) => {
+        if (!statusFilter) return true;
+        const sf = statusFilter.toLowerCase();
+        if (sf === 'stage1' || sf === 'stage 1') return row.stage && /Stage 1/.test(String(row.stage));
+        if (sf === 'stage2' || sf === 'stage 2') return row.stage && /Stage 2/.test(String(row.stage));
+        if (sf === 'stage3' || sf === 'stage 3') return row.stage && /Stage 3/.test(String(row.stage));
+        return String(row.hmo_claim?.status || '').toLowerCase() === sf;
+      })
       .filter((row) => {
         if (!query) return true;
         const haystack = [
@@ -1182,7 +1274,10 @@ router.get('/hmo-queue', async (req, res) => {
           row.hmo_claim?.provider,
           row.hmo_claim?.loa_number,
           row.hmo_claim?.hmo_card_number,
-          row.hmo_claim?.status
+          row.hmo_claim?.status,
+          row.requested_by,
+          row.workups_list,
+          row.stage
         ]
           .map((value) => String(value || '').toLowerCase())
           .join(' ');
