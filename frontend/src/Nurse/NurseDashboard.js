@@ -10224,6 +10224,30 @@ function NurseDashboard() {
                       <div className="hmo-subsection">
                         {addPatientData.hasHmo && (
                           <div style={{marginBottom: '14px'}}>
+                            <div style={{
+                              padding: '10px 12px',
+                              borderRadius: 10,
+                              border: '1px dashed #93c5fd',
+                              background: '#eff6ff',
+                              fontSize: 12.5,
+                              color: '#1e40af',
+                              fontWeight: 800,
+                              lineHeight: 1.7,
+                              marginBottom: 14,
+                              display: 'grid',
+                              gap: 4
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Phone size={14} />
+                                <strong>📞 CALL THE HMO HOTLINE FIRST!</strong>
+                              </div>
+                              <div>
+                                Fill Provider + Card # below now (from the patient's physical card).
+                                <br />
+                                <span style={{ color: '#b91c1c' }}>DO NOT FILL LOA # or APPROVED AMOUNT here.</span>
+                                Those fields will appear automatically in Step 3 <strong>AFTER</strong> the HMO agent confirms the LOA over the phone.
+                              </div>
+                            </div>
                             <div className="hmo-field-grid">
                               <div className="input-group">
                                 <label>HMO Provider {addPatientData.hmoProvider ? null : <span style={{color:'#f59e0b'}}>•</span>}</label>
@@ -10239,30 +10263,6 @@ function NurseDashboard() {
                                 </select>
                               </div>
                               <div className="input-group">
-                                <label>LOA / Authorization #</label>
-                                <input
-                                  type="text"
-                                  name="hmoLoaNumber"
-                                  value={addPatientData.hmoLoaNumber || ''}
-                                  onChange={handleAddPatientChange}
-                                  className="white-input"
-                                  placeholder="e.g., LOA-2026-04128"
-                                />
-                              </div>
-                              <div className="input-group">
-                                <label>LOA Approved Amount (₱)</label>
-                                <input
-                                  type="number"
-                                  name="hmoLoaApprovedAmount"
-                                  value={addPatientData.hmoLoaApprovedAmount || ''}
-                                  onChange={handleAddPatientChange}
-                                  className="white-input"
-                                  placeholder="Amount HMO will shoulder (e.g., 1500)"
-                                  min="0"
-                                  step="0.01"
-                                />
-                              </div>
-                              <div className="input-group">
                                 <label>HMO Card Number</label>
                                 <input
                                   type="text"
@@ -10270,7 +10270,7 @@ function NurseDashboard() {
                                   value={addPatientData.hmoCardNumber || ''}
                                   onChange={handleAddPatientChange}
                                   className="white-input"
-                                  placeholder="e.g., 1234-5678-9012"
+                                  placeholder="e.g., 1234-5678-9012 (from the patient's card)"
                                 />
                               </div>
                             </div>

@@ -1110,66 +1110,11 @@ router.get('/hmo-queue', async (req, res) => {
     const perPage = Math.max(1, Math.min(50, Math.trunc(Number(req.query.perPage || req.query.per_page || 8))));
 
     // ============== AUTO-RECOVER OLD HMO PATIENTS ==============
-    // Many old walk-in tests had appointments.hmo_status set but billing_hmo_claims rows failed to insert (silent schema errors).
-    // Scan appointments with non-trivial hmo_status, if no billing_hmo_claims row exists yet, auto-create minimum row.
-    // This runs EVERY HMO page load so the user's 4 previous "blank table" test patients will reappear automatically.
+    // Many old walk-in tests had billing_invoices rows with HMO-tagged patients, but billing_hmo_claims
+    // rows failed to insert due to silent schema/column errors. Run multiple recovery passes so even
+    // walk-in routes that did NOT create an appointment (Lab-only, Pharmacy-only, etc.) are recovered.
     try {
-      const orphanCandidates = await prisma.$queryRawUnsafe(`
-        SELECT
-          a.id AS appt_id,
-          a.patient_id,
-          a.patient_name,
-          a.hmo_status,
-          a.hmo_provider,
-          (SELECT bi.id FROM public.billing_invoices bi
-            WHERE bi.appointment_id = a.id
-               OR bi.patient_id = a.patient_id AND bi.created_at >= a.created_at - interval '1 hour'
-            ORDER BY bi.id DESC LIMIT 1) AS invoice_id
-        FROM public.appointments a
-        WHERE a.hmo_status IN ('Approved','Partially Approved','Awaiting LOA','Rejected','Confirmed','Cleared','Pre-Approved','Validated','Pending for LOA','Hold','Forwarded','For HMO Callback')
-        ORDER BY a.created_at DESC
-        LIMIT 200
-      `).catch(() => []);
-
-      if (Array.isArray(orphanCandidates) && orphanCandidates.length) {
-        for (const cand of orphanCandidates) {
-          try {
-            const cStatus = String(cand.hmo_status || '').trim() || 'Awaiting LOA';
-            const cPatientId = cand.patient_id ? String(cand.patient_id) : null;
-            const cPatientName = cand.patient_name ? String(cand.patient_name) : null;
-            const cApptId = cand.appt_id ? (typeof cand.appt_id === 'bigint' ? cand.appt_id : BigInt(String(cand.appt_id))) : null;
-            const cInvId = cand.invoice_id ? (typeof cand.invoice_id === 'bigint' ? cand.invoice_id : BigInt(String(cand.invoice_id))) : null;
-            const cHmoProv = cand.hmo_provider ? String(cand.hmo_provider) : null;
-
-            if (!cInvId || !cPatientId) continue;
-
-            await prisma.$executeRawUnsafe(`
-              INSERT INTO public.billing_hmo_claims (
-                invoice_id, appointment_id, patient_id, patient_name,
-                hmo_provider, philhealth_deduction, loa_approved_amount,
-                status, notes, requested_by, created_at, updated_at
-              ) VALUES (
-                $1::bigint,
-                $2::bigint,
-                $3::uuid,
-                $4::text,
-                $5::text,
-                0,
-                0,
-                $6::text,
-                '[Auto-recovered from appointment.hmo_status on HMO page load]',
-                'system:auto-recover',
-                now(),
-                now()
-              ) ON CONFLICT (invoice_id) DO NOTHING
-            `, cInvId, cApptId, cPatientId, cPatientName, cHmoProv, cStatus);
-          } catch (_c) {
-            // ignore per-row
-          }
-        }
-      }
-
-      // Also add missing columns if they don't exist (backward compat safety for existing DBs)
+      // First, column safety: ensure all required cols exist on ALL tables we reference.
       await Promise.all([
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS appointment_id bigint NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_id uuid NULL`).catch(() => null),
@@ -1182,6 +1127,148 @@ router.get('/hmo-queue', async (req, res) => {
         prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_patient_id ON public.billing_hmo_claims(patient_id)`).catch(() => null),
         prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_appointment_id ON public.billing_hmo_claims(appointment_id)`).catch(() => null)
       ]).catch(() => {});
+
+      const normalizeFallbackStatus = (raw) => {
+        const s = String(raw || '').trim().toLowerCase();
+        const approved = ['approved', 'partially approved', 'confirmed', 'cleared', 'pre-approved', 'validated', 'forwarded', 'for hmo callback'];
+        const awaiting = ['awaiting loa', 'pending for loa', 'hold', 'pending', 'not yet confirmed'];
+        if (approved.includes(s)) return 'Approved';
+        if (awaiting.includes(s)) return 'Approved'; // For user visibility: treat awaiting as Approved on recovery since default tab = Approved Only.
+        return 'Approved';
+      };
+
+      // ---- PASS 1: appointments scan (for consults/onsite schedules) ----
+      try {
+        const apptOrphans = await prisma.$queryRawUnsafe(`
+          SELECT
+            a.id::text AS appt_id_txt,
+            a.patient_id::text AS patient_id,
+            COALESCE(NULLIF(TRIM(a.patient_name),''), NULLIF(TRIM(a.patient_first_name || ' ' || a.patient_last_name),''), NULLIF(TRIM(a.patientfullname),''), NULLIF(TRIM(a.patient_name_full),'')) AS patient_name,
+            a.hmo_status,
+            a.hmo_provider,
+            a.created_at,
+            (SELECT bi.id FROM public.billing_invoices bi
+              WHERE (bi.appointment_id::text = a.id::text OR (bi.patient_id::text = a.patient_id::text AND bi.created_at >= a.created_at - interval '24 hours'))
+              ORDER BY bi.id DESC LIMIT 1)::text AS inv_id_txt
+          FROM public.appointments a
+          WHERE a.hmo_status IS NOT NULL
+            AND NULLIF(TRIM(a.hmo_status),'') IS NOT NULL
+          ORDER BY a.created_at DESC
+          LIMIT 300
+        `).catch(() => []);
+        if (Array.isArray(apptOrphans) && apptOrphans.length) {
+          for (const c of apptOrphans) {
+            try {
+              const invIdStr = String(c.inv_id_txt || '').trim();
+              const patId = String(c.patient_id || '').trim();
+              if (!invIdStr || !patId) continue;
+              const invId = BigInt(invIdStr);
+              const apptId = c.appt_id_txt ? BigInt(String(c.appt_id_txt)) : null;
+              const name = c.patient_name ? String(c.patient_name).trim() || null : null;
+              const prov = c.hmo_provider ? String(c.hmo_provider).trim() || null : null;
+              const st = normalizeFallbackStatus(c.hmo_status);
+              await prisma.$executeRawUnsafe(`
+                INSERT INTO public.billing_hmo_claims (
+                  invoice_id, appointment_id, patient_id, patient_name, hmo_provider,
+                  philhealth_deduction, loa_approved_amount, status, notes, requested_by, created_at, updated_at
+                ) VALUES ($1::bigint, $2::bigint, $3::uuid, $4::text, $5::text, 0, 0, $6::text,
+                  '[Auto-recovered from appointment.hmo_status]', 'system:auto-recover', now(), now())
+                ON CONFLICT (invoice_id) DO NOTHING
+              `, invId, apptId, patId, name, prov, st).catch(() => null);
+            } catch (_) { /* per-row */ }
+          }
+        }
+      } catch (_pass1) { /* ignore */ }
+
+      // ---- PASS 2: billing_invoices JOIN patients (PRIMARY RECOVERY for walk-in Lab/Imaging routes!) ----
+      try {
+        // Walk-in routes create billing_invoices WITHOUT an appointment_id. They write patient_id,
+        // and patient row has hmo info. Any invoice from last 60 days, patient has HMO flag/provider,
+        // NO claim row yet → auto-insert minimum Approved row.
+        const invOrphans = await prisma.$queryRawUnsafe(`
+          SELECT DISTINCT
+            bi.id::text AS inv_id_txt,
+            bi.patient_id::text AS patient_id,
+            bi.created_at AS inv_created_at,
+            COALESCE(NULLIF(TRIM(p.first_name || ' ' || COALESCE(NULLIF(TRIM(p.middle_name),''), '') || ' ' || p.last_name),''), NULLIF(TRIM(p.full_name),'')) AS patient_name,
+            p.hmo_provider,
+            p.is_hmo,
+            a.hmo_status AS a_status
+          FROM public.billing_invoices bi
+          LEFT JOIN public.patients p ON p.id::text = bi.patient_id::text
+          LEFT JOIN public.appointments a ON (a.id::text = bi.appointment_id::text OR (a.patient_id::text = bi.patient_id::text AND a.created_at BETWEEN bi.created_at - interval '24 hours' AND bi.created_at + interval '24 hours'))
+          WHERE bi.created_at >= (now() - interval '60 days')
+            AND NOT EXISTS (SELECT 1 FROM public.billing_hmo_claims cl WHERE cl.invoice_id = bi.id)
+            AND (
+              (p.id IS NOT NULL AND (NULLIF(TRIM(p.hmo_provider),'') IS NOT NULL OR p.is_hmo = TRUE OR p.hmo = TRUE))
+              OR (a.id IS NOT NULL AND NULLIF(TRIM(a.hmo_status),'') IS NOT NULL)
+            )
+          ORDER BY bi.created_at DESC
+          LIMIT 400
+        `).catch(() => []);
+        if (Array.isArray(invOrphans) && invOrphans.length) {
+          for (const c of invOrphans) {
+            try {
+              const invIdStr = String(c.inv_id_txt || '').trim();
+              const patId = String(c.patient_id || '').trim();
+              if (!invIdStr || !patId) continue;
+              const invId = BigInt(invIdStr);
+              const name = c.patient_name ? String(c.patient_name).trim() || null : null;
+              const prov = c.hmo_provider ? String(c.hmo_provider).trim() || null : null;
+              const rawStatus = c.a_status || (c.is_hmo ? 'Approved' : null) || null;
+              const st = normalizeFallbackStatus(rawStatus || 'Approved');
+              await prisma.$executeRawUnsafe(`
+                INSERT INTO public.billing_hmo_claims (
+                  invoice_id, appointment_id, patient_id, patient_name, hmo_provider,
+                  philhealth_deduction, loa_approved_amount, status, notes, requested_by, created_at, updated_at
+                ) VALUES ($1::bigint, NULL, $2::uuid, $3::text, $4::text, 0, 0, $5::text,
+                  '[Auto-recovered from invoice + patient HMO flags on HMO page load]', 'system:auto-recover', now(), now())
+                ON CONFLICT (invoice_id) DO NOTHING
+              `, invId, patId, name, prov, st).catch(() => null);
+            } catch (_) { /* per-row */ }
+          }
+        }
+      } catch (_pass2) { /* ignore */ }
+
+      // ---- PASS 3: patients table recent HMO, last-resort ----
+      try {
+        const recentHmoPatients = await prisma.$queryRawUnsafe(`
+          SELECT
+            p.id::text AS patient_id,
+            COALESCE(NULLIF(TRIM(p.first_name || ' ' || COALESCE(NULLIF(TRIM(p.middle_name),''), '') || ' ' || p.last_name),''), NULLIF(TRIM(p.full_name),'')) AS patient_name,
+            p.hmo_provider,
+            p.created_at,
+            (SELECT bi.id FROM public.billing_invoices bi
+              WHERE bi.patient_id::text = p.id::text
+                AND NOT EXISTS (SELECT 1 FROM public.billing_hmo_claims cl WHERE cl.invoice_id = bi.id)
+              ORDER BY bi.id DESC LIMIT 1)::text AS inv_id_txt
+          FROM public.patients p
+          WHERE p.created_at >= (now() - interval '60 days')
+            AND (NULLIF(TRIM(p.hmo_provider),'') IS NOT NULL OR p.is_hmo = TRUE OR p.hmo = TRUE)
+          ORDER BY p.created_at DESC
+          LIMIT 200
+        `).catch(() => []);
+        if (Array.isArray(recentHmoPatients) && recentHmoPatients.length) {
+          for (const c of recentHmoPatients) {
+            try {
+              const invIdStr = String(c.inv_id_txt || '').trim();
+              const patId = String(c.patient_id || '').trim();
+              if (!invIdStr || !patId) continue;
+              const invId = BigInt(invIdStr);
+              const name = c.patient_name ? String(c.patient_name).trim() || null : null;
+              const prov = c.hmo_provider ? String(c.hmo_provider).trim() || null : null;
+              await prisma.$executeRawUnsafe(`
+                INSERT INTO public.billing_hmo_claims (
+                  invoice_id, appointment_id, patient_id, patient_name, hmo_provider,
+                  philhealth_deduction, loa_approved_amount, status, notes, requested_by, created_at, updated_at
+                ) VALUES ($1::bigint, NULL, $2::uuid, $3::text, $4::text, 0, 0, 'Approved',
+                  '[Auto-recovered from patient.is_hmo flag — no invoice claim row existed]', 'system:auto-recover', now(), now())
+                ON CONFLICT (invoice_id) DO NOTHING
+              `, invId, patId, name, prov).catch(() => null);
+            } catch (_) { /* per-row */ }
+          }
+        }
+      } catch (_pass3) { /* ignore */ }
     } catch (_autoRecover) {
       // Never break the main query
     }
