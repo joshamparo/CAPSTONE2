@@ -62,26 +62,41 @@ const rewriteUrlForApiBase = (rawUrl, apiBase = API_BASE) => {
 export const normalizeApiAssetUrl = (rawUrl, apiBase = API_BASE) => rewriteUrlForApiBase(rawUrl, apiBase);
 
 export const installApiFetchShim = () => {
-  if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
-  if (window.__PASCUALINGA_API_SHIM_INSTALLED__) return;
+  try {
+    if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
+    if (window.__PASCUALINGA_API_SHIM_INSTALLED__) return;
 
-  const originalFetch = window.fetch.bind(window);
-  window.fetch = (input, init) => {
-    if (typeof input === 'string') {
-      return originalFetch(rewriteUrlForApiBase(input), init);
-    }
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      try {
+        if (typeof input === 'string') {
+          return originalFetch(rewriteUrlForApiBase(input), init);
+        }
 
-    if (input instanceof Request) {
-      const nextUrl = rewriteUrlForApiBase(input.url);
-      if (nextUrl === input.url) return originalFetch(input, init);
-      const nextRequest = new Request(nextUrl, input);
-      return originalFetch(nextRequest, init);
-    }
+        if (input && typeof Request !== 'undefined' && input instanceof Request) {
+          try {
+            const nextUrl = rewriteUrlForApiBase(input.url);
+            if (nextUrl === input.url) return originalFetch(input, init);
+            const nextRequest = new Request(nextUrl, input);
+            return originalFetch(nextRequest, init);
+          } catch (_) {
+            return originalFetch(input, init);
+          }
+        }
 
-    return originalFetch(input, init);
-  };
+        return originalFetch(input, init);
+      } catch (err) {
+        if (typeof Promise !== 'undefined') {
+          return Promise.reject(err);
+        }
+        throw err;
+      }
+    };
 
-  window.__PASCUALINGA_API_SHIM_INSTALLED__ = true;
+    window.__PASCUALINGA_API_SHIM_INSTALLED__ = true;
+  } catch (_) {
+    // Never throw at boot
+  }
 };
 
 export const safeJson = (raw) => {

@@ -4,21 +4,252 @@
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/images/pgh logo.png" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#0f172a" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <meta name="description" content="Pascual General Hospital" />
+    <meta name="description" content="Pascual General Hospital — Pascualinga Medical Link" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/images/pgh logo.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>Pascualinga</title>
+    <style>
+      html,body{margin:0;padding:0;background:#f8fafc;color:#0f172a;}
+      #__pascualinga_boot{
+        position:fixed;inset:0;z-index:2147483000;display:block!important;
+        background:radial-gradient(1200px 600px at 10% -10%, rgba(234,88,12,.18), transparent 60%),
+                   radial-gradient(900px 500px at 110% 10%, rgba(14,165,233,.16), transparent 60%), #f8fafc;
+        font-family: Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      }
+      #__pascualinga_boot[hidden]{display:none!important;}
+      #__pascualinga_boot .wrap{
+        min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+      }
+      #__pascualinga_boot .card{
+        width:100%;max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;
+        box-shadow:0 24px 80px rgba(15,23,42,.10);padding:28px 28px 24px;
+      }
+      #__pascualinga_boot .brand{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
+      #__pascualinga_boot .badge{
+        width:44px;height:44px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;
+        background:linear-gradient(135deg,#ea580c,#c2410c);color:#fff;font-weight:800;font-size:18px;letter-spacing:.3px;
+        box-shadow:0 10px 26px rgba(234,88,12,.26);
+      }
+      #__pascualinga_boot h1{margin:0;font-size:1.28rem;line-height:1.25;color:#0f172a;}
+      #__pascualinga_boot .sub{margin-top:6px;color:#64748b;font-size:.88rem;}
+      #__pascualinga_boot .spinner{
+        width:38px;height:38px;border-radius:999px;border:3px solid #e2e8f0;border-top-color:#ea580c;
+        animation:__pascualinga_spin .9s linear infinite;margin:18px auto 0;
+      }
+      @keyframes __pascualinga_spin{to{transform:rotate(360deg);}}
+      #__pascualinga_boot .pill-row{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 6px;}
+      #__pascualinga_boot .pill{
+        padding:6px 10px;border-radius:999px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;
+        font-size:.75rem;font-weight:600;letter-spacing:.2px;
+      }
+      #__pascualinga_boot .pill.blue{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;}
+      #__pascualinga_boot .pill.gray{background:#f1f5f9;border-color:#e2e8f0;color:#334155;}
+      #__pascualinga_boot .row{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;}
+      #__pascualinga_boot button{
+        display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;cursor:pointer;font-weight:600;font-size:.88rem;
+        border:1px solid transparent;transition:all .15s ease;
+      }
+      #__pascualinga_boot .btn-primary{
+        background:linear-gradient(135deg,#ea580c,#c2410c);color:#fff;box-shadow:0 10px 24px rgba(234,88,12,.22);
+      }
+      #__pascualinga_boot .btn-primary:hover{transform:translateY(-1px);}
+      #__pascualinga_boot .btn-secondary{background:#f1f5f9;color:#0f172a;border-color:#e2e8f0;}
+      #__pascualinga_boot .btn-ghost{background:#ffffff;color:#0f172a;border-color:#cbd5e1;}
+      #__pascualinga_boot .btn-secondary:hover,#__pascualinga_boot .btn-ghost:hover{background:#e2e8f0;}
+      #__pascualinga_boot .error-box{
+        margin-top:14px;background:#fff1f2;border:1px solid #fecdd3;color:#881337;
+        border-radius:12px;padding:10px 12px;font-size:.82rem;line-height:1.55;display:none;
+      }
+      #__pascualinga_boot[data-state="error"] .error-box{display:block;}
+      #__pascualinga_boot[data-state="error"] .spinner{display:none;}
+      #__pascualinga_boot[data-state="recover"] .spinner{display:none;}
+      #__pascualinga_boot code{
+        display:block;white-space:pre-wrap;word-break:break-word;margin-top:6px;max-height:220px;overflow:auto;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+        font-size:.78rem;background:rgba(136,19,55,.06);border-radius:8px;padding:8px 10px;
+      }
+      #__pascualinga_boot .tips{margin-top:14px;color:#475569;font-size:.8rem;line-height:1.55;}
+      #__pascualinga_boot .tips ol{margin:6px 0 0 18px;padding:0;}
+      #__pascualinga_boot .tips li{margin-bottom:4px;}
+      #__pascualinga_boot .divider{height:1px;background:#e2e8f0;margin:16px 0 4px;}
+      #__pascualinga_boot .foot{font-size:.74rem;color:#64748b;margin-top:10px;}
+    </style>
+    <script>
+      (function(){
+        try{
+          window.__PASCUALINGA_BOOT = { startedAt: Date.now(), error: null, state: 'loading' };
+        }catch(e){ window.__PASCUALINGA_BOOT = { startedAt: 0, error:null, state:'loading' }; }
+
+        function $(id){ try{ return document.getElementById(id); }catch(_){ return null; } }
+        function setAttr(elem, attr, val){ try{ elem.setAttribute(attr, val); }catch(_){} }
+        function setText(elem, text){ try{ if(elem) elem.textContent = text; }catch(_){} }
+        function setHTML(elem, html){ try{ if(elem) elem.innerHTML = html; }catch(_){} }
+        function showRecoveryUI(errorMessage){
+          try{
+            var boot = $('__pascualinga_boot');
+            if(!boot) return;
+            setAttr(boot,'data-state', errorMessage ? 'error' : 'recover');
+            if(errorMessage){
+              try{ window.__PASCUALINGA_BOOT.state = 'error'; window.__PASCUALINGA_BOOT.error = String(errorMessage || ''); }catch(_){}
+            }
+            var title = $('__pascualinga_title');
+            var sub = $('__pascualinga_sub');
+            var pills = $('__pascualinga_pills');
+            var err = $('__pascualinga_error');
+            if(title){ setText(title, errorMessage ? 'The app could not start right now' : 'App is taking longer than usual to start'); }
+            if(sub){ setText(sub, errorMessage ? 'We caught the issue below. Try the quick recovery actions — most are fixed in under 10 seconds.' : 'If this keeps showing, try clearing storage or refreshing the page.'); }
+            if(pills){
+              setHTML(pills,
+                '<span class="pill">Patient-safe mode</span>' +
+                '<span class="pill blue">Recovery ready</span>' +
+                '<span class="pill gray">Pascualinga · v1.0</span>'
+              );
+            }
+            if(err && errorMessage){
+              var now = new Date().toLocaleString();
+              setHTML(err, '<div style="font-weight:600;">What went wrong</div>' +
+                '<code>' + String(errorMessage || 'No details.').replace(/[<>&]/g,'') + '\n\n' +
+                '— reported at: ' + now + '\n' +
+                '— url: ' + (typeof location !== 'undefined' ? String(location.href||'') : '') + '</code>');
+            }
+          }catch(e){}
+        }
+
+        function clearSessionStorage(){ try{ window.sessionStorage.clear(); }catch(_){} }
+        function clearAuth(){
+          try{
+            var keys = ['currentUser','token','tempLoginEmail','tempLoginRole','generatedOTP','displayOtpCode','otpEmailFailed','otp_bypass','tempUserDetails','app_global_be_down','app_global_maint','loginAttempts','loginLockoutTime','tempUser'];
+            for(var i=0;i<keys.length;i++){ try{ window.localStorage.removeItem(keys[i]); }catch(_){} }
+          }catch(_){}
+        }
+        function hardReset(){
+          clearSessionStorage();
+          clearAuth();
+          setTimeout(function(){ try{ window.location.href = '/'; }catch(_){ try{ window.location.reload(true); }catch(e){} } }, 280);
+        }
+
+        function bindButtons(){
+          try{
+            var b1 = $('__pascualinga_reset');
+            var b2 = $('__pascualinga_home');
+            var b3 = $('__pascualinga_reload');
+            if(b1) b1.addEventListener('click', function(){ hardReset(); });
+            if(b2) b2.addEventListener('click', function(){ try{ window.location.href = '/'; }catch(_){} });
+            if(b3) b3.addEventListener('click', function(){ try{ window.location.reload(true); }catch(_){} });
+          }catch(e){}
+        }
+
+        // Capture boot errors BEFORE React even loads
+        var capturedFirstError = false;
+        window.addEventListener('error', function(e){
+          try{
+            if(capturedFirstError) return;
+            capturedFirstError = true;
+            var message = e && e.message ? String(e.message) : '';
+            var file = e && e.filename ? ('\nfile: ' + String(e.filename)) : '';
+            var line = (e && typeof e.lineno !== 'undefined') ? (' line: ' + String(e.lineno)) : '';
+            var col = (e && typeof e.colno !== 'undefined') ? (':' + String(e.colno)) : '';
+            var stack = (e && e.error && e.error.stack) ? ('\n' + String(e.error.stack).slice(0,1600)) : '';
+            showRecoveryUI(message + file + line + col + stack);
+          }catch(_){}
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e){
+          try{
+            if(capturedFirstError) return;
+            var reason = '';
+            if(e && e.reason){
+              try{ reason = (e.reason.message || String(e.reason)) + (e.reason.stack ? ('\n' + String(e.reason.stack).slice(0,1600)) : ''); }
+              catch(_){ reason = String(e.reason); }
+            }
+            showRecoveryUI('Unhandled promise rejection: ' + (reason || 'no details'));
+          }catch(_){}
+        }, true);
+
+        document.addEventListener('DOMContentLoaded', function(){
+          try{ bindButtons(); }catch(_){}
+          // Watchdog: if React didn't hide this boot layer in 3.5s, show recovery UI (no more pure white screen)
+          setTimeout(function(){
+            try{
+              var boot = $('__pascualinga_boot');
+              if(!boot) return;
+              var hidden = boot.hasAttribute('hidden');
+              if(hidden) return;
+              if(window.__PASCUALINGA_APP_MOUNTED_SUCCESSFULLY__ === true) return;
+              showRecoveryUI(null);
+            }catch(_){}
+          }, 3500);
+        });
+
+        // Expose helpers for index.js to call in case of a caught boot error
+        window.__PASCUALINGA_RECOVERY__ = {
+          show: showRecoveryUI,
+          clearAuth: clearAuth,
+          clearSessionStorage: clearSessionStorage,
+          hardReset: hardReset
+        };
+      })();
+    </script>
   </head>
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <noscript>
+      <div style="padding:28px;font-family:Inter,system-ui,Arial,sans-serif;color:#0f172a;">
+        <h1 style="margin:0 0 8px;">JavaScript is disabled</h1>
+        <p style="margin:0;color:#475569;max-width:720px;line-height:1.6;">
+          Pascualinga needs JavaScript to run the clinical dashboard and appointment workflow.
+          Please enable JavaScript in your browser settings, then refresh this page.
+        </p>
+      </div>
+    </noscript>
+
+    <!-- BULLETPROOF boot fallback — hidden ONLY if React mounts successfully. NEVER shows pure white. -->
+    <div id="__pascualinga_boot" data-state="loading" aria-live="polite">
+      <div class="wrap">
+        <div class="card" role="status">
+          <div class="brand">
+            <div class="badge">PGH</div>
+            <div>
+              <div style="font-size:.78rem;font-weight:700;color:#9a3412;letter-spacing:.3px;">PASCUALINGA MEDICAL LINK</div>
+              <h1 id="__pascualinga_title">Preparing Pascualinga…</h1>
+            </div>
+          </div>
+          <div id="__pascualinga_sub" class="sub">Loading the secure dashboard. This usually takes 1-3 seconds.</div>
+          <div id="__pascualinga_pills" class="pill-row">
+            <span class="pill">Starting dashboard</span>
+            <span class="pill blue">Secured session</span>
+            <span class="pill gray">Pascualinga · v1.0</span>
+          </div>
+          <div class="spinner" aria-hidden="true"></div>
+
+          <div id="__pascualinga_error" class="error-box"></div>
+
+          <div class="row">
+            <button id="__pascualinga_reset" type="button" class="btn-primary">🔄 Reset &amp; go home</button>
+            <button id="__pascualinga_home" type="button" class="btn-secondary">🏠 Back to homepage</button>
+            <button id="__pascualinga_reload" type="button" class="btn-ghost">↻ Reload page</button>
+          </div>
+
+          <div class="divider"></div>
+          <div class="tips">
+            <strong>Tips if the app does not start:</strong>
+            <ol>
+              <li>Tap <strong>Reset &amp; go home</strong> to clear the current cached session and start fresh.</li>
+              <li>Tap <strong>Reload page</strong> if a network issue blocked the latest deployed version.</li>
+              <li>Still blank? Clear site storage from your browser settings for <code>pascualinga.com</code>.</li>
+            </ol>
+          </div>
+          <div class="foot">If you continue seeing this screen after 3 attempts, please take a screenshot and forward it to support.</div>
+        </div>
+      </div>
+    </div>
+
     <div id="root"></div>
   </body>
 </html>
-
