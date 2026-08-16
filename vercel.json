@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "create-react-app",
   "installCommand": "npm install --no-audit --no-fund",
   "buildCommand": "npm run build:frontend:only",
   "outputDirectory": "frontend/build",
@@ -22,7 +21,6 @@
     }
   ],
   "rewrites": [
-    { "source": "/((?!.*\\..*|_next).*)", "destination": "/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
