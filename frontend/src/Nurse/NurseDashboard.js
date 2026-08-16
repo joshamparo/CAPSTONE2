@@ -1342,7 +1342,8 @@ function NurseDashboard() {
         routeType: addPatientData.routeType,
         routeLabel,
         routeTarget: services ? services : (routeTarget || null),
-        routeKind: routeKind || null
+        routeKind: routeKind || null,
+        hmo: response?.hmo && typeof response.hmo === 'object' ? response.hmo : null
       });
       setWalkInPharmacyDest('in_house');
       setWalkInPharmacyNotes('');
@@ -1591,9 +1592,28 @@ function NurseDashboard() {
       const ticket = walkInNextSteps?.ticket ? `Ticket: ${walkInNextSteps.ticket}` : '';
       const doctor = addPatientData?.doctorName ? `Assigned doctor: ${addPatientData.doctorName}` : '';
       const when = `Time: ${new Date().toLocaleString()}`;
-      const text = [patient, apt, ticket, doctor, when].filter(Boolean).join('\n');
+      const destParts = [
+        walkInNextSteps?.routeLabel ? `Destination: ${walkInNextSteps.routeLabel}` : '',
+        walkInNextSteps?.routeTarget ? walkInNextSteps.routeTarget : ''
+      ].filter(Boolean);
+      const destLine = destParts.length ? destParts.join(' — ') : '';
+      const lines = [patient, apt, ticket, doctor, destLine, when].filter(Boolean);
+      const hmo = walkInNextSteps?.hmo && typeof walkInNextSteps.hmo === 'object' ? walkInNextSteps.hmo : null;
+      if (hmo) {
+        lines.push('');
+        lines.push('------------------- HMO -------------------');
+        lines.push(`Status: Approved${hmo.provider ? ' by ' + hmo.provider : ''}`);
+        if (hmo.loa_number) lines.push(`LOA #: ${hmo.loa_number}`);
+        if (hmo.card_number) lines.push(`HMO Card #: ${hmo.card_number}`);
+        lines.push(`Invoice total:   ${hmo.invoice_total || '₱0'}`);
+        lines.push(`Philhealth:     -${hmo.philhealth_deduction || '₱0'}`);
+        lines.push(`HMO coverage:   -${hmo.hmo_coverage || '₱0'}`);
+        lines.push(`Total covered:   ${hmo.total_coverage || '₱0'}`);
+        lines.push(`AMOUNT DUE:      ${hmo.patient_balance || '₱0'}`);
+      }
+      const text = lines.join('\n');
       await navigator.clipboard.writeText(text);
-      setSuccessMessage('Copied handoff slip.');
+      setSuccessMessage('Copied handoff slip (with HMO status).');
       setModalType('success');
       setShowSuccessModal(true);
     } catch (_) {
@@ -9689,6 +9709,70 @@ function NurseDashboard() {
                   {walkInNextSteps.routeLabel ? `Destination: ${walkInNextSteps.routeLabel}` : ''}
                   {walkInNextSteps.routeTarget ? ` • ${walkInNextSteps.routeTarget}` : ''}
                 </div>
+
+                {(() => {
+                  const hmo = walkInNextSteps?.hmo && typeof walkInNextSteps.hmo === 'object' ? walkInNextSteps.hmo : null;
+                  if (!hmo) return null;
+                  const amountDue = String(hmo.patient_balance || '₱0');
+                  const isFullyCovered = /0[.,]00|^₱0$/.test(amountDue) || amountDue.replace(/[^0-9]/g, '') === '0';
+                  return (
+                    <div style={{ marginTop: 18, padding: 16, borderRadius: 14, border: '1px solid #86efac', background: '#f0fdf4' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 999, background: '#16a34a', color: '#ffffff', fontWeight: 800, fontSize: '13px' }}>
+                          ✅ APPROVED BY HMO
+                        </div>
+                        {hmo.provider ? (
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#166534' }}>
+                            {hmo.provider}
+                          </span>
+                        ) : null}
+                        {isFullyCovered ? (
+                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#166534', marginLeft: 'auto' }}>
+                            FULLY COVERED
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {(hmo.loa_number || hmo.card_number) ? (
+                        <div style={{ display: 'flex', gap: 16, fontSize: '12px', color: '#14532d', fontWeight: 600, marginBottom: 10 }}>
+                          {hmo.loa_number ? `LOA: ${hmo.loa_number}` : ''}
+                          {hmo.card_number ? `HMO Card: ${hmo.card_number}` : ''}
+                        </div>
+                      ) : null}
+
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto',
+                        rowGap: 6,
+                        columnGap: 18,
+                        fontSize: '13px',
+                        padding: 12,
+                        background: '#ecfccb',
+                        borderRadius: 10,
+                        border: '1px solid #bef264'
+                      }}>
+                        <div style={{ color: '#365314', fontWeight: 600 }}>Invoice total</div>
+                        <div style={{ color: '#0f172a', fontWeight: 700 }}>{hmo.invoice_total || '₱0'}</div>
+
+                        <div style={{ color: '#365314', fontWeight: 600 }}>Philhealth deduction</div>
+                        <div style={{ color: '#15803d', fontWeight: 700 }}>-{hmo.philhealth_deduction || '₱0'}</div>
+
+                        <div style={{ color: '#365314', fontWeight: 600 }}>HMO coverage</div>
+                        <div style={{ color: '#15803d', fontWeight: 700 }}>-{hmo.hmo_coverage || '₱0'}</div>
+
+                        <div style={{ color: '#365314', fontWeight: 800, borderTop: '1px dashed #a3e635', marginTop: 4, paddingTop: 6 }}>Total covered</div>
+                        <div style={{ color: '#15803d', fontWeight: 800, borderTop: '1px dashed #a3e635', marginTop: 4, paddingTop: 6 }}>{hmo.total_coverage || '₱0'}</div>
+
+                        <div style={{ color: '#064e3b', fontWeight: 900, fontSize: '14px' }}>
+                          {isFullyCovered ? 'Amount due (paid by HMO)' : 'Amount due (patient balance)'}
+                        </div>
+                        <div style={{ color: isFullyCovered ? '#166534' : '#0f172a', fontWeight: 900, fontSize: '15px' }}>
+                          {amountDue}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
                 
                 <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #e2e8f0', fontSize: '13px', color: '#64748b', fontWeight: '600' }}>
                   Please proceed to the station and wait for your number to be called.

@@ -2059,9 +2059,78 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 ).catch((err) => {
                     console.error('[HMO Intake] Failed to record claim:', err);
                 });
+
+                // AUTO-UPDATE invoice status once HMO claim is Approved:
+                // If HMO + Philhealth fully cover invoice → status = 'Paid'; else → status = 'Ready' (cashier collects balance)
+                if (linkedInvoiceId) {
+                    try {
+                        await ensureBillingTablesExist(tx).catch(() => null);
+                        const invRows = await tx.$queryRawUnsafe(`
+                            SELECT id, total_amount, status FROM public.billing_invoices WHERE id = $1::bigint
+                        `, String(linkedInvoiceId)).catch(() => []);
+                        const inv = Array.isArray(invRows) && invRows.length ? invRows[0] : null;
+                        if (inv) {
+                            const totalAmt = Math.max(0, Number(inv.total_amount || 0));
+                            const maxPh = Math.min(totalAmt, Math.max(0, Number(phAmt || 0)));
+                            const afterPh = Math.max(0, totalAmt - maxPh);
+                            const appliedHmo = Math.min(afterPh, Math.max(0, Number(autoApproveAmount || 0)));
+                            const patientPay = Math.max(0, totalAmt - maxPh - appliedHmo);
+                            const newStatus = patientPay <= 0.0001 ? 'Paid' : 'Ready';
+                            await tx.$executeRawUnsafe(`
+                                UPDATE public.billing_invoices
+                                SET status = $1::text, updated_at = now()
+                                WHERE id = $2::bigint AND status IN ('Draft', 'For Payment', 'Pending')
+                            `, newStatus, String(linkedInvoiceId)).catch(() => {});
+                        }
+                    } catch (invoiceUpdateErr) {
+                        console.error('[HMO Intake] Failed to sync invoice status:', invoiceUpdateErr);
+                    }
+                }
             }
 
-            return { patient, createdRecord };
+            // Build HMO summary for patient slip / handoff / response
+            let hmoSummary = null;
+            if (hmoSave) {
+                try {
+                    const hmoProv = String(payload.hmoProvider || '').trim() || null;
+                    const loaNum = String(payload.hmoLoaNumber || '').trim() || null;
+                    const hmoCard = String(payload.hmoCardNumber || '').trim() || null;
+                    const phAmt = Number(payload.philhealthDeduction) || 0;
+                    const onSiteAmt = hasServices ? 100 : 0;
+                    const coverageAmount = onSiteAmt + mainClinicalOrderHmoCoveredCents + extraHmoTotalCents;
+                    let totalAmt = 0;
+                    let invStatus = null;
+                    if (linkedInvoiceId) {
+                        const qRows = await prisma.$queryRawUnsafe(`SELECT total_amount, status FROM public.billing_invoices WHERE id = $1::bigint`, String(linkedInvoiceId)).catch(() => []);
+                        if (Array.isArray(qRows) && qRows.length) {
+                            totalAmt = Math.max(0, Number(qRows[0].total_amount || 0));
+                            invStatus = String(qRows[0].status || null);
+                        }
+                    }
+                    const maxPh = Math.min(totalAmt, Math.max(0, Number(phAmt || 0)));
+                    const afterPh = Math.max(0, totalAmt - maxPh);
+                    const appliedHmo = Math.min(afterPh, Math.max(0, Number(coverageAmount || 0)));
+                    const patientPay = Math.max(0, totalAmt - maxPh - appliedHmo);
+                    hmoSummary = {
+                        status: 'Approved',
+                        provider: hmoProv,
+                        loa_number: loaNum,
+                        card_number: hmoCard,
+                        philhealth_deduction: toMoney(maxPh),
+                        hmo_coverage: toMoney(appliedHmo),
+                        total_coverage: toMoney(maxPh + appliedHmo),
+                        patient_balance: toMoney(patientPay),
+                        invoice_total: toMoney(totalAmt),
+                        invoice_id: linkedInvoiceId ? String(linkedInvoiceId) : null,
+                        invoice_status: invStatus,
+                        coverage: (coverageExtra && Object.keys(coverageExtra).length ? coverageExtra : null)
+                    };
+                } catch (_hsum) {
+                    console.error('[HMO Intake] HMO summary compute failed:', _hsum);
+                }
+            }
+
+            return { patient, createdRecord, hmoSummary };
         }, { timeout: 45000 });
 
         let emailSent = false;
@@ -2090,7 +2159,8 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             patient: result.patient,
             routeType: routeMeta.type,
             routeLabel: routeMeta.label,
-            routing: { ...result.createdRecord, emailSent }
+            routing: { ...result.createdRecord, emailSent },
+            hmo: result.hmoSummary || null
         });
     } catch (err) {
         res.status(err.statusCode || 500).json({ message: err.message || 'Error processing walk-in intake' });

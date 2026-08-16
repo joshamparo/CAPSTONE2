@@ -2147,6 +2147,7 @@ export default function OfficeStaffDashboard({ mode }) {
                       <th>Invoice</th>
                       <th>Patient</th>
                       <th>Status</th>
+                      <th>HMO</th>
                       <th>Total</th>
                       <th>Balance</th>
                       <th className="inc-right">Actions</th>
@@ -2155,18 +2156,65 @@ export default function OfficeStaffDashboard({ mode }) {
                   <tbody>
                     {invoiceLoading ? (
                       <tr>
-                        <td colSpan="6" className="text-center py-8 text-slate-500">Loading…</td>
+                        <td colSpan="7" className="text-center py-8 text-slate-500">Loading…</td>
                       </tr>
                     ) : displayedInvoices.length === 0 ? (
                       <tr>
-                        <td colSpan="6" className="text-center py-8 text-slate-500">No invoices match your filters.</td>
+                        <td colSpan="7" className="text-center py-8 text-slate-500">No invoices match your filters.</td>
                       </tr>
                     ) : (
                       displayedInvoices.slice(0, 80).map((inv) => {
                         const p = inv.patients;
                         const patientName = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : '—';
                         const status = inv.status || 'Draft';
-                        const balance = inv.balance_amount || inv.total_amount;
+                        const claim = inv?.hmo_claim && typeof inv.hmo_claim === 'object' ? inv.hmo_claim : null;
+                        const hmoStatus = String(claim?.status || '').trim();
+                        const hasHmoClaim = Boolean(hmoStatus && claim);
+                        const hmoBadge = (() => {
+                          if (!hasHmoClaim) {
+                            return <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>—</span>;
+                          }
+                          const label = hmoStatus === 'Approved' ? `✅ Approved${claim.provider ? ' · ' + claim.provider : ''}` :
+                                        hmoStatus === 'Partially Approved' ? `🟡 Partially${claim.provider ? ' · ' + claim.provider : ''}` :
+                                        hmoStatus === 'Awaiting LOA' ? `⏳ Awaiting LOA${claim.provider ? ' · ' + claim.provider : ''}` :
+                                        hmoStatus === 'Rejected' ? `❌ Rejected` :
+                                        `⏸ ${hmoStatus}${claim.provider ? ' · ' + claim.provider : ''}`;
+                          const color =
+                            hmoStatus === 'Approved' ? { bg: '#16a34a', fg: '#ffffff', ring: '#86efac' } :
+                            hmoStatus === 'Partially Approved' ? { bg: '#fde68a', fg: '#854d0e', ring: '#fbbf24' } :
+                            hmoStatus === 'Rejected' ? { bg: '#fee2e2', fg: '#991b1b', ring: '#fca5a5' } :
+                            hmoStatus === 'Awaiting LOA' ? { bg: '#dbeafe', fg: '#1e3a8a', ring: '#93c5fd' } :
+                            { bg: '#f1f5f9', fg: '#334155', ring: '#cbd5e1' };
+                          return (
+                            <div>
+                              <span style={{
+                                display: 'inline-block',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                padding: '4px 8px',
+                                borderRadius: 999,
+                                background: color.bg,
+                                color: color.fg,
+                                border: `1px solid ${color.ring}`
+                              }}>{label}</span>
+                              {hmoStatus === 'Approved' || hmoStatus === 'Partially Approved' ? (
+                                <div style={{ marginTop: 4, fontSize: '11px', color: '#475569', fontWeight: 600, lineHeight: '1.45' }}>
+                                  {claim.philhealth_deduction > 0 ? <span style={{ color: '#ea580c' }}>−PH {toMoney(claim.philhealth_deduction)}  </span> : null}
+                                  {claim.applied_hmo_amount > 0 || claim.loa_approved_amount > 0 ? <span style={{ color: '#2563eb' }}>−HMO {toMoney(Math.max(Number(claim.applied_hmo_amount || 0), Number(claim.loa_approved_amount || 0)))}</span> : null}
+                                  <div style={{ color: '#0f172a', fontWeight: 800, marginTop: 2 }}>
+                                    Patient pays: ₱ {toMoney(Number(inv.patient_due_amount ?? claim.patient_payable ?? 0))}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })();
+                        const balanceValue = (() => {
+                          if (hasHmoClaim && (hmoStatus === 'Approved' || hmoStatus === 'Partially Approved')) {
+                            return Number(inv.balance_amount ?? inv.patient_due_amount ?? claim.patient_payable ?? inv.total_amount ?? 0);
+                          }
+                          return Number(inv.balance_amount ?? inv.total_amount ?? 0);
+                        })();
                         return (
                           <tr key={inv.id}>
                             <td className="text-sm font-medium text-slate-700">#{inv.id}</td>
@@ -2178,8 +2226,11 @@ export default function OfficeStaffDashboard({ mode }) {
                                 String(status).toLowerCase() === 'cancelled' ? 'status-off' : 'status-scheduled'
                               }`}>{status}</span>
                             </td>
+                            <td>{hmoBadge}</td>
                             <td className="text-sm text-slate-600">₱ {toMoney(inv.total_amount)}</td>
-                            <td className="text-sm text-slate-600">₱ {toMoney(balance)}</td>
+                            <td className={`text-sm ${hasHmoClaim ? 'font-semibold' : ''} ${Number(balanceValue) <= 0.0001 ? 'text-green-700 font-bold' : 'text-slate-700'}`}>
+                              ₱ {toMoney(balanceValue)}
+                            </td>
                             <td className="inc-right">
                               <button type="button" className="office-btn ghost" onClick={() => openInvoice(inv.id)}>
                                 View
