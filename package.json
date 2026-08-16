@@ -6,10 +6,13 @@
     "start": "node capstone-backend/server.js",
     "build": "npm run build:backend && npm run build:frontend",
     "build:backend": "cd capstone-backend && npm install --no-audit --no-fund && npx prisma generate",
-    "build:frontend": "cd frontend && npm install --no-audit --no-fund && CI=false DISABLE_ESLINT_PLUGIN=true GENERATE_SOURCEMAP=false npm run build",
-    "build:frontend:only": "cd frontend && CI=false DISABLE_ESLINT_PLUGIN=true GENERATE_SOURCEMAP=false npm run build"
+    "build:frontend": "cd frontend && npm install --no-audit --no-fund && npm run build:frontend:only",
+    "build:frontend:only": "cd frontend && cross-env CI=false DISABLE_ESLINT_PLUGIN=true GENERATE_SOURCEMAP=false npm run build:frontend:only"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
   }
 }
