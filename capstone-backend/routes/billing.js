@@ -1102,8 +1102,12 @@ router.get('/hmo-queue', async (req, res) => {
     const role = String(req.headers['x-user-role'] || '').toLowerCase();
     if (!['cashier', 'admin', 'doctor_secretary', 'staff'].includes(role)) return res.status(401).json({ message: 'Unauthorized' });
 
-    const statusFilter = String(req.query.status || '').trim();
+    const filterModeRaw = String(req.query.filter || 'approved').trim().toLowerCase();
+    const filterMode = filterModeRaw === 'all' ? 'all' : 'approved';
     const query = String(req.query.q || '').trim().toLowerCase();
+    const page = Math.max(1, Math.trunc(Number(req.query.page || 1)));
+    const perPage = Math.max(1, Math.min(50, Math.trunc(Number(req.query.perPage || req.query.per_page || 8))));
+
     const rows = await prisma.$queryRawUnsafe(
       `
         SELECT
@@ -1248,19 +1252,11 @@ router.get('/hmo-queue', async (req, res) => {
       `
     ).catch(() => []);
 
-    const list = (Array.isArray(rows) ? rows : [])
+    const builtList = (Array.isArray(rows) ? rows : [])
       .map((row) => {
         const total = Number(row.total_amount || 0);
         const claim = summarizeHmoClaim(row, total);
-        const rowStatusNorm = String(claim.status || '').toLowerCase();
-        const loaFilled = Boolean(claim.loa_number);
-        const covered = (Number(claim.applied_hmo_amount || 0) + Number(claim.philhealth_deduction || 0));
-        const stageLabel =
-          ['awaiting loa', 'pending', 'rejected', ''].includes(rowStatusNorm) && !loaFilled
-            ? 'Stage 1 · Call HMO'
-            : (rowStatusNorm === 'partially approved' || rowStatusNorm === 'loa received' || (loaFilled && covered <= 0.0001))
-              ? 'Stage 2 · Encode LOA'
-              : 'Stage 3 · Discharge Billing';
+        const claimStatusNorm = String(claim.status || '').toLowerCase();
         return {
           id: claim.id,
           invoice_id: claim.invoice_id,
@@ -1269,44 +1265,52 @@ router.get('/hmo-queue', async (req, res) => {
           email: row.email || null,
           contact_number: row.contact_number || null,
           total_amount: toMoney(total),
-          patient_due_amount: toMoney(claim.patient_payable),
+          philhealth_amount: toMoney(claim.philhealth_deduction),
+          hmo_covered_amount: toMoney(claim.applied_hmo_amount),
+          patient_pays: toMoney(claim.patient_payable),
+          claim_status: claim.status,
           workups_list: row.workups_list ? String(row.workups_list).slice(0, 400) : null,
-          requested_by: row.requested_by ? String(row.requested_by).slice(0, 200) : null,
-          stage: stageLabel,
-          source_type: row.source_type || null,
           hmo_claim: claim
         };
       })
       .filter((row) => {
-        if (!statusFilter) return true;
-        const sf = statusFilter.toLowerCase();
-        if (sf === 'stage1' || sf === 'stage 1') return row.stage && /Stage 1/.test(String(row.stage));
-        if (sf === 'stage2' || sf === 'stage 2') return row.stage && /Stage 2/.test(String(row.stage));
-        if (sf === 'stage3' || sf === 'stage 3') return row.stage && /Stage 3/.test(String(row.stage));
-        return String(row.hmo_claim?.status || '').toLowerCase() === sf;
+        if (filterMode === 'approved') {
+          const norm = String(row.claim_status || '').toLowerCase();
+          return norm === 'approved' || norm === 'partially approved';
+        }
+        return true;
       })
       .filter((row) => {
         if (!query) return true;
         const haystack = [
           row.patient_name,
-          row.invoice_id,
-          row.invoice_status,
-          row.email,
           row.contact_number,
+          row.invoice_id,
           row.hmo_claim?.provider,
           row.hmo_claim?.loa_number,
           row.hmo_claim?.hmo_card_number,
-          row.hmo_claim?.status,
-          row.requested_by,
-          row.workups_list,
-          row.stage
+          row.claim_status,
+          row.workups_list
         ]
           .map((value) => String(value || '').toLowerCase())
           .join(' ');
         return haystack.includes(query);
       });
 
-    res.json(serialize(list));
+    const totalCount = builtList.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
+    const currentPage = Math.min(page, totalPages);
+    const offset = (currentPage - 1) * perPage;
+    const pagedRows = builtList.slice(offset, offset + perPage);
+
+    res.json(serialize({
+      filter: filterMode,
+      page: currentPage,
+      perPage,
+      totalCount,
+      totalPages,
+      rows: pagedRows
+    }));
   } catch (err) {
     const msg = String(err?.message || '');
     res.status(500).json({ message: msg || 'Server error' });
