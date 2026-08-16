@@ -21,8 +21,6 @@
     }
   ],
   "routes": [
-    { "src": "^/static/.*$", "dest": "/static/0", "continue": true },
-    { "src": "^/(.*\\.(?:js|css|map|json|png|jpg|jpeg|svg|gif|webp|ico|woff|woff2|ttf|eot|otf|txt|xml|webmanifest))$", "dest": "/$1", "continue": true },
     { "handle": "filesystem" },
     { "src": "^/cashier(?:/.*)?$", "dest": "/index.html", "status": 200 },
     { "src": "^/doctor(?:/.*)?$", "dest": "/index.html", "status": 200 },
