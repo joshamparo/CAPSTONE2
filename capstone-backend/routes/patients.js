@@ -1313,6 +1313,58 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
           return '';
         })();
 
+        try {
+          await Promise.all([
+            ensureBillingTablesExist().catch(() => {}),
+            prisma.$executeRawUnsafe(`
+              CREATE TABLE IF NOT EXISTS public.billing_adjustments (
+                id bigserial PRIMARY KEY,
+                invoice_id bigint NOT NULL REFERENCES public.billing_invoices(id) ON DELETE CASCADE,
+                type text NOT NULL,
+                amount numeric(10,2) NOT NULL DEFAULT 0,
+                reference text NULL,
+                reason text NULL,
+                created_by text NULL,
+                created_at timestamptz NOT NULL DEFAULT now()
+              )
+            `).catch(() => null),
+            prisma.$executeRawUnsafe(`
+              CREATE TABLE IF NOT EXISTS public.billing_hmo_claims (
+                id bigserial PRIMARY KEY,
+                invoice_id bigint NOT NULL UNIQUE REFERENCES public.billing_invoices(id) ON DELETE CASCADE,
+                appointment_id bigint NULL,
+                patient_id uuid NULL,
+                patient_name text NULL,
+                hmo_provider text NULL,
+                hmo_loa_number text NULL,
+                hmo_card_number text NULL,
+                philhealth_deduction numeric(12,2) NOT NULL DEFAULT 0,
+                loa_approved_amount numeric(12,2) NOT NULL DEFAULT 0,
+                status text NOT NULL DEFAULT 'Pending',
+                notes text NULL,
+                requested_by text NULL,
+                updated_by text NULL,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now()
+              )
+            `).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS appointment_id bigint NULL`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_id uuid NULL`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_name text NULL`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_loa_number text NULL`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_card_number text NULL`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS requested_by text NULL`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS updated_by text NULL`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'Pending'`).catch(() => null),
+            prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_status ON public.billing_hmo_claims(status, updated_at DESC)`).catch(() => null),
+            prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_invoice_id ON public.billing_hmo_claims(invoice_id)`).catch(() => null),
+            prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_patient_id ON public.billing_hmo_claims(patient_id)`).catch(() => null),
+            prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_appointment_id ON public.billing_hmo_claims(appointment_id)`).catch(() => null),
+            prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_adjustments_invoice_id ON public.billing_adjustments(invoice_id)`).catch(() => null),
+            prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_adjustments_created_at ON public.billing_adjustments(created_at)`).catch(() => null)
+          ]);
+        } catch (_schemaWarm) {}
+
         if (!routeMeta?.type) {
             return res.status(400).json({ message: 'Invalid walk-in destination.' });
         }
