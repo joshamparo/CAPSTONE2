@@ -3,7 +3,7 @@
   "installCommand": "npm install --no-audit --no-fund",
   "buildCommand": "npm run build:frontend:only",
   "outputDirectory": "frontend/build",
-  "cleanUrls": true,
+  "cleanUrls": false,
   "trailingSlash": false,
   "headers": [
     {
