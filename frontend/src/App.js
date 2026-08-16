@@ -160,25 +160,31 @@ function AppShell() {
   const isAuthRoute = ['/', '/login', '/otp', '/recovery', '/reset-password'].includes(pathname);
 
   useEffect(() => {
-    try {
-      const key = 'pascualinga_404_restore_path';
-      const pending = window.sessionStorage.getItem(key);
-      if (pending && typeof pending === 'string' && pending !== '/') {
-        window.sessionStorage.removeItem(key);
-        if (pending !== pathname) {
-          navigate(pending, { replace: true });
+    // Run RESTORE path AFTER first paint so initial mount isn't blocked by storage/navigate work.
+    let cancelled = false;
+    const id = setTimeout(() => {
+      if (cancelled) return;
+      try {
+        const key = 'pascualinga_404_restore_path';
+        const pending = window.sessionStorage.getItem(key);
+        if (pending && typeof pending === 'string' && pending !== '/') {
+          window.sessionStorage.removeItem(key);
+          if (pending !== pathname) {
+            navigate(pending, { replace: true });
+          }
+          return;
         }
-        return;
-      }
-      const q = new URLSearchParams(window.location.search);
-      if (q.get('p404') === '1') {
-        const target = window.sessionStorage.getItem(key) || '/';
-        window.sessionStorage.removeItem(key);
-        if (target && target !== pathname) {
-          navigate(target, { replace: true });
+        const q = new URLSearchParams(window.location.search);
+        if (q.get('p404') === '1') {
+          const target = window.sessionStorage.getItem(key) || '/';
+          window.sessionStorage.removeItem(key);
+          if (target && target !== pathname) {
+            navigate(target, { replace: true });
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }, 80);
+    return () => { cancelled = true; clearTimeout(id); };
   }, [navigate, pathname]);
 
   const [backendDown, setBackendDown] = useState(() => {
@@ -234,9 +240,13 @@ function AppShell() {
   });
 
   useEffect(() => {
-    // First run immediately
+    // First run AFTER first paint — keep mount path fast and clean.
     const mark = { current: 0 };
-    runSystemHealthCheck(mark);
+    let cancelled = false;
+    const firstRun = setTimeout(() => {
+      if (cancelled) return;
+      runSystemHealthCheck(mark);
+    }, 250);
     // Poll every 15 seconds
     const intv = setInterval(() => {
       runSystemHealthCheck({ current: 0 });
@@ -244,6 +254,8 @@ function AppShell() {
     const onLine = () => runSystemHealthCheck({ current: 0 });
     try { window.addEventListener('online', onLine); } catch (_) {}
     return () => {
+      cancelled = true;
+      clearTimeout(firstRun);
       clearInterval(intv);
       try { window.removeEventListener('online', onLine); } catch (_) {}
     };

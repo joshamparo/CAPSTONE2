@@ -143,6 +143,10 @@ class RootErrorBoundary extends Component {
 function bootApp() {
   try {
     try {
+      // eslint-disable-next-line no-console
+      console.log('[pascualinga:boot] bootApp() entered @ +' + (Date.now() - (window.__PASCUALINGA_BOOT && window.__PASCUALINGA_BOOT.startedAt ? window.__PASCUALINGA_BOOT.startedAt : Date.now())) + 'ms');
+    } catch (_) {}
+    try {
       document.documentElement.dataset.theme = 'light';
     } catch (_) {}
     try {
@@ -151,7 +155,13 @@ function bootApp() {
       }
     } catch (_) {}
 
-    try { installApiFetchShim(); } catch (apiShimError) {
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[pascualinga:boot] before installApiFetchShim');
+      installApiFetchShim();
+      // eslint-disable-next-line no-console
+      console.log('[pascualinga:boot] installApiFetchShim OK');
+    } catch (apiShimError) {
       try {
         // eslint-disable-next-line no-console
         console.error('installApiFetchShim failed — continuing anyway', apiShimError);
@@ -164,7 +174,15 @@ function bootApp() {
       return;
     }
 
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[pascualinga:boot] before ReactDOM.createRoot');
+    } catch (_) {}
     const root = ReactDOM.createRoot(rootEl);
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[pascualinga:boot] before root.render() – mounting App tree');
+    } catch (_) {}
     root.render(
       <React.StrictMode>
         <RootErrorBoundary>
@@ -172,15 +190,22 @@ function bootApp() {
         </RootErrorBoundary>
       </React.StrictMode>
     );
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[pascualinga:boot] root.render() returned OK');
+    } catch (_) {}
 
     try {
       window.__PASCUALINGA_APP_MOUNTED_SUCCESSFULLY__ = true;
+      try {
+        // eslint-disable-next-line no-console
+        console.log('[pascualinga:boot] ✅ __PASCUALINGA_APP_MOUNTED_SUCCESSFULLY__ flag set @ +' + (Date.now() - (window.__PASCUALINGA_BOOT && window.__PASCUALINGA_BOOT.startedAt ? window.__PASCUALINGA_BOOT.startedAt : Date.now())) + 'ms');
+      } catch (_) {}
     } catch (_) {}
 
     // Hide the boot shell after a tiny delay to allow first React paint
     try {
       setTimeout(hideBootShell, 50);
-      // Belt & suspenders: run again in case the first setTimeout runs before a heavy first paint.
       setTimeout(hideBootShell, 350);
       setTimeout(hideBootShell, 900);
     } catch (_) {}

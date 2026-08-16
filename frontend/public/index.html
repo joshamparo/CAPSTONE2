@@ -71,7 +71,7 @@
           </div>
 
           <!-- JS POWERED BUTTON HANDLERS (only if JS works) -->
-          <div id="__pascualinga_btn_row" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;display:none;">
+          <div id="__pascualinga_btn_row" style="display:none;">
             <button id="__pascualinga_reset" type="button"
               style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;cursor:pointer;
                      font-weight:600;font-size:.88rem;border:none;
@@ -221,17 +221,46 @@
 
         document.addEventListener('DOMContentLoaded', function(){
           try{ bindButtons(); }catch(_){}
-          // Watchdog: if React didn't hide this boot layer in 3.5s, show recovery UI (no more pure white screen)
+          // Watchdog timers:
+          // - 6s: avoid false positives on Vercel cold start / heavy bundle parse
+          // - 14s: hard recovery UI (app truly stuck
           setTimeout(function(){
             try{
               var boot = $('__pascualinga_boot');
               if(!boot) return;
-              var hidden = boot.hasAttribute('hidden');
-              if(hidden) return;
+              if(boot.hasAttribute('hidden')) return;
               if(window.__PASCUALINGA_APP_MOUNTED_SUCCESSFULLY__ === true) return;
+              if(window.__PASCUALINGA_RECOVERY_UI_SHOWN__) return;
+              // Not yet mounted, show the RECOVERY MODE info
               showRecoveryUI(null);
+              window.__PASCUALINGA_RECOVERY_UI_SHOWN__ = true;
             }catch(_){}
-          }, 3500);
+          }, 6000);
+          setTimeout(function(){
+            try{
+              var boot = $('__pascualinga_boot');
+              if(!boot) return;
+              if(boot.hasAttribute('hidden')) return;
+              if(window.__PASCUALINGA_APP_MOUNTED_SUCCESSFULLY__ === true) return;
+              var title = $('__pascualinga_title');
+              var sub = $('__pascualinga_sub');
+              if(title) setText(title, 'App is stuck during startup');
+              if(sub) setText(sub, 'Main JS bundle may have failed to load. Please use the buttons below to recover quickly.');
+              try{
+                var err = $('__pascualinga_error');
+                if(err){
+                  err.style.display = 'block';
+                  setHTML(err, '<div style="font-weight:600;">What happened</div>' +
+                    '<pre style="display:block;white-space:pre-wrap;word-break:break-word;margin-top:6px;max-height:220px;overflow:auto;' +
+                    'font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;' +
+                    'font-size:.78rem;background:rgba(136,19,55,.06);border-radius:8px;padding:8px 10px;">' +
+                    'App shell loaded successfully, but React /static/ could not be parsed or React did not finish loading. This is almost always because main.js failed to load.\n\n' +
+                    'Check your browser console (F12 → Console) for red errors.\n\n' +
+                    'Try: Reset & go home → Reload page → Clear site storage.</pre>');
+                }
+              }catch(_){}
+            }catch(_){}
+          }, 14000);
         });
 
         // Expose helpers for index.js to call in case of a caught boot error
