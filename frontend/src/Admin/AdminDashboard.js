@@ -314,34 +314,33 @@ function AdminDashboard() {
   const [newTodo, setNewTodo] = useState("");
   const [newTodoError, setNewTodoError] = useState("");
   useEffect(() => { localStorage.setItem('adminTodos', JSON.stringify(adminTodos)); }, [adminTodos]);
+  const focusTodoInputWithShake = () => {
+    try {
+      const todoInputEl = document.getElementById('admin-todo-input');
+      if (todoInputEl) {
+        todoInputEl.focus({ preventScroll: false });
+        todoInputEl.classList.remove("todo-input-shake");
+        void todoInputEl.offsetWidth;
+        todoInputEl.classList.add("todo-input-shake");
+      }
+    } catch (_) {}
+  };
   const handleAddTodo = (e) => {
     e.preventDefault();
     const trimmed = String(newTodo || "").trim();
     if (!trimmed) {
       setNewTodoError("Task cannot be empty. Type something you need to do.");
-      setModalType("error");
-      setSuccessMessage("Please enter a task before adding it.");
-      setShowSuccessModal(true);
-      const todoInputEl = document.querySelector('form.todo-input-group input[type="text"].todo-input');
-      if (todoInputEl) {
-        todoInputEl.classList.remove("todo-input-shake");
-        void todoInputEl.offsetWidth;
-        todoInputEl.classList.add("todo-input-shake");
-      }
+      focusTodoInputWithShake();
       return;
     }
     if (trimmed.length < 3) {
       setNewTodoError("Task is too short. Add at least 3 characters.");
-      setModalType("error");
-      setSuccessMessage("⚠️ Task is too short — add at least 3 characters.");
-      setShowSuccessModal(true);
+      focusTodoInputWithShake();
       return;
     }
     if (trimmed.length > 220) {
       setNewTodoError("Task is too long. Max 220 characters allowed.");
-      setModalType("error");
-      setSuccessMessage("⚠️ Task is too long — keep under 220 characters.");
-      setShowSuccessModal(true);
+      focusTodoInputWithShake();
       return;
     }
     setNewTodoError("");
@@ -4602,6 +4601,7 @@ function AdminDashboard() {
                   ) : null}
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <input
+                      id="admin-todo-input"
                       type="text"
                       placeholder="Add a new task..."
                       className="todo-input"
