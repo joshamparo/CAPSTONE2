@@ -1782,7 +1782,13 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 const kind = routeMeta.type === 'lab' ? 'Laboratory' : isEcg ? 'ECG' : 'Radiology';
                 const assignedRole = routeMeta.type === 'lab' ? 'medtech' : isEcg ? 'ecg_operator' : 'radiographer';
                 const pricing = resolveClinicalServicePricing({ kind, service });
-                const status = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
+                const hmoActive = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
+                const coverage = payload.hmoCoveredServices && typeof payload.hmoCoveredServices === 'object' ? payload.hmoCoveredServices : {};
+                const serviceType = routeMeta.type === 'lab' ? 'lab' : 'imaging';
+                const coveredByHmo = hmoActive && Boolean(coverage[serviceType]);
+                const baseStatus = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
+                const status = coveredByHmo ? 'Paid' : baseStatus;
+                if (coveredByHmo) mainClinicalOrderHmoCoveredCents = Number(pricing?.unitPrice || 0);
                 const priority = triage.level <= 2 ? 'urgent' : 'routine';
 
                 const detailLines = [
@@ -1880,15 +1886,22 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             // --- COMMON LOGIC FOR SELECTED LAB/IMAGING SERVICES ---
             // This now runs for ALL walk-in intakes if checkboxes were checked
             const generatedExtraTickets = [];
+            let mainClinicalOrderHmoCoveredCents = 0;
             const commonDetailLines = [
                 `Vitals: Temp ${intakeEntry.vitals.temperature ?? '—'}, BP ${intakeEntry.vitals.bloodPressure || '—'}, HR ${intakeEntry.vitals.heartRate ?? '—'}`,
                 `Main Concern: ${String(payload.mainConcern || '').trim() || 'Walk-in'}`
             ];
+            const hmoActiveExtra = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
+            const coverageExtra = payload.hmoCoveredServices && typeof payload.hmoCoveredServices === 'object' ? payload.hmoCoveredServices : {};
+            let extraHmoTotalCents = 0;
 
             if (Array.isArray(payload.selectedLabServices) && payload.selectedLabServices.length > 0) {
                 for (const service of payload.selectedLabServices) {
                     const pricing = resolveClinicalServicePricing({ kind: 'Laboratory', service });
-                    const status = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
+                    const baseStatus = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
+                    const covered = hmoActiveExtra && Boolean(coverageExtra.lab);
+                    const status = covered ? 'Paid' : baseStatus;
+                    if (covered) extraHmoTotalCents += Number(pricing?.unitPrice || 0);
                     const { ticket: labTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], 'LAB');
                     generatedExtraTickets.push(labTicket);
                     await tx.clinical_orders.create({
@@ -1917,7 +1930,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     const kind = isECG ? 'ECG' : 'Radiology';
                     const assignedRole = isECG ? 'ecg_operator' : 'radiographer';
                     const pricing = resolveClinicalServicePricing({ kind, service });
-                    const status = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
+                    const baseStatus = pricing?.configured && Number(pricing?.unitPrice || 0) > 0 ? 'For Payment' : 'Pending';
+                    const covered = hmoActiveExtra && Boolean(coverageExtra.imaging);
+                    const status = covered ? 'Paid' : baseStatus;
+                    if (covered) extraHmoTotalCents += Number(pricing?.unitPrice || 0);
                     const { ticket: imgTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], isECG ? 'ECG' : 'IMG');
                     generatedExtraTickets.push(imgTicket);
                     await tx.clinical_orders.create({
@@ -2014,23 +2030,31 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 }
 
                 // Insert into billing_hmo_claims using the unified schema
-                const autoApproveAmount = hasServices ? 100 : 0; // Flat fee is 100
+                const onSiteAmount = hasServices ? 100 : 0;
+                const autoApproveAmount = onSiteAmount + mainClinicalOrderHmoCoveredCents + extraHmoTotalCents;
+                const apptIdForClaim = createdRecord && createdRecord.id ? String(createdRecord.id) : null;
+                const coverageJson = (coverageExtra && Object.keys(coverageExtra).length > 0) ? JSON.stringify(coverageExtra) : null;
                 await tx.$executeRawUnsafe(`
                     INSERT INTO public.billing_hmo_claims
-                        (invoice_id, hmo_provider, hmo_loa_number, hmo_card_number, 
-                         philhealth_deduction, loa_approved_amount, status, notes, requested_by, created_at, updated_at)
+                        (invoice_id, appointment_id, patient_id, patient_name, hmo_provider, hmo_loa_number, hmo_card_number, 
+                         philhealth_deduction, loa_approved_amount, status, coverage_json, notes, requested_by, created_at, updated_at)
                     VALUES
-                        ($1::bigint, $2::text, $3::text, $4::text, 
-                         $5::numeric, $6::numeric, 'Approved', $7::text, $8::text, now(), now())
+                        ($1::bigint, $2::bigint, $3::bigint, $4::text, $5::text, $6::text, $7::text, 
+                         $8::numeric, $9::numeric, 'Approved', $10::jsonb, $11::text, $12::text, now(), now())
                     ON CONFLICT (invoice_id) DO UPDATE SET
+                        appointment_id = COALESCE(public.billing_hmo_claims.appointment_id, EXCLUDED.appointment_id),
+                        patient_id = COALESCE(public.billing_hmo_claims.patient_id, EXCLUDED.patient_id),
+                        patient_name = COALESCE(public.billing_hmo_claims.patient_name, EXCLUDED.patient_name),
                         hmo_provider = EXCLUDED.hmo_provider,
                         hmo_loa_number = EXCLUDED.hmo_loa_number,
                         hmo_card_number = EXCLUDED.hmo_card_number,
                         philhealth_deduction = EXCLUDED.philhealth_deduction,
                         loa_approved_amount = CASE WHEN public.billing_hmo_claims.loa_approved_amount = 0 THEN EXCLUDED.loa_approved_amount ELSE public.billing_hmo_claims.loa_approved_amount END,
+                        coverage_json = COALESCE(public.billing_hmo_claims.coverage_json, EXCLUDED.coverage_json),
                         notes = EXCLUDED.notes,
                         updated_at = now()
-                `, linkedInvoiceId, hmoProv, loaNum, hmoCard, phAmt, autoApproveAmount, hmoNts,
+                `, linkedInvoiceId, apptIdForClaim, String(patient.id), patientName, hmoProv, loaNum, hmoCard,
+                    phAmt, autoApproveAmount, coverageJson, hmoNts,
                     getRequesterEmail(req) || requesterName || null
                 ).catch((err) => {
                     console.error('[HMO Intake] Failed to record claim:', err);

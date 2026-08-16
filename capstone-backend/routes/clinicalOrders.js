@@ -148,6 +148,7 @@ function canTransitionStatus({ fromStatus, toStatus, actorRole, assignedRole }) 
 function enrichClinicalOrder(order) {
   const row = order && typeof order === 'object' ? { ...order } : {};
   const pricing = resolveClinicalServicePricing({ kind: row.kind, service: row.service });
+  const statusIsForPayment = String(row.status || '').toLowerCase() === 'for payment';
   return {
     ...row,
     pricing,
@@ -156,7 +157,7 @@ function enrichClinicalOrder(order) {
     priceLabel: pricing.serviceLabel,
     currency: pricing.currency,
     unitPrice: pricing.unitPrice,
-    amountDue: pricing.unitPrice
+    amountDue: statusIsForPayment ? pricing.unitPrice : 0
   };
 }
 

@@ -1108,7 +1108,49 @@ router.get('/hmo-queue', async (req, res) => {
           FROM public.billing_invoices bi
         ) i ON i.id = h.invoice_id
         LEFT JOIN public.patients p ON p.id = i.patient_id
-        ORDER BY h.updated_at DESC, h.created_at DESC
+
+        UNION ALL
+
+        SELECT
+          -a.id AS id,
+          NULL AS invoice_id,
+          a.hmo_provider,
+          a.hmo_loa_number,
+          a.hmo_card_number,
+          a.philhealth_deduction AS philhealth_deduction,
+          CASE
+            WHEN COALESCE((SELECT SUM(c.unit_price) FROM public.clinical_orders c WHERE c.patient_id = a.patient_id AND c.created_at >= a.created_at - INTERVAL '2 hours'), 0) > 0
+            THEN COALESCE((SELECT SUM(c.unit_price) FROM public.clinical_orders c WHERE c.patient_id = a.patient_id AND c.created_at >= a.created_at - INTERVAL '2 hours'), 0)
+            ELSE 0
+          END AS loa_approved_amount,
+          'Approved' AS status,
+          CONCAT_WS(' • ', 'Walk-in HMO Intake', a.purpose, a.route_type) AS notes,
+          NULL AS requested_by,
+          NULL AS updated_by,
+          a.created_at AS created_at,
+          a.updated_at AS updated_at,
+          0 AS total_amount,
+          0 AS balance_amount,
+          'Draft' AS invoice_status,
+          p.first_name,
+          p.last_name,
+          p.email,
+          p.contact_number
+        FROM public.appointments a
+        LEFT JOIN public.patients p ON p.id = a.patient_id
+        WHERE a.is_hmo = TRUE
+          AND NOT EXISTS (
+            SELECT 1 FROM public.billing_hmo_claims hc WHERE hc.appointment_id = a.id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM public.billing_hmo_claims hc2
+            JOIN public.billing_invoices bi ON bi.id = hc2.invoice_id
+            WHERE bi.patient_id = a.patient_id
+              AND bi.created_at >= a.created_at - INTERVAL '4 hours'
+              AND bi.created_at <= a.created_at + INTERVAL '4 hours'
+          )
+
+        ORDER BY updated_at DESC, created_at DESC
       `
     ).catch(() => []);
 
