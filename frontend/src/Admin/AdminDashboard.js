@@ -2197,13 +2197,19 @@ function AdminDashboard() {
     const city = e.target.value;
     setSelectedCity(city);
     const data = ncrCalabarzonCities.find(c => c.city === city);
+    let province = "";
+    let zip = "";
     if (data) {
-      setSelectedProvince(data.province);
-      setPostalCode(data.zip);
+      province = data.province;
+      zip = data.zip;
+      setSelectedProvince(province);
+      setPostalCode(zip);
     } else {
       setSelectedProvince("");
       setPostalCode("");
     }
+    // ALSO sync staffFormData for city/province/postal so validators that read from staffFormData stay in sync
+    setStaffFormData((prev) => ({ ...prev, city, province, postalCode: zip }));
   };
 
   const handlePhilHealthInput = (e, fieldId) => {
@@ -2870,11 +2876,16 @@ function AdminDashboard() {
     let newUser = null;
     let tempPassword = "";
     try {
+      const clean = (v) => String(v || "").trim();
+      const resolvedCity = clean(staffFormData.city) || clean(selectedCity);
+      const matchedCity = ncrCalabarzonCities.find((item) => clean(item.city) === resolvedCity);
+      const resolvedProvince = clean(staffFormData.province) || clean(selectedProvince) || clean(matchedCity?.province);
+      const resolvedPostalCode = clean(staffFormData.postalCode) || clean(postalCode) || clean(matchedCity?.zip);
       newUser = { 
         ...staffFormData, 
-        city: selectedCity,
-        province: selectedProvince,
-        postalCode: postalCode
+        city: resolvedCity,
+        province: resolvedProvince,
+        postalCode: resolvedPostalCode
       };
       
       // Map role to accountType
@@ -2903,7 +2914,6 @@ function AdminDashboard() {
       }
 
       const errors = [];
-      const clean = (v) => String(v || "").trim();
       const isValidPHPhone = (v) => /^(\+?63\s?|0)9\d{9}$/.test(String(clean(v)).replace(/[\s\-()]/g, ''));
       const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(clean(v));
       const isValidName = (v) => { const s = clean(v); return !!s && /^[A-Za-zÑñ][A-Za-zÑñ' .\-]*$/.test(s); };
@@ -3153,15 +3163,17 @@ function AdminDashboard() {
         return false;
       }
     } else if (registrationStep === 3) {
-      // Step 3 actual displayed fields: email, phone, streetAddress, city (NOT username/password/address combined)
+      // Step 3: accept whichever city source is already populated so the UI and payload stay aligned
       const emailClean = clean(staffFormData.email);
       const phoneDigits = clean(staffFormData.phone).replace(/[\s\-()]/g, '');
       const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
       const isValidPhone = (v) => /^(\+?63\s?|0)9\d{9}$/.test(v);
+      const cityForStep = clean(staffFormData.city) || clean(selectedCity);
+      const streetForStep = clean(staffFormData.streetAddress);
       if (!emailClean || !isValidEmail(emailClean)) return false;
       if (!clean(staffFormData.phone) || !isValidPhone(phoneDigits)) return false;
-      if (!clean(staffFormData.streetAddress) || clean(staffFormData.streetAddress).length < 5) return false;
-      if (!clean(staffFormData.city) || clean(staffFormData.city).length < 2) return false;
+      if (!streetForStep || streetForStep.length < 5) return false;
+      if (!cityForStep || cityForStep.length < 2) return false;
     }
     return true;
   }, [registrationStep, staffFormData, selectedCity]);
@@ -3224,8 +3236,10 @@ function AdminDashboard() {
       const isValidPhone = (v) => /^(\+?63\s?|0)9\d{9}$/.test(v);
       if (!clean(staffFormData.phone)) blockers.push("Phone Number");
       else if (!isValidPhone(phoneDigits)) blockers.push("PH Phone format (09XX XXX XXXX or +63 9XX XXX XXXX)");
-      if (!clean(staffFormData.streetAddress) || clean(staffFormData.streetAddress).length < 5) blockers.push("Street Address (min 5 chars)");
-      if (!clean(staffFormData.city) || clean(staffFormData.city).length < 2) blockers.push("City / Municipality");
+      const streetStep = clean(staffFormData.streetAddress);
+      if (!streetStep || streetStep.length < 5) blockers.push("Street Address (min 5 chars)");
+      const cityStep = clean(staffFormData.city) || clean(selectedCity);
+      if (!cityStep || cityStep.length < 2) blockers.push("City / Municipality");
     }
     return blockers;
   }, [registrationStep, staffFormData, selectedCity]);
@@ -6137,7 +6151,7 @@ function AdminDashboard() {
                   </div>
                   <div className="input-group">
                     <label>City / Municipality</label>
-                    <select className="white-input" name="city" required onChange={handleCityChange} value={selectedCity}>
+                    <select className="white-input" name="city" required onChange={handleCityChange} value={staffFormData.city || selectedCity}>
                       <option value="">Select City</option>
                       {ncrCalabarzonCities.map((item, index) => (
                         <option key={index} value={item.city}>{item.city}</option>
@@ -6146,11 +6160,11 @@ function AdminDashboard() {
                   </div>
                   <div className="input-group">
                     <label>Province</label>
-                    <input type="text" name="province" className="white-input input-disabled-bg" value={selectedProvince} readOnly />
+                    <input type="text" name="province" className="white-input input-disabled-bg" value={staffFormData.province || selectedProvince} readOnly />
                   </div>
                   <div className="input-group">
                     <label>Postal Code</label>
-                    <input type="text" name="postalCode" className="white-input input-disabled-bg" value={postalCode} readOnly />
+                    <input type="text" name="postalCode" className="white-input input-disabled-bg" value={staffFormData.postalCode || postalCode} readOnly />
                   </div>
                 </div>
               </div>
