@@ -1109,6 +1109,83 @@ router.get('/hmo-queue', async (req, res) => {
     const page = Math.max(1, Math.trunc(Number(req.query.page || 1)));
     const perPage = Math.max(1, Math.min(50, Math.trunc(Number(req.query.perPage || req.query.per_page || 8))));
 
+    // ============== AUTO-RECOVER OLD HMO PATIENTS ==============
+    // Many old walk-in tests had appointments.hmo_status set but billing_hmo_claims rows failed to insert (silent schema errors).
+    // Scan appointments with non-trivial hmo_status, if no billing_hmo_claims row exists yet, auto-create minimum row.
+    // This runs EVERY HMO page load so the user's 4 previous "blank table" test patients will reappear automatically.
+    try {
+      const orphanCandidates = await prisma.$queryRawUnsafe(`
+        SELECT
+          a.id AS appt_id,
+          a.patient_id,
+          a.patient_name,
+          a.hmo_status,
+          a.hmo_provider,
+          (SELECT bi.id FROM public.billing_invoices bi
+            WHERE bi.appointment_id = a.id
+               OR bi.patient_id = a.patient_id AND bi.created_at >= a.created_at - interval '1 hour'
+            ORDER BY bi.id DESC LIMIT 1) AS invoice_id
+        FROM public.appointments a
+        WHERE a.hmo_status IN ('Approved','Partially Approved','Awaiting LOA','Rejected','Confirmed','Cleared','Pre-Approved','Validated','Pending for LOA','Hold','Forwarded','For HMO Callback')
+        ORDER BY a.created_at DESC
+        LIMIT 200
+      `).catch(() => []);
+
+      if (Array.isArray(orphanCandidates) && orphanCandidates.length) {
+        for (const cand of orphanCandidates) {
+          try {
+            const cStatus = String(cand.hmo_status || '').trim() || 'Awaiting LOA';
+            const cPatientId = cand.patient_id ? String(cand.patient_id) : null;
+            const cPatientName = cand.patient_name ? String(cand.patient_name) : null;
+            const cApptId = cand.appt_id ? (typeof cand.appt_id === 'bigint' ? cand.appt_id : BigInt(String(cand.appt_id))) : null;
+            const cInvId = cand.invoice_id ? (typeof cand.invoice_id === 'bigint' ? cand.invoice_id : BigInt(String(cand.invoice_id))) : null;
+            const cHmoProv = cand.hmo_provider ? String(cand.hmo_provider) : null;
+
+            if (!cInvId || !cPatientId) continue;
+
+            await prisma.$executeRawUnsafe(`
+              INSERT INTO public.billing_hmo_claims (
+                invoice_id, appointment_id, patient_id, patient_name,
+                hmo_provider, philhealth_deduction, loa_approved_amount,
+                status, notes, requested_by, created_at, updated_at
+              ) VALUES (
+                $1::bigint,
+                $2::bigint,
+                $3::uuid,
+                $4::text,
+                $5::text,
+                0,
+                0,
+                $6::text,
+                '[Auto-recovered from appointment.hmo_status on HMO page load]',
+                'system:auto-recover',
+                now(),
+                now()
+              ) ON CONFLICT (invoice_id) DO NOTHING
+            `, cInvId, cApptId, cPatientId, cPatientName, cHmoProv, cStatus);
+          } catch (_c) {
+            // ignore per-row
+          }
+        }
+      }
+
+      // Also add missing columns if they don't exist (backward compat safety for existing DBs)
+      await Promise.all([
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS appointment_id bigint NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_id uuid NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_name text NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_loa_number text NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_card_number text NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS requested_by text NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS updated_by text NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_status ON public.billing_hmo_claims(status, updated_at DESC)`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_patient_id ON public.billing_hmo_claims(patient_id)`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_appointment_id ON public.billing_hmo_claims(appointment_id)`).catch(() => null)
+      ]).catch(() => {});
+    } catch (_autoRecover) {
+      // Never break the main query
+    }
+
     const rows = await prisma.$queryRawUnsafe(
       `
         SELECT

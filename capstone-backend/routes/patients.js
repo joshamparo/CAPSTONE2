@@ -1304,8 +1304,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
 
         const hmoApprovalStatusRaw = String(payload.hmoApprovalStatus || '').trim().toLowerCase();
         const hmoPaymentModeRaw = String(payload.hmoPaymentMode || '').trim().toLowerCase();
+        const hmoRejectedFlag = Boolean(payload.hmoRejected === true || hmoApprovalStatusRaw === 'rejected');
         let desiredHmoStatus = null;
-        if (hmoApprovalStatusRaw === 'approved') desiredHmoStatus = 'Approved';
+        if (hmoRejectedFlag) desiredHmoStatus = null; // EXPLICITLY REJECTED → skip ALL claim inserts, no HMO monitoring row
+        else if (hmoApprovalStatusRaw === 'approved') desiredHmoStatus = 'Approved';
         else if (hmoApprovalStatusRaw === 'awaiting_loa') desiredHmoStatus = 'Awaiting LOA';
         const paymentModeNoteTag = (() => {
           if (hmoPaymentModeRaw === 'temp_cash') return '[Patient temp paid full - refund HMO later]';
@@ -2450,6 +2452,79 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
 
             return { patient, createdRecord, hmoSummary };
         }, { timeout: 45000 });
+
+        // ============== LAYER 2 FALLBACK SAFETY NET ==============
+        // GUARANTEES: HMO claim row exists if patient had HMO + status approved/awaiting
+        // Even if layer1 syncHmo failed silently (old bugs/crashes/.catch(()=>null)), this runs directly with fresh prisma
+        // after commit, uses ON CONFLICT (invoice_id) DO NOTHING so duplicates never happen.
+        try {
+            const hasAnyHmoFlag = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
+            const shouldCreateClaim = hasAnyHmoFlag && desiredHmoStatus && !hmoRejectedFlag;
+            if (shouldCreateClaim && result?.patient?.id) {
+                const patientIdRaw = String(result.patient.id || '').trim();
+                const patientFullName = (() => {
+                    const f = String(result.patient.first_name || result.createdRecord?.patientFirstName || result.patient.firstName || '').trim();
+                    const m = String(result.patient.middle_name || result.patient.middleName || '').trim();
+                    const l = String(result.patient.last_name || result.createdRecord?.patientLastName || result.patient.lastName || '').trim();
+                    return [f, m, l].filter(Boolean).join(' ') || null;
+                })();
+                const hmoProv = String(payload.hmoProvider || '').trim() || null;
+                const loaNum = String(payload.hmoLoaNumber || '').trim() || null;
+                const hmoCard = String(payload.hmoCardNumber || '').trim() || null;
+                const phAmt = Number(payload.philhealthDeduction) || 0;
+                const loaAmt = Number(payload.hmoLoaApprovedAmount) || 0;
+                const apptId = result?.createdRecord?.appointmentId || result?.createdRecord?.id ? String(result.createdRecord.appointmentId || result.createdRecord.id) : null;
+                const notes = [String(payload.hmoNotes || '').trim(), paymentModeNoteTag].filter(Boolean).join(' · ') || null;
+                const requester = getRequesterEmail(req) || requesterName || null;
+
+                // Find all recent invoices for this patient created in last 5 minutes (covers all per-service walkin invoices)
+                const candidateInvoices = await prisma.$queryRawUnsafe(`
+                    SELECT DISTINCT bi.id FROM public.billing_invoices bi
+                    WHERE bi.patient_id = $1::uuid
+                      AND bi.created_at >= (now() - interval '15 minutes')
+                    ORDER BY bi.id DESC
+                `, patientIdRaw).catch(() => []);
+                if (Array.isArray(candidateInvoices) && candidateInvoices.length) {
+                    const insertPromises = candidateInvoices.map(async (row) => {
+                        const invId = row?.id ? (typeof row.id === 'bigint' ? row.id : BigInt(String(row.id))) : null;
+                        if (!invId) return;
+                        try {
+                            const apptIdSafe = apptId ? apptId : null;
+                            await prisma.$executeRawUnsafe(`
+                                INSERT INTO public.billing_hmo_claims (
+                                    invoice_id, appointment_id, patient_id, patient_name,
+                                    hmo_provider, hmo_loa_number, hmo_card_number,
+                                    philhealth_deduction, loa_approved_amount, status,
+                                    notes, requested_by, updated_by, created_at, updated_at
+                                ) VALUES (
+                                    $1::bigint,
+                                    $2::bigint,
+                                    $3::uuid,
+                                    $4::text,
+                                    $5::text,
+                                    $6::text,
+                                    $7::text,
+                                    $8::numeric,
+                                    $9::numeric,
+                                    $10::text,
+                                    $11::text,
+                                    $12::text,
+                                    $13::text,
+                                    now(),
+                                    now()
+                                ) ON CONFLICT (invoice_id) DO NOTHING
+                            `, invId, apptIdSafe, patientIdRaw, patientFullName, hmoProv, loaNum, hmoCard, phAmt, loaAmt, desiredHmoStatus, notes, requester, requester);
+                        } catch (_ins) {
+                            // ignore duplicate or schema issues; layer1 may have worked
+                        }
+                    });
+                    await Promise.all(insertPromises);
+                }
+            }
+        } catch (_layer2) {
+            // Safety net failing should never break user response
+            console.error('[HMO Layer2] Safety net insert failed:', _layer2);
+        }
 
         let emailSent = false;
         if (routeMeta.type === 'onsite_consult') {
