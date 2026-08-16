@@ -17,6 +17,7 @@ const normalizeStatus = (v) => {
   const s = String(v || '').trim();
   if (!s) return '';
   const lower = s.toLowerCase();
+  if (lower === 'hmo_lab_queue') return s; // Preserve cashier queue alias literal
   if (lower === 'inprogress') return 'In Progress';
   if (lower === 'in progress') return 'In Progress';
   if (lower === 'forpayment') return 'For Payment';
