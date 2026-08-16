@@ -1548,23 +1548,40 @@ export default function OfficeStaffDashboard({ mode }) {
                       ) : (
                         displayedLabOrders.slice(0, 5).map((o) => (
                           <tr key={String(o.id)}>
-                            <td className="text-sm font-medium text-slate-700">#{o.id}</td>
-                            <td className="text-sm text-slate-600">{o.patientName || '—'}</td>
-                            <td className="text-sm text-slate-600">{o.service || o.kind || '—'}</td>
-                            <td className="text-sm text-slate-600">
-                              {o.priceConfigured ? `₱ ${toMoney(o.amountDue)}` : 'Needs setup'}
+                            <td className="text-sm font-medium text-slate-900">#{o.id}</td>
+                            <td className="text-sm text-slate-900">{o.patientName || '—'}</td>
+                            <td className="text-sm text-slate-900">{o.service || o.kind || '—'}</td>
+                            <td className="text-sm text-slate-900">
+                              {String(o.status || '').toLowerCase() === 'paid'
+                                ? (
+                                  <div>
+                                    <div style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 500, fontSize: '12px', color: '#475569' }}>₱ {toMoney(Number(o.configuredUnitPrice ?? o.unitPrice ?? 0))}</div>
+                                    <div style={{ fontWeight: 900, color: '#0f172a' }}>₱ 0.00 (covered by HMO)</div>
+                                  </div>
+                                )
+                                : (o.priceConfigured ? `₱ ${toMoney(o.amountDue)}` : 'Needs setup')}
                             </td>
                             <td>
-                              <span className="status-badge-table status-upcoming">{o.status || 'For Payment'}</span>
+                              {String(o.status || '').toLowerCase() === 'paid'
+                                ? <span className="status-badge-table status-duty" style={{ background: '#e2e8f0', color: '#0f172a', border: '1px solid #cbd5e1', fontWeight: 900 }}>PAID (HMO)</span>
+                                : <span className="status-badge-table status-upcoming">{o.status || 'For Payment'}</span>}
                             </td>
                             <td className="inc-right">
-                              <button
-                                type="button"
-                                className="office-btn ghost"
-                                onClick={() => openLabOrderPos(o)}
-                              >
-                                Record Payment
-                              </button>
+                              {String(o.status || '').toLowerCase() === 'paid'
+                                ? (
+                                  <button type="button" className="office-btn ghost" onClick={() => openLabOrderPos(o)}>
+                                    View Record
+                                  </button>
+                                )
+                                : (
+                                  <button
+                                    type="button"
+                                    className="office-btn ghost"
+                                    onClick={() => openLabOrderPos(o)}
+                                  >
+                                    Record Payment
+                                  </button>
+                                )}
                             </td>
                           </tr>
                         ))
@@ -1902,7 +1919,7 @@ export default function OfficeStaffDashboard({ mode }) {
 
         {view === 'billing' ? (
           <div className="office-billing-shell">
-            <div className="office-grid-4">
+            <div className="office-grid-3">
               <div className="office-kpi office-kpi-accent">
                 <div className="office-kpi-k">Ready For Payment</div>
                 <div className="office-kpi-v">{billingSummary.readyCount}</div>
@@ -1912,11 +1929,6 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div className="office-kpi-k">Collected Today</div>
                 <div className="office-kpi-v" style={blurStyle} onMouseEnter={blurOnHover} onMouseLeave={resetBlur}>₱ {toMoney(billingSummary.collectedToday)}</div>
                 <div className="office-kpi-meta">{billingSummary.paidToday} settled invoice(s)</div>
-              </div>
-              <div className="office-kpi">
-                <div className="office-kpi-k">Pending Lab Payments</div>
-                <div className="office-kpi-v">{displayedLabOrders.length}</div>
-                <div className="office-kpi-meta">Separate pay-before-exam queue</div>
               </div>
               <div className="office-kpi">
                 <div className="office-kpi-k">Invoices Today</div>
@@ -2313,31 +2325,32 @@ export default function OfficeStaffDashboard({ mode }) {
                       const servicePrice = Number(o.configuredUnitPrice ?? o.unitPrice ?? o.amountDue ?? 0);
                       const rowPatientDue = isPrePaid ? 0 : Number(o.amountDue ?? o.patientPayable ?? servicePrice);
                       return (
-                      <tr key={String(o.id)} style={{ background: isPrePaid ? '#f0fdf4' : undefined }}>
-                        <td className="text-sm font-medium text-slate-700">#{o.id}</td>
-                        <td className="text-sm text-slate-600">{o.patientName || '—'}</td>
-                        <td className="text-sm text-slate-600">
+                      <tr key={String(o.id)} style={{ background: isPrePaid ? '#ffffff' : undefined }}>
+                        <td className="text-sm font-medium text-slate-900">#{o.id}</td>
+                        <td className="text-sm text-slate-900">{o.patientName || '—'}</td>
+                        <td className="text-sm text-slate-900">
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <span>{o.service || o.kind || '—'}</span>
                             {isPrePaid ? (
                               <span style={{
                                 display: 'inline-flex', alignItems: 'center', gap: 6,
                                 padding: '3px 9px', borderRadius: 999,
-                                background: '#16a34a', color: '#fff',
-                                fontSize: '11px', fontWeight: 800
+                                background: '#e2e8f0', color: '#0f172a',
+                                border: '1px solid #cbd5e1',
+                                fontSize: '11px', fontWeight: 700
                               }}>
                                 ✅ HMO COVERED • NO PAYMENT NEEDED
                               </span>
                             ) : null}
                           </div>
                         </td>
-                        <td className="text-sm" style={{ color: isPrePaid ? '#16a34a' : '#0f172a', fontWeight: isPrePaid ? 800 : 600 }}>
+                        <td className="text-sm" style={{ color: '#0f172a', fontWeight: isPrePaid ? 800 : 600 }}>
                           {isPrePaid ? (
                             <div>
-                              <div style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 500, fontSize: '12px' }}>
+                              <div style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 500, fontSize: '12px', color: '#475569' }}>
                                 ₱ {toMoney(servicePrice)}
                               </div>
-                              <div style={{ fontWeight: 900 }}>
+                              <div style={{ fontWeight: 900, color: '#0f172a' }}>
                                 ₱ 0.00 (covered by HMO)
                               </div>
                             </div>
@@ -2347,7 +2360,7 @@ export default function OfficeStaffDashboard({ mode }) {
                         </td>
                         <td>
                           {isPrePaid ? (
-                            <span className={`status-badge-table status-duty`} style={{ fontWeight: 900 }}>
+                            <span className={`status-badge-table status-duty`} style={{ fontWeight: 900, background: '#e2e8f0', color: '#0f172a', border: '1px solid #cbd5e1' }}>
                               PAID (HMO)
                             </span>
                           ) : (
@@ -2358,34 +2371,17 @@ export default function OfficeStaffDashboard({ mode }) {
                             }`}>{o.status || '—'}</span>
                           )}
                         </td>
-                        <td className="text-sm text-slate-600">{o.createdAt ? new Date(o.createdAt).toLocaleString() : '—'}</td>
+                        <td className="text-sm text-slate-900">{o.createdAt ? new Date(o.createdAt).toLocaleString() : '—'}</td>
                         <td className="inc-right">
                           {isPrePaid ? (
                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                              {(o.linkedInvoiceId || (o.hmoIndicators && o.hmoIndicators.hasHmo)) ? (
-                                <button
-                                  type="button"
-                                  className="office-btn"
-                                  style={{ color: '#fff', background: '#16a34a', fontWeight: 800, border: '1px solid #15803d' }}
-                                  onClick={async () => {
-                                    if (o.linkedInvoiceId) {
-                                      await openInvoice(String(o.linkedInvoiceId));
-                                      setView('billing');
-                                    } else {
-                                      await openLabOrderPos(o);
-                                    }
-                                  }}
-                                >
-                                  <FileText size={14} style={{ marginRight: 4 }} />
-                                  View Invoice
-                                </button>
-                              ) : null}
                               <button
                                 type="button"
                                 className="office-btn ghost"
                                 onClick={async () => { await openLabOrderPos(o); }}
                               >
-                                View Receipt
+                                <FileText size={14} style={{ marginRight: 4 }} />
+                                View Record
                               </button>
                               <button
                                 type="button"
@@ -2782,29 +2778,57 @@ export default function OfficeStaffDashboard({ mode }) {
                       This lab service has no configured cashier price yet. Add it to the clinical service catalog before collecting payment.
                     </div>
                   ) : null}
+                  {selectedLabOrderDue <= 0.0099 && selectedLabOrder.priceConfigured ? (
+                    <div style={{
+                      marginBottom: 12, padding: '14px 18px', borderRadius: 10,
+                      background: '#f8fafc', border: '1px solid #e2e8f0',
+                      color: '#0f172a', fontWeight: 600, lineHeight: 1.55
+                    }}>
+                      ✅ <strong style={{ color: '#0f172a', fontWeight: 900 }}>WALA NA BABAYARAN:</strong>
+                      <div style={{ marginTop: 6, fontWeight: 500 }}>
+                        Lahat ng serbisyong ito ay sakop na ng PhilHealth at HMO Letter of Authority (LOA).
+                        Hindi na kailangang magbayad ng pasyente. Pindutin ang <strong>"Mark as Settled (No Charge)"</strong> para ituloy ang record sa laboratoryo.
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="office-row">
-                    <select className="office-select" value={labPaymentMethod} onChange={(e) => setLabPaymentMethod(e.target.value)}>
+                    <select className="office-select" value={labPaymentMethod} onChange={(e) => setLabPaymentMethod(e.target.value)} disabled={selectedLabOrderDue <= 0.0099}>
                       <option value="Cash">Cash</option>
                       <option value="GCash">GCash</option>
                       <option value="Card">Card</option>
+                      <option value="HMO">HMO / LOA</option>
                     </select>
                     <input
                       className="office-input"
-                      style={{ width: 180, minWidth: 0 }}
+                      style={{ width: 180, minWidth: 0, opacity: selectedLabOrderDue <= 0.0099 ? 0.5 : 1 }}
                       type="number"
                       min="0"
                       step="0.01"
-                      value={labPaymentAmount}
-                      onChange={(e) => setLabPaymentAmount(e.target.value)}
+                      value={selectedLabOrderDue <= 0.0099 ? '0.00' : labPaymentAmount}
+                      onChange={(e) => setLabPaymentAmount(selectedLabOrderDue <= 0.0099 ? '0.00' : e.target.value)}
+                      disabled={selectedLabOrderDue <= 0.0099}
                       placeholder="Amount received"
                     />
-                    <input className="office-input" style={{ flex: '1 1 220px', minWidth: 0 }} value={labPaymentReference} onChange={(e) => setLabPaymentReference(e.target.value)} placeholder={labPaymentMethod === 'Cash' ? 'Receipt / Reference (optional)' : 'Receipt / Reference (required)'} />
-                    <button type="button" className="office-btn primary" onClick={recordLabPayment} disabled={labPaymentLoading || !selectedLabOrder.priceConfigured}>
-                      {labPaymentLoading ? 'Saving…' : 'Collect Payment'}
+                    <input
+                      className="office-input"
+                      style={{ flex: '1 1 220px', minWidth: 0 }}
+                      value={labPaymentReference}
+                      onChange={(e) => setLabPaymentReference(e.target.value)}
+                      placeholder={selectedLabOrderDue <= 0.0099 ? 'HMO LOA Number / Reference (required)' : (labPaymentMethod === 'Cash' ? 'Receipt / Reference (optional)' : 'Receipt / Reference (required)')}
+                    />
+                    <button
+                      type="button"
+                      className="office-btn primary"
+                      onClick={recordLabPayment}
+                      disabled={labPaymentLoading || !selectedLabOrder.priceConfigured}
+                    >
+                      {labPaymentLoading ? 'Saving…' : (selectedLabOrderDue <= 0.0099 ? 'Mark as Settled (No Charge)' : 'Collect Payment')}
                     </button>
                   </div>
                   <div style={{ marginTop: 10, color: '#64748b', fontSize: '0.9rem' }}>
-                    After cashier collection, this lab order moves to <strong>Paid</strong> so the lab staff can proceed with the exam.
+                    {selectedLabOrderDue <= 0.0099
+                      ? 'After confirmation, this lab order is set to PAID (HMO) and patient may proceed directly to the laboratory station.'
+                      : 'After cashier collection, this lab order moves to <strong>Paid</strong> so the lab staff can proceed with the exam.'}
                   </div>
                 </div>
               </div>

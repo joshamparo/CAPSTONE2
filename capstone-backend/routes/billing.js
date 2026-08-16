@@ -721,23 +721,36 @@ router.get('/invoices', async (req, res) => {
       const refunded = adjs
         .filter((a) => String(a.type || '').toLowerCase() === 'refund')
         .reduce((sum, a) => sum + Number(a.amount || 0), 0);
-      const netPaid = paid - refunded;
       const total = Number(inv.total_amount || 0);
       const hmoClaim = hmoByInvoice.get(String(inv.id)) || summarizeHmoClaim(null, total);
+      const hmoCoveredPaidPortion = Math.max(0, Number(hmoClaim.philhealth_deduction || 0) + Number(hmoClaim.applied_hmo_amount || 0));
+      const cashPaid = paid - refunded;
       const collectibleTotal = hmoClaim.patient_payable;
+      const grossPaid = hmoCoveredPaidPortion + Math.max(0, cashPaid);
       const st = String(inv.status || '').trim().toLowerCase();
-      const balance = st === 'cancelled' || st === 'voided' ? 0 : Math.max(0, collectibleTotal - netPaid);
+      const balance = st === 'cancelled' || st === 'voided' ? 0 : Math.max(0, total - hmoCoveredPaidPortion - Math.max(0, cashPaid));
+      let effectiveStatus = String(inv.status || '').trim();
+      if (!['Cancelled', 'Voided', 'Draft', 'Pending'].map((s) => s.toLowerCase()).includes(String(effectiveStatus || '').toLowerCase())) {
+        if (balance <= 0.0099) {
+          effectiveStatus = 'Paid';
+        } else if (collectibleTotal <= 0.0099 && Math.max(0, cashPaid) <= 0.0099) {
+          effectiveStatus = 'Paid';
+        } else if (['Paid', 'paid', 'PAID'].includes(String(inv.status || ''))) {
+          effectiveStatus = 'Ready';
+        }
+      }
       return {
         ...inv,
+        status: effectiveStatus,
         appointment_status: inv.appointment_id != null ? (appointmentStatusById[String(inv.appointment_id)] || null) : null,
         adjustments: adjs,
         hmo_claim: hmoClaim,
         patient_due_amount: toMoney(collectibleTotal),
         philhealth_deduction: toMoney(hmoClaim.philhealth_deduction),
         hmo_coverage_amount: toMoney(hmoClaim.applied_hmo_amount),
-        paid_amount: toMoney(paid),
+        paid_amount: toMoney(grossPaid),
         refunded_amount: toMoney(refunded),
-        net_paid_amount: toMoney(netPaid),
+        net_paid_amount: toMoney(hmoCoveredPaidPortion + cashPaid),
         balance_amount: toMoney(balance)
       };
     });
@@ -792,26 +805,39 @@ router.get('/invoices/:id', async (req, res) => {
     const refunded = (Array.isArray(adjustments) ? adjustments : [])
       .filter((a) => String(a.type || '').toLowerCase() === 'refund')
       .reduce((sum, a) => sum + Number(a.amount || 0), 0);
-    const netPaid = paid - refunded;
     const total = Number(inv.total_amount || 0);
     const hmoRows = await fetchHmoClaimsByInvoiceIds(prisma, [id]);
     const hmoClaim = summarizeHmoClaim(Array.isArray(hmoRows) ? hmoRows[0] : null, total);
+    const hmoCoveredPaidPortion = Math.max(0, Number(hmoClaim.philhealth_deduction || 0) + Number(hmoClaim.applied_hmo_amount || 0));
+    const cashPaid = paid - refunded;
     const collectibleTotal = hmoClaim.patient_payable;
+    const grossPaid = hmoCoveredPaidPortion + Math.max(0, cashPaid);
     const st = String(inv.status || '').trim().toLowerCase();
-    const balance = st === 'cancelled' || st === 'voided' ? 0 : Math.max(0, collectibleTotal - netPaid);
+    const balance = st === 'cancelled' || st === 'voided' ? 0 : Math.max(0, total - hmoCoveredPaidPortion - Math.max(0, cashPaid));
+    let effectiveStatus = String(inv.status || '').trim();
+    if (!['Cancelled', 'Voided', 'Draft', 'Pending'].map((s) => s.toLowerCase()).includes(String(effectiveStatus || '').toLowerCase())) {
+      if (balance <= 0.0099) {
+        effectiveStatus = 'Paid';
+      } else if (collectibleTotal <= 0.0099 && Math.max(0, cashPaid) <= 0.0099) {
+        effectiveStatus = 'Paid';
+      } else if (['Paid', 'paid', 'PAID'].includes(String(inv.status || ''))) {
+        effectiveStatus = 'Ready';
+      }
+    }
 
     res.json(
       serialize({
         ...inv,
+        status: effectiveStatus,
         appointment_status: appointmentStatus,
         adjustments,
         hmo_claim: hmoClaim,
         patient_due_amount: toMoney(collectibleTotal),
         philhealth_deduction: toMoney(hmoClaim.philhealth_deduction),
         hmo_coverage_amount: toMoney(hmoClaim.applied_hmo_amount),
-        paid_amount: toMoney(paid),
+        paid_amount: toMoney(grossPaid),
         refunded_amount: toMoney(refunded),
-        net_paid_amount: toMoney(netPaid),
+        net_paid_amount: toMoney(hmoCoveredPaidPortion + cashPaid),
         balance_amount: toMoney(balance)
       })
     );
@@ -1138,11 +1164,7 @@ router.get('/hmo-queue', async (req, res) => {
           a.hmo_loa_number,
           a.hmo_card_number,
           a.philhealth_deduction AS philhealth_deduction,
-          CASE
-            WHEN COALESCE((SELECT SUM(c.unit_price) FROM public.clinical_orders c WHERE c.patient_id = a.patient_id AND c.created_at >= a.created_at - INTERVAL '2 hours'), 0) > 0
-            THEN COALESCE((SELECT SUM(c.unit_price) FROM public.clinical_orders c WHERE c.patient_id = a.patient_id AND c.created_at >= a.created_at - INTERVAL '2 hours'), 0)
-            ELSE 0
-          END AS loa_approved_amount,
+          COALESCE(a.hmo_loa_approved_amount, a.loa_approved_amount, 0) AS loa_approved_amount,
           COALESCE(NULLIF(a.hmo_status, ''), 'Awaiting LOA') AS status,
           CONCAT_WS(' • ', 'Walk-in HMO Intake', a.purpose, a.route_type) AS notes,
           CONCAT_WS(' · ', a.created_by, 'Appointment created') AS requested_by,
