@@ -750,7 +750,8 @@ router.post('/', requireRole(['admin']), async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const accountName = `${String(firstName || '').trim()} ${String(lastName || '').trim()}`.trim()
-            || (email ? String(email).split('@')[0] : normalizedAccountType);
+            || (email ? String(email).split('@')[0] : normalizedAccountType)
+            || `${normalizedAccountType}_${Date.now().toString(36)}`;
 
         if (modelType === 'accounts') {
             const name = accountName
@@ -871,12 +872,19 @@ router.post('/', requireRole(['admin']), async (req, res) => {
         return res.status(201).json(savedDoc);
     } catch (err) {
         if (err.code === 'P2002') {
-            return res.status(400).json({ 
-                message: `Duplicate field error: ${err.meta.target.join(', ')}` 
-            });
+            const target = Array.isArray(err?.meta?.target) ? err.meta.target.join(', ') : (String(err.meta?.target || '') || '');
+            const msg = target ? `Duplicate ${target} — record already exists.` : 'Duplicate entry — email/employee ID/medical license may already be registered.';
+            return res.status(400).json({ message: msg, prismaCode: err.code, field: target ? target.split(',')[0] : undefined });
         }
-        console.error(err);
-        res.status(500).json({ message: "Internal Server Error" });
+        if (err.code === 'P2008' || err.code === 'P2007' || /23514|check constraint|staff_account_type_check/i.test(String(err?.message || ''))) {
+            return res.status(400).json({ message: `Account type is not allowed for the staff table — try selecting a different role or specialization. (${err.code || '23514'})` });
+        }
+        if (String(err?.message || '').includes('invalid input syntax') || String(err?.message || '').includes('uuid')) {
+            return res.status(400).json({ message: `Database UUID mismatch — ${String(err.message).slice(0,180)}` });
+        }
+        console.error("STAFF CREATE ERROR:", err?.code || 'NO_CODE', err?.message || 'NO_MESSAGE', err?.meta || 'NO_META');
+        const safeMsg = String(err?.message || '').slice(0, 300) || 'Database rejected the staff creation request.';
+        res.status(500).json({ message: safeMsg, code: err?.code, prismaMeta: err?.meta ? String(JSON.stringify(err.meta)).slice(0,200) : undefined });
     }
 });
 

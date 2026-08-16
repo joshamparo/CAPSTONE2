@@ -988,6 +988,7 @@ function AdminDashboard() {
   const [updateNotice, setUpdateNotice] = useState("");
   const [createStaffError, setCreateStaffError] = useState(""); // General error for Create Staff form
   const [createStaffSuccess, setCreateStaffSuccess] = useState(""); // Inline success for Create Staff form
+  const [createStaffLoading, setCreateStaffLoading] = useState(false); // Loading state for Create button
   const [purgeEmailLoading, setPurgeEmailLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false); // Success modal state
   const [modalType, setModalType] = useState("success"); // success or error
@@ -2865,194 +2866,224 @@ function AdminDashboard() {
     e.preventDefault();
     setCreateStaffError("");
     setCreateStaffSuccess("");
-    const newUser = { 
-      ...staffFormData, 
-      city: selectedCity,
-      province: selectedProvince,
-      postalCode: postalCode
-    };
-    
-    // Map role to accountType
-    if (newUser.role === 'Nurse') newUser.accountType = 'nurse';
-    else if (newUser.role === 'Doctor') newUser.accountType = 'doctor';
-    else if (newUser.role === 'Admin') newUser.accountType = 'admin';
-    else if (newUser.role === 'Pharmacist') newUser.accountType = 'pharmacist';
-    else if (newUser.role === 'Clinical Staff') {
-      const spec = String(newUser.specialization || '').trim();
-      if (spec === 'MedTech' || spec === 'Medtechs') newUser.accountType = 'medtech';
-      else if (spec === 'Radiographer' || spec === 'Radiographer (X-ray)') newUser.accountType = 'radiographer';
-      else if (spec === 'ECG Operator') newUser.accountType = 'ecg_operator';
-      else if (spec === 'Physical Therapist') newUser.accountType = 'physical_therapist';
-      else newUser.accountType = 'staff';
-    }
-    else if (['Office Staff', 'Staff'].includes(newUser.role) && String(newUser.specialization || '').trim() === 'Cashier') newUser.accountType = 'cashier';
-    else if (['Office Staff', 'Staff'].includes(newUser.role)) {
-      const spec = String(newUser.specialization || '').trim();
-      if (spec === 'Doctor Secretary' || spec === "Doctor's Secretary") newUser.accountType = 'doctor_secretary';
-      else newUser.accountType = 'staff';
-    }
-    else newUser.accountType = 'staff'; // Fallback
-
-    if (newUser.role === 'Nurse') {
-      newUser.department = newUser.specialization;
-    }
-
-    const errors = [];
-    const clean = (v) => String(v || "").trim();
-    const isValidPHPhone = (v) => /^(\+?63\s?|0)9\d{9}$/.test(String(clean(v)).replace(/[\s\-()]/g, ''));
-    const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(clean(v));
-    const isValidName = (v) => { const s = clean(v); return !!s && /^[A-Za-zÑñ][A-Za-zÑñ' .\-]*$/.test(s); };
-
-    // Final validation for Step 3 fields
-    if (!isValidEmail(newUser.email)) errors.push("Invalid email address format.");
-    if (!isValidPHPhone(newUser.phone)) errors.push("Invalid PH phone number. Use format: 09XX XXX XXXX or +63 9XX XXX XXXX.");
-    if (!clean(newUser.streetAddress) || clean(newUser.streetAddress).length < 5) errors.push("Street Address must be at least 5 characters.");
-    if (!clean(newUser.city)) errors.push("City / Municipality is required.");
-    if (clean(newUser.firstName) && !isValidName(newUser.firstName)) errors.push("First Name contains invalid characters.");
-    if (clean(newUser.lastName) && !isValidName(newUser.lastName)) errors.push("Last Name contains invalid characters.");
-    if (clean(newUser.middleName) && !isValidName(newUser.middleName)) errors.push("Middle Name contains invalid characters.");
-
-    // Auto-generate secure temporary password
-    const tempPassword = Math.random().toString(36).slice(-8) + "Temp1!";
-    newUser.password = tempPassword;
-    
-    if (errors.length > 0) {
-      setCreateStaffError(errors.join("\n"));
-      return;
-    }
-    
+    setCreateStaffLoading(true);
+    let newUser = null;
+    let tempPassword = "";
     try {
-        await fetchJson(`/api/staff`, {
-          apiBase: API_BASE,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders(),
-            'x-user-role': 'admin'
-          },
-          body: JSON.stringify(newUser)
-        });
-            await logActivity('Create', `Registered new staff: ${newUser.firstName} ${newUser.lastName}`, `Staff: ${newUser.email}`);
-            setSuccessMessage("Staff account created successfully.");
-            
-            handleReset();
-            let emailOk = false;
-            let emailErr = '';
-            try {
-              if (EMAILJS_STAFF_TEMPLATE_ID) {
-                const staffName = `${String(newUser.firstName || '').trim()} ${String(newUser.lastName || '').trim()}`.trim();
-                const resp = await emailjs.send(
-                  EMAILJS_SERVICE_ID,
-                  EMAILJS_STAFF_TEMPLATE_ID,
-                  {
-                    staff_name: staffName,
-                    staff_email: newUser.email,
-                    to_email: newUser.email,
-                    temp_password: tempPassword,
-                    system_name: 'Pascualinga',
-                    login_link: LOGIN_LINK,
-                    login_url: LOGIN_LINK,
-                    portal_link: LOGIN_LINK,
-                    website_url: 'https://pascualinga.com'
-                  },
-                  EMAILJS_PUBLIC_KEY
-                );
-                emailOk = !!(resp && resp.status === 200);
-              }
-            } catch (_) {
-              emailOk = false;
-              emailErr = String(_?.text || _?.message || '').trim();
-            }
+      newUser = { 
+        ...staffFormData, 
+        city: selectedCity,
+        province: selectedProvince,
+        postalCode: postalCode
+      };
+      
+      // Map role to accountType
+      if (newUser.role === 'Nurse') newUser.accountType = 'nurse';
+      else if (newUser.role === 'Doctor') newUser.accountType = 'doctor';
+      else if (newUser.role === 'Admin') newUser.accountType = 'admin';
+      else if (newUser.role === 'Pharmacist') newUser.accountType = 'pharmacist';
+      else if (newUser.role === 'Clinical Staff') {
+        const spec = String(newUser.specialization || '').trim();
+        if (spec === 'MedTech' || spec === 'Medtechs') newUser.accountType = 'medtech';
+        else if (spec === 'Radiographer' || spec === 'Radiographer (X-ray)') newUser.accountType = 'radiographer';
+        else if (spec === 'ECG Operator') newUser.accountType = 'ecg_operator';
+        else if (spec === 'Physical Therapist') newUser.accountType = 'physical_therapist';
+        else newUser.accountType = 'staff';
+      }
+      else if (['Office Staff', 'Staff'].includes(newUser.role) && String(newUser.specialization || '').trim() === 'Cashier') newUser.accountType = 'cashier';
+      else if (['Office Staff', 'Staff'].includes(newUser.role)) {
+        const spec = String(newUser.specialization || '').trim();
+        if (spec === 'Doctor Secretary' || spec === "Doctor's Secretary") newUser.accountType = 'doctor_secretary';
+        else newUser.accountType = 'staff';
+      }
+      else newUser.accountType = 'staff'; // Fallback
 
-            setCreateStaffSuccess(
-              emailOk
-                ? "Staff account created successfully. Credentials email has been sent."
-                : `Staff account created successfully. Credentials email was not sent${emailErr ? ` — ${emailErr}` : ' — please check EmailJS template settings.'} (template: ${EMAILJS_STAFF_TEMPLATE_ID}, service: ${EMAILJS_SERVICE_ID})`
-            );
-            fetchStaff(); 
-    } catch (error) {
-            const msg = String(error?.message || '');
-            const looksDuplicate = /already\s+registered|already\s+exists/i.test(msg);
-            if (looksDuplicate && newUser.email) {
-                const ok = window.confirm(`Email "${newUser.email}" is already registered.\n\nDo you want to remove the existing account for this email and try again?`);
-                if (ok) {
-                    try {
-                        await fetchJson(`/api/staff/by-email`, {
-                          apiBase: API_BASE,
-                          method: 'DELETE',
-                          headers: { 
-                            'Content-Type': 'application/json',
-                            ...getAuthHeaders(),
-                            'x-user-role': 'admin'
-                          },
-                          body: JSON.stringify({ email: newUser.email })
-                        });
-                    } catch (e) {
-                        setCreateStaffError(String(e?.message || msg || "Database rejected the registration. Check if email already exists."));
-                        return;
-                    }
-                    try {
-                        await fetchJson(`/api/staff`, {
-                          apiBase: API_BASE,
-                          method: 'POST',
-                          headers: { 
-                            'Content-Type': 'application/json',
-                            ...getAuthHeaders(),
-                            'x-user-role': 'admin'
-                          },
-                          body: JSON.stringify(newUser)
-                        });
-                        await logActivity('Create', `Registered new staff: ${newUser.firstName} ${newUser.lastName}`, `Staff: ${newUser.email}`);
-                        setSuccessMessage("Staff account created successfully.");
+      if (newUser.role === 'Nurse') {
+        newUser.department = newUser.specialization;
+      }
 
-                        handleReset();
-                        let emailOk = false;
-                        let emailErr = '';
-                        try {
-                          if (EMAILJS_STAFF_TEMPLATE_ID) {
-                            const staffName = `${String(newUser.firstName || '').trim()} ${String(newUser.lastName || '').trim()}`.trim();
-                            const resp = await emailjs.send(
-                              EMAILJS_SERVICE_ID,
-                              EMAILJS_STAFF_TEMPLATE_ID,
-                              {
-                                staff_name: staffName,
-                                staff_email: newUser.email,
-                                to_email: newUser.email,
-                                temp_password: tempPassword,
-                                system_name: 'Pascualinga',
-                                login_link: LOGIN_LINK,
-                                login_url: LOGIN_LINK,
-                                portal_link: LOGIN_LINK,
-                                website_url: 'https://pascualinga.com'
-                              },
-                              EMAILJS_PUBLIC_KEY
-                            );
-                            emailOk = !!(resp && resp.status === 200);
-                          }
-                        } catch (_) {
-                          emailOk = false;
-                          emailErr = String(_?.text || _?.message || '').trim();
-                        }
+      const errors = [];
+      const clean = (v) => String(v || "").trim();
+      const isValidPHPhone = (v) => /^(\+?63\s?|0)9\d{9}$/.test(String(clean(v)).replace(/[\s\-()]/g, ''));
+      const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(clean(v));
+      const isValidName = (v) => { const s = clean(v); return !!s && /^[A-Za-zÑñ][A-Za-zÑñ' .\-]*$/.test(s); };
 
-                        setCreateStaffSuccess(
-                          emailOk
-                            ? "Staff account created successfully. Credentials email has been sent."
-                            : `Staff account created successfully. Credentials email was not sent${emailErr ? ` — ${emailErr}` : ' — please check EmailJS template settings.'} (template: ${EMAILJS_STAFF_TEMPLATE_ID}, service: ${EMAILJS_SERVICE_ID})`
-                        );
-                        fetchStaff();
-                        return;
-                    } catch (e) {
-                        setCreateStaffError(String(e?.message || msg || "Database rejected the registration. Check if email already exists."));
-                        return;
-                    }
+      // Final validation for Step 1 / 2 / 3 fields (belt and suspenders — gate already checked, but double check)
+      if (!clean(newUser.firstName) || clean(newUser.firstName).length < 2) errors.push("First Name is required (min 2 letters).");
+      else if (!isValidName(newUser.firstName)) errors.push("First Name contains invalid characters.");
+      if (!clean(newUser.lastName) || clean(newUser.lastName).length < 2) errors.push("Last Name is required (min 2 letters).");
+      else if (!isValidName(newUser.lastName)) errors.push("Last Name contains invalid characters.");
+      if (clean(newUser.middleName) && !isValidName(newUser.middleName)) errors.push("Middle Name contains invalid characters.");
+      if (!clean(newUser.role)) errors.push("Role is required.");
+      if (!clean(newUser.dateHired)) errors.push("Date Hired is required.");
+      if (!isValidEmail(newUser.email)) errors.push("Invalid email address format.");
+      if (!isValidPHPhone(newUser.phone)) errors.push("Invalid PH phone number. Use format: 09XX XXX XXXX or +63 9XX XXX XXXX.");
+      if (!clean(newUser.streetAddress) || clean(newUser.streetAddress).length < 5) errors.push("Street Address must be at least 5 characters.");
+      if (!clean(newUser.city)) errors.push("City / Municipality is required.");
+      const medicalRolesForLic = ['doctor', 'nurse', 'pharmacist'];
+      if (medicalRolesForLic.includes(String(newUser.accountType || '').toLowerCase())) {
+        if (!/^\d{7}$/.test(clean(newUser.medicalLicenseNumber))) errors.push("Medical License Number must be exactly 7 digits.");
+      }
+      if (String(newUser.accountType || '').toLowerCase() === 'doctor' && clean(newUser.specialization).toLowerCase() === 'medicine') {
+        if (!clean(newUser.department)) errors.push("Department is required for Medicine doctors (ER or OPD/Medicine).");
+      }
+      const specClean = clean(newUser.specialization);
+      const isDocSec = ['Office Staff', 'Staff'].includes(String(newUser.role || '')) &&
+        (specClean === "Doctor's Secretary" || specClean === 'Doctor Secretary');
+      if (isDocSec && !clean(newUser.linkedDoctorId)) errors.push("Linked Doctor is required for Doctor Secretary.");
+
+      // Auto-generate secure temporary password (strong 11+ chars: 8 rand + Temp1! = 14 chars)
+      tempPassword = Math.random().toString(36).slice(-8) + "Temp1!";
+      newUser.password = tempPassword;
+      
+      if (errors.length > 0) {
+        setCreateStaffError(errors.join("\n"));
+        return;
+      }
+      
+      try {
+          await fetchJson(`/api/staff`, {
+            apiBase: API_BASE,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+              'x-user-role': 'admin'
+            },
+            body: JSON.stringify(newUser)
+          });
+              await logActivity('Create', `Registered new staff: ${newUser.firstName} ${newUser.lastName}`, `Staff: ${newUser.email}`);
+              setSuccessMessage("Staff account created successfully.");
+              
+              handleReset();
+              let emailOk = false;
+              let emailErr = '';
+              try {
+                if (EMAILJS_STAFF_TEMPLATE_ID) {
+                  const staffName = `${String(newUser.firstName || '').trim()} ${String(newUser.lastName || '').trim()}`.trim();
+                  const resp = await emailjs.send(
+                    EMAILJS_SERVICE_ID,
+                    EMAILJS_STAFF_TEMPLATE_ID,
+                    {
+                      staff_name: staffName,
+                      staff_email: newUser.email,
+                      to_email: newUser.email,
+                      temp_password: tempPassword,
+                      system_name: 'Pascualinga',
+                      login_link: LOGIN_LINK,
+                      login_url: LOGIN_LINK,
+                      portal_link: LOGIN_LINK,
+                      website_url: 'https://pascualinga.com'
+                    },
+                    EMAILJS_PUBLIC_KEY
+                  );
+                  emailOk = !!(resp && resp.status === 200);
                 }
-            }
-            setCreateStaffError(msg || "Database rejected the registration. Check if email already exists.");
+              } catch (_) {
+                emailOk = false;
+                emailErr = String(_?.text || _?.message || '').trim();
+              }
+
+              setCreateStaffSuccess(
+                emailOk
+                  ? "Staff account created successfully. Credentials email has been sent."
+                  : `Staff account created successfully. Credentials email was not sent${emailErr ? ` — ${emailErr}` : ' — please check EmailJS template settings.'} (template: ${EMAILJS_STAFF_TEMPLATE_ID}, service: ${EMAILJS_SERVICE_ID})`
+              );
+              fetchStaff(); 
+      } catch (error) {
+              const msg = String(error?.message || '');
+              const looksDuplicate = /already\s+registered|already\s+exists|duplicate/i.test(msg);
+              if (looksDuplicate && newUser.email) {
+                  const ok = window.confirm(`Email "${newUser.email}" is already registered.\n\nDo you want to remove the existing account for this email and try again?`);
+                  if (ok) {
+                      try {
+                          await fetchJson(`/api/staff/by-email`, {
+                            apiBase: API_BASE,
+                            method: 'DELETE',
+                            headers: { 
+                              'Content-Type': 'application/json',
+                              ...getAuthHeaders(),
+                              'x-user-role': 'admin'
+                            },
+                            body: JSON.stringify({ email: newUser.email })
+                          });
+                      } catch (e) {
+                          setCreateStaffError(String(e?.message || msg || "Database rejected the registration. Check if email already exists."));
+                          return;
+                      }
+                      try {
+                          await fetchJson(`/api/staff`, {
+                            apiBase: API_BASE,
+                            method: 'POST',
+                            headers: { 
+                              'Content-Type': 'application/json',
+                              ...getAuthHeaders(),
+                              'x-user-role': 'admin'
+                            },
+                            body: JSON.stringify(newUser)
+                          });
+                          await logActivity('Create', `Registered new staff: ${newUser.firstName} ${newUser.lastName}`, `Staff: ${newUser.email}`);
+                          setSuccessMessage("Staff account created successfully.");
+
+                          handleReset();
+                          let emailOk = false;
+                          let emailErr = '';
+                          try {
+                            if (EMAILJS_STAFF_TEMPLATE_ID) {
+                              const staffName = `${String(newUser.firstName || '').trim()} ${String(newUser.lastName || '').trim()}`.trim();
+                              const resp = await emailjs.send(
+                                EMAILJS_SERVICE_ID,
+                                EMAILJS_STAFF_TEMPLATE_ID,
+                                {
+                                  staff_name: staffName,
+                                  staff_email: newUser.email,
+                                  to_email: newUser.email,
+                                  temp_password: tempPassword,
+                                  system_name: 'Pascualinga',
+                                  login_link: LOGIN_LINK,
+                                  login_url: LOGIN_LINK,
+                                  portal_link: LOGIN_LINK,
+                                  website_url: 'https://pascualinga.com'
+                                },
+                                EMAILJS_PUBLIC_KEY
+                              );
+                              emailOk = !!(resp && resp.status === 200);
+                            }
+                          } catch (_) {
+                            emailOk = false;
+                            emailErr = String(_?.text || _?.message || '').trim();
+                          }
+
+                          setCreateStaffSuccess(
+                            emailOk
+                              ? "Staff account created successfully. Credentials email has been sent."
+                              : `Staff account created successfully. Credentials email was not sent${emailErr ? ` — ${emailErr}` : ' — please check EmailJS template settings.'} (template: ${EMAILJS_STAFF_TEMPLATE_ID}, service: ${EMAILJS_SERVICE_ID})`
+                          );
+                          fetchStaff();
+                          return;
+                      } catch (e) {
+                          const detail = e?.data?.field ? ` (field: ${e.data.field})` : '';
+                          setCreateStaffError(String(e?.message || msg || "Database rejected the registration.") + detail);
+                          return;
+                      }
+                  }
+              }
+              const detail = error?.data?.field ? `\n(Problem field: ${error.data.field})` : '';
+              const codeStr = error?.data?.code || error?.data?.prismaCode ? `\n[${error.data.code || error.data.prismaCode}]` : '';
+              setCreateStaffError((msg || "Database rejected the registration. Check if email/employee ID already exists.") + detail + codeStr);
+      }
+    } catch (outerErr) {
+      // Top-level catch — any unexpected JS error before/during submission
+      console.error("handleCreateStaff OUTER ERROR:", outerErr);
+      const outerMsg = String(outerErr?.message || outerErr || "Unexpected error occurred — please refresh and try again.").slice(0, 400);
+      setCreateStaffError(outerMsg);
+    } finally {
+      setCreateStaffLoading(false);
     }
   };
 
   const handleForceRemoveEmail = async () => {
-    const email = String(newUser.email || '').trim();
+    const email = String(staffFormData.email || '').trim();
     if (!email) return;
 
     setPurgeEmailLoading(true);
@@ -6129,7 +6160,7 @@ function AdminDashboard() {
             {createStaffError && (
                 <div className="field-notice-error" style={{ whiteSpace: 'pre-line', marginBottom: '16px', fontWeight: 'bold', textAlign: 'center', background: '#fef2f2', padding: '12px', borderRadius: '8px', border: '1px solid #fecaca' }}>
                   {createStaffError}
-                  {(/already\s+registered|already\s+exists/i.test(String(createStaffError)) && String(newUser.email || '').trim()) ? (
+                  {(/already\s+registered|already\s+exists|duplicate/i.test(String(createStaffError)) && String(staffFormData.email || '').trim()) ? (
                     <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center' }}>
                       <button
                         type="button"
@@ -6174,14 +6205,20 @@ function AdminDashboard() {
 
             <div className="form-actions-row">
               {registrationStep > 1 && (
-                <button type="button" className="btn-gray shadow-btn" onClick={() => setRegistrationStep(prev => prev - 1)}>Back</button>
+                <button type="button" className="btn-gray shadow-btn" onClick={() => setRegistrationStep(prev => prev - 1)} disabled={createStaffLoading}>Back</button>
               )}
               {registrationStep < 3 ? (
-                <button type="button" className="btn-orange-large shadow-btn" onClick={handleNextStep} disabled={!isValidRegisterStep}>Next</button>
+                <button type="button" className="btn-orange-large shadow-btn" onClick={handleNextStep} disabled={createStaffLoading || !isValidRegisterStep}>
+                  {createStaffLoading ? 'Processing…' : 'Next'}
+                </button>
               ) : (
-                <button type="submit" className="btn-orange-large shadow-btn" disabled={!isValidRegisterStep}>Create Staff Account</button>
+                <button type="submit" className="btn-orange-large shadow-btn" disabled={createStaffLoading || !isValidRegisterStep}>
+                  {createStaffLoading ? '⏳ Creating Staff Account…' : 'Create Staff Account'}
+                </button>
               )}
-              <button type="button" className="btn-gray shadow-btn" onClick={handleReset}>Remove All</button>
+              <button type="button" className="btn-gray shadow-btn" onClick={handleReset} disabled={createStaffLoading}>
+                {createStaffLoading ? 'Busy…' : 'Remove All'}
+              </button>
             </div>
           </form>
         </div>
