@@ -1109,6 +1109,129 @@ router.get('/hmo-queue', async (req, res) => {
     const page = Math.max(1, Math.trunc(Number(req.query.page || 1)));
     const perPage = Math.max(1, Math.min(50, Math.trunc(Number(req.query.perPage || req.query.per_page || 8))));
 
+    // ========== COLUMN NAME PROBE (MEGA BUG #1 FIX) ==========
+    // Probe actual columns on patients/appointments/billing_hmo_claims tables to avoid
+    // "column does not exist" SQL errors. Build safe aliases dynamically.
+    const buildColAliases = async (tableName, wanted) => {
+      const rows = await prisma.$queryRawUnsafe(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = $1
+      `, tableName).catch(() => []);
+      const have = new Set((Array.isArray(rows) ? rows : []).map((r) => String(r.column_name || '').trim().toLowerCase()));
+      const out = {};
+      wanted.forEach((aliasOpts) => {
+        const first = aliasOpts[0];
+        const match = aliasOpts.find((c) => have.has(String(c || '').trim().toLowerCase()));
+        out[first] = match ? String(match) : null;
+      });
+      return out;
+    };
+
+    const [patientsCols, apptCols, claimsCols] = await Promise.all([
+      buildColAliases('patients', [
+        ['first_name', 'first_name', 'firstname', 'firstName'],
+        ['last_name', 'last_name', 'lastname', 'lastName'],
+        ['middle_name', 'middle_name', 'middlename', 'middleName'],
+        ['full_name', 'full_name', 'fullname', 'fullName', 'name'],
+        ['email', 'email'],
+        ['contact_number', 'contact_number', 'contactnumber', 'mobile', 'phone', 'phone_number'],
+        ['is_hmo', 'is_hmo', 'hmo', 'hmo_active'],
+        ['hmo_provider', 'hmo_provider', 'hmoprovider', 'hmo_company'],
+        ['hmo_card_number', 'hmo_card_number', 'hmocardnumber', 'hmo_card_no'],
+        ['philhealth_amount', 'philhealth_amount', 'philhealth_deduction'],
+        ['created_by', 'created_by', 'createdby'],
+        ['updated_at', 'updated_at', 'updatedAt'],
+        ['created_at', 'created_at', 'createdAt'],
+        ['id', 'id']
+      ]),
+      buildColAliases('appointments', [
+        ['id', 'id'],
+        ['patient_id', 'patient_id', 'patientId'],
+        ['is_hmo', 'is_hmo', 'hmo'],
+        ['hmo_status', 'hmo_status', 'hmostatus', 'status_hmo'],
+        ['hmo_provider', 'hmo_provider', 'hmoprovider'],
+        ['hmo_loa_number', 'hmo_loa_number', 'hmo_loa_no', 'loa_number'],
+        ['hmo_card_number', 'hmo_card_number'],
+        ['philhealth_deduction', 'philhealth_deduction', 'philhealth'],
+        ['hmo_loa_approved_amount', 'hmo_loa_approved_amount', 'loa_approved_amount', 'hmo_approved_amount'],
+        ['loa_approved_amount', 'loa_approved_amount', 'approved_amount'],
+        ['patient_name', 'patient_name', 'patientfullname', 'patient_full_name'],
+        ['purpose', 'purpose', 'notes'],
+        ['route_type', 'route_type', 'route', 'service_type'],
+        ['created_by', 'created_by', 'createdby'],
+        ['updated_at', 'updated_at'],
+        ['created_at', 'created_at']
+      ]),
+      buildColAliases('billing_hmo_claims', [
+        ['id', 'id'],
+        ['invoice_id', 'invoice_id'],
+        ['appointment_id', 'appointment_id'],
+        ['patient_id', 'patient_id'],
+        ['patient_name', 'patient_name'],
+        ['hmo_provider', 'hmo_provider'],
+        ['hmo_loa_number', 'hmo_loa_number'],
+        ['hmo_card_number', 'hmo_card_number'],
+        ['philhealth_deduction', 'philhealth_deduction'],
+        ['loa_approved_amount', 'loa_approved_amount'],
+        ['status', 'status'],
+        ['notes', 'notes'],
+        ['requested_by', 'requested_by'],
+        ['updated_by', 'updated_by'],
+        ['created_at', 'created_at'],
+        ['updated_at', 'updated_at']
+      ])
+    ]).catch(() => [{}, {}, {}]);
+
+    const pick = (cols, key, fallback = 'NULL') => cols[key] ? `${cols[key]}` : fallback;
+    const pickNotNull = (cols, key, fallback) => cols[key] ? `NULLIF(TRIM(${cols[key]}::text),'')` : fallback || 'NULL';
+
+    const pFirstName = pickNotNull(patientsCols, 'first_name', 'NULL');
+    const pLastName = pickNotNull(patientsCols, 'last_name', 'NULL');
+    const pFullName = pickNotNull(patientsCols, 'full_name', 'NULL');
+    const pEmail = pickNotNull(patientsCols, 'email', 'NULL');
+    const pContact = pickNotNull(patientsCols, 'contact_number', 'NULL');
+    const pIsHmo = pick(patientsCols, 'is_hmo', 'FALSE');
+    const pHmoProv = pickNotNull(patientsCols, 'hmo_provider', 'NULL');
+    const pHmoCard = pickNotNull(patientsCols, 'hmo_card_number', 'NULL');
+    const pPhilAmt = pick(patientsCols, 'philhealth_amount', '0');
+    const pCreatedBy = pickNotNull(patientsCols, 'created_by', 'NULL');
+    const pUpdatedAt = pick(patientsCols, 'updated_at', 'NULL');
+    const pCreatedAt = pick(patientsCols, 'created_at', 'NULL');
+
+    const aId = pick(apptCols, 'id', 'NULL');
+    const aPatientId = pick(apptCols, 'patient_id', 'NULL');
+    const aIsHmo = pick(apptCols, 'is_hmo', 'FALSE');
+    const aHmoStatus = pickNotNull(apptCols, 'hmo_status', 'NULL');
+    const aHmoProv = pickNotNull(apptCols, 'hmo_provider', 'NULL');
+    const aHmoLoa = pickNotNull(apptCols, 'hmo_loa_number', 'NULL');
+    const aHmoCard = pickNotNull(apptCols, 'hmo_card_number', 'NULL');
+    const aPhilDed = pick(apptCols, 'philhealth_deduction', '0');
+    const aLoaAppr1 = pick(apptCols, 'hmo_loa_approved_amount', '0');
+    const aLoaAppr2 = pick(apptCols, 'loa_approved_amount', '0');
+    const aPatientName = pickNotNull(apptCols, 'patient_name', 'NULL');
+    const aPurpose = pickNotNull(apptCols, 'purpose', 'NULL');
+    const aRouteType = pickNotNull(apptCols, 'route_type', 'NULL');
+    const aCreatedBy = pickNotNull(apptCols, 'created_by', 'NULL');
+    const aCreatedAt = pick(apptCols, 'created_at', 'now()');
+    const aUpdatedAt = pick(apptCols, 'updated_at', aCreatedAt);
+
+    const hId = pick(claimsCols, 'id', 'NULL');
+    const hInvoiceId = pick(claimsCols, 'invoice_id', 'NULL');
+    const hApptId = pick(claimsCols, 'appointment_id', 'NULL');
+    const hPatientId = pick(claimsCols, 'patient_id', 'NULL');
+    const hPatientName = pickNotNull(claimsCols, 'patient_name', 'NULL');
+    const hHmoProv = pickNotNull(claimsCols, 'hmo_provider', 'NULL');
+    const hHmoLoa = pickNotNull(claimsCols, 'hmo_loa_number', 'NULL');
+    const hHmoCard = pickNotNull(claimsCols, 'hmo_card_number', 'NULL');
+    const hPhilDed = pick(claimsCols, 'philhealth_deduction', '0');
+    const hLoaAppr = pick(claimsCols, 'loa_approved_amount', '0');
+    const hStatus = pickNotNull(claimsCols, 'status', 'NULL');
+    const hNotes = pickNotNull(claimsCols, 'notes', 'NULL');
+    const hRequestedBy = pickNotNull(claimsCols, 'requested_by', 'NULL');
+    const hUpdatedBy = pickNotNull(claimsCols, 'updated_by', 'NULL');
+    const hCreatedAt = pick(claimsCols, 'created_at', 'now()');
+    const hUpdatedAt = pick(claimsCols, 'updated_at', hCreatedAt);
+
     // ============== AUTO-RECOVER OLD HMO PATIENTS ==============
     // Many old walk-in tests had billing_invoices rows with HMO-tagged patients, but billing_hmo_claims
     // rows failed to insert due to silent schema/column errors. Run multiple recovery passes so even
@@ -1273,149 +1396,193 @@ router.get('/hmo-queue', async (req, res) => {
       // Never break the main query
     }
 
-    const rows = await prisma.$queryRawUnsafe(
-      `
-        SELECT
-          h.id,
-          h.invoice_id,
-          h.appointment_id,
-          h.patient_id,
-          h.hmo_provider,
-          h.hmo_loa_number,
-          h.hmo_card_number,
-          h.philhealth_deduction,
-          h.loa_approved_amount,
-          h.status,
-          h.notes,
-          h.requested_by,
-          h.updated_by,
-          h.created_at,
-          h.updated_at,
-          COALESCE(i.total_amount, 0) AS total_amount,
-          COALESCE(i.balance_amount, 0) AS balance_amount,
-          COALESCE(i.status, 'Draft') AS invoice_status,
-          COALESCE(p.first_name, pp.first_name) AS first_name,
-          COALESCE(p.last_name, pp.last_name) AS last_name,
-          COALESCE(p.email, pp.email) AS email,
-          COALESCE(p.contact_number, pp.contact_number) AS contact_number,
-          COALESCE(i.workups_list,
+    let rows = [];
+
+    // ========== PRIMARY: Full 3-branch UNION query ==========
+    // (Column-name safe via probe aliases above)
+    try {
+      rows = await prisma.$queryRawUnsafe(
+        `
+          SELECT
+            ${hId} AS id,
+            ${hInvoiceId} AS invoice_id,
+            ${hApptId} AS appointment_id,
+            ${hPatientId} AS patient_id,
+            ${hHmoProv} AS hmo_provider,
+            ${hHmoLoa} AS hmo_loa_number,
+            ${hHmoCard} AS hmo_card_number,
+            ${hPhilDed} AS philhealth_deduction,
+            ${hLoaAppr} AS loa_approved_amount,
+            ${hStatus} AS status,
+            ${hNotes} AS notes,
+            ${hRequestedBy} AS requested_by,
+            ${hUpdatedBy} AS updated_by,
+            ${hCreatedAt} AS created_at,
+            ${hUpdatedAt} AS updated_at,
+            COALESCE(i.total_amount, 0) AS total_amount,
+            COALESCE(i.balance_amount, 0) AS balance_amount,
+            COALESCE(i.status, 'Draft') AS invoice_status,
+            COALESCE(${pFirstName}, ${pFullName}) AS first_name,
+            COALESCE(${pLastName}, NULL) AS last_name,
+            ${pEmail} AS email,
+            ${pContact} AS contact_number,
+            COALESCE(i.workups_list,
+              (SELECT STRING_AGG(c.kind || ': ' || c.service, ', ' ORDER BY c.created_at)
+               FROM public.clinical_orders c
+               WHERE c.patient_id = COALESCE(i.patient_id, ${hPatientId})
+                 AND c.created_at >= ${hCreatedAt} - INTERVAL '6 hours'
+                 AND c.created_at <= ${hCreatedAt} + INTERVAL '2 days')
+            ) AS workups_list,
+            'claim' AS source_type,
+            ${hCreatedAt} AS stage_timestamp
+          FROM public.billing_hmo_claims h
+          LEFT JOIN (
+            SELECT bi.id, bi.patient_id, bi.status, bi.total_amount, bi.updated_at, bi.created_at, bi.notes,
+                   (bi.total_amount - COALESCE((SELECT SUM(amount) FROM public.billing_payments WHERE invoice_id = bi.id), 0)) AS balance_amount,
+                   (SELECT STRING_AGG(c.kind || ': ' || c.service, ', ' ORDER BY c.created_at)
+                    FROM public.clinical_orders c
+                    WHERE c.patient_id = bi.patient_id
+                      AND c.created_at >= bi.created_at - INTERVAL '6 hours'
+                      AND c.created_at <= bi.created_at + INTERVAL '2 days'
+                    LIMIT 20) AS workups_list
+            FROM public.billing_invoices bi
+          ) i ON i.id = ${hInvoiceId}
+          LEFT JOIN public.patients p ON p.id = i.patient_id
+
+          UNION ALL
+
+          SELECT
+            -(${aId}) AS id,
+            NULL AS invoice_id,
+            ${aId} AS appointment_id,
+            ${aPatientId} AS patient_id,
+            ${aHmoProv} AS hmo_provider,
+            ${aHmoLoa} AS hmo_loa_number,
+            ${aHmoCard} AS hmo_card_number,
+            ${aPhilDed} AS philhealth_deduction,
+            COALESCE(${aLoaAppr1}, ${aLoaAppr2}, 0) AS loa_approved_amount,
+            COALESCE(${aHmoStatus}, 'Awaiting LOA') AS status,
+            CONCAT_WS(' • ', 'Walk-in HMO Intake', ${aPurpose}, ${aRouteType}) AS notes,
+            CONCAT_WS(' • ', ${aCreatedBy}, 'Appointment created') AS requested_by,
+            NULL AS updated_by,
+            ${aCreatedAt} AS created_at,
+            ${aUpdatedAt} AS updated_at,
+            0 AS total_amount,
+            0 AS balance_amount,
+            'Draft' AS invoice_status,
+            ${pFirstName} AS first_name,
+            ${pLastName} AS last_name,
+            ${pEmail} AS email,
+            ${pContact} AS contact_number,
             (SELECT STRING_AGG(c.kind || ': ' || c.service, ', ' ORDER BY c.created_at)
              FROM public.clinical_orders c
-             WHERE c.patient_id = COALESCE(i.patient_id, h.patient_id, pp.id)
-               AND c.created_at >= h.created_at - INTERVAL '6 hours'
-               AND c.created_at <= h.created_at + INTERVAL '2 days')
-          ) AS workups_list,
-          'claim' AS source_type,
-          h.created_at AS stage_timestamp
-        FROM public.billing_hmo_claims h
-        LEFT JOIN (
-          SELECT bi.id, bi.patient_id, bi.status, bi.total_amount, bi.updated_at, bi.created_at, bi.notes,
-                 (bi.total_amount - COALESCE((SELECT SUM(amount) FROM public.billing_payments WHERE invoice_id = bi.id), 0)) AS balance_amount,
-                 (SELECT STRING_AGG(c.kind || ': ' || c.service, ', ' ORDER BY c.created_at)
-                  FROM public.clinical_orders c
-                  WHERE c.patient_id = bi.patient_id
-                    AND c.created_at >= bi.created_at - INTERVAL '6 hours'
-                    AND c.created_at <= bi.created_at + INTERVAL '2 days'
-                  LIMIT 20) AS workups_list
-          FROM public.billing_invoices bi
-        ) i ON i.id = h.invoice_id
-        LEFT JOIN public.patients p ON p.id = i.patient_id
-        LEFT JOIN public.patients pp ON pp.id = h.patient_id
+             WHERE c.patient_id = ${aPatientId}
+               AND c.created_at >= ${aCreatedAt} - INTERVAL '2 hours') AS workups_list,
+            'appointment' AS source_type,
+            ${aCreatedAt} AS stage_timestamp
+          FROM public.appointments a
+          LEFT JOIN public.patients p ON p.id = ${aPatientId}
+          WHERE (
+              (${aIsHmo}) IS TRUE
+              OR NULLIF(${aHmoStatus}, '') IS NOT NULL
+              OR NULLIF(${aHmoProv}, '') IS NOT NULL
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM public.billing_hmo_claims hc WHERE hc.appointment_id = ${aId}
+            )
 
-        UNION ALL
+          UNION ALL
 
-        SELECT
-          -a.id AS id,
-          NULL AS invoice_id,
-          a.id AS appointment_id,
-          a.patient_id,
-          a.hmo_provider,
-          a.hmo_loa_number,
-          a.hmo_card_number,
-          a.philhealth_deduction AS philhealth_deduction,
-          COALESCE(a.hmo_loa_approved_amount, a.loa_approved_amount, 0) AS loa_approved_amount,
-          COALESCE(NULLIF(a.hmo_status, ''), 'Awaiting LOA') AS status,
-          CONCAT_WS(' • ', 'Walk-in HMO Intake', a.purpose, a.route_type) AS notes,
-          CONCAT_WS(' · ', a.created_by, 'Appointment created') AS requested_by,
-          NULL AS updated_by,
-          a.created_at AS created_at,
-          a.updated_at AS updated_at,
-          0 AS total_amount,
-          0 AS balance_amount,
-          'Draft' AS invoice_status,
-          p.first_name,
-          p.last_name,
-          p.email,
-          p.contact_number,
-          (SELECT STRING_AGG(c.kind || ': ' || c.service, ', ' ORDER BY c.created_at)
-           FROM public.clinical_orders c
-           WHERE c.patient_id = a.patient_id
-             AND c.created_at >= a.created_at - INTERVAL '2 hours') AS workups_list,
-          'appointment' AS source_type,
-          a.created_at AS stage_timestamp
-        FROM public.appointments a
-        LEFT JOIN public.patients p ON p.id = a.patient_id
-        WHERE a.is_hmo = TRUE
-          AND NOT EXISTS (
-            SELECT 1 FROM public.billing_hmo_claims hc WHERE hc.appointment_id = a.id
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM public.billing_hmo_claims hc2
-            JOIN public.billing_invoices bi ON bi.id = hc2.invoice_id
-            WHERE bi.patient_id = a.patient_id
-              AND bi.created_at >= a.created_at - INTERVAL '4 hours'
-              AND bi.created_at <= a.created_at + INTERVAL '4 hours'
-          )
+          SELECT
+            -(10000000 + CAST(p2.id AS bigint)) AS id,
+            NULL AS invoice_id,
+            NULL AS appointment_id,
+            p2.id AS patient_id,
+            ${pHmoProv} AS hmo_provider,
+            NULL AS hmo_loa_number,
+            ${pHmoCard} AS hmo_card_number,
+            COALESCE(${pPhilAmt}, 0) AS philhealth_deduction,
+            0 AS loa_approved_amount,
+            'Awaiting LOA' AS status,
+            'Patient flagged HMO-active — no linked invoice/appointment claim yet' AS notes,
+            CONCAT_WS(' • ', 'Patient registry HMO flag', ${pCreatedBy}) AS requested_by,
+            NULL AS updated_by,
+            COALESCE(${pUpdatedAt}, ${pCreatedAt}, CURRENT_TIMESTAMP) AS created_at,
+            COALESCE(${pUpdatedAt}, ${pCreatedAt}, CURRENT_TIMESTAMP) AS updated_at,
+            0 AS total_amount,
+            0 AS balance_amount,
+            'Draft' AS invoice_status,
+            ${pFirstName} AS first_name,
+            ${pLastName} AS last_name,
+            ${pEmail} AS email,
+            ${pContact} AS contact_number,
+            (SELECT STRING_AGG(c.kind || ': ' || c.service, ', ' ORDER BY c.created_at)
+             FROM public.clinical_orders c
+             WHERE c.patient_id = p2.id
+               AND c.created_at >= COALESCE(${pUpdatedAt}, ${pCreatedAt}, CURRENT_TIMESTAMP) - INTERVAL '48 hours'
+            ) AS workups_list,
+            'patient' AS source_type,
+            COALESCE(${pUpdatedAt}, ${pCreatedAt}, CURRENT_TIMESTAMP) AS stage_timestamp
+          FROM public.patients p2
+          WHERE (
+              (${pIsHmo}) IS TRUE
+              OR NULLIF(${pHmoProv}, '') IS NOT NULL
+              OR NULLIF(${pHmoCard}, '') IS NOT NULL
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM public.billing_hmo_claims hc3 WHERE hc3.patient_id = p2.id
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM public.billing_hmo_claims hc4
+              JOIN public.billing_invoices bi2 ON bi2.id = hc4.invoice_id
+              WHERE bi2.patient_id = p2.id
+            )
 
-        UNION ALL
-
-        SELECT
-          -(10000000 + CAST(p2.id AS bigint)) AS id,
-          NULL AS invoice_id,
-          NULL AS appointment_id,
-          p2.id AS patient_id,
-          p2.hmo_provider,
-          NULL AS hmo_loa_number,
-          p2.hmo_card_number,
-          COALESCE(p2.philhealth_amount, 0) AS philhealth_deduction,
-          0 AS loa_approved_amount,
-          'Awaiting LOA' AS status,
-          'Patient flagged HMO-active — no linked invoice/appointment claim yet' AS notes,
-          CONCAT_WS(' · ', 'Patient registry HMO flag', p2.created_by) AS requested_by,
-          NULL AS updated_by,
-          COALESCE(p2.updated_at, p2.created_at, CURRENT_TIMESTAMP) AS created_at,
-          COALESCE(p2.updated_at, p2.created_at, CURRENT_TIMESTAMP) AS updated_at,
-          0 AS total_amount,
-          0 AS balance_amount,
-          'Draft' AS invoice_status,
-          p2.first_name,
-          p2.last_name,
-          p2.email,
-          p2.contact_number,
-          (SELECT STRING_AGG(c.kind || ': ' || c.service, ', ' ORDER BY c.created_at)
-           FROM public.clinical_orders c
-           WHERE c.patient_id = p2.id
-             AND c.created_at >= COALESCE(p2.updated_at, p2.created_at, CURRENT_TIMESTAMP) - INTERVAL '48 hours'
-          ) AS workups_list,
-          'patient' AS source_type,
-          COALESCE(p2.updated_at, p2.created_at, CURRENT_TIMESTAMP) AS stage_timestamp
-        FROM public.patients p2
-        WHERE p2.is_hmo = TRUE
-          AND NOT EXISTS (
-            SELECT 1 FROM public.billing_hmo_claims hc3 WHERE hc3.patient_id = p2.id
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM public.appointments a2 WHERE a2.patient_id = p2.id AND a2.is_hmo = TRUE
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM public.billing_hmo_claims hc4
-            JOIN public.billing_invoices bi2 ON bi2.id = hc4.invoice_id
-            WHERE bi2.patient_id = p2.id
-          )
-
-        ORDER BY COALESCE(updated_at, created_at, stage_timestamp) DESC, created_at DESC
-      `
-    ).catch(() => []);
+          ORDER BY COALESCE(updated_at, created_at, stage_timestamp) DESC, created_at DESC
+        `
+      );
+    } catch (_mainUnionErr) {
+      // ========== ULTIMATE FALLBACK: NO-JOIN super simple claim-only query ==========
+      // (Guaranteed to work if any column mismatch happened in primary query)
+      console.warn('[HMO] Primary union query failed, using no-join fallback:', _mainUnionErr.message || _mainUnionErr);
+      try {
+        rows = await prisma.$queryRawUnsafe(
+          `
+            SELECT
+              ${hId} AS id,
+              ${hInvoiceId} AS invoice_id,
+              ${hApptId} AS appointment_id,
+              ${hPatientId} AS patient_id,
+              ${hHmoProv} AS hmo_provider,
+              ${hHmoLoa} AS hmo_loa_number,
+              ${hHmoCard} AS hmo_card_number,
+              ${hPhilDed} AS philhealth_deduction,
+              ${hLoaAppr} AS loa_approved_amount,
+              COALESCE(${hStatus}, 'Approved') AS status,
+              ${hNotes} AS notes,
+              ${hRequestedBy} AS requested_by,
+              ${hUpdatedBy} AS updated_by,
+              ${hCreatedAt} AS created_at,
+              ${hUpdatedAt} AS updated_at,
+              0 AS total_amount,
+              0 AS balance_amount,
+              'Draft' AS invoice_status,
+              COALESCE(${hPatientName}, 'Patient') AS first_name,
+              NULL AS last_name,
+              NULL AS email,
+              NULL AS contact_number,
+              NULL AS workups_list,
+              'claim_fallback' AS source_type,
+              ${hCreatedAt} AS stage_timestamp
+            FROM public.billing_hmo_claims h
+            ORDER BY ${hUpdatedAt} DESC NULLS LAST, ${hCreatedAt} DESC NULLS LAST
+            LIMIT 200
+          `
+        ).catch(() => []);
+      } catch (_fallbackErr) {
+        rows = [];
+      }
+    }
 
     const builtList = (Array.isArray(rows) ? rows : [])
       .map((row) => {
