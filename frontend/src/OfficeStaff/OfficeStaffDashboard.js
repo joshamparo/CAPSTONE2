@@ -1474,6 +1474,10 @@ export default function OfficeStaffDashboard({ mode }) {
             </div>
           </div>
           <div className="office-header-right">
+            <button type="button" className="office-btn ghost" onClick={refreshInvoices} disabled={!user || invoiceLoading} title="Refresh">
+              <RefreshCw size={16} />
+              Refresh
+            </button>
             <AccountHeaderActions user={user} roleLabel={roleLabel} showChangePasswordMenu={false} onSignOut={() => setShowLogoutConfirm(true)} onMyProfile={() => setView('profile')} />
           </div>
         </div>
@@ -2827,52 +2831,8 @@ export default function OfficeStaffDashboard({ mode }) {
 
       {view === 'hmo' ? (
         <div className="office-card">
-          <div className="office-row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-            <div>
-              <div className="office-title" style={{ fontSize: '1.05rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <Shield size={17} style={{ color: '#6366f1' }} /> HMO Monitoring
-              </div>
-              <div className="office-subtitle" style={{ marginTop: 2, marginBottom: 8 }}>
-                {hmoQueueFilter === 'approved'
-                  ? 'Approved / partially approved HMO claims only — ready for billing and discharge.'
-                  : 'All HMO claims for audit purposes (includes pending, rejected, and awaiting LOA).'}
-              </div>
-              <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
-                {[
-                  { key: 'approved', label: 'Approved Only (Default)' },
-                  { key: 'all', label: 'All Claims · Audit View' }
-                ].map((tab) => {
-                  const active = hmoQueueFilter === tab.key;
-                  return (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      onClick={() => { setHmoQueueFilter(tab.key); setHmoQueuePage(1); }}
-                      style={{
-                        padding: '7px 13px',
-                        borderRadius: 9,
-                        border: active ? '2px solid #6366f1' : '1px solid #e2e8f0',
-                        background: active ? '#eef2ff' : '#ffffff',
-                        color: active ? '#4338ca' : '#475569',
-                        fontWeight: active ? 800 : 600,
-                        fontSize: '0.82rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {tab.label}
-                    </button>
-                  );
-                })}
-                <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', fontSize: '0.8rem', fontWeight: 700, marginLeft: 4 }}>
-                  {hmoQueueLoading
-                    ? 'Loading…'
-                    : (Number(hmoQueue.totalCount) === 0
-                      ? `0 ${hmoQueueFilter === 'approved' ? 'approved' : 'all'} claim(s)`
-                      : `Showing ${(Number(hmoQueue.page) - 1) * Number(hmoQueue.perPage) + 1}–${Math.min(Number(hmoQueue.page) * Number(hmoQueue.perPage), Number(hmoQueue.totalCount))} of ${Number(hmoQueue.totalCount)} ${hmoQueueFilter === 'approved' ? 'approved' : 'all'} claim(s) · 8 per page`)}
-                </div>
-              </div>
-            </div>
-            <div className="office-row" style={{ gap: 10, flexWrap: 'wrap' }}>
+          <div className="office-row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div className="office-row" style={{ gap: 10, alignItems: 'center' }}>
               <div className="input-wrapper-relative">
                 <Search size={18} className="absolute-icon-left text-slate-400" />
                 <input
@@ -2885,13 +2845,44 @@ export default function OfficeStaffDashboard({ mode }) {
                       refreshHmoQueue();
                     }
                   }}
-                  placeholder="Search patient, provider, LOA #, contact"
+                  placeholder="Search patient name, provider, LOA #, contact"
                 />
               </div>
               <button type="button" className="office-btn primary" onClick={() => { setHmoQueuePage(1); refreshHmoQueue(); }} disabled={hmoQueueLoading || !user}>
-                <RefreshCw size={16} />
-                Refresh
+                Search
               </button>
+            </div>
+            <div className="office-row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {[
+                { key: 'approved', label: 'Approved Only' },
+                { key: 'all', label: 'All Claims · Audit' }
+              ].map((tab) => {
+                const active = hmoQueueFilter === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => { setHmoQueueFilter(tab.key); setHmoQueuePage(1); }}
+                    style={{
+                      padding: '7px 13px',
+                      borderRadius: 9,
+                      border: active ? '2px solid #f97316' : '1px solid #e2e8f0',
+                      background: active ? '#fff7ed' : '#ffffff',
+                      color: active ? '#c2410c' : '#475569',
+                      fontWeight: active ? 800 : 600,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+              {Number(hmoQueue.totalCount) > 0 ? (
+                <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', fontSize: '0.8rem', fontWeight: 700 }}>
+                  Showing {(Number(hmoQueue.page) - 1) * Number(hmoQueue.perPage) + 1}–{Math.min(Number(hmoQueue.page) * Number(hmoQueue.perPage), Number(hmoQueue.totalCount))} of {Number(hmoQueue.totalCount)}
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -2901,41 +2892,32 @@ export default function OfficeStaffDashboard({ mode }) {
             <table className="staff-table">
               <thead>
                 <tr>
-                  <th style={{ minWidth: 180 }}>Patient</th>
-                  <th style={{ minWidth: 130 }}>HMO Provider</th>
-                  <th style={{ minWidth: 160 }}>LOA #</th>
-                  <th style={{ minWidth: 240, maxWidth: 320 }}>Workups</th>
-                  <th style={{ textAlign: 'right', minWidth: 100 }}>Total Bill</th>
-                  <th style={{ textAlign: 'right', minWidth: 100 }}>PhilHealth</th>
-                  <th style={{ textAlign: 'right', minWidth: 105, whiteSpace: 'nowrap' }}>HMO Covered</th>
-                  <th style={{ textAlign: 'right', minWidth: 110 }}>Patient Pays</th>
-                  <th style={{ minWidth: 180, whiteSpace: 'nowrap' }} className="inc-right">Actions</th>
+                  <th>Patient</th>
+                  <th>HMO Provider</th>
+                  <th>LOA #</th>
+                  <th>Workups</th>
+                  <th style={{ textAlign: 'right' }}>Total Bill</th>
+                  <th style={{ textAlign: 'right' }}>PhilHealth</th>
+                  <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>HMO Covered</th>
+                  <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Patient Pays</th>
+                  <th className="inc-right">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {hmoQueueLoading ? (
                   <tr>
-                    <td colSpan="9" className="text-center py-8 text-slate-500">Loading claims…</td>
+                    <td colSpan="9" className="text-center py-8 text-slate-500">Loading...</td>
                   </tr>
                 ) : (!Array.isArray(hmoQueue.rows) || hmoQueue.rows.length === 0) ? (
                   <tr>
-                    <td colSpan="9" className="text-center py-12 text-slate-500">
-                      <div style={{ opacity: 0.85 }}>
-                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>
-                          {hmoQueueFilter === 'approved'
-                            ? (Number(hmoQueue.totalCount) === 0
-                              ? 'No Approved / Partially Approved HMO claims yet.'
-                              : 'No rows on this page. Go to Page 1.')
-                            : (Number(hmoQueue.totalCount) === 0
-                              ? 'No HMO claims stored yet.'
-                              : 'No rows on this page. Go to Page 1.')}
-                        </div>
-                        <div style={{ fontSize: '0.86rem', marginTop: 6, color: '#64748b', lineHeight: 1.5 }}>
-                          {hmoQueueFilter === 'approved'
-                            ? 'Wait for HMO approval or switch to "All Claims · Audit View" to see pending rows.'
-                            : 'Create a Nurse Walk-In Intake patient → toggle HMO = YES → encode LOA details to populate rows here.'}
-                        </div>
-                      </div>
+                    <td colSpan="9" className="text-center py-8 text-slate-500">
+                      {hmoQueueFilter === 'approved'
+                        ? (Number(hmoQueue.totalCount) === 0
+                          ? 'No Approved / Partially Approved HMO claims yet.'
+                          : 'No rows on this page. Go to Page 1.')
+                        : (Number(hmoQueue.totalCount) === 0
+                          ? 'No HMO claims stored yet. Create a Nurse Walk-In Intake with HMO = YES + encode LOA details first.'
+                          : 'No rows on this page. Go to Page 1.')}
                     </td>
                   </tr>
                 ) : hmoQueue.rows.map((row) => {
@@ -2945,24 +2927,21 @@ export default function OfficeStaffDashboard({ mode }) {
                   const phNow = Number(row.philhealth_amount === '₱ 0.00' ? 0 : (row.philhealth_amount ? String(row.philhealth_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.philhealth_deduction || 0);
                   const hmoNow = Number(row.hmo_covered_amount === '₱ 0.00' ? 0 : (row.hmo_covered_amount ? String(row.hmo_covered_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.applied_hmo_amount || claim.loa_approved_amount || 0);
                   const totalNow = Number(row.total_amount === '₱ 0.00' ? 0 : (row.total_amount ? String(row.total_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.total_amount || claim.gross_amount || 0);
-                  const rowBg = patientDue <= 0.0099 ? '#f8fafc' : '#ffffff';
                   return (
-                    <tr key={String(row.id || row.invoice_id)} style={{ background: rowBg }}>
-                      <td>
-                        <div className="office-billing-patient" style={{ color: '#0f172a' }}>{row.patient_name || '—'}</div>
+                    <tr key={String(row.id || row.invoice_id)}>
+                      <td className="text-sm font-medium text-slate-700">
+                        <div>{row.patient_name || '—'}</div>
                         {row.contact_number ? <div className="office-billing-subline" style={{ color: '#64748b' }}>{String(row.contact_number)}</div> : null}
                       </td>
-                      <td>
+                      <td className="text-sm text-slate-600">
                         <div style={{ fontWeight: 700, color: '#0f172a' }}>{claim.provider || String(row.hmo_claim?.provider) || '—'}</div>
                         {claim.hmo_card_number ? <div className="office-billing-subline" style={{ color: '#64748b' }}>Card: {String(claim.hmo_card_number)}</div> : null}
                       </td>
-                      <td>
+                      <td className="text-sm text-slate-600">
                         {claim.loa_number ? (
-                          <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#2563eb', fontWeight: 800, fontSize: '0.86rem' }}>
-                            {String(claim.loa_number)}
-                          </div>
+                          <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#2563eb', fontWeight: 800, fontSize: '0.86rem' }}>{String(claim.loa_number)}</div>
                         ) : (
-                          <div style={{ color: '#cbd5e1', fontStyle: 'italic', fontSize: '0.8rem' }}>no LOA # yet</div>
+                          <div style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.8rem' }}>no LOA # yet</div>
                         )}
                         <div style={{ marginTop: 4 }}>
                           <span className={`status-badge-table ${
@@ -2974,7 +2953,7 @@ export default function OfficeStaffDashboard({ mode }) {
                           }`} style={{ fontSize: '0.72rem', padding: '2px 8px', fontWeight: 800 }}>{status}</span>
                         </div>
                       </td>
-                      <td style={{ maxWidth: 320 }}>
+                      <td className="text-sm text-slate-600" style={{ maxWidth: 320 }}>
                         {row.workups_list ? (
                           <div
                             style={{
@@ -2983,32 +2962,26 @@ export default function OfficeStaffDashboard({ mode }) {
                               WebkitBoxOrient: 'vertical',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
-                              color: '#0f172a',
-                              fontWeight: 600,
-                              lineHeight: 1.4,
-                              fontSize: '0.85rem'
+                              lineHeight: 1.35,
+                              fontWeight: 600
                             }}
                             title={String(row.workups_list)}
                           >
                             {String(row.workups_list)}
                           </div>
                         ) : (
-                          <div style={{ color: '#cbd5e1', fontSize: '0.78rem', fontStyle: 'italic' }}>No lab/imaging linked yet.</div>
+                          <span style={{ color: '#cbd5e1', fontSize: '0.78rem', fontStyle: 'italic' }}>No lab/imaging linked yet.</span>
                         )}
                       </td>
-                      <td style={{ textAlign: 'right', color: '#0f172a', fontWeight: 700 }}>₱ {toMoney(totalNow)}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        {phNow <= 0.0001
-                          ? <span style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>—</span>
-                          : <span style={{ color: '#ea580c', fontWeight: 700 }}>−₱ {toMoney(phNow)}</span>}
+                      <td className="text-sm font-medium text-slate-700" style={{ textAlign: 'right' }}>₱ {toMoney(totalNow)}</td>
+                      <td className="text-sm text-slate-600" style={{ textAlign: 'right' }}>
+                        {phNow <= 0.0001 ? <span style={{ color: '#cbd5e1' }}>—</span> : <span style={{ color: '#ea580c', fontWeight: 700 }}>−₱ {toMoney(phNow)}</span>}
                       </td>
-                      <td style={{ textAlign: 'right' }}>
-                        {hmoNow <= 0.0001
-                          ? <span style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>—</span>
-                          : <span style={{ color: '#2563eb', fontWeight: 700 }}>−₱ {toMoney(hmoNow)}</span>}
+                      <td className="text-sm text-slate-600" style={{ textAlign: 'right' }}>
+                        {hmoNow <= 0.0001 ? <span style={{ color: '#cbd5e1' }}>—</span> : <span style={{ color: '#2563eb', fontWeight: 700 }}>−₱ {toMoney(hmoNow)}</span>}
                       </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 900, color: patientDue <= 0.0099 ? '#475569' : '#0f172a', fontSize: '0.92rem' }}>
+                      <td className="text-sm text-slate-600" style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: 900, color: patientDue <= 0.0099 ? '#475569' : '#0f172a' }}>
                           ₱ {toMoney(patientDue)}
                         </div>
                         {patientDue <= 0.0099 ? (
@@ -3020,16 +2993,13 @@ export default function OfficeStaffDashboard({ mode }) {
                           <button
                             type="button"
                             className="office-btn ghost"
-                            style={{ padding: '6px 10px', fontSize: '0.8rem', height: 34, borderRadius: 10, width: 'auto' }}
                             onClick={() => setHmoQuickEdit(row)}
-                            title="Update HMO provider / status / amounts"
                           >
-                            <Edit2 size={14} style={{ marginRight: 4 }} /> Update
+                            Update
                           </button>
                           <button
                             type="button"
-                            className="office-btn primary"
-                            style={{ padding: '6px 10px', fontSize: '0.8rem', height: 34, borderRadius: 10, width: 'auto' }}
+                            className="office-btn"
                             onClick={async () => {
                               if (row.invoice_id) {
                                 await openInvoice(String(row.invoice_id));
@@ -3042,12 +3012,11 @@ export default function OfficeStaffDashboard({ mode }) {
                               }
                             }}
                           >
-                            <FileText size={14} style={{ marginRight: 4 }} /> View Invoice
+                            View Invoice
                           </button>
                           <button
                             type="button"
-                            className="office-btn ghost"
-                            style={{ padding: '6px 10px', fontSize: '0.8rem', height: 34, borderRadius: 10, width: 'auto' }}
+                            className="office-btn primary"
                             onClick={() => {
                               const slip = [
                                 `HMO STATEMENT OF ACCOUNT (SOA)`,
