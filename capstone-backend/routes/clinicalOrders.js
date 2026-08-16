@@ -148,7 +148,9 @@ function canTransitionStatus({ fromStatus, toStatus, actorRole, assignedRole }) 
 function enrichClinicalOrder(order) {
   const row = order && typeof order === 'object' ? { ...order } : {};
   const pricing = resolveClinicalServicePricing({ kind: row.kind, service: row.service });
-  const statusIsForPayment = String(row.status || '').toLowerCase() === 'for payment';
+  const statusNorm = String(row.status || '').toLowerCase();
+  const statusIsForPayment = statusNorm === 'for payment';
+  const statusIsPaid = statusNorm === 'paid';
   return {
     ...row,
     pricing,
@@ -157,7 +159,12 @@ function enrichClinicalOrder(order) {
     priceLabel: pricing.serviceLabel,
     currency: pricing.currency,
     unitPrice: pricing.unitPrice,
-    amountDue: statusIsForPayment ? pricing.unitPrice : 0
+    amountDue: statusIsForPayment ? pricing.unitPrice : 0,
+    configuredUnitPrice: pricing.unitPrice,
+    patientPayable: statusIsPaid ? 0 : pricing.unitPrice,
+    hmoIndicators: {
+      isHmoPrePaid: statusIsPaid
+    }
   };
 }
 
@@ -221,7 +228,7 @@ router.get('/', async (req, res) => {
             delete base.OR;
             where.AND = [
               base,
-              { OR: [{ status: 'For Payment' }, { status: 'Pending', assigned_role: { in: Array.from(SCHEDULABLE_ROLE_SET) } }] }
+              { OR: [{ status: 'For Payment' }, { status: 'Paid' }, { status: 'Pending', assigned_role: { in: Array.from(SCHEDULABLE_ROLE_SET) } }] }
             ];
             delete where.status;
             delete where.OR;

@@ -2294,33 +2294,97 @@ export default function OfficeStaffDashboard({ mode }) {
                       <td colSpan="7" className="text-center py-8 text-slate-500">No lab orders waiting for payment.</td>
                     </tr>
                   ) : (
-                    displayedLabOrders.slice(0, 120).map((o) => (
-                      <tr key={String(o.id)}>
+                    displayedLabOrders.slice(0, 120).map((o) => {
+                      const statusNorm = String(o.status || '').toLowerCase();
+                      const isPrePaid = statusNorm === 'paid';
+                      const servicePrice = Number(o.configuredUnitPrice ?? o.unitPrice ?? o.amountDue ?? 0);
+                      const rowPatientDue = isPrePaid ? 0 : Number(o.amountDue ?? o.patientPayable ?? servicePrice);
+                      return (
+                      <tr key={String(o.id)} style={{ background: isPrePaid ? '#f0fdf4' : undefined }}>
                         <td className="text-sm font-medium text-slate-700">#{o.id}</td>
                         <td className="text-sm text-slate-600">{o.patientName || '—'}</td>
-                        <td className="text-sm text-slate-600">{o.service || o.kind || '—'}</td>
                         <td className="text-sm text-slate-600">
-                          {o.priceConfigured ? `₱ ${toMoney(o.amountDue)}` : 'Needs setup'}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span>{o.service || o.kind || '—'}</span>
+                            {isPrePaid ? (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 6,
+                                padding: '3px 9px', borderRadius: 999,
+                                background: '#16a34a', color: '#fff',
+                                fontSize: '11px', fontWeight: 800
+                              }}>
+                                ✅ HMO COVERED • NO PAYMENT NEEDED
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="text-sm" style={{ color: isPrePaid ? '#16a34a' : '#0f172a', fontWeight: isPrePaid ? 800 : 600 }}>
+                          {isPrePaid ? (
+                            <div>
+                              <div style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 500, fontSize: '12px' }}>
+                                ₱ {toMoney(servicePrice)}
+                              </div>
+                              <div style={{ fontWeight: 900 }}>
+                                ₱ 0.00 (covered by HMO)
+                              </div>
+                            </div>
+                          ) : (
+                            o.priceConfigured ? `₱ ${toMoney(rowPatientDue)}` : 'Needs setup'
+                          )}
                         </td>
                         <td>
-                          <span className={`status-badge-table ${
-                            String(o.status || '').toLowerCase() === 'paid' ? 'status-duty' :
-                            String(o.status || '').toLowerCase() === 'for payment' ? 'status-upcoming' :
-                            'status-scheduled'
-                          }`}>{o.status || '—'}</span>
+                          {isPrePaid ? (
+                            <span className={`status-badge-table status-duty`} style={{ fontWeight: 900 }}>
+                              PAID (HMO)
+                            </span>
+                          ) : (
+                            <span className={`status-badge-table ${
+                              String(o.status || '').toLowerCase() === 'paid' ? 'status-duty' :
+                              String(o.status || '').toLowerCase() === 'for payment' ? 'status-upcoming' :
+                              'status-scheduled'
+                            }`}>{o.status || '—'}</span>
+                          )}
                         </td>
                         <td className="text-sm text-slate-600">{o.createdAt ? new Date(o.createdAt).toLocaleString() : '—'}</td>
                         <td className="inc-right">
-                          <button
-                            type="button"
-                            className="office-btn ghost"
-                            onClick={() => openLabOrderPos(o)}
-                          >
-                            Record Payment
-                          </button>
+                          {isPrePaid ? (
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <button
+                                type="button"
+                                className="office-btn ghost"
+                                style={{ color: '#16a34a', fontWeight: 800, border: '1px solid #86efac', background: '#ecfccb' }}
+                                onClick={() => openLabOrderPos(o)}
+                              >
+                                View Receipt
+                              </button>
+                              <button
+                                type="button"
+                                className="office-btn ghost"
+                                onClick={() => {
+                                  if (typeof window !== 'undefined') {
+                                    const patientText = `Patient: ${o.patientName || ''}\nOrder: #${o.id}\nService: ${o.service || o.kind || ''}\nStatus: PAID via HMO (no further payment)\nAmount: ₱ ${toMoney(servicePrice)} (100% covered by HMO)\nCreated: ${o.createdAt ? new Date(o.createdAt).toLocaleString() : ''}\n\nPresent this slip to the station. Patient may proceed directly to the laboratory.`;
+                                    navigator.clipboard?.writeText(patientText).catch(() => {});
+                                    setSuccessMessage('HMO-covered lab slip copied to clipboard — patient may go directly to lab.');
+                                    setModalType('success');
+                                    setShowSuccessModal(true);
+                                  }
+                                }}
+                              >
+                                Print Slip
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="office-btn ghost"
+                              onClick={() => openLabOrderPos(o)}
+                            >
+                              Record Payment
+                            </button>
+                          )}
                         </td>
                       </tr>
-                    ))
+                    );})
                   )}
                 </tbody>
               </table>
