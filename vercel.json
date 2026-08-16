@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "create-react-app",
-  "buildCommand": "echo skip",
-  "installCommand": "echo skip",
+  "installCommand": "npm install --no-audit --no-fund",
+  "buildCommand": "CI=false DISABLE_ESLINT_PLUGIN=true GENERATE_SOURCEMAP=false npm run build:frontend:only",
   "outputDirectory": "frontend/build",
   "cleanUrls": true,
   "trailingSlash": false,
