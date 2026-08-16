@@ -1787,12 +1787,29 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 const hmoActive = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
                 const coverage = payload.hmoCoveredServices && typeof payload.hmoCoveredServices === 'object' ? payload.hmoCoveredServices : {};
                 const serviceType = routeMeta.type === 'lab' ? 'lab' : 'imaging';
-                const coveredByHmo = hmoActive && Boolean(coverage[serviceType]);
                 const configuredUnitPrice = Number(pricing?.unitPrice || 0);
-                const patientNeedsPay = !(pricing?.configured && configuredUnitPrice > 0 && coveredByHmo);
+                const pillMarkedCovered = hmoActive && Boolean(coverage[serviceType]);
+                const gross = configuredUnitPrice;
+                const phDedRaw = hmoActive && payload.hasPhilhealth ? Math.max(0, Number(payload.philhealthDeduction || 0)) : 0;
+                const loaRaw = hmoActive && payload.hasHmo ? Math.max(0, Number(payload.hmoLoaApprovedAmount || 0)) : 0;
+                const realPh = gross > 0 && phDedRaw > 0 ? Math.min(gross, phDedRaw) : 0;
+                const afterPh = Math.max(0, gross - realPh);
+                let realLoa = 0;
+                if (loaRaw > 0) {
+                    realLoa = Math.min(afterPh, loaRaw);
+                } else if (pillMarkedCovered && hmoActive) {
+                    realLoa = afterPh;
+                }
+                const patientPayable = Math.max(0, gross - realPh - realLoa);
+                const coveredByHmo = hmoActive && (realPh + realLoa > 0.0099);
+                const patientNeedsPay = patientPayable > 0.0099;
                 const baseStatus = pricing?.configured && configuredUnitPrice > 0 ? 'For Payment' : 'Pending';
-                const status = coveredByHmo ? 'Paid' : baseStatus;
-                if (coveredByHmo) mainClinicalOrderHmoCoveredCents = configuredUnitPrice;
+                const status = !coveredByHmo
+                    ? baseStatus
+                    : patientNeedsPay
+                        ? 'For Payment'
+                        : 'Paid';
+                if (coveredByHmo) mainClinicalOrderHmoCoveredCents = (realPh + realLoa);
                 const priority = triage.level <= 2 ? 'urgent' : 'routine';
 
                 const detailLines = [
@@ -1856,7 +1873,19 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             // Auto-create HMO claim linkage if HMO active:
                             if (hmoActive) {
                                 try {
-                                    await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id).catch(() => null);
+                                    const userLoa = Number(payload.hmoLoaApprovedAmount || 0);
+                                    const fallbackLoa = coveredByHmo ? configuredUnitPrice : null;
+                                    await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id, {
+                                        patientId: patient.id,
+                                        patientName,
+                                        hmoProvider: hmoSave ? (String(payload.hmoProvider || '').trim() || null) : null,
+                                        hmoLoaNumber: hmoSave ? (String(payload.hmoLoaNumber || '').trim() || null) : null,
+                                        hmoCardNumber: hmoSave ? (String(payload.hmoCardNumber || '').trim() || null) : null,
+                                        philhealthDeduction: hmoSave ? Number(payload.philhealthDeduction || 0) : null,
+                                        loaApprovedAmount: Number.isFinite(userLoa) && userLoa > 0 ? userLoa : fallbackLoa,
+                                        requester: getRequesterEmail(req) || requesterName || null,
+                                        notes: coveredByHmo ? `Walk-in ${kind} #${order.id}: HMO pre-covered at intake` : `Walk-in ${kind} #${order.id}`
+                                    }).catch(() => null);
                                 } catch (_e1) {}
                             }
                         } catch (_invCreateErr) {
@@ -1941,10 +1970,25 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 for (const service of payload.selectedLabServices) {
                     const pricing = resolveClinicalServicePricing({ kind: 'Laboratory', service });
                     const configuredUnitPrice = Number(pricing?.unitPrice || 0);
+                    const pillMarkedCovered = hmoActiveExtra && Boolean(coverageExtra.lab);
+                    const gross = configuredUnitPrice;
+                    const phDedRaw = hmoActiveExtra && payload.hasPhilhealth ? Math.max(0, Number(payload.philhealthDeduction || 0)) : 0;
+                    const loaRaw = hmoActiveExtra && payload.hasHmo ? Math.max(0, Number(payload.hmoLoaApprovedAmount || 0)) : 0;
+                    const realPh = gross > 0 && phDedRaw > 0 ? Math.min(gross, phDedRaw) : 0;
+                    const afterPh = Math.max(0, gross - realPh);
+                    let realLoa = 0;
+                    if (loaRaw > 0) realLoa = Math.min(afterPh, loaRaw);
+                    else if (pillMarkedCovered) realLoa = afterPh;
+                    const patientPayable = Math.max(0, gross - realPh - realLoa);
+                    const covered = hmoActiveExtra && (realPh + realLoa > 0.0099);
+                    const patientPayNow = patientPayable > 0.0099;
                     const baseStatus = pricing?.configured && configuredUnitPrice > 0 ? 'For Payment' : 'Pending';
-                    const covered = hmoActiveExtra && Boolean(coverageExtra.lab);
-                    const status = covered ? 'Paid' : baseStatus;
-                    if (covered) extraHmoTotalCents += configuredUnitPrice;
+                    const status = !covered
+                        ? baseStatus
+                        : patientPayNow
+                            ? 'For Payment'
+                            : 'Paid';
+                    if (covered) extraHmoTotalCents += (realPh + realLoa);
                     const { ticket: labTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], 'LAB');
                     generatedExtraTickets.push(labTicket);
                     const order = await tx.clinical_orders.create({
@@ -1999,7 +2043,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                     hmoLoaNumber: hmoSave ? (String(payload.hmoLoaNumber || '').trim() || null) : null,
                                     hmoCardNumber: hmoSave ? (String(payload.hmoCardNumber || '').trim() || null) : null,
                                     philhealthDeduction: hmoSave ? Number(payload.philhealthDeduction || 0) : null,
-                                    loaApprovedAmount: covered ? configuredUnitPrice : null,
+                                    loaApprovedAmount: (() => {
+                                        const u = Number(payload.hmoLoaApprovedAmount || 0);
+                                        return Number.isFinite(u) && u > 0 ? u : (covered ? configuredUnitPrice : null);
+                                    })(),
                                     requester: getRequesterEmail(req) || requesterName || null,
                                     notes: covered ? `Walk-in Lab #${order.id}: HMO pre-covered at intake` : `Walk-in Lab #${order.id}`
                                 }).catch(() => null);
@@ -2018,10 +2065,25 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     const assignedRole = isECG ? 'ecg_operator' : 'radiographer';
                     const pricing = resolveClinicalServicePricing({ kind, service });
                     const configuredUnitPrice = Number(pricing?.unitPrice || 0);
+                    const pillMarkedCovered = hmoActiveExtra && Boolean(coverageExtra.imaging);
+                    const gross = configuredUnitPrice;
+                    const phDedRaw = hmoActiveExtra && payload.hasPhilhealth ? Math.max(0, Number(payload.philhealthDeduction || 0)) : 0;
+                    const loaRaw = hmoActiveExtra && payload.hasHmo ? Math.max(0, Number(payload.hmoLoaApprovedAmount || 0)) : 0;
+                    const realPh = gross > 0 && phDedRaw > 0 ? Math.min(gross, phDedRaw) : 0;
+                    const afterPh = Math.max(0, gross - realPh);
+                    let realLoa = 0;
+                    if (loaRaw > 0) realLoa = Math.min(afterPh, loaRaw);
+                    else if (pillMarkedCovered) realLoa = afterPh;
+                    const patientPayable = Math.max(0, gross - realPh - realLoa);
+                    const covered = hmoActiveExtra && (realPh + realLoa > 0.0099);
+                    const patientPayNow = patientPayable > 0.0099;
                     const baseStatus = pricing?.configured && configuredUnitPrice > 0 ? 'For Payment' : 'Pending';
-                    const covered = hmoActiveExtra && Boolean(coverageExtra.imaging);
-                    const status = covered ? 'Paid' : baseStatus;
-                    if (covered) extraHmoTotalCents += configuredUnitPrice;
+                    const status = !covered
+                        ? baseStatus
+                        : patientPayNow
+                            ? 'For Payment'
+                            : 'Paid';
+                    if (covered) extraHmoTotalCents += (realPh + realLoa);
                     const { ticket: imgTicket } = await nextWalkInTicket(tx, now.toISOString().split('T')[0], isECG ? 'ECG' : 'IMG');
                     generatedExtraTickets.push(imgTicket);
                     const order = await tx.clinical_orders.create({
@@ -2076,7 +2138,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                     hmoLoaNumber: hmoSave ? (String(payload.hmoLoaNumber || '').trim() || null) : null,
                                     hmoCardNumber: hmoSave ? (String(payload.hmoCardNumber || '').trim() || null) : null,
                                     philhealthDeduction: hmoSave ? Number(payload.philhealthDeduction || 0) : null,
-                                    loaApprovedAmount: covered ? configuredUnitPrice : null,
+                                    loaApprovedAmount: (() => {
+                                        const u = Number(payload.hmoLoaApprovedAmount || 0);
+                                        return Number.isFinite(u) && u > 0 ? u : (covered ? configuredUnitPrice : null);
+                                    })(),
                                     requester: getRequesterEmail(req) || requesterName || null,
                                     notes: covered ? `Walk-in ${kind} #${order.id}: HMO pre-covered at intake` : `Walk-in ${kind} #${order.id}`
                                 }).catch(() => null);

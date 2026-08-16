@@ -637,6 +637,7 @@ function NurseDashboard() {
     hasHmo: false,
     hmoProvider: '',
     hmoLoaNumber: '',
+    hmoLoaApprovedAmount: '',
     hmoCardNumber: '',
     hmoNotes: '',
     hasPhilhealth: false,
@@ -1313,6 +1314,7 @@ function NurseDashboard() {
           hasHmo: addPatientData.hasHmo,
           hmoProvider: addPatientData.hmoProvider || null,
           hmoLoaNumber: addPatientData.hmoLoaNumber || null,
+          hmoLoaApprovedAmount: Number(addPatientData.hmoLoaApprovedAmount) || 0,
           hmoCardNumber: addPatientData.hmoCardNumber || null,
           hmoNotes: addPatientData.hmoNotes || null,
           hasPhilhealth: addPatientData.hasPhilhealth,
@@ -1398,6 +1400,7 @@ function NurseDashboard() {
         hasHmo: false,
         hmoProvider: "",
         hmoLoaNumber: "",
+        hmoLoaApprovedAmount: "",
         hmoCardNumber: "",
         hmoNotes: "",
         hasPhilhealth: false,
@@ -10235,6 +10238,19 @@ function NurseDashboard() {
                                   onChange={handleAddPatientChange}
                                   className="white-input"
                                   placeholder="e.g., LOA-2026-04128"
+                                />
+                              </div>
+                              <div className="input-group">
+                                <label>LOA Approved Amount (₱)</label>
+                                <input
+                                  type="number"
+                                  name="hmoLoaApprovedAmount"
+                                  value={addPatientData.hmoLoaApprovedAmount || ''}
+                                  onChange={handleAddPatientChange}
+                                  className="white-input"
+                                  placeholder="Amount HMO will shoulder (e.g., 1500)"
+                                  min="0"
+                                  step="0.01"
                                 />
                               </div>
                               <div className="input-group">
