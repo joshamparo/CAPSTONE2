@@ -9715,26 +9715,28 @@ function NurseDashboard() {
                   if (!hmo) return null;
                   const amountDue = String(hmo.patient_balance || '₱0');
                   const isFullyCovered = /0[.,]00|^₱0$/.test(amountDue) || amountDue.replace(/[^0-9]/g, '') === '0';
+                  const zeroPh = !hmo.philhealth_deduction || /0[.,]00|^₱0$/.test(String(hmo.philhealth_deduction)) || String(hmo.philhealth_deduction).replace(/[^0-9]/g, '') === '0';
+                  const zeroHmo = !hmo.hmo_coverage || /0[.,]00|^₱0$/.test(String(hmo.hmo_coverage)) || String(hmo.hmo_coverage).replace(/[^0-9]/g, '') === '0';
                   return (
-                    <div style={{ marginTop: 18, padding: 16, borderRadius: 14, border: '1px solid #86efac', background: '#f0fdf4' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    <div style={{ marginTop: 18, padding: 16, borderRadius: 14, border: '1px solid #e2e8f0', background: '#ffffff' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 999, background: '#16a34a', color: '#ffffff', fontWeight: 800, fontSize: '13px' }}>
                           ✅ APPROVED BY HMO
                         </div>
                         {hmo.provider ? (
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#166534' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
                             {hmo.provider}
                           </span>
                         ) : null}
                         {isFullyCovered ? (
-                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#166534', marginLeft: 'auto' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#0f172a', marginLeft: 'auto', padding: '4px 10px', borderRadius: 999, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
                             FULLY COVERED
                           </span>
                         ) : null}
                       </div>
 
                       {(hmo.loa_number || hmo.card_number) ? (
-                        <div style={{ display: 'flex', gap: 16, fontSize: '12px', color: '#14532d', fontWeight: 600, marginBottom: 10 }}>
+                        <div style={{ display: 'flex', gap: 16, fontSize: '12px', color: '#475569', fontWeight: 600, marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #f1f5f9' }}>
                           {hmo.loa_number ? `LOA: ${hmo.loa_number}` : ''}
                           {hmo.card_number ? `HMO Card: ${hmo.card_number}` : ''}
                         </div>
@@ -9743,31 +9745,49 @@ function NurseDashboard() {
                       <div style={{
                         display: 'grid',
                         gridTemplateColumns: '1fr auto',
-                        rowGap: 6,
+                        rowGap: 8,
                         columnGap: 18,
                         fontSize: '13px',
                         padding: 12,
-                        background: '#ecfccb',
+                        background: '#ffffff',
                         borderRadius: 10,
-                        border: '1px solid #bef264'
+                        border: '1px solid #f1f5f9'
                       }}>
-                        <div style={{ color: '#365314', fontWeight: 600 }}>Invoice total</div>
-                        <div style={{ color: '#0f172a', fontWeight: 700 }}>{hmo.invoice_total || '₱0'}</div>
+                        <div style={{ color: '#475569', fontWeight: 600 }}>Invoice total</div>
+                        <div style={{ color: '#0f172a', fontWeight: 700 }}>₱ {hmo.invoice_total || '0.00'}</div>
 
-                        <div style={{ color: '#365314', fontWeight: 600 }}>Philhealth deduction</div>
-                        <div style={{ color: '#15803d', fontWeight: 700 }}>-{hmo.philhealth_deduction || '₱0'}</div>
+                        {!zeroPh ? (
+                          <>
+                            <div style={{ color: '#475569', fontWeight: 600 }}>Philhealth deduction</div>
+                            <div style={{ color: '#15803d', fontWeight: 700 }}>−₱ {hmo.philhealth_deduction || '0.00'}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ color: '#94a3b8', fontWeight: 500 }}>Philhealth deduction</div>
+                            <div style={{ color: '#cbd5e1', fontWeight: 500 }}>—</div>
+                          </>
+                        )}
 
-                        <div style={{ color: '#365314', fontWeight: 600 }}>HMO coverage</div>
-                        <div style={{ color: '#15803d', fontWeight: 700 }}>-{hmo.hmo_coverage || '₱0'}</div>
+                        {!zeroHmo ? (
+                          <>
+                            <div style={{ color: '#475569', fontWeight: 600 }}>HMO coverage</div>
+                            <div style={{ color: '#2563eb', fontWeight: 700 }}>−₱ {hmo.hmo_coverage || '0.00'}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ color: '#94a3b8', fontWeight: 500 }}>HMO coverage</div>
+                            <div style={{ color: '#cbd5e1', fontWeight: 500 }}>—</div>
+                          </>
+                        )}
 
-                        <div style={{ color: '#365314', fontWeight: 800, borderTop: '1px dashed #a3e635', marginTop: 4, paddingTop: 6 }}>Total covered</div>
-                        <div style={{ color: '#15803d', fontWeight: 800, borderTop: '1px dashed #a3e635', marginTop: 4, paddingTop: 6 }}>{hmo.total_coverage || '₱0'}</div>
+                        <div style={{ color: '#0f172a', fontWeight: 800, borderTop: '1px dashed #e2e8f0', marginTop: 4, paddingTop: 10 }}>Total covered</div>
+                        <div style={{ color: '#0f172a', fontWeight: 800, borderTop: '1px dashed #e2e8f0', marginTop: 4, paddingTop: 10 }}>₱ {hmo.total_coverage || '0.00'}</div>
 
-                        <div style={{ color: '#064e3b', fontWeight: 900, fontSize: '14px' }}>
+                        <div style={{ color: '#0f172a', fontWeight: 900, fontSize: '14px', paddingTop: 2 }}>
                           {isFullyCovered ? 'Amount due (paid by HMO)' : 'Amount due (patient balance)'}
                         </div>
-                        <div style={{ color: isFullyCovered ? '#166534' : '#0f172a', fontWeight: 900, fontSize: '15px' }}>
-                          {amountDue}
+                        <div style={{ color: isFullyCovered ? '#16a34a' : '#0f172a', fontWeight: 900, fontSize: '15px', paddingTop: 2 }}>
+                          ₱ {amountDue}
                         </div>
                       </div>
                     </div>

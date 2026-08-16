@@ -2017,13 +2017,15 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 // Ensure we have an invoice to link to
                 if (!linkedInvoiceId) {
                     await ensureBillingTablesExist(tx).catch(() => null);
+                    const onSiteAmtInt = hasServices ? 100 : 0;
+                    const impliedTotal = onSiteAmtInt + mainClinicalOrderHmoCoveredCents + extraHmoTotalCents;
                     const inv = await tx.billing_invoices.create({
                         data: {
                             patient_id: patient.id,
                             status: 'Draft',
                             notes: `HMO Monitoring Record • ${routeMeta.label} Intake`,
                             created_by: getRequesterEmail(req) || requesterName || null,
-                            total_amount: 0
+                            total_amount: toMoney(Math.max(100, impliedTotal))
                         }
                     });
                     linkedInvoiceId = inv.id;
@@ -2101,11 +2103,14 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     let totalAmt = 0;
                     let invStatus = null;
                     if (linkedInvoiceId) {
-                        const qRows = await prisma.$queryRawUnsafe(`SELECT total_amount, status FROM public.billing_invoices WHERE id = $1::bigint`, String(linkedInvoiceId)).catch(() => []);
+                        const qRows = await tx.$queryRawUnsafe(`SELECT total_amount, status FROM public.billing_invoices WHERE id = $1::bigint`, String(linkedInvoiceId)).catch(() => []);
                         if (Array.isArray(qRows) && qRows.length) {
                             totalAmt = Math.max(0, Number(qRows[0].total_amount || 0));
                             invStatus = String(qRows[0].status || null);
                         }
+                    }
+                    if (!totalAmt || totalAmt <= 0.0001) {
+                        totalAmt = Math.max(100, onSiteAmt + mainClinicalOrderHmoCoveredCents + extraHmoTotalCents);
                     }
                     const maxPh = Math.min(totalAmt, Math.max(0, Number(phAmt || 0)));
                     const afterPh = Math.max(0, totalAmt - maxPh);
