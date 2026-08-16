@@ -2899,14 +2899,18 @@ function AdminDashboard() {
 
     const errors = [];
     const clean = (v) => String(v || "").trim();
-    const isValidPHPhone = (v) => /^09\d{9}$/.test(clean(v));
-    const isValidEmail = (v) => /^[A-Za-z][A-Za-z0-9._-]*@(gmail\.com|yahoo\.com)$/.test(clean(v));
+    const isValidPHPhone = (v) => /^(\+?63\s?|0)9\d{9}$/.test(String(clean(v)).replace(/[\s\-()]/g, ''));
+    const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(clean(v));
+    const isValidName = (v) => { const s = clean(v); return !!s && /^[A-Za-zÑñ][A-Za-zÑñ' .\-]*$/.test(s); };
 
     // Final validation for Step 3 fields
-    if (!isValidEmail(newUser.email)) errors.push("Email must start with a letter and end with @gmail.com or @yahoo.com.");
-    if (!isValidPHPhone(newUser.phone)) errors.push("Phone number must start with 09 and be 11 digits.");
+    if (!isValidEmail(newUser.email)) errors.push("Invalid email address format.");
+    if (!isValidPHPhone(newUser.phone)) errors.push("Invalid PH phone number. Use format: 09XX XXX XXXX or +63 9XX XXX XXXX.");
     if (!clean(newUser.streetAddress) || clean(newUser.streetAddress).length < 5) errors.push("Street Address must be at least 5 characters.");
     if (!clean(newUser.city)) errors.push("City / Municipality is required.");
+    if (clean(newUser.firstName) && !isValidName(newUser.firstName)) errors.push("First Name contains invalid characters.");
+    if (clean(newUser.lastName) && !isValidName(newUser.lastName)) errors.push("Last Name contains invalid characters.");
+    if (clean(newUser.middleName) && !isValidName(newUser.middleName)) errors.push("Middle Name contains invalid characters.");
 
     // Auto-generate secure temporary password
     const tempPassword = Math.random().toString(36).slice(-8) + "Temp1!";
@@ -3118,15 +3122,82 @@ function AdminDashboard() {
         return false;
       }
     } else if (registrationStep === 3) {
-      if (!clean(staffFormData.email) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(staffFormData.email))) return false;
-      if (!clean(staffFormData.phone) || clean(staffFormData.phone).replace(/\D/g, '').length < 10) return false;
-      if (!clean(staffFormData.address) || clean(staffFormData.address).length < 8) return false;
-      if (!clean(staffFormData.username) || clean(staffFormData.username).length < 4) return false;
-      if (!clean(staffFormData.password) || clean(staffFormData.password).length < 8) return false;
-      if (clean(staffFormData.password) !== clean(staffFormData.confirmPassword)) return false;
+      // Step 3 actual displayed fields: email, phone, streetAddress, city (NOT username/password/address combined)
+      const emailClean = clean(staffFormData.email);
+      const phoneDigits = clean(staffFormData.phone).replace(/[\s\-()]/g, '');
+      const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
+      const isValidPhone = (v) => /^(\+?63\s?|0)9\d{9}$/.test(v);
+      if (!emailClean || !isValidEmail(emailClean)) return false;
+      if (!clean(staffFormData.phone) || !isValidPhone(phoneDigits)) return false;
+      if (!clean(staffFormData.streetAddress) || clean(staffFormData.streetAddress).length < 5) return false;
+      if (!clean(staffFormData.city) || clean(staffFormData.city).length < 2) return false;
     }
     return true;
-  }, [registrationStep, staffFormData]);
+  }, [registrationStep, staffFormData, selectedCity]);
+
+  // Dynamic UX: show EXACT reasons why button is disabled (so user never guesses)
+  const registerStepBlockers = useMemo(() => {
+    const clean = (v) => String(v || "").trim();
+    const blockers = [];
+    if (registrationStep === 1) {
+      if (!clean(staffFormData.firstName) || clean(staffFormData.firstName).length < 2) blockers.push("First Name (min 2 letters)");
+      if (!clean(staffFormData.middleName) || clean(staffFormData.middleName).length < 2) blockers.push("Middle Name (min 2 letters)");
+      if (!clean(staffFormData.lastName) || clean(staffFormData.lastName).length < 2) blockers.push("Last Name (min 2 letters)");
+      const dobStr = clean(staffFormData.dateOfBirth);
+      if (!dobStr) blockers.push("Date of Birth");
+      else {
+        const dob = new Date(dobStr);
+        const today = new Date();
+        if (Number.isNaN(dob.getTime())) blockers.push("Valid Date of Birth");
+        else if (dob > today) blockers.push("Date of Birth (not future)");
+        else {
+          let age = today.getFullYear() - dob.getFullYear();
+          const m = today.getMonth() - dob.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age -= 1;
+          if (age < 18) blockers.push("Staff must be 18+ years old");
+        }
+      }
+      if (!clean(staffFormData.gender)) blockers.push("Gender");
+      if (!clean(staffFormData.civilStatus)) blockers.push("Civil Status");
+      if (!clean(staffFormData.nationality)) blockers.push("Nationality");
+    } else if (registrationStep === 2) {
+      if (!clean(staffFormData.role)) blockers.push("Role / Position");
+      const hiredStr = clean(staffFormData.dateHired);
+      if (!hiredStr) blockers.push("Date Hired");
+      else {
+        const hired = new Date(hiredStr);
+        const today = new Date();
+        if (Number.isNaN(hired.getTime())) blockers.push("Valid Date Hired");
+        else if (hired > today) blockers.push("Date Hired (not future)");
+      }
+      const medicalRoles = ['Doctor', 'Nurse', 'Pharmacist'];
+      if (medicalRoles.includes(clean(staffFormData.role))) {
+        if (!/^\d{7}$/.test(clean(staffFormData.medicalLicenseNumber))) blockers.push("Medical License # (7 digits)");
+      }
+      if (clean(staffFormData.role) && !clean(staffFormData.specialization)) blockers.push("Specialization");
+      const isMedicineDoctor = clean(staffFormData.role) === 'Doctor' && clean(staffFormData.specialization) === 'Medicine';
+      if (isMedicineDoctor && !clean(staffFormData.department)) blockers.push("Department (ER / OPD-Medicine)");
+      const specClean = clean(staffFormData.specialization);
+      const isDoctorSecretary = ['Office Staff', 'Staff'].includes(clean(staffFormData.role)) &&
+        (specClean === "Doctor's Secretary" || specClean === 'Doctor Secretary');
+      if (isDoctorSecretary && !clean(staffFormData.linkedDoctorId)) blockers.push("Linked Doctor");
+      if (['Nurse', 'Medtech', 'Radiographer', 'ECG Operator', 'Physical Therapist'].includes(clean(staffFormData.role)) && !clean(staffFormData.department)) {
+        blockers.push("Department");
+      }
+    } else if (registrationStep === 3) {
+      const emailClean = clean(staffFormData.email);
+      const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
+      if (!emailClean) blockers.push("Email Address");
+      else if (!isValidEmail(emailClean)) blockers.push("Valid Email format");
+      const phoneDigits = clean(staffFormData.phone).replace(/[\s\-()]/g, '');
+      const isValidPhone = (v) => /^(\+?63\s?|0)9\d{9}$/.test(v);
+      if (!clean(staffFormData.phone)) blockers.push("Phone Number");
+      else if (!isValidPhone(phoneDigits)) blockers.push("PH Phone format (09XX XXX XXXX or +63 9XX XXX XXXX)");
+      if (!clean(staffFormData.streetAddress) || clean(staffFormData.streetAddress).length < 5) blockers.push("Street Address (min 5 chars)");
+      if (!clean(staffFormData.city) || clean(staffFormData.city).length < 2) blockers.push("City / Municipality");
+    }
+    return blockers;
+  }, [registrationStep, staffFormData, selectedCity]);
 
   const handleNextStep = () => {
     setCreateStaffError(""); // Clear previous errors
@@ -6076,6 +6147,29 @@ function AdminDashboard() {
                 <div style={{ color: '#16a34a', whiteSpace: 'pre-line', marginBottom: '16px', fontWeight: 'bold', textAlign: 'center', background: '#dcfce7', padding: '12px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
                   {createStaffSuccess}
                 </div>
+            )}
+
+            {/* Visible explanation if Next / Create button is disabled */}
+            {!isValidRegisterStep && registerStepBlockers.length > 0 && (
+              <div style={{
+                marginBottom: '16px',
+                padding: '14px 16px',
+                borderRadius: '10px',
+                border: '1px solid #fed7aa',
+                background: '#fff7ed',
+                color: '#9a3412',
+                fontSize: '0.88rem',
+                textAlign: 'left'
+              }}>
+                <div style={{ fontWeight: 700, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertCircle size={16} /> Please complete these fields first before proceeding:
+                </div>
+                <ul style={{ margin: '6px 0 0', paddingLeft: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '4px 16px' }}>
+                  {registerStepBlockers.map((b, i) => (
+                    <li key={i} style={{ color: '#7c2d12' }}>• {b}</li>
+                  ))}
+                </ul>
+              </div>
             )}
 
             <div className="form-actions-row">

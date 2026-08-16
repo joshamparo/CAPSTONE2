@@ -641,28 +641,42 @@ router.post('/', requireRole(['admin']), async (req, res) => {
         // ---- Backend required + format validations (belt-and-suspenders against direct API calls) ----
         const errors = [];
         const cleanStr = (v) => String(v || "").trim();
-        const isValidPHPhone = (v) => /^09\d{9}$/.test(cleanStr(v));
-        const isValidEmail = (v) => /^[A-Za-z][A-Za-z0-9._-]*@(gmail\.com|yahoo\.com)$/.test(cleanStr(v));
+        const isValidPHPhone = (v) => /^(\+?63\s?|0)9\d{9}$/.test(String(cleanStr(v)).replace(/[\s\-()]/g, ''));
+        const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanStr(v));
+        const isValidName = (v) => { const s = cleanStr(v); return !!s && /^[A-Za-zÑñ][A-Za-zÑñ' .\-]*$/.test(s); };
 
         const firstNameClean = cleanStr(firstName);
         const lastNameClean = cleanStr(lastName);
+        const middleNameClean = cleanStr(middleName);
         const emailClean = email ? normalizeEmail(email) : '';
         const phoneClean = cleanStr(phone);
         const roleClean = normalizedAccountType;
 
         if (!firstNameClean || firstNameClean.length < 2) errors.push("First Name is required (at least 2 characters).");
+        else if (!isValidName(firstNameClean)) errors.push("First Name contains invalid characters.");
         if (!lastNameClean || lastNameClean.length < 2) errors.push("Last Name is required (at least 2 characters).");
+        else if (!isValidName(lastNameClean)) errors.push("Last Name contains invalid characters.");
+        if (middleNameClean && !isValidName(middleNameClean)) errors.push("Middle Name contains invalid characters.");
         if (!roleClean) errors.push("Role / accountType is required.");
-        if (!password || String(password).trim().length < 6) errors.push("Password is required (min 6 chars).");
+
+        const rawPassword = String(password || "").trim();
+        if (!rawPassword) errors.push("Password is required.");
+        else {
+            const pwErrors = [];
+            if (rawPassword.length < 11) pwErrors.push("11 characters");
+            if (!/[^A-Za-z0-9]/.test(rawPassword)) pwErrors.push("special character");
+            if (!/[0-9]/.test(rawPassword)) pwErrors.push("number");
+            if (pwErrors.length > 0) errors.push(`Password must contain at least: ${pwErrors.join(", ")}.`);
+        }
         if (!emailClean) {
             errors.push("Email is required.");
         } else if (!isValidEmail(emailClean)) {
-            errors.push("Email must start with a letter and end with @gmail.com or @yahoo.com.");
+            errors.push("Invalid email address format.");
         }
         if (!phoneClean) {
             errors.push("Phone number is required.");
         } else if (!isValidPHPhone(phoneClean)) {
-            errors.push("Phone number must start with 09 and be 11 digits.");
+            errors.push("Invalid PH phone number. Use format: 09XX XXX XXXX or +63 9XX XXX XXXX.");
         }
         if (cleanStr(streetAddress).length > 0 && cleanStr(streetAddress).length < 5) errors.push("Street Address, if provided, must be at least 5 characters.");
         if (cleanStr(city) && /\d/.test(cleanStr(city))) errors.push("City / Municipality must not contain digits.");
