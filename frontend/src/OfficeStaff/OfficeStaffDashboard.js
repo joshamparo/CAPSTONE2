@@ -405,6 +405,9 @@ export default function OfficeStaffDashboard({ mode }) {
   const [hmoQueueQuery, setHmoQueueQuery] = useState('');
   const [hmoQuickEdit, setHmoQuickEdit] = useState(null);
   const [hmoQuickSaving, setHmoQuickSaving] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [modalType, setModalType] = useState('success');
+  const [successMessage, setSuccessMessage] = useState('');
 
   const [labOrders, setLabOrders] = useState([]);
   const [labOrdersLoading, setLabOrdersLoading] = useState(false);
@@ -2993,11 +2996,29 @@ export default function OfficeStaffDashboard({ mode }) {
                   const phNow = Number(row.philhealth_amount === '₱ 0.00' ? 0 : (row.philhealth_amount ? String(row.philhealth_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.philhealth_deduction || 0);
                   const hmoNow = Number(row.hmo_covered_amount === '₱ 0.00' ? 0 : (row.hmo_covered_amount ? String(row.hmo_covered_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.applied_hmo_amount || claim.loa_approved_amount || 0);
                   const totalNow = Number(row.total_amount === '₱ 0.00' ? 0 : (row.total_amount ? String(row.total_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.total_amount || claim.gross_amount || 0);
+                  const invoiceIdTxt = String(row.invoice_id || claim.invoice_id || '').trim();
+                  const rawPatientName = String(claim.patient_name || row.patient_name || '').trim();
+                  const isFallbackName = !rawPatientName || rawPatientName.toLowerCase().startsWith('patient of invoice') || rawPatientName.toLowerCase().includes('[pass0-auto') || rawPatientName.toLowerCase().startsWith('invoice-') || rawPatientName.toLowerCase().startsWith('lab order #') || rawPatientName.toLowerCase().startsWith('walk-in') || rawPatientName.toLowerCase().startsWith('nurse walk-in');
+                  const displayPatientName = isFallbackName ? 'Patient (click Update to fill name)' : rawPatientName;
+                  const subtitleText = (() => {
+                    const parts = [];
+                    if (invoiceIdTxt) parts.push(`Invoice #${invoiceIdTxt}`);
+                    if (!isFallbackName && String(row.workups_list || '').trim()) {
+                      const w = String(row.workups_list).trim();
+                      parts.push(w.length > 38 ? (w.slice(0, 36) + '…') : w);
+                    } else if (isFallbackName && String(rawPatientName || '').trim()) {
+                      const n = String(rawPatientName).trim();
+                      parts.push(n.length > 40 ? (n.slice(0, 38) + '…') : n);
+                    }
+                    if (!parts.length && String(row.contact_number || '').trim()) parts.push('');
+                    return parts.join(' · ');
+                  })();
                   return (
                     <tr key={String(row.id || row.invoice_id)}>
                       <td className="text-sm font-medium text-slate-700">
-                        <div>{row.patient_name || '—'}</div>
-                        {row.contact_number ? <div className="office-billing-subline" style={{ color: '#64748b' }}>{String(row.contact_number)}</div> : null}
+                        <div style={{ fontWeight: 900, fontSize: '0.93rem', color: isFallbackName ? '#475569' : '#0f172a' }}>{displayPatientName}</div>
+                        {String(row.contact_number || '').trim() ? <div className="office-billing-subline" style={{ color: '#64748b', marginTop: 2 }}>{String(row.contact_number).trim()}</div> : null}
+                        {subtitleText ? <div className="office-billing-subline" style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: String(row.contact_number || '').trim() ? 1 : 3 }}>{subtitleText}</div> : null}
                       </td>
                       <td className="text-sm text-slate-600">
                         <div style={{ fontWeight: 700, color: '#0f172a' }}>{claim.provider || String(row.hmo_claim?.provider) || '—'}</div>
@@ -3074,9 +3095,57 @@ export default function OfficeStaffDashboard({ mode }) {
                             className="office-btn"
                             onClick={async () => {
                               try {
-                                if (row.invoice_id) {
-                                  await openInvoice(String(row.invoice_id));
-                                  setView('billing');
+                                const invoiceIdStr = String(row.invoice_id || claim.invoice_id || '').trim();
+                                if (invoiceIdStr) {
+                                  await openInvoice(invoiceIdStr);
+                                  const fallbackName = isFallbackName
+                                    ? 'Patient'
+                                    : (displayPatientName && displayPatientName !== '—' ? displayPatientName : 'Patient');
+                                  const receiptPayload = {
+                                    id: `INV-${invoiceIdStr}`,
+                                    invoice_id: invoiceIdStr,
+                                    source: inferInvoiceSource(selectedInvoice || {}),
+                                    serviceLabel: String(row.workups_list || selectedInvoice?.items?.[0]?.description || selectedInvoice?.notes || 'Hospital Services').trim() || 'Hospital Services',
+                                    invoice: selectedInvoice || { id: invoiceIdStr, total_amount: totalNow, balance_amount: patientDue },
+                                    amount: totalNow,
+                                    amountReceived: Math.max(0, totalNow - patientDue),
+                                    change: 0,
+                                    method: (hmoNow > 0.0099 || claim.provider) ? `HMO · ${String(claim.provider || 'Provider')}` : (String(selectedInvoice?.payment_method || selectedInvoice?.method || 'Cash')),
+                                    reference: claim.loa_number ? `LOA ${String(claim.loa_number)}` : (String(selectedInvoice?.payment_reference || selectedInvoice?.reference || '—')),
+                                    patientName: fallbackName,
+                                    cashierName: user?.name || user?.full_name || user?.firstName + ' ' + (user?.lastName || '') || 'Cashier',
+                                    created_at: row.created_at || claim.created_at || (selectedInvoice?.created_at || new Date().toISOString()),
+                                    paidAtLabel: formatDateTime(row.created_at || claim.created_at || (selectedInvoice?.created_at || new Date().toISOString())),
+                                    note: (hmoNow > 0.0099 || claim.provider)
+                                      ? `This amount is covered by HMO LOA. LOA #${String(claim.loa_number || 'pending')}. ${phNow > 0.0099 ? `PhilHealth deducted first: ₱ ${toMoney(phNow)}.` : ''}`
+                                      : 'Official billing statement. Present this slip for verification.'
+                                  };
+                                  const receiptSlip = buildPaymentReceipt(receiptPayload);
+                                  if (receiptSlip) {
+                                    receiptSlip.receiptNumber = `PGH-HMO-${invoiceIdStr}`;
+                                    receiptSlip.loaNumber = claim.loa_number || '';
+                                    receiptSlip.hmoProvider = claim.provider || '';
+                                    receiptSlip.hmoCard = claim.hmo_card_number || '';
+                                    receiptSlip.hmoCoverage = hmoNow;
+                                    receiptSlip.philhealthDeduction = phNow;
+                                    setPaymentReceipt(receiptSlip);
+                                  } else {
+                                    setPaymentReceipt({
+                                      receiptNumber: `PGH-HMO-${invoiceIdStr}`,
+                                      orderId: invoiceIdStr,
+                                      paidAt: new Date().toISOString(),
+                                      paidAtLabel: formatDateTime(new Date().toISOString()),
+                                      cashierName: user?.name || 'Cashier',
+                                      method: 'HMO',
+                                      reference: claim.loa_number ? `LOA ${String(claim.loa_number)}` : '—',
+                                      patientName: fallbackName,
+                                      serviceLabel: String(row.workups_list || 'Hospital Services') || 'Hospital Services',
+                                      amountDue: totalNow,
+                                      amountReceived: Math.max(0, totalNow - patientDue),
+                                      change: 0,
+                                      source: 'HMO Billing Statement'
+                                    });
+                                  }
                                 } else {
                                   setSuccessMessage('No invoice linked yet. Use "Update" to encode LOA and amounts first.');
                                   setModalType('success');
@@ -3084,37 +3153,88 @@ export default function OfficeStaffDashboard({ mode }) {
                                   setHmoQuickEdit(row);
                                 }
                               } catch (err) {
-                                alert('⚠️ Invoice error: ' + String(err?.message || err));
+                                alert('⚠️ Receipt error: ' + String(err?.message || err));
                               }
                             }}
                           >
-                            View Invoice
+                            View Receipt Slip
                           </button>
                           <button
                             type="button"
                             className="office-btn primary"
                             onClick={() => {
                               try {
-                                const slip = [
-                                  `HMO STATEMENT OF ACCOUNT (SOA)`,
-                                  `Patient: ${row.patient_name || ''}`,
-                                  `HMO: ${claim.provider || ''}   LOA #: ${claim.loa_number || ''}   HMO Card: ${claim.hmo_card_number || ''}`,
-                                  `Status: ${status}`,
+                                const dispName = (displayPatientName && displayPatientName !== '—') ? displayPatientName : 'Patient';
+                                const workupsStr = String(row.workups_list || 'No workups linked yet.').trim();
+                                const lines = [
+                                  `======================================================================`,
+                                  `                  HMO STATEMENT OF ACCOUNT (SOA)`,
+                                  `======================================================================`,
                                   ``,
-                                  `Workups: ${row.workups_list || '—'}`,
+                                  `  PATIENT NAME    :  ${dispName}`,
+                                  `  CONTACT #       :  ${String(row.contact_number || '—')}`,
+                                  row.invoice_id ? `  INVOICE #       :  ${String(row.invoice_id)}` : null,
                                   ``,
-                                  `Total Gross Bill:   ₱ ${toMoney(totalNow)}`,
-                                  `Less PhilHealth:   -₱ ${toMoney(phNow)}`,
-                                  `Less HMO Covered:  -₱ ${toMoney(hmoNow)}`,
-                                  `────────────────────────────`,
-                                  `PATIENT PAYS:      ₱ ${toMoney(patientDue)}`,
+                                  `  HMO PROVIDER    :  ${String(claim.provider || '—')}`,
+                                  `  HMO CARD #      :  ${String(claim.hmo_card_number || '—')}`,
+                                  `  LOA / AUTH #    :  ${String(claim.loa_number || '—')}`,
+                                  `  CLAIM STATUS    :  ${status}`,
                                   ``,
-                                  `* PhilHealth deducted first per OPD protocol, remainder covered by HMO LOA.`
-                                ].join('\n');
+                                  `----------------------------------------------------------------------`,
+                                  `  SERVICES / WORKUPS:`,
+                                  `----------------------------------------------------------------------`,
+                                  ...(workupsStr.length > 72
+                                    ? workupsStr.match(/.{1,72}/g)?.map((s) => `  ${String(s || '').padEnd(68)}`) || [`  ${workupsStr}`]
+                                    : [`  ${workupsStr}`]),
+                                  ``,
+                                  `----------------------------------------------------------------------`,
+                                  `  BILLING SUMMARY`,
+                                  `----------------------------------------------------------------------`,
+                                  `  TOTAL GROSS BILL         :      ₱ ${toMoney(totalNow).padStart(12)}`,
+                                  phNow > 0.0099 ? `  LESS : PHILHEALTH        :     -₱ ${toMoney(phNow).padStart(12)}` : null,
+                                  hmoNow > 0.0099 ? `  LESS : HMO LOA COVERAGE  :     -₱ ${toMoney(hmoNow).padStart(12)}` : null,
+                                  `                          =========================`,
+                                  `  NET PATIENT PAYABLE      :      ₱ ${toMoney(patientDue).padStart(12)}`,
+                                  ``,
+                                  patientDue <= 0.0099
+                                    ? `  >>> 100% COVERED · NO CHARGE TO PATIENT`
+                                    : `  >>> COLLECT BALANCE FROM PATIENT ON DISCHARGE`,
+                                  ``,
+                                  `----------------------------------------------------------------------`,
+                                  `  NOTES:`,
+                                  `----------------------------------------------------------------------`,
+                                  `  1. PhilHealth deducted first per OPD protocol, remainder covered`,
+                                  `     by HMO LOA per approved amount.`,
+                                  `  2. This is a system-generated SOA. Present HMO card + LOA upon`,
+                                  `     discharge for final verification.`,
+                                  `  Generated: ${formatDateTime(new Date().toISOString())}`,
+                                  `======================================================================`
+                                ].filter(Boolean);
+                                const soaText = lines.join('\n');
+
+                                // ✅ BLACK & WHITE PRINT-READY new window (per user request: simple, all white/black)
                                 if (typeof window !== 'undefined') {
-                                  navigator.clipboard?.writeText(slip).catch(() => {});
+                                  try { navigator.clipboard?.writeText(soaText).catch(() => {}); } catch (_) {}
+                                  const safe = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                  const popup = window.open('', '_blank', 'width=820,height=900');
+                                  if (popup) {
+                                    popup.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>HMO SOA - ${safe(dispName)}</title><style>
+                                      * { box-sizing: border-box; }
+                                      html, body { margin: 0; padding: 0; background: #ffffff; color: #000000; font-family: 'Courier New', Courier, ui-monospace, monospace; font-size: 12.5px; line-height: 1.5; }
+                                      .page { max-width: 760px; margin: 0 auto; padding: 22px 24px 28px 24px; white-space: pre-wrap; word-break: break-word; }
+                                      @media print {
+                                        body { background: #ffffff; color: #000000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                                        .page { max-width: 100%; padding: 0; margin: 0; }
+                                        @page { size: letter; margin: 10mm 10mm; }
+                                      }
+                                    </style></head><body><div class="page">${safe(soaText)}</div></body></html>`);
+                                    popup.document.close();
+                                    try { popup.focus(); } catch (_) {}
+                                    setTimeout(() => { try { popup.print(); } catch (_) {} }, 250);
+                                  }
                                 }
-                                setSuccessMessage('SOA copied to clipboard (thermal-print ready).');
+
+                                setSuccessMessage('SOA printed (black & white window opened) + copied to clipboard.');
                                 setModalType('success');
                                 setShowSuccessModal(true);
                               } catch (err) {
@@ -4112,6 +4232,47 @@ export default function OfficeStaffDashboard({ mode }) {
 
         </div>
       </main>
+
+      {showSuccessModal ? (
+        <div className="office-modal-overlay" onClick={() => setShowSuccessModal(false)}>
+          <div className="office-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <div style={{
+              textAlign: 'center',
+              padding: '12px 8px 4px 8px'
+            }}>
+              <div style={{
+                width: 58, height: 58, borderRadius: '50%',
+                background: modalType === 'success' ? 'linear-gradient(180deg,#dcfce7 0%, #bbf7d0 100%)' : 'linear-gradient(180deg,#fee2e2 0%, #fecaca 100%)',
+                border: modalType === 'success' ? '2px solid #22c55e' : '2px solid #ef4444',
+                color: modalType === 'success' ? '#15803d' : '#b91c1c',
+                fontSize: '1.9rem',
+                fontWeight: 900,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 3px 8px rgba(15,23,42,0.08)'
+              }}>
+                {modalType === 'success' ? '✓' : '!'}
+              </div>
+            </div>
+            <div className="office-title" style={{ textAlign: 'center', marginTop: 8, fontSize: '1.1rem' }}>
+              {modalType === 'success' ? 'Success' : 'Notice'}
+            </div>
+            <div style={{ textAlign: 'center', color: '#334155', marginTop: 6, padding: '0 8px', lineHeight: 1.5 }}>
+              {String(successMessage || '')}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 22 }}>
+              <button
+                type="button"
+                className="office-btn primary"
+                onClick={() => setShowSuccessModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <PatientFullRecordModal
         open={centralRecordOpen}
