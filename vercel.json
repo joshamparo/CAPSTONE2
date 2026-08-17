@@ -5,6 +5,7 @@
   "outputDirectory": "frontend/build",
   "cleanUrls": false,
   "trailingSlash": false,
+  "framework": "create-react-app",
   "headers": [
     {
       "source": "/(.*)",
