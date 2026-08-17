@@ -409,6 +409,10 @@ export default function OfficeStaffDashboard({ mode }) {
   const [modalType, setModalType] = useState('success');
   const [successMessage, setSuccessMessage] = useState('');
 
+  const [hmoRefSearch, setHmoRefSearch] = useState('');
+  const [hmoHighlightRowId, setHmoHighlightRowId] = useState(null);
+  const [hmoRefSearchLoading, setHmoRefSearchLoading] = useState(false);
+
   const [labOrders, setLabOrders] = useState([]);
   const [labOrdersLoading, setLabOrdersLoading] = useState(false);
   const [labOrdersError, setLabOrdersError] = useState('');
@@ -733,6 +737,91 @@ export default function OfficeStaffDashboard({ mode }) {
     if (!user) return;
     if (view === 'hmo') refreshHmoQueue();
   }, [refreshHmoQueue, user, view]);
+
+  const handleRefGoSearch = async () => {
+    const refRaw = String(hmoRefSearch || '').trim();
+    if (!refRaw) return;
+    if (!user) return;
+
+    setHmoRefSearchLoading(true);
+    setHmoHighlightRowId(null);
+    try {
+      const result = await fetchJson(`/api/billing/search-by-ref?ref=${encodeURIComponent(refRaw)}`, {
+        apiBase: API_BASE,
+        headers: buildHeaders(user),
+        timeoutMs: 15000
+      });
+
+      const matchedInvoiceIds = Array.isArray(result?.matched_invoice_ids)
+        ? result.matched_invoice_ids.map(String).filter(Boolean)
+        : [];
+
+      if (!matchedInvoiceIds.length) {
+        setModalType('success');
+        setSuccessMessage(`❌ Reference "${refRaw}" not found!\n\nTips: Double-check the format (PGHYYMMDD-NNNNN). Make sure it was typed correctly. If it was created recently, press the global Refresh button first and try again.`);
+        setShowSuccessModal(true);
+        return;
+      }
+
+      setHmoQueueFilter('all');
+      setHmoQueuePage(1);
+      setHmoQueueQuery(refRaw);
+
+      const params = new URLSearchParams();
+      params.set('filter', 'all');
+      params.set('page', '1');
+      params.set('perPage', '8');
+      params.set('q', refRaw);
+
+      const data = await fetchJson(`/api/billing/hmo-queue?${params.toString()}`, {
+        apiBase: API_BASE,
+        headers: buildHeaders(user)
+      });
+      const safe = data && typeof data === 'object' && !Array.isArray(data)
+        ? {
+            filter: String(data.filter || 'all'),
+            page: 1,
+            perPage: Math.max(1, Math.min(50, Number(data.perPage || 8))),
+            totalCount: Math.max(0, Number(data.totalCount || 0)),
+            totalPages: Math.max(1, Math.ceil(Math.max(0, Number(data.totalCount || 0)) / Math.max(1, Math.min(50, Number(data.perPage || 8))))),
+            rows: Array.isArray(data.rows) ? data.rows : []
+          }
+        : { filter: 'all', page: 1, perPage: 8, totalCount: 0, totalPages: 1, rows: [] };
+      setHmoQueue(safe);
+
+      const firstMatch = (Array.isArray(safe.rows) ? safe.rows : []).find((r) => {
+        const inv = String(r.invoice_id || (r.hmo_claim && r.hmo_claim.invoice_id) || '').trim();
+        return matchedInvoiceIds.includes(inv) || Boolean(r.patient_reference) && String(r.patient_reference).toUpperCase() === refRaw.toUpperCase();
+      }) || (safe.rows && safe.rows[0]);
+
+      if (firstMatch) {
+        const firstMatchId = String(firstMatch.id || firstMatch.invoice_id || Math.random());
+        setHmoHighlightRowId(firstMatchId);
+        setTimeout(() => {
+          try {
+            const el = document.querySelector('.hmo-row-highlight');
+            if (el && typeof el.scrollIntoView === 'function') {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          } catch (_) { /* noop */ }
+        }, 120);
+        setTimeout(() => {
+          try {
+            setHmoQuickEdit(firstMatch);
+          } catch (err) {
+            alert('⚠️ Update modal error: ' + String(err?.message || err));
+          }
+        }, 260);
+        setTimeout(() => setHmoHighlightRowId(null), 3100);
+      }
+    } catch (e) {
+      setModalType('success');
+      setSuccessMessage(`⚠️ Reference search error: ${String(e.message || e)}\n\nIf this persists, use the regular Search bar instead and type "${refRaw}".`);
+      setShowSuccessModal(true);
+    } finally {
+      setHmoRefSearchLoading(false);
+    }
+  };
 
   const saveHmoClaim = async (invoiceId, opts = {}) => {
     if (!user) return Promise.resolve(null);
@@ -2855,8 +2944,43 @@ export default function OfficeStaffDashboard({ mode }) {
 
       {view === 'hmo' ? (
           <div className="office-card">
+          <style>{`
+            @keyframes hmoYellowBlink {
+              0%,100% { background-color: transparent; }
+              50% { background-color: #fef08a; }
+            }
+            .hmo-row-highlight {
+              animation: hmoYellowBlink 0.8s ease-in-out 3 !important;
+              border-left: 4px solid #eab308 !important;
+            }
+          `}</style>
           <div className="office-row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div className="office-row" style={{ gap: 10, alignItems: 'center' }}>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                border: '2px solid #ef4444', borderRadius: 10, padding: '4px 8px 4px 10px',
+                background: '#fef2f2', marginRight: 4, flexShrink: 0
+              }}>
+                <span style={{color:'#b91c1c',fontWeight:800,fontSize:'0.85rem'}}>🔎 Ref #:</span>
+                <input
+                  type="text"
+                  value={hmoRefSearch}
+                  onChange={(e) => setHmoRefSearch(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleRefGoSearch(); }}
+                  placeholder="PGH260817-00042"
+                  style={{
+                    border:'none',background:'#fff',borderRadius:7,padding:'6px 10px',
+                    fontSize:'0.9rem',fontWeight:700,width:200,outline:'none'
+                  }}
+                />
+                <button
+                  type="button"
+                  className="office-btn primary"
+                  onClick={handleRefGoSearch}
+                  disabled={hmoRefSearchLoading || !hmoRefSearch.trim()}
+                  style={{background:'#ef4444',borderColor:'#ef4444',padding:'7px 14px'}}
+                >{hmoRefSearchLoading ? '…' : 'GO'}</button>
+              </div>
               <div className="input-wrapper-relative">
                 <Search size={18} className="absolute-icon-left text-slate-400" />
                 <input
@@ -2869,7 +2993,7 @@ export default function OfficeStaffDashboard({ mode }) {
                       refreshHmoQueue();
                     }
                   }}
-                  placeholder="Search patient name, provider, LOA #, contact"
+                  placeholder="Search reference #, patient name, provider, LOA #, contact"
                 />
               </div>
               <button type="button" className="office-btn primary" onClick={() => { setHmoQueuePage(1); refreshHmoQueue(); }} disabled={hmoQueueLoading || !user}>
@@ -3014,7 +3138,10 @@ export default function OfficeStaffDashboard({ mode }) {
                     return parts.join(' · ');
                   })();
                   return (
-                    <tr key={String(row.id || row.invoice_id)}>
+                    <tr
+                      key={String(row.id || row.invoice_id)}
+                      className={String(row.id || row.invoice_id) === String(hmoHighlightRowId) ? 'hmo-row-highlight' : ''}
+                    >
                       <td className="text-sm font-medium text-slate-700">
                         <div style={{ fontWeight: 900, fontSize: '0.93rem', color: isFallbackName ? '#475569' : '#0f172a' }}>{displayPatientName}</div>
                         {String(row.contact_number || '').trim() ? <div className="office-billing-subline" style={{ color: '#64748b', marginTop: 2 }}>{String(row.contact_number).trim()}</div> : null}

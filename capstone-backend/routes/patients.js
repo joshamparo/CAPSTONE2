@@ -1377,6 +1377,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo_loa_number TEXT NULL`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS philhealth_amount NUMERIC(12,2) DEFAULT 0`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS is_philhealth BOOLEAN DEFAULT FALSE`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS company TEXT NULL`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL UNIQUE`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.appointments ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
             // Also backfill existing patients that had HMO via appointments/invoices:
             prisma.$executeRawUnsafe(`
               UPDATE public.patients p SET is_hmo = TRUE WHERE (p.is_hmo IS NULL OR p.is_hmo = FALSE) AND EXISTS (
@@ -1395,7 +1398,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_hmo BOOLEAN DEFAULT FALSE`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS hmo_provider TEXT NULL`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS hmo_status TEXT NULL`).catch(() => null),
-            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_philhealth BOOLEAN DEFAULT FALSE`).catch(() => null)
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_philhealth BOOLEAN DEFAULT FALSE`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null)
           ]);
         } catch (_schemaWarm) {}
 

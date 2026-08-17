@@ -1109,10 +1109,15 @@ router.get('/hmo-debug', async (req, res) => {
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo_card_number TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo_loa_number TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS philhealth_amount NUMERIC(12,2) DEFAULT 0`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS company TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL UNIQUE`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.appointments ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_hmo BOOLEAN DEFAULT FALSE`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS hmo_provider TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS hmo_status TEXT NULL`).catch(() => null),
-        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_philhealth BOOLEAN DEFAULT FALSE`).catch(() => null)
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_philhealth BOOLEAN DEFAULT FALSE`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null)
       ]).catch(() => {});
       // Backfill billing_invoices.is_hmo = TRUE where invoice was linked to patients/appointments with HMO
       prisma.$executeRawUnsafe(`
@@ -1303,10 +1308,15 @@ router.get('/hmo-queue', async (req, res) => {
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo_card_number TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo_loa_number TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS philhealth_amount NUMERIC(12,2) DEFAULT 0`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS company TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL UNIQUE`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.appointments ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_hmo BOOLEAN DEFAULT FALSE`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS hmo_provider TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS hmo_status TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_philhealth BOOLEAN DEFAULT FALSE`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`
           CREATE TABLE IF NOT EXISTS public.billing_hmo_claims (
             id bigserial PRIMARY KEY,
@@ -1360,6 +1370,96 @@ router.get('/hmo-queue', async (req, res) => {
             AND (bi.is_hmo = TRUE OR NULLIF(TRIM(bi.hmo_provider::text),'') IS NOT NULL OR LOWER(bi.notes::text) LIKE '%hmo%')
         )
       `).catch(() => null);
+
+      // ✅ REFERENCE NUMBER BACKFILL: For old patients/appointments/invoices/claims with NULL patient_reference
+      // This runs EVERY TIME the HMO queue page loads until ALL rows have refs. After that, it does nothing.
+      try {
+        // Helper to build PGHYYMMDD-NNNNN format
+        // Step 1: Pick all patients with no reference, order by created_at, generate sequential ref
+        const noRefPatients = await prisma.$queryRawUnsafe(`
+          SELECT id::text AS pid, created_at AS ca FROM public.patients
+          WHERE NULLIF(TRIM(patient_reference::text),'') IS NULL
+          ORDER BY COALESCE(created_at, now()) ASC
+          LIMIT 9999
+        `).catch(() => []);
+        if (Array.isArray(noRefPatients) && noRefPatients.length > 0) {
+          const byDay = {};
+          for (const p of noRefPatients) {
+            const d = p.ca ? new Date(p.ca) : new Date();
+            const yymmdd = String(d.getFullYear()).slice(-2) +
+              String(d.getMonth() + 1).padStart(2, '0') +
+              String(d.getDate()).padStart(2, '0');
+            if (!byDay[yymmdd]) byDay[yymmdd] = [];
+            byDay[yymmdd].push(p.pid);
+          }
+          for (const yymmdd of Object.keys(byDay)) {
+            const pids = byDay[yymmdd];
+            // Get max existing counter for this date prefix
+            const prefix = `PGH${yymmdd}-`;
+            let maxCounter = 0;
+            try {
+              const existingRows = await prisma.$queryRawUnsafe(`
+                SELECT patient_reference AS pr FROM public.patients
+                WHERE patient_reference LIKE $1
+              `, prefix + '%').catch(() => []);
+              if (Array.isArray(existingRows)) {
+                for (const r of existingRows) {
+                  const parts = String(r.pr || '').split('-');
+                  const n = parseInt(parts[parts.length - 1] || '0', 10);
+                  if (!isNaN(n) && n > maxCounter) maxCounter = n;
+                }
+              }
+            } catch (_) { /* ignore */ }
+            for (let i = 0; i < pids.length; i++) {
+              maxCounter += 1;
+              const counter = String(maxCounter).padStart(5, '0');
+              const ref = `PGH${yymmdd}-${counter}`;
+              const pid = pids[i];
+              // Set on PATIENTS row
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.patients SET patient_reference = $1::text
+                WHERE id::text = $2::text AND NULLIF(TRIM(patient_reference::text),'') IS NULL
+              `, ref, pid).catch(() => null);
+              // Propagate to APPOINTMENTS (same patient)
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.appointments SET patient_reference = $1::text
+                WHERE patient_id::text = $2::text AND NULLIF(TRIM(patient_reference::text),'') IS NULL
+              `, ref, pid).catch(() => null);
+              // Propagate to BILLING_INVOICES (same patient)
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.billing_invoices SET patient_reference = $1::text
+                WHERE patient_id::text = $2::text AND NULLIF(TRIM(patient_reference::text),'') IS NULL
+              `, ref, pid).catch(() => null);
+              // Propagate to BILLING_HMO_CLAIMS where linked via patient_id OR invoice via patient_id subquery
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.billing_hmo_claims SET patient_reference = $1::text
+                WHERE patient_id::text = $2::text AND NULLIF(TRIM(patient_reference::text),'') IS NULL
+              `, ref, pid).catch(() => null);
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.billing_hmo_claims cl SET patient_reference = $1::text
+                WHERE NULLIF(TRIM(cl.patient_reference::text),'') IS NULL
+                  AND EXISTS (SELECT 1 FROM public.billing_invoices bi WHERE bi.id = cl.invoice_id AND bi.patient_id::text = $2::text)
+              `, ref, pid).catch(() => null);
+            }
+          }
+        }
+        // Step 2: Any remaining billing_invoices without reference → set via join to patients
+        await prisma.$executeRawUnsafe(`
+          UPDATE public.billing_invoices bi SET patient_reference = p.patient_reference
+          FROM public.patients p
+          WHERE p.id::text = bi.patient_id::text
+            AND NULLIF(TRIM(bi.patient_reference::text),'') IS NULL
+            AND NULLIF(TRIM(p.patient_reference::text),'') IS NOT NULL
+        `).catch(() => null);
+        // Step 3: Any remaining billing_hmo_claims without reference → set via join to invoices
+        await prisma.$executeRawUnsafe(`
+          UPDATE public.billing_hmo_claims cl SET patient_reference = bi.patient_reference
+          FROM public.billing_invoices bi
+          WHERE bi.id = cl.invoice_id
+            AND NULLIF(TRIM(cl.patient_reference::text),'') IS NULL
+            AND NULLIF(TRIM(bi.patient_reference::text),'') IS NOT NULL
+        `).catch(() => null);
+      } catch (_refBackfillErr) { /* never break the queue */ }
     } catch (_warmupIgnore) { /* never break */ }
 
     const role = String(req.headers['x-user-role'] || '').toLowerCase();
@@ -1972,7 +2072,7 @@ router.get('/hmo-queue', async (req, res) => {
       }
     }
 
-    const builtList = (Array.isArray(rows) ? rows : [])
+    let builtList = (Array.isArray(rows) ? rows : [])
       .map((row) => {
         const total = Number(row.total_amount || 0);
         const claim = summarizeHmoClaim(row, total);
@@ -1999,23 +2099,99 @@ router.get('/hmo-queue', async (req, res) => {
           return norm === 'approved' || norm === 'partially approved';
         }
         return true;
-      })
-      .filter((row) => {
-        if (!query) return true;
-        const haystack = [
-          row.patient_name,
-          row.contact_number,
-          row.invoice_id,
-          row.hmo_claim?.provider,
-          row.hmo_claim?.loa_number,
-          row.hmo_claim?.hmo_card_number,
-          row.claim_status,
-          row.workups_list
-        ]
-          .map((value) => String(value || '').toLowerCase())
-          .join(' ');
-        return haystack.includes(query);
       });
+
+    // ✅ STEP: PATIENT REFERENCE ENRICHMENT (add patient_reference to EVERY row!)
+    // No changes to giant UNION SELECT needed (zero crash risk!). We enrich after rows are built.
+    try {
+      const invIds = [];
+      const patIds = [];
+      for (const r of builtList) {
+        if (r.invoice_id && String(r.invoice_id) !== '' && String(r.invoice_id) !== '0' && String(r.invoice_id) !== 'null') invIds.push(String(r.invoice_id));
+        const pid = String(r.hmo_claim?.patient_id || '').trim();
+        if (pid && pid !== '' && pid !== 'null') patIds.push(pid);
+      }
+      const refMap = new Map(); // key = "inv-123" or "pat-uuid" → ref
+      if (invIds.length) {
+        try {
+          const invRefs = await prisma.$queryRawUnsafe(
+            `SELECT id::text AS id, patient_reference AS pr FROM public.billing_invoices WHERE id::text IN (${invIds.map((_, i) => `$${i + 1}`).join(',')})`,
+            ...invIds.map((x) => BigInt(x))
+          ).catch(() => []);
+          if (Array.isArray(invRefs)) {
+            for (const r of invRefs) {
+              const v = String(r.pr || '').trim();
+              if (v) refMap.set(`inv-${String(r.id)}`, v);
+            }
+          }
+        } catch (_) { /* ignore */ }
+        // Also check claim table direct
+        try {
+          const claimRefs = await prisma.$queryRawUnsafe(
+            `SELECT invoice_id::text AS invid, patient_reference AS pr FROM public.billing_hmo_claims WHERE invoice_id::text IN (${invIds.map((_, i) => `$${i + 1}`).join(',')})`,
+            ...invIds.map((x) => BigInt(x))
+          ).catch(() => []);
+          if (Array.isArray(claimRefs)) {
+            for (const r of claimRefs) {
+              const v = String(r.pr || '').trim();
+              if (v) refMap.set(`inv-${String(r.invid)}`, v);
+            }
+          }
+        } catch (_) { /* ignore */ }
+      }
+      if (patIds.length) {
+        try {
+          const patientRefs = await prisma.$queryRawUnsafe(
+            `SELECT id::text AS pid, patient_reference AS pr FROM public.patients WHERE id::text IN (${patIds.map((_, i) => `$${i + 1}`).join(',')})`,
+            ...patIds
+          ).catch(() => []);
+          if (Array.isArray(patientRefs)) {
+            for (const r of patientRefs) {
+              const v = String(r.pr || '').trim();
+              if (v) {
+                refMap.set(`pat-${String(r.pid)}`, v);
+                // Also propagate to claim table (one-time write)
+                prisma.$executeRawUnsafe(`UPDATE public.billing_hmo_claims SET patient_reference = $1::text WHERE patient_id::text = $2::text AND NULLIF(TRIM(patient_reference::text),'') IS NULL`, v, String(r.pid)).catch(() => null);
+              }
+            }
+          }
+        } catch (_) { /* ignore */ }
+      }
+      // Apply refMap to rows
+      for (let i = 0; i < builtList.length; i++) {
+        const r = builtList[i];
+        let found = null;
+        if (r.invoice_id && refMap.has(`inv-${String(r.invoice_id)}`)) found = refMap.get(`inv-${String(r.invoice_id)}`);
+        if (!found) {
+          const pid = String(r.hmo_claim?.patient_id || '').trim();
+          if (pid && refMap.has(`pat-${pid}`)) found = refMap.get(`pat-${pid}`);
+        }
+        builtList[i] = { ...r, patient_reference: found || null };
+        // Also ensure claim object inside has it for the frontend
+        if (builtList[i].hmo_claim && builtList[i].patient_reference && !builtList[i].hmo_claim.patient_reference) {
+          builtList[i].hmo_claim = { ...builtList[i].hmo_claim, patient_reference: builtList[i].patient_reference };
+        }
+      }
+    } catch (_refEnrichErr) { /* never break page */ }
+
+    builtList = builtList.filter((row) => {
+      if (!query) return true;
+      const haystack = [
+        row.patient_name,
+        row.contact_number,
+        row.invoice_id,
+        row.patient_reference,
+        row.hmo_claim?.patient_reference,
+        row.hmo_claim?.provider,
+        row.hmo_claim?.loa_number,
+        row.hmo_claim?.hmo_card_number,
+        row.claim_status,
+        row.workups_list
+      ]
+        .map((value) => String(value || '').toLowerCase())
+        .join(' ');
+      return haystack.includes(query);
+    });
 
     const totalCount = builtList.length;
     const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
@@ -2034,6 +2210,374 @@ router.get('/hmo-queue', async (req, res) => {
   } catch (err) {
     const msg = String(err?.message || '');
     res.status(500).json({ message: msg || 'Server error' });
+  }
+});
+
+// ============================================================================
+// ✅ NEW: Reference Number Generator for new patient walk-in intakes
+// Endpoint: GET /api/billing/generate-ref?patient_id=UUID
+// Nurse calls this when she clicks Complete Intake → gets NEW reference #
+// Returns: { reference: "PGH260817-00042" }
+// Also SAVES the reference to patients, appointments, billing_invoices, billing_hmo_claims rows!
+// ============================================================================
+router.get('/generate-ref', async (req, res) => {
+  try {
+    const role = String(req.headers['x-user-role'] || '').toLowerCase();
+    if (!['nurse', 'admin', 'cashier', 'staff', 'doctor_secretary'].includes(role)) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    const patientId = String(req.query.patient_id || '').trim();
+    const invoiceIdRaw = String(req.query.invoice_id || '').trim();
+    const appointmentIdRaw = String(req.query.appointment_id || '').trim();
+
+    // Step 1: Schema warmup to ensure columns exist (never crash)
+    try {
+      await Promise.all([
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL UNIQUE`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.appointments ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS company TEXT NULL`).catch(() => null)
+      ]).catch(() => {});
+    } catch (_) { /* ignore */ }
+
+    // Step 2: If the patient already has a reference → return existing, don't waste counter
+    let existingRef = null;
+    if (patientId && patientId !== '') {
+      try {
+        const pRow = await prisma.$queryRawUnsafe(
+          `SELECT patient_reference AS pr FROM public.patients WHERE id::text = $1::text LIMIT 1`,
+          patientId
+        ).catch(() => []);
+        if (Array.isArray(pRow) && pRow.length && String(pRow[0]?.pr || '').trim() !== '') {
+          existingRef = String(pRow[0].pr).trim();
+        }
+      } catch (_) { /* ignore */ }
+    }
+    if (!existingRef && invoiceIdRaw) {
+      try {
+        const iRow = await prisma.$queryRawUnsafe(
+          `SELECT patient_reference AS pr FROM public.billing_invoices WHERE id::text = $1::text LIMIT 1`,
+          invoiceIdRaw
+        ).catch(() => []);
+        if (Array.isArray(iRow) && iRow.length && String(iRow[0]?.pr || '').trim() !== '') {
+          existingRef = String(iRow[0].pr).trim();
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    let finalRef = existingRef;
+
+    // Step 3: Generate if no existing
+    if (!finalRef) {
+      const now = new Date();
+      const yymmdd = String(now.getFullYear()).slice(-2) +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0');
+      const prefix = `PGH${yymmdd}-`;
+      let maxCounter = 0;
+      try {
+        const existing = await prisma.$queryRawUnsafe(
+          `SELECT patient_reference AS pr FROM public.patients WHERE patient_reference LIKE $1 LIMIT 9999`,
+          prefix + '%'
+        ).catch(() => []);
+        if (Array.isArray(existing)) {
+          for (const r of existing) {
+            const parts = String(r.pr || '').split('-');
+            const n = parseInt(parts[parts.length - 1] || '0', 10);
+            if (!isNaN(n) && n > maxCounter) maxCounter = n;
+          }
+        }
+      } catch (_) { /* ignore */ }
+      // Safety: ensure unique with retries (0.001% collision chance but better safe)
+      for (let attempt = 0; attempt < 50; attempt++) {
+        maxCounter += 1;
+        const counter = String(maxCounter).padStart(5, '0');
+        const candidate = `${prefix}${counter}`;
+        try {
+          const dup = await prisma.$queryRawUnsafe(
+            `SELECT 1 AS ok FROM public.patients WHERE patient_reference = $1::text LIMIT 1`,
+            candidate
+          ).catch(() => []);
+          if (!Array.isArray(dup) || dup.length === 0) {
+            finalRef = candidate;
+            break;
+          }
+        } catch (_) { /* retry */ }
+      }
+      if (!finalRef) {
+        // Fallback random (should never happen)
+        finalRef = `${prefix}${String(Math.floor(Math.random() * 90000) + 10000)}`;
+      }
+    }
+
+    // Step 4: WRITE to database (all 4 tables we can link)
+    const saved = { patient: false, appointments: 0, invoices: 0, claims: 0 };
+    try {
+      if (patientId && patientId !== '') {
+        const r1 = await prisma.$executeRawUnsafe(
+          `UPDATE public.patients SET patient_reference = $1::text WHERE id::text = $2::text AND (NULLIF(TRIM(patient_reference::text),'') IS NULL OR patient_reference IS NULL)`,
+          finalRef, patientId
+        ).catch(() => 0);
+        saved.patient = Number(r1 || 0) > 0;
+      }
+      if (appointmentIdRaw) {
+        const r2 = await prisma.$executeRawUnsafe(
+          `UPDATE public.appointments SET patient_reference = $1::text WHERE id::text = $2::text AND (NULLIF(TRIM(patient_reference::text),'') IS NULL OR patient_reference IS NULL)`,
+          finalRef, appointmentIdRaw
+        ).catch(() => 0);
+        saved.appointments = Number(r2 || 0);
+        // Also by patient_id link (any same day appointments)
+        if (patientId && patientId !== '') {
+          prisma.$executeRawUnsafe(
+            `UPDATE public.appointments SET patient_reference = $1::text WHERE patient_id::text = $2::text AND (NULLIF(TRIM(patient_reference::text),'') IS NULL OR patient_reference IS NULL)`,
+            finalRef, patientId
+          ).catch(() => null);
+        }
+      }
+      if (invoiceIdRaw) {
+        const r3 = await prisma.$executeRawUnsafe(
+          `UPDATE public.billing_invoices SET patient_reference = $1::text WHERE id::text = $2::text AND (NULLIF(TRIM(patient_reference::text),'') IS NULL OR patient_reference IS NULL)`,
+          finalRef, invoiceIdRaw
+        ).catch(() => 0);
+        saved.invoices = Number(r3 || 0);
+        // Also billing_hmo_claims by invoice_id
+        const r4 = await prisma.$executeRawUnsafe(
+          `UPDATE public.billing_hmo_claims SET patient_reference = $1::text WHERE invoice_id::text = $2::text AND (NULLIF(TRIM(patient_reference::text),'') IS NULL OR patient_reference IS NULL)`,
+          finalRef, invoiceIdRaw
+        ).catch(() => 0);
+        saved.claims = Number(r4 || 0);
+      }
+      // Also propagate by patient_id to invoices + claims that don't have it yet
+      if (patientId && patientId !== '') {
+        prisma.$executeRawUnsafe(
+          `UPDATE public.billing_invoices SET patient_reference = $1::text WHERE patient_id::text = $2::text AND (NULLIF(TRIM(patient_reference::text),'') IS NULL OR patient_reference IS NULL)`,
+          finalRef, patientId
+        ).catch(() => null);
+        prisma.$executeRawUnsafe(
+          `UPDATE public.billing_hmo_claims SET patient_reference = $1::text WHERE patient_id::text = $2::text AND (NULLIF(TRIM(patient_reference::text),'') IS NULL OR patient_reference IS NULL)`,
+          finalRef, patientId
+        ).catch(() => null);
+      }
+    } catch (_writeErr) { /* ignore partial write failures */ }
+
+    return res.status(200).json({
+      ok: true,
+      reference: finalRef,
+      generated: !existingRef,
+      saved
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+// ============================================================================
+// ✅ NEW: Cashier SEARCH by REFERENCE NUMBER (used for the [GO] button)
+// Endpoint: GET /api/billing/search-by-ref?ref=PGH260817-00042
+// Returns ALL matching HMO claim rows that have this reference!
+// So the cashier types the ref → this endpoint returns the row(s) to highlight!
+// ============================================================================
+router.get('/search-by-ref', async (req, res) => {
+  try {
+    const role = String(req.headers['x-user-role'] || '').toLowerCase();
+    if (!['cashier', 'admin', 'doctor_secretary', 'staff'].includes(role)) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    let refRaw = String(req.query.ref || '').trim();
+    if (refRaw === '') {
+      return res.status(200).json({ ok: true, found: false, ref: '', rows: [], count: 0 });
+    }
+
+    // Schema warmup (never crash)
+    try {
+      await Promise.all([
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL UNIQUE`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.appointments ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null)
+      ]).catch(() => {});
+    } catch (_) { /* ignore */ }
+
+    // Normalize: support partial! If user typed "00042" → treat like "%00042"
+    // If user typed "PGH0817-00042" → exact match or LIKE
+    const isPartial = refRaw.length < 10 || !refRaw.toUpperCase().startsWith('PGH');
+    const likePattern = isPartial ? `%${refRaw}%` : `%${refRaw}%`;
+    const exactPattern = refRaw.toUpperCase();
+
+    // Find ALL matching claim IDs from ANY of the 4 tables
+    const matchedIds = new Set(); // store billing_invoices.id or claim.id
+    const matchedPatientIds = new Set();
+
+    // Scan 1: patients by reference
+    try {
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT id::text AS pid, patient_reference AS pr FROM public.patients
+         WHERE UPPER(patient_reference) LIKE UPPER($1::text)
+         LIMIT 100`,
+        likePattern
+      ).catch(() => []);
+      if (Array.isArray(rows)) {
+        for (const r of rows) {
+          if (String(r.pid || '').trim()) matchedPatientIds.add(String(r.pid).trim());
+        }
+      }
+    } catch (_) { /* ignore */ }
+
+    // Scan 2: appointments
+    try {
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT patient_id::text AS pid FROM public.appointments
+         WHERE UPPER(patient_reference) LIKE UPPER($1::text)
+         LIMIT 100`,
+        likePattern
+      ).catch(() => []);
+      if (Array.isArray(rows)) {
+        for (const r of rows) {
+          if (String(r.pid || '').trim()) matchedPatientIds.add(String(r.pid).trim());
+        }
+      }
+    } catch (_) { /* ignore */ }
+
+    // Scan 3: billing_invoices (collect invoice IDs!)
+    try {
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT id::text AS invid, patient_id::text AS pid FROM public.billing_invoices
+         WHERE UPPER(patient_reference) LIKE UPPER($1::text)
+         LIMIT 100`,
+        likePattern
+      ).catch(() => []);
+      if (Array.isArray(rows)) {
+        for (const r of rows) {
+          if (String(r.invid || '').trim()) matchedIds.add(String(r.invid).trim());
+          if (String(r.pid || '').trim()) matchedPatientIds.add(String(r.pid).trim());
+        }
+      }
+    } catch (_) { /* ignore */ }
+
+    // Scan 4: billing_hmo_claims (collect invoice IDs!)
+    try {
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT invoice_id::text AS invid, patient_id::text AS pid FROM public.billing_hmo_claims
+         WHERE UPPER(patient_reference) LIKE UPPER($1::text)
+         LIMIT 100`,
+        likePattern
+      ).catch(() => []);
+      if (Array.isArray(rows)) {
+        for (const r of rows) {
+          if (String(r.invid || '').trim()) matchedIds.add(String(r.invid).trim());
+          if (String(r.pid || '').trim()) matchedPatientIds.add(String(r.pid).trim());
+        }
+      }
+    } catch (_) { /* ignore */ }
+
+    // Now also find invoices linked via patient_id
+    if (matchedPatientIds.size > 0) {
+      const pidArr = Array.from(matchedPatientIds).slice(0, 100);
+      try {
+        const invRows = await prisma.$queryRawUnsafe(
+          `SELECT id::text AS invid FROM public.billing_invoices
+           WHERE patient_id::text IN (${pidArr.map((_, i) => `$${i + 1}`).join(',')})
+           LIMIT 100`,
+          ...pidArr
+        ).catch(() => []);
+        if (Array.isArray(invRows)) {
+          for (const r of invRows) {
+            if (String(r.invid || '').trim()) matchedIds.add(String(r.invid).trim());
+          }
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    // If no match at all yet → try broad text search on notes field (fallback)
+    if (matchedIds.size === 0 && matchedPatientIds.size === 0) {
+      try {
+        const fallback = await prisma.$queryRawUnsafe(
+          `SELECT id::text AS invid FROM public.billing_invoices
+           WHERE UPPER(COALESCE(notes::text,'')) LIKE UPPER($1::text)
+           ORDER BY id DESC LIMIT 20`,
+          likePattern
+        ).catch(() => []);
+        if (Array.isArray(fallback)) {
+          for (const r of fallback) if (String(r.invid || '').trim()) matchedIds.add(String(r.invid).trim());
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    const invArr = Array.from(matchedIds).slice(0, 200);
+    const results = [];
+
+    if (invArr.length > 0) {
+      // Enrich invoice ids → full patient info + HMO claim info
+      try {
+        // Get patient info from billing_invoices join to patients + claim details
+        const claimRows = await prisma.$queryRawUnsafe(`
+          SELECT
+            h.id::text AS claim_id,
+            h.invoice_id::text AS invoice_id,
+            h.patient_name AS claim_patient_name,
+            h.hmo_provider AS provider,
+            h.hmo_loa_number AS loa_number,
+            h.hmo_card_number AS hmo_card_number,
+            h.philhealth_deduction AS philhealth_deduction,
+            h.loa_approved_amount AS loa_approved_amount,
+            h.status AS status,
+            h.notes AS notes,
+            h.patient_reference AS patient_reference,
+            bi.total_amount AS total_amount,
+            bi.patient_id::text AS patient_id,
+            p.first_name AS p_first,
+            p.last_name AS p_last,
+            p.company AS company,
+            p.contact_number AS contact_number,
+            bi.created_at AS created_at,
+            h.created_at AS claim_created_at
+          FROM public.billing_hmo_claims h
+          LEFT JOIN public.billing_invoices bi ON bi.id = h.invoice_id
+          LEFT JOIN public.patients p ON p.id = bi.patient_id
+          WHERE h.invoice_id::text IN (${invArr.map((_, i) => `$${i + 1}`).join(',')})
+          ORDER BY COALESCE(h.updated_at, h.created_at, bi.created_at) DESC
+          LIMIT 200
+        `, ...invArr.map((x) => BigInt(x))
+        ).catch(() => []);
+        if (Array.isArray(claimRows)) {
+          for (const r of claimRows) {
+            const patientName = [String(r.p_first || ''), String(r.p_last || '')].join(' ').trim()
+              || String(r.claim_patient_name || '').trim() || 'Patient';
+            results.push({
+              claim_id: r.claim_id,
+              invoice_id: r.invoice_id,
+              patient_id: r.patient_id,
+              patient_name: patientName,
+              company: r.company || null,
+              contact_number: r.contact_number || null,
+              patient_reference: r.patient_reference || null,
+              provider: r.provider || null,
+              loa_number: r.loa_number || null,
+              hmo_card_number: r.hmo_card_number || null,
+              philhealth_deduction: Number(r.philhealth_deduction || 0),
+              loa_approved_amount: Number(r.loa_approved_amount || 0),
+              total_amount: Number(r.total_amount || 0),
+              status: r.status || 'Approved',
+              notes: r.notes || null,
+              created_at: r.created_at || r.claim_created_at || new Date().toISOString()
+            });
+          }
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    return res.status(200).json({
+      ok: true,
+      ref: refRaw,
+      found: results.length > 0,
+      count: results.length,
+      matched_invoice_ids: invArr,
+      matched_patient_ids: Array.from(matchedPatientIds),
+      rows: results
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
 });
 

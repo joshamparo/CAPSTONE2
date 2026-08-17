@@ -562,6 +562,8 @@ function NurseDashboard() {
 
   const [walkInNextSteps, setWalkInNextSteps] = useState(null);
   const [walkInNextStepsOpen, setWalkInNextStepsOpen] = useState(false);
+  const [walkInPatientReference, setWalkInPatientReference] = useState(''); // ✅ NEW: Patient reference number
+  const [walkInIntakeVitals, setWalkInIntakeVitals] = useState(null); // ✅ NEW: Saved vitals from intake for report
   const [walkInPharmacyDest, setWalkInPharmacyDest] = useState('in_house'); // in_house | outside
   const [walkInPharmacyNotes, setWalkInPharmacyNotes] = useState('');
 
@@ -1338,21 +1340,67 @@ function NurseDashboard() {
       const routeTicket = String(response?.routing?.ticket || '').trim();
       const patientId = String(response?.patient?.id || response?.patient?._id || '').trim();
       const patientName = response?.patient
-        ? `${String(response.patient.first_name || response.patient.firstName || '').trim()} ${String(response.patient.last_name || response.patient.lastName || '').trim()}`.trim()
+        ? `${String(response.patient.first_name || response.patient.firstName || addPatientData.firstName || '').trim()} ${String(response.patient.last_name || response.patient.lastName || addPatientData.lastName || '').trim()}`.trim()
         : '';
       const appointmentId = routeKind === 'appointment' ? routeId : '';
       const services = response?.routing?.services || '';
-      
+      const patientCompany = String(response?.patient?.company || response?.patient?.employer || addPatientData.companyName || '').trim() || '';
+      const patientContact = String(response?.patient?.contact_number || response?.patient?.contactNumber || addPatientData.contactNumber || '').trim() || '';
+      const vitalsSave = {
+        temperature: String(addPatientData.temperature || '').trim(),
+        bp: `${String(addPatientData.bp_systolic || '').trim()}/${String(addPatientData.bp_diastolic || '').trim()}`,
+        heartRate: String(addPatientData.heartRate || '').trim(),
+        respiratoryRate: String(addPatientData.respiratoryRate || '').trim(),
+        spo2: String(addPatientData.spo2 || '').trim(),
+        weight: String(addPatientData.weight || '').trim(),
+        height: String(addPatientData.height || '').trim(),
+        date: new Date().toISOString()
+      };
+      setWalkInIntakeVitals(vitalsSave);
+
+      // ✅ NEW: GENERATE PATIENT REFERENCE NUMBER BEFORE OPENING MODAL
+      // Returns format PGHYYMMDD-NNNNN (ex: PGH260817-00042) and saves to DB automatically
+      let generatedRef = '';
+      try {
+        const invoiceIdRaw = String(response?.billing?.invoice_id || response?.invoiceId || response?.invoice_id || response?.routing?.invoice_id || '').trim();
+        const params = new URLSearchParams();
+        if (patientId) params.append('patient_id', patientId);
+        if (appointmentId) params.append('appointment_id', appointmentId);
+        if (invoiceIdRaw) params.append('invoice_id', invoiceIdRaw);
+        const refRes = await fetchJson(`/api/billing/generate-ref?${params.toString()}`, {
+          apiBase: API_BASE,
+          headers: { ...getAuthHeaders() }
+        }).catch(() => null);
+        if (refRes && refRes.ok && String(refRes.reference || '').trim() !== '') {
+          generatedRef = String(refRes.reference).trim();
+          setWalkInPatientReference(generatedRef);
+        }
+      } catch (_refErr) { /* ignore - never break flow */ }
+
+      const patientHmo = {
+        hasHmo: !!addPatientData.hasHmo,
+        provider: addPatientData.hmoProvider || response?.hmo?.provider || null,
+        loa_number: addPatientData.hmoLoaNumber || response?.hmo?.loa_number || null,
+        card_number: addPatientData.hmoCardNumber || response?.hmo?.card_number || null,
+        approved_amount: Number(addPatientData.hmoLoaApprovedAmount || response?.hmo?.hmo_coverage || 0),
+        status: String(options?.hmoApprovalStatus || (addPatientData.hasHmo ? 'Approved' : '')).trim() || null
+      };
+
       setWalkInNextSteps({
         patientId: patientId || null,
         patientName: patientName || null,
+        patientCompany: patientCompany || null,
+        patientContact: patientContact || null,
         appointmentId: appointmentId || null,
         ticket: routeTicket || null,
         routeType: addPatientData.routeType,
         routeLabel,
         routeTarget: services ? services : (routeTarget || null),
         routeKind: routeKind || null,
-        hmo: response?.hmo && typeof response.hmo === 'object' ? response.hmo : null
+        patient_reference: generatedRef || null,
+        vitals: vitalsSave,
+        hmo: patientHmo.hasHmo ? patientHmo : (response?.hmo && typeof response.hmo === 'object' ? response.hmo : null),
+        created_at: new Date().toISOString()
       });
       setWalkInPharmacyDest('in_house');
       setWalkInPharmacyNotes('');
@@ -9695,139 +9743,340 @@ function NurseDashboard() {
         <ModalShell
           open={walkInNextStepsOpen}
           onClose={() => setWalkInNextStepsOpen(false)}
-          maxWidth={500}
+          maxWidth={680}
           showCloseButton={true}
         >
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-              <div style={{ width: 64, height: 64, borderRadius: '20px', background: 'var(--status-duty-wash, #dcfce7)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, border: '2px solid var(--status-duty-ring, #bbf7d0)' }}>
-                <CheckCircle size={32} color="var(--status-duty, #16a34a)" />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 18 }}>
+                <div style={{ width: 64, height: 64, borderRadius: '20px', background: 'var(--status-duty-wash, #dcfce7)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, border: '2px solid var(--status-duty-ring, #bbf7d0)' }}>
+                  <CheckCircle size={32} color="var(--status-duty, #16a34a)" />
+                </div>
+                <h3 style={{ color: '#0f172a', fontSize: '26px', fontWeight: '900', margin: 0 }}>✅ Intake Complete!</h3>
               </div>
-              
-              <h3 style={{ color: '#0f172a', fontSize: '24px', fontWeight: '800', marginBottom: 12, margin: 0 }}>Registration successful</h3>
-              
-              <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '16px', width: '100%', marginBottom: 24, marginTop: 20, border: '2px solid #e2e8f0' }}>
-                {walkInNextSteps.ticket && (
-                  <div style={{ marginBottom: 20 }}>
-                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Your Queue Number</div>
-                    <div style={{ fontSize: '48px', fontWeight: '900', color: 'var(--brand-primary, #f97316)', lineHeight: '1' }}>{walkInNextSteps.ticket}</div>
-                  </div>
-                )}
-                
-                <p style={{ color: '#1e293b', fontSize: '16px', fontWeight: '700', marginBottom: 8, lineHeight: '1.5', margin: 0 }}>
-                  {walkInNextSteps.patientName ? `Patient: ${walkInNextSteps.patientName}` : ''}
-                  {walkInNextSteps.appointmentId ? ` • Appointment #${walkInNextSteps.appointmentId}` : ''}
-                </p>
-                <div style={{ color: '#475569', fontSize: '14px', fontWeight: '600', marginTop: 8 }}>
-                  {walkInNextSteps.routeLabel ? `Destination: ${walkInNextSteps.routeLabel}` : ''}
-                  {walkInNextSteps.routeTarget ? ` • ${walkInNextSteps.routeTarget}` : ''}
+
+              {/* ================================================================ */}
+              {/* 🏷️ NEW: PATIENT INTAKE REPORT (THERMAL 80mm RECEIPT STYLE) */}
+              {/* ================================================================ */}
+              {/* This is the NEW document the nurse prints for the patient. */}
+              {/* Contains: REFERENCE #, Patient, Company, HMO, Services, Vitals */}
+              <div id="intake-report-print-area" style={{
+                width: '100%',
+                background: '#ffffff',
+                border: '2px dashed #cbd5e1',
+                borderRadius: '14px',
+                padding: '22px 18px',
+                marginBottom: 20,
+                fontFamily: '"Courier New", "Consolas", monospace',
+                color: '#000000',
+                fontSize: '13.5px',
+                lineHeight: '1.55',
+                boxSizing: 'border-box'
+              }}>
+                <div style={{ textAlign: 'center', marginBottom: 14, paddingBottom: 12, borderBottom: '1px dashed #94a3b8' }}>
+                  <div style={{ fontWeight: 900, fontSize: '17px', letterSpacing: '0.03em', textTransform: 'uppercase' }}>Pascual General Hospital</div>
+                  <div style={{ fontWeight: 700, fontSize: '14.5px', marginTop: 4, color: '#334155' }}>PATIENT INTAKE REPORT</div>
                 </div>
 
+                {/* REFERENCE NUMBER: boxed, biggest text, center */}
                 {(() => {
-                  const hmo = walkInNextSteps?.hmo && typeof walkInNextSteps.hmo === 'object' ? walkInNextSteps.hmo : null;
-                  if (!hmo) return null;
-                  const amountDue = String(hmo.patient_balance || '₱0');
-                  const isFullyCovered = /0[.,]00|^₱0$/.test(amountDue) || amountDue.replace(/[^0-9]/g, '') === '0';
-                  const zeroPh = !hmo.philhealth_deduction || /0[.,]00|^₱0$/.test(String(hmo.philhealth_deduction)) || String(hmo.philhealth_deduction).replace(/[^0-9]/g, '') === '0';
-                  const zeroHmo = !hmo.hmo_coverage || /0[.,]00|^₱0$/.test(String(hmo.hmo_coverage)) || String(hmo.hmo_coverage).replace(/[^0-9]/g, '') === '0';
+                  const refNum = String(walkInNextSteps?.patient_reference || walkInPatientReference || '').trim();
                   return (
-                    <div style={{ marginTop: 18, padding: 16, borderRadius: 14, border: '1px solid #e2e8f0', background: '#ffffff' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 999, background: '#16a34a', color: '#ffffff', fontWeight: 800, fontSize: '13px' }}>
-                          ✅ APPROVED BY HMO
-                        </div>
-                        {hmo.provider ? (
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                            {hmo.provider}
-                          </span>
-                        ) : null}
-                        {isFullyCovered ? (
-                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#0f172a', marginLeft: 'auto', padding: '4px 10px', borderRadius: 999, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
-                            FULLY COVERED
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {(hmo.loa_number || hmo.card_number) ? (
-                        <div style={{ display: 'flex', gap: 16, fontSize: '12px', color: '#475569', fontWeight: 600, marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #f1f5f9' }}>
-                          {hmo.loa_number ? `LOA: ${hmo.loa_number}` : ''}
-                          {hmo.card_number ? `HMO Card: ${hmo.card_number}` : ''}
-                        </div>
-                      ) : null}
-
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr auto',
-                        rowGap: 8,
-                        columnGap: 18,
-                        fontSize: '13px',
-                        padding: 12,
-                        background: '#ffffff',
-                        borderRadius: 10,
-                        border: '1px solid #f1f5f9'
-                      }}>
-                        <div style={{ color: '#475569', fontWeight: 600 }}>Invoice total</div>
-                        <div style={{ color: '#0f172a', fontWeight: 700 }}>₱ {hmo.invoice_total || '0.00'}</div>
-
-                        {!zeroPh ? (
-                          <>
-                            <div style={{ color: '#475569', fontWeight: 600 }}>Philhealth deduction</div>
-                            <div style={{ color: '#15803d', fontWeight: 700 }}>−₱ {hmo.philhealth_deduction || '0.00'}</div>
-                          </>
-                        ) : (
-                          <>
-                            <div style={{ color: '#94a3b8', fontWeight: 500 }}>Philhealth deduction</div>
-                            <div style={{ color: '#cbd5e1', fontWeight: 500 }}>—</div>
-                          </>
-                        )}
-
-                        {!zeroHmo ? (
-                          <>
-                            <div style={{ color: '#475569', fontWeight: 600 }}>HMO coverage</div>
-                            <div style={{ color: '#2563eb', fontWeight: 700 }}>−₱ {hmo.hmo_coverage || '0.00'}</div>
-                          </>
-                        ) : (
-                          <>
-                            <div style={{ color: '#94a3b8', fontWeight: 500 }}>HMO coverage</div>
-                            <div style={{ color: '#cbd5e1', fontWeight: 500 }}>—</div>
-                          </>
-                        )}
-
-                        <div style={{ color: '#0f172a', fontWeight: 800, borderTop: '1px dashed #e2e8f0', marginTop: 4, paddingTop: 10 }}>Total covered</div>
-                        <div style={{ color: '#0f172a', fontWeight: 800, borderTop: '1px dashed #e2e8f0', marginTop: 4, paddingTop: 10 }}>₱ {hmo.total_coverage || '0.00'}</div>
-
-                        <div style={{ color: '#0f172a', fontWeight: 900, fontSize: '14px', paddingTop: 2 }}>
-                          {isFullyCovered ? 'Amount due (paid by HMO)' : 'Amount due (patient balance)'}
-                        </div>
-                        <div style={{ color: isFullyCovered ? '#16a34a' : '#0f172a', fontWeight: 900, fontSize: '15px', paddingTop: 2 }}>
-                          ₱ {amountDue}
-                        </div>
+                    <div style={{
+                      textAlign: 'center',
+                      marginBottom: 16,
+                      padding: '14px 10px',
+                      border: '2px solid #0f172a',
+                      borderRadius: '10px',
+                      background: '#f8fafc'
+                    }}>
+                      <div style={{ fontWeight: 800, fontSize: '11px', color: '#475569', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>REFERENCE NUMBER</div>
+                      <div style={{ fontWeight: 900, fontSize: refNum ? '28px' : '18px', color: '#0f172a', letterSpacing: '0.04em' }}>
+                        {refNum ? refNum : '— (generating, click PRINT to refresh) —'}
                       </div>
                     </div>
                   );
                 })()}
-                
-                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #e2e8f0', fontSize: '13px', color: '#64748b', fontWeight: '600' }}>
-                  Please proceed to the station and wait for your number to be called.
+
+                <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px dashed #cbd5e1' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontWeight: 700 }}>Patient:</span>
+                    <span style={{ textAlign: 'right', maxWidth: '65%' }}>{walkInNextSteps?.patientName || 'Patient'}</span>
+                  </div>
+                  {walkInNextSteps?.patientCompany ? (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                      <span style={{ fontWeight: 700 }}>Company:</span>
+                      <span style={{ textAlign: 'right', maxWidth: '65%' }}>{walkInNextSteps.patientCompany}</span>
+                    </div>
+                  ) : null}
+                  {walkInNextSteps?.patientContact ? (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                      <span style={{ fontWeight: 700 }}>Contact:</span>
+                      <span style={{ textAlign: 'right', maxWidth: '65%' }}>{walkInNextSteps.patientContact}</span>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* HMO SECTION: if patient has HMO */}
+                {(() => {
+                  const hmo = walkInNextSteps?.hmo;
+                  if (!hmo || typeof hmo !== 'object') return null;
+                  const hmoProv = String(hmo.provider || hmo.hmo_provider || addPatientData.hmoProvider || '').trim();
+                  const hmoCard = String(hmo.card_number || hmo.hmo_card_number || hmoCardNumber || addPatientData.hmoCardNumber || '').trim();
+                  const loaNum = String(hmo.loa_number || hmo.hmo_loa_number || hmo.loaNumber || addPatientData.hmoLoaNumber || '').trim();
+                  const status = String(hmo.status || '').trim();
+                  if (!hmoProv && !hmoCard && !loaNum) return null;
+                  return (
+                    <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px dashed #cbd5e1', background: '#f8fafc', borderRadius: 8, padding: 10 }}>
+                      <div style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '11.5px', letterSpacing: '0.06em', color: '#1d4ed8', marginBottom: 8 }}>
+                        {status ? `✅ ${status} · HMO COVERAGE` : '✅ HMO COVERAGE'}
+                      </div>
+                      {hmoProv ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
+                          <span style={{ fontWeight: 700 }}>HMO Provider:</span>
+                          <span style={{ textAlign: 'right', maxWidth: '65%' }}>{hmoProv}</span>
+                        </div>
+                      ) : null}
+                      {hmoCard ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
+                          <span style={{ fontWeight: 700 }}>HMO Card #:</span>
+                          <span style={{ textAlign: 'right', maxWidth: '65%' }}>{hmoCard}</span>
+                        </div>
+                      ) : null}
+                      {loaNum ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
+                          <span style={{ fontWeight: 700 }}>LOA #:</span>
+                          <span style={{ textAlign: 'right', maxWidth: '65%' }}>{loaNum}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()}
+
+                {/* SERVICES TO BE PERFORMED */}
+                <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px dashed #cbd5e1' }}>
+                  <div style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '11.5px', letterSpacing: '0.06em', color: '#0f172a', marginBottom: 8 }}>
+                    Services / Procedure
+                  </div>
+                  <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                    {walkInNextSteps?.routeLabel ? `✓ ${walkInNextSteps.routeLabel}` : ''}
+                  </div>
+                  {walkInNextSteps?.routeTarget ? (
+                    <div style={{ marginTop: 5, fontSize: '13px', lineHeight: '1.5' }}>{walkInNextSteps.routeTarget}</div>
+                  ) : null}
+                </div>
+
+                {/* VITALS */}
+                {(() => {
+                  const v = walkInNextSteps?.vitals || walkInIntakeVitals || null;
+                  if (!v) return null;
+                  const arr = [];
+                  if (v.temperature) arr.push(`T:${v.temperature}°C`);
+                  if (v.bp && v.bp !== '/') arr.push(`BP:${v.bp}`);
+                  if (v.heartRate) arr.push(`HR:${v.heartRate}`);
+                  if (v.respiratoryRate) arr.push(`RR:${v.respiratoryRate}`);
+                  if (v.spo2) arr.push(`O2:${v.spo2}%`);
+                  if (v.weight) arr.push(`Wt:${v.weight}kg`);
+                  if (v.height) arr.push(`Ht:${v.height}cm`);
+                  if (arr.length === 0) return null;
+                  return (
+                    <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px dashed #cbd5e1' }}>
+                      <div style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '11.5px', letterSpacing: '0.06em', color: '#0f172a', marginBottom: 6 }}>
+                        Vitals on Intake
+                      </div>
+                      <div style={{ fontSize: '13px', lineHeight: '1.7', fontWeight: 700 }}>{arr.join('  ·  ')}</div>
+                    </div>
+                  );
+                })()}
+
+                <div style={{ paddingBottom: 10, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontWeight: 700 }}>Nurse On Duty:</span>
+                    <span style={{ textAlign: 'right', maxWidth: '65%' }}>
+                      {(() => {
+                        try {
+                          const raw = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+                          return (raw?.name || raw?.full_name || raw?.firstName ? `${String(raw.firstName || raw.first_name || '').trim()} ${String(raw.lastName || raw.last_name || '').trim()}`.trim() : '') || user?.name || user?.full_name || 'Nurse';
+                        } catch (_) { return user?.name || 'Nurse'; }
+                      })()}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                    <span style={{ fontWeight: 700 }}>Date / Time:</span>
+                    <span style={{ textAlign: 'right', maxWidth: '65%' }}>
+                      {new Date(walkInNextSteps?.created_at || Date.now()).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'center', paddingTop: 10, borderTop: '3px double #64748b' }}>
+                  <div style={{ fontWeight: 900, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#b91c1c' }}>
+                    ⚠️ PRESENT THIS RECEIPT TO CASHIER ⚠️
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: '12px', marginTop: 4, color: '#475569' }}>
+                    for final settlement BEFORE any procedure or exam.
+                  </div>
                 </div>
               </div>
+              {/* ===================== END INTAKE REPORT ===================== */}
 
-              <div style={{ display: 'flex', gap: 12, width: '100%' }}>
-                <button 
-                  type="button" 
-                  className="btn-gray" 
-                  onClick={copyWalkInSlip} 
-                  style={{ flex: 1, fontWeight: '700', padding: '14px', borderRadius: '12px', fontSize: '15px', background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#475569' }}
+              {/* Old queue ticket info kept for backwards compat, moved to a smaller bottom box */}
+              <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: '14px', width: '100%', marginBottom: 18, border: '1px solid #e2e8f0' }}>
+                {walkInNextSteps.ticket && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: walkInNextSteps.routeLabel ? 8 : 0 }}>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>Queue Ticket</div>
+                      <div style={{ fontSize: '32px', fontWeight: '900', color: 'var(--brand-primary, #f97316)', lineHeight: '1' }}>{walkInNextSteps.ticket}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ color: '#1e293b', fontSize: '14px', fontWeight: '700' }}>
+                        {walkInNextSteps.routeLabel ? `➡️ ${walkInNextSteps.routeLabel}` : ''}
+                      </div>
+                      <div style={{ color: '#475569', fontSize: '12.5px', fontWeight: '600', marginTop: 2 }}>
+                        {walkInNextSteps.routeTarget ? walkInNextSteps.routeTarget : ''}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {!walkInNextSteps.ticket ? (
+                  <div style={{ color: '#475569', fontSize: '13px', fontWeight: 600 }}>
+                    Proceed to <b style={{ color: '#0f172a' }}>{walkInNextSteps.routeLabel}</b> station
+                    {walkInNextSteps.routeTarget ? <> · <span style={{ color: '#334155' }}>{walkInNextSteps.routeTarget}</span></> : null}
+                  </div>
+                ) : null}
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, width: '100%', flexDirection: 'column' }}>
+                <button
+                  type="button"
+                  className="btn-modal-confirm"
+                  onClick={() => {
+                    try {
+                      const userRaw = (() => {
+                        try { return localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}') : {}; }
+                        catch (_) { return {}; }
+                      })();
+                      const nurseName = (userRaw?.name || userRaw?.full_name || userRaw?.firstName ? `${String(userRaw.firstName || userRaw.first_name || '').trim()} ${String(userRaw.lastName || userRaw.last_name || '').trim()}`.trim() : '') || user?.name || 'Nurse';
+                      const refNum = String(walkInNextSteps?.patient_reference || walkInPatientReference || '').trim() || '—';
+                      const pName = walkInNextSteps?.patientName || 'Patient';
+                      const company = walkInNextSteps?.patientCompany || '';
+                      const contact = walkInNextSteps?.patientContact || '';
+                      const hmo = walkInNextSteps?.hmo || null;
+                      const hmoProv = hmo ? String(hmo.provider || hmo.hmo_provider || '').trim() : '';
+                      const hmoCard = hmo ? String(hmo.card_number || hmo.hmo_card_number || '').trim() : '';
+                      const loaNum = hmo ? String(hmo.loa_number || hmo.hmo_loa_number || '').trim() : '';
+                      const hmoStatus = hmo ? String(hmo.status || '').trim() : '';
+                      const routeLabel = walkInNextSteps?.routeLabel || '';
+                      const routeTarget = walkInNextSteps?.routeTarget || '';
+                      const v = walkInNextSteps?.vitals || walkInIntakeVitals || null;
+                      const vitalsLine = v ? [
+                        v.temperature ? `T:${v.temperature}°C` : null,
+                        (v.bp && v.bp !== '/') ? `BP:${v.bp}` : null,
+                        v.heartRate ? `HR:${v.heartRate}` : null,
+                        v.respiratoryRate ? `RR:${v.respiratoryRate}` : null,
+                        v.spo2 ? `O2:${v.spo2}%` : null,
+                        v.weight ? `Wt:${v.weight}kg` : null,
+                        v.height ? `Ht:${v.height}cm` : null
+                      ].filter(Boolean).join('   ') : '';
+                      const dateStr = new Date(walkInNextSteps?.created_at || Date.now()).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
+
+                      const htmlLines = [
+                        '<!DOCTYPE html>',
+                        '<html><head><title>Patient Intake Report - ' + pName + '</title>',
+                        '<style>',
+                        '  body { margin: 0; padding: 24px 20px 32px 20px; font-family: "Courier New", Courier, monospace; color: #000; background: #fff; font-size: 13.5px; line-height: 1.55; }',
+                        '  .header { text-align: center; padding-bottom: 10px; border-bottom: 1px dashed #000; margin-bottom: 14px; }',
+                        '  .hospital { font-weight: 900; font-size: 18px; letter-spacing: 0.03em; text-transform: uppercase; }',
+                        '  .sub { font-weight: 700; font-size: 14.5px; margin-top: 3px; }',
+                        '  .ref { text-align: center; border: 2px solid #000; border-radius: 8px; padding: 12px 8px; margin-bottom: 14px; background: #f1f5f9; }',
+                        '  .ref-label { font-weight: 800; font-size: 11px; color: #333; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }',
+                        '  .ref-num { font-weight: 900; font-size: 26px; letter-spacing: 0.04em; }',
+                        '  .row { display: flex; justify-content: space-between; margin-top: 3px; }',
+                        '  .row b { font-weight: 700; }',
+                        '  .section { padding-bottom: 11px; margin-bottom: 11px; border-bottom: 1px dashed #000; }',
+                        '  .hmo-section { background: #f1f5f9; border-radius: 6px; padding: 9px; }',
+                        '  .section-title { font-weight: 800; text-transform: uppercase; font-size: 11.5px; letter-spacing: 0.06em; margin-bottom: 7px; }',
+                        '  .footer { text-align: center; padding-top: 10px; border-top: 3px double #000; margin-top: 4px; }',
+                        '  .warn { font-weight: 900; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.07em; color: #991b1b; }',
+                        '  .foot-sub { font-weight: 700; font-size: 12px; margin-top: 3px; color: #333; }',
+                        '</style></head><body>',
+                        '<div class="header">',
+                        '  <div class="hospital">Pascual General Hospital</div>',
+                        '  <div class="sub">PATIENT INTAKE REPORT</div>',
+                        '</div>',
+                        '<div class="ref">',
+                        '  <div class="ref-label">REFERENCE NUMBER</div>',
+                        '  <div class="ref-num">' + refNum + '</div>',
+                        '</div>',
+                        '<div class="section">',
+                        '  <div class="row"><b>Patient:</b><span>' + pName + '</span></div>',
+                        company ? ('  <div class="row"><b>Company:</b><span>' + company + '</span></div>') : '',
+                        contact ? ('  <div class="row"><b>Contact:</b><span>' + contact + '</span></div>') : '',
+                        '</div>',
+                        (hmoProv || hmoCard || loaNum) ? (
+                          '<div class="section hmo-section">' +
+                          '  <div class="section-title" style="color:#1e40af">' + (hmoStatus ? '✅ ' + hmoStatus + ' · HMO COVERAGE' : '✅ HMO COVERAGE') + '</div>' +
+                          (hmoProv ? ('  <div class="row"><b>HMO Provider:</b><span>' + hmoProv + '</span></div>') : '') +
+                          (hmoCard ? ('  <div class="row"><b>HMO Card #:</b><span>' + hmoCard + '</span></div>') : '') +
+                          (loaNum ? ('  <div class="row"><b>LOA #:</b><span>' + loaNum + '</span></div>') : '') +
+                          '</div>'
+                        ) : '',
+                        '<div class="section">',
+                        '  <div class="section-title">Services / Procedure</div>',
+                        '  <div style="font-weight:700">' + (routeLabel ? '✓ ' + routeLabel : '') + '</div>',
+                        routeTarget ? ('  <div style="margin-top:5px">' + routeTarget + '</div>') : '',
+                        '</div>',
+                        vitalsLine ? (
+                          '<div class="section">' +
+                          '  <div class="section-title">Vitals on Intake</div>' +
+                          '  <div style="font-weight:700">' + vitalsLine + '</div>' +
+                          '</div>'
+                        ) : '',
+                        '<div class="section">',
+                        '  <div class="row"><b>Nurse on Duty:</b><span>' + nurseName + '</span></div>',
+                        '  <div class="row"><b>Date / Time:</b><span>' + dateStr + '</span></div>',
+                        '</div>',
+                        '<div class="footer">',
+                        '  <div class="warn">⚠️ PRESENT THIS RECEIPT TO CASHIER ⚠️</div>',
+                        '  <div class="foot-sub">for final settlement BEFORE any procedure or exam.</div>',
+                        '</div>',
+                        '</body></html>'
+                      ].filter(Boolean).join('\n');
+
+                      const w = window.open('', '_blank', 'width=420,height=820,scrollbars=yes,menubar=no,toolbar=no,location=no');
+                      if (w) {
+                        w.document.open();
+                        w.document.write(htmlLines);
+                        w.document.close();
+                        setTimeout(() => { try { w.focus(); w.print(); } catch (_) {} }, 250);
+                      } else {
+                        alert('Popup blocked! Please allow popups then click Print Intake Report again.');
+                      }
+                    } catch (err) {
+                      alert('⚠️ Print error: ' + String(err?.message || err));
+                    }
+                  }}
+                  style={{ fontWeight: '800', padding: '15px 18px', borderRadius: '12px', fontSize: '16px', background: 'linear-gradient(135deg,#0f766e,#0f172a)', color: '#ffffff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(15,118,110,0.35)' }}
                 >
-                  Copy slip
+                  🖨️ PRINT INTAKE REPORT (give to patient)
                 </button>
-                <button 
-                  type="button" 
-                  className="btn-modal-confirm" 
-                  onClick={() => setWalkInNextStepsOpen(false)}
-                  style={{ flex: 1, fontWeight: '700', padding: '14px', borderRadius: '12px', fontSize: '15px', background: 'var(--brand-primary-gradient)', color: '#ffffff' }}
-                >
-                  Exit
-                </button>
+                <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+                  <button
+                    type="button"
+                    className="btn-gray"
+                    onClick={copyWalkInSlip}
+                    style={{ flex: 1, fontWeight: '700', padding: '13px', borderRadius: '12px', fontSize: '14px', background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#475569' }}
+                  >
+                    Copy details
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-modal-confirm"
+                    onClick={() => setWalkInNextStepsOpen(false)}
+                    style={{ flex: 1, fontWeight: '700', padding: '13px', borderRadius: '12px', fontSize: '14px', background: 'var(--brand-primary-gradient)', color: '#ffffff' }}
+                  >
+                    Exit
+                  </button>
+                </div>
               </div>
             </div>
         </ModalShell>
