@@ -3093,65 +3093,70 @@ export default function OfficeStaffDashboard({ mode }) {
                           <button
                             type="button"
                             className="office-btn"
-                            onClick={async () => {
+                            onClick={() => {
                               try {
                                 const invoiceIdStr = String(row.invoice_id || claim.invoice_id || '').trim();
-                                if (invoiceIdStr) {
-                                  await openInvoice(invoiceIdStr);
-                                  const fallbackName = isFallbackName
-                                    ? 'Patient'
-                                    : (displayPatientName && displayPatientName !== '—' ? displayPatientName : 'Patient');
-                                  const receiptPayload = {
-                                    id: `INV-${invoiceIdStr}`,
-                                    invoice_id: invoiceIdStr,
-                                    source: inferInvoiceSource(selectedInvoice || {}),
-                                    serviceLabel: String(row.workups_list || selectedInvoice?.items?.[0]?.description || selectedInvoice?.notes || 'Hospital Services').trim() || 'Hospital Services',
-                                    invoice: selectedInvoice || { id: invoiceIdStr, total_amount: totalNow, balance_amount: patientDue },
-                                    amount: totalNow,
-                                    amountReceived: Math.max(0, totalNow - patientDue),
-                                    change: 0,
-                                    method: (hmoNow > 0.0099 || claim.provider) ? `HMO · ${String(claim.provider || 'Provider')}` : (String(selectedInvoice?.payment_method || selectedInvoice?.method || 'Cash')),
-                                    reference: claim.loa_number ? `LOA ${String(claim.loa_number)}` : (String(selectedInvoice?.payment_reference || selectedInvoice?.reference || '—')),
-                                    patientName: fallbackName,
-                                    cashierName: user?.name || user?.full_name || user?.firstName + ' ' + (user?.lastName || '') || 'Cashier',
-                                    created_at: row.created_at || claim.created_at || (selectedInvoice?.created_at || new Date().toISOString()),
-                                    paidAtLabel: formatDateTime(row.created_at || claim.created_at || (selectedInvoice?.created_at || new Date().toISOString())),
-                                    note: (hmoNow > 0.0099 || claim.provider)
-                                      ? `This amount is covered by HMO LOA. LOA #${String(claim.loa_number || 'pending')}. ${phNow > 0.0099 ? `PhilHealth deducted first: ₱ ${toMoney(phNow)}.` : ''}`
-                                      : 'Official billing statement. Present this slip for verification.'
-                                  };
-                                  const receiptSlip = buildPaymentReceipt(receiptPayload);
-                                  if (receiptSlip) {
-                                    receiptSlip.receiptNumber = `PGH-HMO-${invoiceIdStr}`;
-                                    receiptSlip.loaNumber = claim.loa_number || '';
-                                    receiptSlip.hmoProvider = claim.provider || '';
-                                    receiptSlip.hmoCard = claim.hmo_card_number || '';
-                                    receiptSlip.hmoCoverage = hmoNow;
-                                    receiptSlip.philhealthDeduction = phNow;
-                                    setPaymentReceipt(receiptSlip);
-                                  } else {
-                                    setPaymentReceipt({
-                                      receiptNumber: `PGH-HMO-${invoiceIdStr}`,
-                                      orderId: invoiceIdStr,
-                                      paidAt: new Date().toISOString(),
-                                      paidAtLabel: formatDateTime(new Date().toISOString()),
-                                      cashierName: user?.name || 'Cashier',
-                                      method: 'HMO',
-                                      reference: claim.loa_number ? `LOA ${String(claim.loa_number)}` : '—',
-                                      patientName: fallbackName,
-                                      serviceLabel: String(row.workups_list || 'Hospital Services') || 'Hospital Services',
-                                      amountDue: totalNow,
-                                      amountReceived: Math.max(0, totalNow - patientDue),
-                                      change: 0,
-                                      source: 'HMO Billing Statement'
-                                    });
-                                  }
-                                } else {
+                                if (!invoiceIdStr) {
                                   setSuccessMessage('No invoice linked yet. Use "Update" to encode LOA and amounts first.');
                                   setModalType('success');
                                   setShowSuccessModal(true);
                                   setHmoQuickEdit(row);
+                                  return;
                                 }
+
+                                // ✅ INSTANT RECEIPT! NO API FETCH, NO openInvoice() CALL!
+                                // We already have 100% of the data we need from the row + claim objects.
+                                // SKIPPING openInvoice() avoids the CASHIER POS INVOICE MODAL that used to appear FIRST!
+                                // Receipt modal now shows INSTANTLY. No intermediate popups!
+                                const dispName = (displayPatientName && displayPatientName !== '—') ? displayPatientName : 'Patient';
+                                const serviceStr = (
+                                  String(row.workups_list || '').trim()
+                                  || (isFallbackName && subtitleText)
+                                  || 'Hospital Services'
+                                );
+                                const source = (
+                                  String(serviceStr).toLowerCase().includes('lab') ? 'Lab Services (HMO)' :
+                                  String(serviceStr).toLowerCase().includes('pharmacy') || String(serviceStr).toLowerCase().includes('medicine') ? 'Pharmacy (HMO)' :
+                                  String(serviceStr).toLowerCase().includes('xray') || String(serviceStr).toLowerCase().includes('imaging') || String(serviceStr).toLowerCase().includes('radiograph') ? 'Radiology / Imaging (HMO)' :
+                                  String(serviceStr).toLowerCase().includes('ecg') ? 'ECG / Cardio (HMO)' :
+                                  String(serviceStr).toLowerCase().includes('pt') || String(serviceStr).toLowerCase().includes('physical therapy') ? 'Physical Therapy (HMO)' :
+                                  String(serviceStr).toLowerCase().includes('consult') || String(serviceStr).toLowerCase().includes('onsite') ? 'Onsite Consult (HMO)' :
+                                  'HMO Billing Statement'
+                                );
+                                const receiptPayload = {
+                                  receiptNumber: `PGH-HMO-${invoiceIdStr}`,
+                                  orderId: invoiceIdStr,
+                                  invoice_id: invoiceIdStr,
+                                  paidAt: row.created_at || claim.created_at || claim.updated_at || new Date().toISOString(),
+                                  paidAtLabel: formatDateTime(row.created_at || claim.created_at || claim.updated_at || new Date().toISOString()),
+                                  cashierName: (user?.name || user?.full_name || (user?.first_name ? String(user.first_name || '').trim() + ' ' + String(user.last_name || '').trim() : 'Cashier') || 'Cashier').trim() || 'Cashier',
+                                  method: (hmoNow > 0.0099 || claim.provider) ? `HMO · ${String(claim.provider || 'Provider')}` : 'Pending Settlement',
+                                  reference: claim.loa_number ? `LOA ${String(claim.loa_number)}` : (claim.hmo_card_number ? `Card ${String(claim.hmo_card_number)}` : '—'),
+                                  patientName: dispName,
+                                  serviceLabel: (String(serviceStr || 'Hospital Services').trim().length > 90 ? String(serviceStr).slice(0, 88) + '…' : String(serviceStr || 'Hospital Services')) || 'Hospital Services',
+                                  amountDue: Number(totalNow || 0),
+                                  amountReceived: Math.max(0, Number(totalNow || 0) - Number(patientDue || 0)),
+                                  change: 0,
+                                  source,
+                                  philhealthDeduction: Number(phNow || 0),
+                                  hmoCoverage: Number(hmoNow || 0),
+                                  hmoProvider: String(claim.provider || '').trim() || '—',
+                                  hmoCard: String(claim.hmo_card_number || '').trim() || '—',
+                                  loaNumber: String(claim.loa_number || '').trim() || '—',
+                                  note: (hmoNow > 0.0099 || claim.provider)
+                                    ? (
+                                        (phNow > 0.0099 ? `PhilHealth deduction (₱ ${toMoney(phNow)}) applied first per OPD protocol. ` : '')
+                                        + (hmoNow > 0.0099 ? `Remaining balance covered by HMO LOA #${String(claim.loa_number || 'pending')} (₱ ${toMoney(hmoNow)}). ` : '')
+                                        + (patientDue > 0.0099 ? `Patient pays balance ₱ ${toMoney(patientDue)} upon discharge / settlement.` : 'Full HMO settlement · 100% covered · no balance.')
+                                      )
+                                    : 'Official billing statement · present HMO card + this slip for settlement.'
+                                };
+
+                                // Directly open RECEIPT MODAL ONLY (no POS invoice modal!)
+                                setPaymentReceipt({
+                                  ...receiptPayload,
+                                  id: `INV-${invoiceIdStr}`
+                                });
                               } catch (err) {
                                 alert('⚠️ Receipt error: ' + String(err?.message || err));
                               }
