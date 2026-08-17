@@ -2180,6 +2180,121 @@ router.get('/hmo-queue', async (req, res) => {
       }
     } catch (_refEnrichErr) { /* never break page */ }
 
+    // ✅ STEP: REAL PATIENT NAME + CONTACT ENRICHMENT (CRITICAL FIX)
+    // For rows where patient_name = 'Patient' or fallback 'Patient of Invoice-X'
+    // we fetch the ACTUAL first_name + last_name from public.patients via patient_id link
+    // This fixes the "Patient (click Update to fill name)" on Lab Order / auto-created rows!
+    try {
+      const patNameIds = new Set();
+      for (const r of builtList) {
+        const claimPid = String(r.hmo_claim?.patient_id || '').trim();
+        if (claimPid && claimPid !== '' && claimPid !== 'null') patNameIds.add(claimPid);
+      }
+      // Also pull patient_id directly from billing_invoices if the row has invoice_id
+      try {
+        const invIdsExtra = [];
+        for (const r of builtList) {
+          const nameNow = String(r.patient_name || '').trim();
+          const isBadName = (!nameNow) || (nameNow.length <= 9) || nameNow.toLowerCase().startsWith('patient of') || nameNow.toLowerCase().startsWith('invoice') || nameNow.toLowerCase().startsWith('walk-in') || nameNow.toLowerCase().includes('lab order #') || nameNow.toLowerCase().startsWith('nurse walk');
+          if (isBadName && r.invoice_id && String(r.invoice_id) !== '' && String(r.invoice_id) !== '0' && String(r.invoice_id) !== 'null') {
+            invIdsExtra.push(String(r.invoice_id));
+          }
+        }
+        if (invIdsExtra.length) {
+          const invPats = await prisma.$queryRawUnsafe(
+            `SELECT id::text AS iid, patient_id::text AS pid FROM public.billing_invoices WHERE id::text IN (${invIdsExtra.map((_, i) => `$${i + 1}`).join(',')})`,
+            ...invIdsExtra.map((x) => BigInt(x))
+          ).catch(() => []);
+          if (Array.isArray(invPats)) {
+            for (const x of invPats) {
+              const p = String(x.pid || '').trim();
+              if (p && p !== '' && p !== 'null') patNameIds.add(p);
+            }
+          }
+        }
+      } catch (_) { /* ignore */ }
+        const patNameArr = Array.from(patNameIds).filter(Boolean);
+      // Precompute invoice → patient ID map for rows whose hmo_claim has no patient_id
+      const invToPat = new Map();
+      try {
+        const allInvIdsForPat = [];
+        for (const r of builtList) {
+          if (r.invoice_id && String(r.invoice_id) !== '' && String(r.invoice_id) !== '0' && String(r.invoice_id) !== 'null') allInvIdsForPat.push(String(r.invoice_id));
+        }
+        if (allInvIdsForPat.length) {
+          const allI2p = await prisma.$queryRawUnsafe(
+            `SELECT id::text AS iid, patient_id::text AS pid FROM public.billing_invoices WHERE id::text IN (${allInvIdsForPat.map((_, i) => `$${i + 1}`).join(',')})`,
+            ...allInvIdsForPat.map((x) => BigInt(x))
+          ).catch(() => []);
+          if (Array.isArray(allI2p)) {
+            for (const x of allI2p) {
+              const p = String(x.pid || '').trim();
+              const i = String(x.iid || '').trim();
+              if (i && p && p !== 'null') invToPat.set(i, p);
+              if (p && p !== '' && p !== 'null') patNameIds.add(p);
+            }
+          }
+        }
+      } catch (_) { /* ignore */ }
+
+      if (patNameArr.length || invToPat.size > 0) {
+        const patNameArrFinal = Array.from(patNameIds).filter(Boolean);
+        let realNames = [];
+        if (patNameArrFinal.length) {
+          realNames = await prisma.$queryRawUnsafe(
+            `SELECT id::text AS pid, first_name, middle_name, last_name, contact_number, company, email FROM public.patients WHERE id::text IN (${patNameArrFinal.map((_, i) => `$${i + 1}`).join(',')})`,
+            ...patNameArrFinal
+          ).catch(() => []);
+        }
+        const pMap = new Map();
+        if (Array.isArray(realNames)) {
+          for (const p of realNames) {
+            const pid = String(p.pid || '').trim();
+            if (!pid) continue;
+            const fn = String(p.first_name || '').trim();
+            const mn = String(p.middle_name || '').trim();
+            const ln = String(p.last_name || '').trim();
+            const fullNameChunks = [fn, mn, ln].filter((s) => s.length > 0);
+            const full = fullNameChunks.length ? fullNameChunks.join(' ').trim() : '';
+            if (full) pMap.set(`pid:${pid}`, full);
+            if (String(p.contact_number || '').trim()) pMap.set(`pcontact:${pid}`, String(p.contact_number).trim());
+            if (String(p.company || '').trim()) pMap.set(`pcompany:${pid}`, String(p.company).trim());
+            if (String(p.email || '').trim()) pMap.set(`pemail:${pid}`, String(p.email).trim());
+          }
+        }
+        // Apply pMap to rows!
+        for (let i = 0; i < builtList.length; i++) {
+          const r = builtList[i];
+          let pid = String(r.hmo_claim?.patient_id || '').trim();
+          if ((!pid || pid === 'null' || pid === '') && r.invoice_id) {
+            const candidate = invToPat.get(String(r.invoice_id));
+            if (candidate) pid = String(candidate).trim();
+          }
+          if (!pid || pid === 'null') continue;
+          const full2 = pMap.get(`pid:${pid}`);
+          if (full2) {
+            const curr = String(r.patient_name || '').trim();
+            const isBadNow = (!curr) || curr.length <= 9 || curr.toLowerCase().startsWith('patient of') || curr.toLowerCase().startsWith('invoice') || curr.toLowerCase().startsWith('walk-in') || curr.toLowerCase().includes('lab order #') || curr.toLowerCase().startsWith('nurse walk') || curr === 'Patient';
+            if (isBadNow) {
+              const patched = { ...r, patient_name: full2 };
+              const cc = pMap.get(`pcontact:${pid}`);
+              if (cc && (!String(r.contact_number || '').trim() || String(r.contact_number).length < 6)) patched.contact_number = cc;
+              const em = pMap.get(`pemail:${pid}`);
+              if (em && (!String(r.email || '').trim())) patched.email = em;
+              if (patched.hmo_claim) {
+                patched.hmo_claim = { ...patched.hmo_claim, patient_name: full2 };
+                const hmc = patched.hmo_claim;
+                if (cc && !String(hmc.patient_contact || '').trim()) hmc.patient_contact = cc;
+                const co = pMap.get(`pcompany:${pid}`);
+                if (co && !String(hmc.company || '').trim()) hmc.company = co;
+              }
+              builtList[i] = patched;
+            }
+          }
+        }
+      }
+    } catch (_nameEnrichErr) { /* never break page */ }
+
     builtList = builtList.filter((row) => {
       if (!query) return true;
       const haystack = [
