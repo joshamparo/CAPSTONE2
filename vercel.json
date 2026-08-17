@@ -6,6 +6,7 @@
   "cleanUrls": false,
   "trailingSlash": false,
   "framework": "create-react-app",
+  "github": { "silent": false },
   "headers": [
     {
       "source": "/(.*)",
