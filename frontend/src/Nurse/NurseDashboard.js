@@ -9786,6 +9786,9 @@ function NurseDashboard() {
                       <div style={{ fontWeight: 900, fontSize: '28px', color: '#000000', letterSpacing: '0.04em' }}>
                         {refNum || '—'}
                       </div>
+                      <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed #000000', fontSize: '10.5px', letterSpacing: '0.12em', fontWeight: 700, color: '#000000', textTransform: 'uppercase' }}>
+                        [BUILD 2026-08-17 v3 · CASHIER REF# FLOW ACTIVE]
+                      </div>
                     </div>
                   );
                 })()}
@@ -10006,6 +10009,7 @@ function NurseDashboard() {
                         '<div class="ref">',
                         '  <div class="ref-label">REFERENCE NUMBER</div>',
                         '  <div class="ref-num">' + refNum + '</div>',
+                        '  <div style="margin-top:8px;padding-top:7px;border-top:1px dashed #000;font-size:10.5px;letter-spacing:0.12em;font-weight:700;color:#000;text-transform:uppercase">[BUILD 2026-08-17 v3 · CASHIER REF# FLOW ACTIVE]</div>',
                         '</div>',
                         '<div class="section">',
                         '  <div class="row"><b>Patient:</b><span>' + pName + '</span></div>',
