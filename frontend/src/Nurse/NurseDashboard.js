@@ -9747,13 +9747,6 @@ function NurseDashboard() {
           showCloseButton={true}
         >
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 18 }}>
-                <div style={{ width: 64, height: 64, borderRadius: '20px', background: 'var(--status-duty-wash, #dcfce7)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, border: '2px solid var(--status-duty-ring, #bbf7d0)' }}>
-                  <CheckCircle size={32} color="var(--status-duty, #16a34a)" />
-                </div>
-                <h3 style={{ color: '#0f172a', fontSize: '26px', fontWeight: '900', margin: 0 }}>✅ Intake Complete!</h3>
-              </div>
-
               {/* ================================================================ */}
               {/* 🏷️ NEW: PATIENT INTAKE REPORT (THERMAL 80mm RECEIPT STYLE) */}
               {/* ================================================================ */}
@@ -9762,8 +9755,8 @@ function NurseDashboard() {
               <div id="intake-report-print-area" style={{
                 width: '100%',
                 background: '#ffffff',
-                border: '2px dashed #cbd5e1',
-                borderRadius: '14px',
+                border: '1px solid #000000',
+                borderRadius: '6px',
                 padding: '22px 18px',
                 marginBottom: 20,
                 fontFamily: '"Courier New", "Consolas", monospace',
@@ -9772,9 +9765,9 @@ function NurseDashboard() {
                 lineHeight: '1.55',
                 boxSizing: 'border-box'
               }}>
-                <div style={{ textAlign: 'center', marginBottom: 14, paddingBottom: 12, borderBottom: '1px dashed #94a3b8' }}>
-                  <div style={{ fontWeight: 900, fontSize: '17px', letterSpacing: '0.03em', textTransform: 'uppercase' }}>Pascual General Hospital</div>
-                  <div style={{ fontWeight: 700, fontSize: '14.5px', marginTop: 4, color: '#334155' }}>PATIENT INTAKE REPORT</div>
+                <div style={{ textAlign: 'center', marginBottom: 14, paddingBottom: 12, borderBottom: '1px dashed #000000' }}>
+                  <div style={{ fontWeight: 900, fontSize: '17px', letterSpacing: '0.03em', textTransform: 'uppercase', color: '#000000' }}>Pascual General Hospital</div>
+                  <div style={{ fontWeight: 700, fontSize: '14.5px', marginTop: 4, color: '#000000' }}>PATIENT INTAKE REPORT</div>
                 </div>
 
                 {/* REFERENCE NUMBER: boxed, biggest text, center */}
@@ -9785,33 +9778,33 @@ function NurseDashboard() {
                       textAlign: 'center',
                       marginBottom: 16,
                       padding: '14px 10px',
-                      border: '2px solid #0f172a',
-                      borderRadius: '10px',
-                      background: '#f8fafc'
+                      border: '2px solid #000000',
+                      borderRadius: '8px',
+                      background: '#ffffff'
                     }}>
-                      <div style={{ fontWeight: 800, fontSize: '11px', color: '#475569', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>REFERENCE NUMBER</div>
-                      <div style={{ fontWeight: 900, fontSize: refNum ? '28px' : '18px', color: '#0f172a', letterSpacing: '0.04em' }}>
-                        {refNum ? refNum : '— (generating, click PRINT to refresh) —'}
+                      <div style={{ fontWeight: 800, fontSize: '11px', color: '#000000', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>REFERENCE NUMBER</div>
+                      <div style={{ fontWeight: 900, fontSize: '28px', color: '#000000', letterSpacing: '0.04em' }}>
+                        {refNum || '—'}
                       </div>
                     </div>
                   );
                 })()}
 
-                <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px dashed #cbd5e1' }}>
+                <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px dashed #000000' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 700 }}>Patient:</span>
-                    <span style={{ textAlign: 'right', maxWidth: '65%' }}>{walkInNextSteps?.patientName || 'Patient'}</span>
+                    <span style={{ fontWeight: 700, color: '#000000' }}>Patient:</span>
+                    <span style={{ textAlign: 'right', maxWidth: '65%', color: '#000000' }}>{walkInNextSteps?.patientName || 'Patient'}</span>
                   </div>
                   {walkInNextSteps?.patientCompany ? (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                      <span style={{ fontWeight: 700 }}>Company:</span>
-                      <span style={{ textAlign: 'right', maxWidth: '65%' }}>{walkInNextSteps.patientCompany}</span>
+                      <span style={{ fontWeight: 700, color: '#000000' }}>Company:</span>
+                      <span style={{ textAlign: 'right', maxWidth: '65%', color: '#000000' }}>{walkInNextSteps.patientCompany}</span>
                     </div>
                   ) : null}
                   {walkInNextSteps?.patientContact ? (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                      <span style={{ fontWeight: 700 }}>Contact:</span>
-                      <span style={{ textAlign: 'right', maxWidth: '65%' }}>{walkInNextSteps.patientContact}</span>
+                      <span style={{ fontWeight: 700, color: '#000000' }}>Contact:</span>
+                      <span style={{ textAlign: 'right', maxWidth: '65%', color: '#000000' }}>{walkInNextSteps.patientContact}</span>
                     </div>
                   ) : null}
                 </div>
@@ -9826,26 +9819,26 @@ function NurseDashboard() {
                   const status = String(hmo.status || '').trim();
                   if (!hmoProv && !hmoCard && !loaNum) return null;
                   return (
-                    <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px dashed #cbd5e1', background: '#f8fafc', borderRadius: 8, padding: 10 }}>
-                      <div style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '11.5px', letterSpacing: '0.06em', color: '#1d4ed8', marginBottom: 8 }}>
-                        {status ? `✅ ${status} · HMO COVERAGE` : '✅ HMO COVERAGE'}
+                    <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px dashed #000000', borderRadius: 0, padding: 10, border: '1px solid #000000', background: '#ffffff' }}>
+                      <div style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '11.5px', letterSpacing: '0.06em', color: '#000000', marginBottom: 8 }}>
+                        {status ? `${status} · HMO COVERAGE` : 'HMO COVERAGE'}
                       </div>
                       {hmoProv ? (
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
-                          <span style={{ fontWeight: 700 }}>HMO Provider:</span>
-                          <span style={{ textAlign: 'right', maxWidth: '65%' }}>{hmoProv}</span>
+                          <span style={{ fontWeight: 700, color: '#000000' }}>HMO Provider:</span>
+                          <span style={{ textAlign: 'right', maxWidth: '65%', color: '#000000' }}>{hmoProv}</span>
                         </div>
                       ) : null}
                       {hmoCard ? (
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
-                          <span style={{ fontWeight: 700 }}>HMO Card #:</span>
-                          <span style={{ textAlign: 'right', maxWidth: '65%' }}>{hmoCard}</span>
+                          <span style={{ fontWeight: 700, color: '#000000' }}>HMO Card #:</span>
+                          <span style={{ textAlign: 'right', maxWidth: '65%', color: '#000000' }}>{hmoCard}</span>
                         </div>
                       ) : null}
                       {loaNum ? (
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
-                          <span style={{ fontWeight: 700 }}>LOA #:</span>
-                          <span style={{ textAlign: 'right', maxWidth: '65%' }}>{loaNum}</span>
+                          <span style={{ fontWeight: 700, color: '#000000' }}>LOA #:</span>
+                          <span style={{ textAlign: 'right', maxWidth: '65%', color: '#000000' }}>{loaNum}</span>
                         </div>
                       ) : null}
                     </div>
@@ -9853,15 +9846,15 @@ function NurseDashboard() {
                 })()}
 
                 {/* SERVICES TO BE PERFORMED */}
-                <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px dashed #cbd5e1' }}>
-                  <div style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '11.5px', letterSpacing: '0.06em', color: '#0f172a', marginBottom: 8 }}>
+                <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px dashed #000000' }}>
+                  <div style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '11.5px', letterSpacing: '0.06em', color: '#000000', marginBottom: 8 }}>
                     Services / Procedure
                   </div>
-                  <div style={{ fontWeight: 700, color: '#0f172a' }}>
-                    {walkInNextSteps?.routeLabel ? `✓ ${walkInNextSteps.routeLabel}` : ''}
+                  <div style={{ fontWeight: 700, color: '#000000' }}>
+                    {walkInNextSteps?.routeLabel ? walkInNextSteps.routeLabel : ''}
                   </div>
                   {walkInNextSteps?.routeTarget ? (
-                    <div style={{ marginTop: 5, fontSize: '13px', lineHeight: '1.5' }}>{walkInNextSteps.routeTarget}</div>
+                    <div style={{ marginTop: 5, fontSize: '13px', lineHeight: '1.5', color: '#000000' }}>{walkInNextSteps.routeTarget}</div>
                   ) : null}
                 </div>
 
@@ -9879,19 +9872,19 @@ function NurseDashboard() {
                   if (v.height) arr.push(`Ht:${v.height}cm`);
                   if (arr.length === 0) return null;
                   return (
-                    <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px dashed #cbd5e1' }}>
-                      <div style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '11.5px', letterSpacing: '0.06em', color: '#0f172a', marginBottom: 6 }}>
+                    <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px dashed #000000' }}>
+                      <div style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '11.5px', letterSpacing: '0.06em', color: '#000000', marginBottom: 6 }}>
                         Vitals on Intake
                       </div>
-                      <div style={{ fontSize: '13px', lineHeight: '1.7', fontWeight: 700 }}>{arr.join('  ·  ')}</div>
+                      <div style={{ fontSize: '13px', lineHeight: '1.7', fontWeight: 700, color: '#000000' }}>{arr.join('  ·  ')}</div>
                     </div>
                   );
                 })()}
 
                 <div style={{ paddingBottom: 10, marginBottom: 10 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 700 }}>Nurse On Duty:</span>
-                    <span style={{ textAlign: 'right', maxWidth: '65%' }}>
+                    <span style={{ fontWeight: 700, color: '#000000' }}>Nurse On Duty:</span>
+                    <span style={{ textAlign: 'right', maxWidth: '65%', color: '#000000' }}>
                       {(() => {
                         try {
                           const raw = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}') : {};
@@ -9901,49 +9894,56 @@ function NurseDashboard() {
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                    <span style={{ fontWeight: 700 }}>Date / Time:</span>
-                    <span style={{ textAlign: 'right', maxWidth: '65%' }}>
+                    <span style={{ fontWeight: 700, color: '#000000' }}>Date / Time:</span>
+                    <span style={{ textAlign: 'right', maxWidth: '65%', color: '#000000' }}>
                       {new Date(walkInNextSteps?.created_at || Date.now()).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}
                     </span>
                   </div>
                 </div>
 
-                <div style={{ textAlign: 'center', paddingTop: 10, borderTop: '3px double #64748b' }}>
-                  <div style={{ fontWeight: 900, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#b91c1c' }}>
-                    ⚠️ PRESENT THIS RECEIPT TO CASHIER ⚠️
+                <div style={{ textAlign: 'center', paddingTop: 10, borderTop: '3px double #000000' }}>
+                  <div style={{ fontWeight: 900, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#000000' }}>
+                    PRESENT THIS RECEIPT TO CASHIER
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: '12px', marginTop: 4, color: '#475569' }}>
+                  <div style={{ fontWeight: 700, fontSize: '12px', marginTop: 4, color: '#000000' }}>
                     for final settlement BEFORE any procedure or exam.
                   </div>
                 </div>
               </div>
               {/* ===================== END INTAKE REPORT ===================== */}
 
-              {/* Old queue ticket info kept for backwards compat, moved to a smaller bottom box */}
-              <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: '14px', width: '100%', marginBottom: 18, border: '1px solid #e2e8f0' }}>
-                {walkInNextSteps.ticket && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: walkInNextSteps.routeLabel ? 8 : 0 }}>
-                    <div>
-                      <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>Queue Ticket</div>
-                      <div style={{ fontSize: '32px', fontWeight: '900', color: 'var(--brand-primary, #f97316)', lineHeight: '1' }}>{walkInNextSteps.ticket}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ color: '#1e293b', fontSize: '14px', fontWeight: '700' }}>
-                        {walkInNextSteps.routeLabel ? `➡️ ${walkInNextSteps.routeLabel}` : ''}
+              {/* Old queue ticket info - HIDDEN IF HMO PATIENT, SHOW ONLY NON-HMO */}
+              {(() => {
+                const hmo = walkInNextSteps?.hmo;
+                const isHmo = Boolean(hmo && typeof hmo === 'object' && (String(hmo.provider || hmo.hmo_provider || '').trim() || String(hmo.card_number || hmo.hmo_card_number || '').trim() || String(hmo.loa_number || hmo.hmo_loa_number || hmo.loaNumber || '').trim()));
+                if (isHmo) return null; // HMO patient: receipt document lang, no ticket
+                return (
+                  <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: '14px', width: '100%', marginBottom: 18, border: '1px solid #e2e8f0' }}>
+                    {walkInNextSteps.ticket && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: walkInNextSteps.routeLabel ? 8 : 0 }}>
+                        <div>
+                          <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>Queue Ticket</div>
+                          <div style={{ fontSize: '32px', fontWeight: '900', color: 'var(--brand-primary, #f97316)', lineHeight: '1' }}>{walkInNextSteps.ticket}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ color: '#1e293b', fontSize: '14px', fontWeight: '700' }}>
+                            {walkInNextSteps.routeLabel ? `➡️ ${walkInNextSteps.routeLabel}` : ''}
+                          </div>
+                          <div style={{ color: '#475569', fontSize: '12.5px', fontWeight: '600', marginTop: 2 }}>
+                            {walkInNextSteps.routeTarget ? walkInNextSteps.routeTarget : ''}
+                          </div>
+                        </div>
                       </div>
-                      <div style={{ color: '#475569', fontSize: '12.5px', fontWeight: '600', marginTop: 2 }}>
-                        {walkInNextSteps.routeTarget ? walkInNextSteps.routeTarget : ''}
+                    )}
+                    {!walkInNextSteps.ticket ? (
+                      <div style={{ color: '#475569', fontSize: '13px', fontWeight: 600 }}>
+                        Proceed to <b style={{ color: '#0f172a' }}>{walkInNextSteps.routeLabel}</b> station
+                        {walkInNextSteps.routeTarget ? <> · <span style={{ color: '#334155' }}>{walkInNextSteps.routeTarget}</span></> : null}
                       </div>
-                    </div>
+                    ) : null}
                   </div>
-                )}
-                {!walkInNextSteps.ticket ? (
-                  <div style={{ color: '#475569', fontSize: '13px', fontWeight: 600 }}>
-                    Proceed to <b style={{ color: '#0f172a' }}>{walkInNextSteps.routeLabel}</b> station
-                    {walkInNextSteps.routeTarget ? <> · <span style={{ color: '#334155' }}>{walkInNextSteps.routeTarget}</span></> : null}
-                  </div>
-                ) : null}
-              </div>
+                );
+              })()}
 
               <div style={{ display: 'flex', gap: 10, width: '100%', flexDirection: 'column' }}>
                 <button
@@ -9987,17 +9987,17 @@ function NurseDashboard() {
                         '  .header { text-align: center; padding-bottom: 10px; border-bottom: 1px dashed #000; margin-bottom: 14px; }',
                         '  .hospital { font-weight: 900; font-size: 18px; letter-spacing: 0.03em; text-transform: uppercase; }',
                         '  .sub { font-weight: 700; font-size: 14.5px; margin-top: 3px; }',
-                        '  .ref { text-align: center; border: 2px solid #000; border-radius: 8px; padding: 12px 8px; margin-bottom: 14px; background: #f1f5f9; }',
-                        '  .ref-label { font-weight: 800; font-size: 11px; color: #333; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }',
-                        '  .ref-num { font-weight: 900; font-size: 26px; letter-spacing: 0.04em; }',
+                        '  .ref { text-align: center; border: 2px solid #000; border-radius: 8px; padding: 12px 8px; margin-bottom: 14px; background: #fff; }',
+                        '  .ref-label { font-weight: 800; font-size: 11px; color: #000; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }',
+                        '  .ref-num { font-weight: 900; font-size: 26px; letter-spacing: 0.04em; color: #000; }',
                         '  .row { display: flex; justify-content: space-between; margin-top: 3px; }',
-                        '  .row b { font-weight: 700; }',
+                        '  .row b { font-weight: 700; color: #000; }',
                         '  .section { padding-bottom: 11px; margin-bottom: 11px; border-bottom: 1px dashed #000; }',
-                        '  .hmo-section { background: #f1f5f9; border-radius: 6px; padding: 9px; }',
-                        '  .section-title { font-weight: 800; text-transform: uppercase; font-size: 11.5px; letter-spacing: 0.06em; margin-bottom: 7px; }',
+                        '  .hmo-section { border: 1px solid #000; border-radius: 0; padding: 9px; background: #fff; }',
+                        '  .section-title { font-weight: 800; text-transform: uppercase; font-size: 11.5px; letter-spacing: 0.06em; margin-bottom: 7px; color: #000; }',
                         '  .footer { text-align: center; padding-top: 10px; border-top: 3px double #000; margin-top: 4px; }',
-                        '  .warn { font-weight: 900; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.07em; color: #991b1b; }',
-                        '  .foot-sub { font-weight: 700; font-size: 12px; margin-top: 3px; color: #333; }',
+                        '  .warn { font-weight: 900; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.07em; color: #000; }',
+                        '  .foot-sub { font-weight: 700; font-size: 12px; margin-top: 3px; color: #000; }',
                         '</style></head><body>',
                         '<div class="header">',
                         '  <div class="hospital">Pascual General Hospital</div>',
@@ -10014,7 +10014,7 @@ function NurseDashboard() {
                         '</div>',
                         (hmoProv || hmoCard || loaNum) ? (
                           '<div class="section hmo-section">' +
-                          '  <div class="section-title" style="color:#1e40af">' + (hmoStatus ? '✅ ' + hmoStatus + ' · HMO COVERAGE' : '✅ HMO COVERAGE') + '</div>' +
+                          '  <div class="section-title">' + (hmoStatus ? hmoStatus + ' · HMO COVERAGE' : 'HMO COVERAGE') + '</div>' +
                           (hmoProv ? ('  <div class="row"><b>HMO Provider:</b><span>' + hmoProv + '</span></div>') : '') +
                           (hmoCard ? ('  <div class="row"><b>HMO Card #:</b><span>' + hmoCard + '</span></div>') : '') +
                           (loaNum ? ('  <div class="row"><b>LOA #:</b><span>' + loaNum + '</span></div>') : '') +
@@ -10022,13 +10022,13 @@ function NurseDashboard() {
                         ) : '',
                         '<div class="section">',
                         '  <div class="section-title">Services / Procedure</div>',
-                        '  <div style="font-weight:700">' + (routeLabel ? '✓ ' + routeLabel : '') + '</div>',
-                        routeTarget ? ('  <div style="margin-top:5px">' + routeTarget + '</div>') : '',
+                        '  <div style="font-weight:700;color:#000">' + (routeLabel ? routeLabel : '') + '</div>',
+                        routeTarget ? ('  <div style="margin-top:5px;color:#000">' + routeTarget + '</div>') : '',
                         '</div>',
                         vitalsLine ? (
                           '<div class="section">' +
                           '  <div class="section-title">Vitals on Intake</div>' +
-                          '  <div style="font-weight:700">' + vitalsLine + '</div>' +
+                          '  <div style="font-weight:700;color:#000">' + vitalsLine + '</div>' +
                           '</div>'
                         ) : '',
                         '<div class="section">',
@@ -10036,7 +10036,7 @@ function NurseDashboard() {
                         '  <div class="row"><b>Date / Time:</b><span>' + dateStr + '</span></div>',
                         '</div>',
                         '<div class="footer">',
-                        '  <div class="warn">⚠️ PRESENT THIS RECEIPT TO CASHIER ⚠️</div>',
+                        '  <div class="warn">PRESENT THIS RECEIPT TO CASHIER</div>',
                         '  <div class="foot-sub">for final settlement BEFORE any procedure or exam.</div>',
                         '</div>',
                         '</body></html>'
