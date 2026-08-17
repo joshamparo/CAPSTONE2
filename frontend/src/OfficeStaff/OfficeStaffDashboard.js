@@ -2874,33 +2874,6 @@ export default function OfficeStaffDashboard({ mode }) {
               </button>
             </div>
             <div className="office-row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 9,
-                  border: '1px solid #fca5a5',
-                  background: 'linear-gradient(180deg,#fee2e2 0%, #fecaca 100%)',
-                  color: '#991b1b',
-                  fontWeight: 900,
-                  fontSize: 11.5,
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 2px rgba(127,29,29,0.08)'
-                }}
-                disabled={!user || hmoQueueLoading}
-                title="Debug DB row counts & contents"
-                onClick={async () => {
-                  try {
-                    const res = await fetchJson('/api/billing/hmo-debug', { apiBase: API_BASE, headers: buildHeaders(user) });
-                    const safe = typeof res === 'object' && res ? res : { result: String(res || 'empty') };
-                    alert(JSON.stringify(safe, null, 2).slice(0, 4000));
-                  } catch (err) {
-                    alert('DEBUG ERROR: ' + String(err.message || err));
-                  }
-                }}
-              >
-                🔍 Debug DB
-              </button>
               {[
                 { key: 'approved', label: 'Approved Only' },
                 { key: 'all', label: 'All Claims · Audit' }
@@ -2929,6 +2902,51 @@ export default function OfficeStaffDashboard({ mode }) {
               {Number(hmoQueue.totalCount) > 0 ? (
                 <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', fontSize: '0.8rem', fontWeight: 700 }}>
                   Showing {(Number(hmoQueue.page) - 1) * Number(hmoQueue.perPage) + 1}–{Math.min(Number(hmoQueue.page) * Number(hmoQueue.perPage), Number(hmoQueue.totalCount))} of {Number(hmoQueue.totalCount)}
+                </div>
+              ) : null}
+              {Number(hmoQueue.totalCount) > Number(hmoQueue.perPage) ? (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    type="button"
+                    aria-label="Previous page"
+                    disabled={Number(hmoQueue.page) <= 1 || hmoQueueLoading || !user}
+                    onClick={() => { if (Number(hmoQueue.page) > 1) { setHmoQueuePage(Number(hmoQueue.page) - 1); } }}
+                    style={{
+                      width: 34, height: 34,
+                      borderRadius: 9,
+                      border: Number(hmoQueue.page) <= 1 || hmoQueueLoading || !user ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
+                      background: Number(hmoQueue.page) <= 1 || hmoQueueLoading || !user ? '#f8fafc' : '#ffffff',
+                      color: Number(hmoQueue.page) <= 1 || hmoQueueLoading || !user ? '#cbd5e1' : '#334155',
+                      fontSize: '0.95rem', fontWeight: 900,
+                      cursor: Number(hmoQueue.page) <= 1 || hmoQueueLoading || !user ? 'not-allowed' : 'pointer',
+                      boxShadow: Number(hmoQueue.page) <= 1 || hmoQueueLoading || !user ? 'none' : '0 1px 2px rgba(15,23,42,0.05)',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0
+                    }}
+                  >
+                    ‹
+                  </button>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 10px', borderRadius: 9, background: '#ffffff', border: '1px solid #e2e8f0', color: '#334155', fontSize: '0.8rem', fontWeight: 700, minWidth: 60, justifyContent: 'center' }}>
+                    {Number(hmoQueue.page)} / {Math.max(1, Math.ceil(Number(hmoQueue.totalCount) / Number(hmoQueue.perPage)))}
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Next page"
+                    disabled={Number(hmoQueue.page) >= Math.max(1, Math.ceil(Number(hmoQueue.totalCount) / Number(hmoQueue.perPage))) || hmoQueueLoading || !user}
+                    onClick={() => { const tp = Math.ceil(Number(hmoQueue.totalCount) / Number(hmoQueue.perPage)); if (Number(hmoQueue.page) < tp) { setHmoQueuePage(Number(hmoQueue.page) + 1); } }}
+                    style={{
+                      width: 34, height: 34,
+                      borderRadius: 9,
+                      border: Number(hmoQueue.page) >= Math.max(1, Math.ceil(Number(hmoQueue.totalCount) / Number(hmoQueue.perPage))) || hmoQueueLoading || !user ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
+                      background: Number(hmoQueue.page) >= Math.max(1, Math.ceil(Number(hmoQueue.totalCount) / Number(hmoQueue.perPage))) || hmoQueueLoading || !user ? '#f8fafc' : '#ffffff',
+                      color: Number(hmoQueue.page) >= Math.max(1, Math.ceil(Number(hmoQueue.totalCount) / Number(hmoQueue.perPage))) || hmoQueueLoading || !user ? '#cbd5e1' : '#334155',
+                      fontSize: '0.95rem', fontWeight: 900,
+                      cursor: Number(hmoQueue.page) >= Math.max(1, Math.ceil(Number(hmoQueue.totalCount) / Number(hmoQueue.perPage))) || hmoQueueLoading || !user ? 'not-allowed' : 'pointer',
+                      boxShadow: Number(hmoQueue.page) >= Math.max(1, Math.ceil(Number(hmoQueue.totalCount) / Number(hmoQueue.perPage))) || hmoQueueLoading || !user ? 'none' : '0 1px 2px rgba(15,23,42,0.05)',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0
+                    }}
+                  >
+                    ›
+                  </button>
                 </div>
               ) : null}
             </div>
@@ -3101,44 +3119,6 @@ export default function OfficeStaffDashboard({ mode }) {
             </table>
           </div>
 
-          {!hmoQueueLoading && Number(hmoQueue.totalPages) > 1 ? (
-            <div style={{
-              marginTop: 12,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: '12px 14px',
-              borderTop: '1px solid #f1f5f9',
-              borderRadius: 10,
-              background: '#fafafa',
-              flexWrap: 'wrap'
-            }}>
-              <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
-                Page <span style={{ fontWeight: 900, color: '#0f172a' }}>{Number(hmoQueue.page)}</span> of {Number(hmoQueue.totalPages)} · 8 rows per page
-              </div>
-              <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                <button
-                  type="button"
-                  className="office-btn ghost"
-                  style={{ padding: '6px 12px', fontSize: '0.82rem', height: 34, borderRadius: 10 }}
-                  disabled={Number(hmoQueue.page) <= 1 || hmoQueueLoading}
-                  onClick={() => { const np = Math.max(1, Number(hmoQueue.page) - 1); setHmoQueuePage(np); }}
-                >
-                  ← Prev
-                </button>
-                <button
-                  type="button"
-                  className="office-btn ghost"
-                  style={{ padding: '6px 12px', fontSize: '0.82rem', height: 34, borderRadius: 10 }}
-                  disabled={Number(hmoQueue.page) >= Number(hmoQueue.totalPages) || hmoQueueLoading}
-                  onClick={() => { const np = Math.min(Number(hmoQueue.totalPages), Number(hmoQueue.page) + 1); setHmoQueuePage(np); }}
-                >
-                  Next →
-                </button>
-              </div>
-            </div>
-          ) : null}
         </div>
       ) : null}
 
