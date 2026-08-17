@@ -749,7 +749,7 @@ export default function OfficeStaffDashboard({ mode }) {
       const result = await fetchJson(`/api/billing/search-by-ref?ref=${encodeURIComponent(refRaw)}`, {
         apiBase: API_BASE,
         headers: buildHeaders(user),
-        timeoutMs: 15000
+        timeoutMs: 60000
       });
 
       const matchedInvoiceIds = Array.isArray(result?.matched_invoice_ids)
@@ -775,7 +775,8 @@ export default function OfficeStaffDashboard({ mode }) {
 
       const data = await fetchJson(`/api/billing/hmo-queue?${params.toString()}`, {
         apiBase: API_BASE,
-        headers: buildHeaders(user)
+        headers: buildHeaders(user),
+        timeoutMs: 60000
       });
       const safe = data && typeof data === 'object' && !Array.isArray(data)
         ? {
@@ -815,8 +816,11 @@ export default function OfficeStaffDashboard({ mode }) {
         setTimeout(() => setHmoHighlightRowId(null), 3100);
       }
     } catch (e) {
+      const msg = String(e?.message || e || '').toLowerCase().includes('timeout') || String(e?.message || e || '').toLowerCase().includes('abort')
+        ? `⏱️ Request timed out searching "${refRaw}".\n\nRetry after 2 seconds, or use the regular Search bar.`
+        : `⚠️ Reference search error: ${String(e.message || e)}\n\nIf this persists, use the regular Search bar instead and type "${refRaw}".`;
       setModalType('success');
-      setSuccessMessage(`⚠️ Reference search error: ${String(e.message || e)}\n\nIf this persists, use the regular Search bar instead and type "${refRaw}".`);
+      setSuccessMessage(msg);
       setShowSuccessModal(true);
     } finally {
       setHmoRefSearchLoading(false);
@@ -2958,19 +2962,23 @@ export default function OfficeStaffDashboard({ mode }) {
             <div className="office-row" style={{ gap: 10, alignItems: 'center' }}>
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                border: '2px solid #ef4444', borderRadius: 10, padding: '4px 8px 4px 10px',
-                background: '#fef2f2', marginRight: 4, flexShrink: 0
+                border: '1px solid #cbd5e1', borderRadius: 10, padding: '4px 8px 4px 10px',
+                background: '#ffffff', marginRight: 4, flexShrink: 0
               }}>
-                <span style={{color:'#b91c1c',fontWeight:800,fontSize:'0.85rem'}}>🔎 Ref #:</span>
+                <span style={{color:'#475569',fontWeight:700,fontSize:'0.85rem'}}>🔎 Ref #:</span>
                 <input
                   type="text"
                   value={hmoRefSearch}
-                  onChange={(e) => setHmoRefSearch(e.target.value)}
+                  onChange={(e) => {
+                    const raw = String(e.target.value || '').toUpperCase();
+                    const cleaned = raw.replace(/[^A-Z0-9-]/g, '');
+                    setHmoRefSearch(cleaned);
+                  }}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleRefGoSearch(); }}
                   placeholder="PGH260817-00042"
                   style={{
-                    border:'none',background:'#fff',borderRadius:7,padding:'6px 10px',
-                    fontSize:'0.9rem',fontWeight:700,width:200,outline:'none'
+                    border:'1px solid #e2e8f0',background:'#f8fafc',borderRadius:7,padding:'6px 10px',
+                    fontSize:'0.9rem',fontWeight:600,width:200,outline:'none'
                   }}
                 />
                 <button
@@ -2978,8 +2986,8 @@ export default function OfficeStaffDashboard({ mode }) {
                   className="office-btn primary"
                   onClick={handleRefGoSearch}
                   disabled={hmoRefSearchLoading || !hmoRefSearch.trim()}
-                  style={{background:'#ef4444',borderColor:'#ef4444',padding:'7px 14px'}}
-                >{hmoRefSearchLoading ? '…' : 'GO'}</button>
+                  style={{padding:'7px 14px'}}
+                >{hmoRefSearchLoading ? '…' : 'Search'}</button>
               </div>
               <div className="input-wrapper-relative">
                 <Search size={18} className="absolute-icon-left text-slate-400" />

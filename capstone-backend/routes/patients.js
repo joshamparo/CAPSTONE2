@@ -1400,7 +1400,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS hmo_status TEXT NULL`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_philhealth BOOLEAN DEFAULT FALSE`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
-            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null)
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
+            prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_appointments_patient_reference ON public.appointments(patient_reference)`).catch(() => null),
+            prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_invoices_patient_reference ON public.billing_invoices(patient_reference)`).catch(() => null),
+            prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_patient_reference ON public.billing_hmo_claims(patient_reference)`).catch(() => null)
           ]);
         } catch (_schemaWarm) {}
 

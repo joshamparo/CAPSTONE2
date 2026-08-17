@@ -1117,7 +1117,10 @@ router.get('/hmo-debug', async (req, res) => {
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS hmo_status TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_philhealth BOOLEAN DEFAULT FALSE`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
-        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null)
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_appointments_patient_reference ON public.appointments(patient_reference)`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_invoices_patient_reference ON public.billing_invoices(patient_reference)`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_patient_reference ON public.billing_hmo_claims(patient_reference)`).catch(() => null)
       ]).catch(() => {});
       // Backfill billing_invoices.is_hmo = TRUE where invoice was linked to patients/appointments with HMO
       prisma.$executeRawUnsafe(`
@@ -1317,6 +1320,9 @@ router.get('/hmo-queue', async (req, res) => {
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_philhealth BOOLEAN DEFAULT FALSE`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_appointments_patient_reference ON public.appointments(patient_reference)`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_invoices_patient_reference ON public.billing_invoices(patient_reference)`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_patient_reference ON public.billing_hmo_claims(patient_reference)`).catch(() => null),
         prisma.$executeRawUnsafe(`
           CREATE TABLE IF NOT EXISTS public.billing_hmo_claims (
             id bigserial PRIMARY KEY,
@@ -2237,7 +2243,10 @@ router.get('/generate-ref', async (req, res) => {
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.appointments ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
-        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS company TEXT NULL`).catch(() => null)
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS company TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_appointments_patient_reference ON public.appointments(patient_reference)`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_invoices_patient_reference ON public.billing_invoices(patient_reference)`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_patient_reference ON public.billing_hmo_claims(patient_reference)`).catch(() => null)
       ]).catch(() => {});
     } catch (_) { /* ignore */ }
 
@@ -2395,7 +2404,10 @@ router.get('/search-by-ref', async (req, res) => {
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL UNIQUE`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.appointments ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
-        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null)
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_reference TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_appointments_patient_reference ON public.appointments(patient_reference)`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_invoices_patient_reference ON public.billing_invoices(patient_reference)`).catch(() => null),
+        prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_patient_reference ON public.billing_hmo_claims(patient_reference)`).catch(() => null)
       ]).catch(() => {});
     } catch (_) { /* ignore */ }
 
