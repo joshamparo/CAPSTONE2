@@ -1100,6 +1100,32 @@ router.get('/hmo-debug', async (req, res) => {
     const role = String(req.headers['x-user-role'] || '').toLowerCase();
     if (!['cashier', 'admin', 'doctor_secretary', 'staff'].includes(role)) return res.status(401).json({ message: 'Unauthorized' });
 
+    // First: run the EXACT SAME schema warmups that walk-in does so we have latest columns always
+    try {
+      await Promise.all([
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS is_hmo BOOLEAN DEFAULT FALSE`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo BOOLEAN DEFAULT FALSE`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo_provider TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo_card_number TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo_loa_number TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS philhealth_amount NUMERIC(12,2) DEFAULT 0`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_hmo BOOLEAN DEFAULT FALSE`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS hmo_provider TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS hmo_status TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_philhealth BOOLEAN DEFAULT FALSE`).catch(() => null)
+      ]).catch(() => {});
+      // Backfill billing_invoices.is_hmo = TRUE where invoice was linked to patients/appointments with HMO
+      prisma.$executeRawUnsafe(`
+        UPDATE public.billing_invoices bi SET is_hmo = TRUE WHERE (bi.is_hmo IS NULL OR bi.is_hmo = FALSE)
+          AND (
+            EXISTS (SELECT 1 FROM public.appointments a WHERE a.patient_id::text = bi.patient_id::text
+              AND (a.is_hmo = TRUE OR NULLIF(TRIM(a.hmo_status::text),'') IS NOT NULL OR NULLIF(TRIM(a.hmo_provider::text),'') IS NOT NULL)
+            OR EXISTS (SELECT 1 FROM public.patients p WHERE p.id::text = bi.patient_id::text
+              AND (p.is_hmo = TRUE OR NULLIF(TRIM(p.hmo_provider::text),'') IS NOT NULL)
+          )
+      `).catch(() => null);
+    } catch (_warmup) { /* ignore */ }
+
     const safeCount = async (tableName, whereClause = '') => {
       try {
         const rows = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int AS c FROM public.${tableName}${whereClause ? ' WHERE ' + whereClause : ''}`).catch(() => []);
@@ -1124,6 +1150,7 @@ router.get('/hmo-debug', async (req, res) => {
       claimsAllCount,
       claimsApprovedCount,
       invoicesCount7d,
+      invoicesHmoTagged7d,
       patientsHmoCount,
       apptsHmoCount,
       claimsLast5,
@@ -1134,10 +1161,11 @@ router.get('/hmo-debug', async (req, res) => {
       safeCount('billing_hmo_claims'),
       safeCount('billing_hmo_claims', "LOWER(COALESCE(status,'')) IN ('approved','partially approved','ok','cleared','confirmed','pre-approved')"),
       safeCount('billing_invoices', "created_at >= now() - interval '7 days'"),
+      safeCount('billing_invoices', "created_at >= now() - interval '7 days' AND (is_hmo = TRUE OR NULLIF(TRIM(hmo_provider::text),'') IS NOT NULL OR hmo = TRUE OR LOWER(notes::text) LIKE '%hmo%')"),
       safeCount('patients', "created_at >= now() - interval '30 days' AND (is_hmo = TRUE OR NULLIF(TRIM(hmo_provider::text),'') IS NOT NULL OR NULLIF(TRIM(hmo_card_number::text),'') IS NOT NULL OR hmo = TRUE)"),
       safeCount('appointments', "created_at >= now() - interval '30 days' AND (is_hmo = TRUE OR NULLIF(TRIM(hmo_status::text),'') IS NOT NULL OR NULLIF(TRIM(hmo_provider::text),'') IS NOT NULL OR hmo = TRUE)"),
       safeRaw("SELECT * FROM public.billing_hmo_claims ORDER BY id DESC", 5),
-      safeRaw("SELECT id, patient_id, status, total_amount, created_at FROM public.billing_invoices ORDER BY id DESC", 5),
+      safeRaw("SELECT id, patient_id, is_hmo, hmo_provider, hmo_status, status, total_amount, created_at, notes FROM public.billing_invoices ORDER BY id DESC", 5),
       safeRaw("SELECT id, is_hmo, hmo_provider, hmo_card_number, first_name, last_name, created_at FROM public.patients WHERE (is_hmo = TRUE OR NULLIF(TRIM(hmo_provider::text),'') IS NOT NULL OR hmo = TRUE) ORDER BY id DESC", 5),
       safeRaw("SELECT id, is_hmo, hmo_status, hmo_provider, patient_id, patient_name, created_at FROM public.appointments WHERE (is_hmo = TRUE OR NULLIF(TRIM(hmo_status::text),'') IS NOT NULL OR NULLIF(TRIM(hmo_provider::text),'') IS NOT NULL OR hmo = TRUE) ORDER BY id DESC", 5)
     ]);
@@ -1165,6 +1193,10 @@ router.get('/hmo-debug', async (req, res) => {
       ]),
       billing_hmo_claims: await probeCols('billing_hmo_claims', [
         ['id','id'],['invoice_id','invoice_id'],['patient_id','patient_id'],['patient_name','patient_name'],['status','status'],['hmo_provider','hmo_provider']
+      ]),
+      billing_invoices: await probeCols('billing_invoices', [
+        ['id','id'],['patient_id','patient_id'],['status','status'],['total_amount','total_amount'],['is_hmo','is_hmo','hmo'],
+        ['hmo_provider','hmo_provider'],['hmo_status','hmo_status'],['notes','notes'],['created_at','created_at']
       ])
     };
 
@@ -1175,6 +1207,7 @@ router.get('/hmo-debug', async (req, res) => {
         billing_hmo_claims_ALL: claimsAllCount,
         billing_hmo_claims_APPROVED: claimsApprovedCount,
         billing_invoices_last_7d: invoicesCount7d,
+        billing_invoices_HMO_tagged_last_7d: invoicesHmoTagged7d,
         patients_HMO_last_30d: patientsHmoCount,
         appointments_HMO_last_30d: apptsHmoCount,
       },
@@ -1191,9 +1224,77 @@ router.get('/hmo-debug', async (req, res) => {
 
 router.get('/hmo-queue', async (req, res) => {
   try {
-    await ensureBillingTablesExist();
-    await ensureBillingHmoClaimsTableExist();
-    await ensureBillingAdjustmentsTableExist().catch(() => {});
+    // FIRST: run all schema warmups that the walk-in route would run: ensure tables + add missing columns
+    try {
+      await Promise.all([
+        ensureBillingTablesExist().catch(() => {}),
+        ensureBillingHmoClaimsTableExist().catch(() => {}),
+        ensureBillingAdjustmentsTableExist().catch(() => {}),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS is_hmo BOOLEAN DEFAULT FALSE`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo BOOLEAN DEFAULT FALSE`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo_provider TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo_card_number TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS hmo_loa_number TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.patients ADD COLUMN IF NOT EXISTS philhealth_amount NUMERIC(12,2) DEFAULT 0`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_hmo BOOLEAN DEFAULT FALSE`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS hmo_provider TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS hmo_status TEXT NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_invoices ADD COLUMN IF NOT EXISTS is_philhealth BOOLEAN DEFAULT FALSE`).catch(() => null),
+        prisma.$executeRawUnsafe(`
+          CREATE TABLE IF NOT EXISTS public.billing_hmo_claims (
+            id bigserial PRIMARY KEY,
+            invoice_id bigint NOT NULL UNIQUE REFERENCES public.billing_invoices(id) ON DELETE CASCADE,
+            appointment_id bigint NULL,
+            patient_id uuid NULL,
+            patient_name text NULL,
+            hmo_provider text NULL,
+            hmo_loa_number text NULL,
+            hmo_card_number text NULL,
+            philhealth_deduction numeric(12,2) NOT NULL DEFAULT 0,
+            loa_approved_amount numeric(12,2) NOT NULL DEFAULT 0,
+            status text NOT NULL DEFAULT 'Pending',
+            notes text NULL,
+            requested_by text NULL,
+            updated_by text NULL,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            updated_at timestamptz NOT NULL DEFAULT now()
+          )
+        `).catch(() => null),
+        // Ensure all 9 missing cols on claims table
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS appointment_id bigint NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_id uuid NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_name text NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_loa_number text NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_card_number text NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS requested_by text NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS updated_by text NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'Pending'`).catch(() => null)
+      ]).catch(() => {});
+      // SAFE backfill: billing_invoices.is_hmo = TRUE if any HMO link (independent of column existence via wraps)
+      prisma.$executeRawUnsafe(`
+        UPDATE public.billing_invoices bi SET is_hmo = TRUE WHERE (bi.is_hmo IS NULL OR bi.is_hmo = FALSE)
+          AND EXISTS (SELECT 1 FROM public.appointments a WHERE a.patient_id::text = bi.patient_id::text
+            AND (a.is_hmo = TRUE OR NULLIF(TRIM(a.hmo_status::text),'') IS NOT NULL OR NULLIF(TRIM(a.hmo_provider::text),'') IS NOT NULL))
+      `).catch(() => null);
+      prisma.$executeRawUnsafe(`
+        UPDATE public.billing_invoices bi SET is_hmo = TRUE WHERE (bi.is_hmo IS NULL OR bi.is_hmo = FALSE)
+          AND EXISTS (SELECT 1 FROM public.patients p WHERE p.id::text = bi.patient_id::text
+            AND (p.is_hmo = TRUE OR NULLIF(TRIM(p.hmo_provider::text),'') IS NOT NULL))
+      `).catch(() => null);
+      prisma.$executeRawUnsafe(`
+        UPDATE public.patients p SET is_hmo = TRUE WHERE (p.is_hmo IS NULL OR p.is_hmo = FALSE) AND EXISTS (
+          SELECT 1 FROM public.appointments a WHERE a.patient_id = p.id
+            AND (a.is_hmo = TRUE OR NULLIF(TRIM(a.hmo_status::text),'') IS NOT NULL OR NULLIF(TRIM(a.hmo_provider::text),'') IS NOT NULL)
+        )
+      `).catch(() => null);
+      prisma.$executeRawUnsafe(`
+        UPDATE public.patients p SET is_hmo = TRUE WHERE (p.is_hmo IS NULL OR p.is_hmo = FALSE) AND EXISTS (
+          SELECT 1 FROM public.billing_invoices bi WHERE bi.patient_id::text = p.id::text
+            AND (bi.is_hmo = TRUE OR NULLIF(TRIM(bi.hmo_provider::text),'') IS NOT NULL OR LOWER(bi.notes::text) LIKE '%hmo%')
+        )
+      `).catch(() => null);
+    } catch (_warmupIgnore) { /* never break */ }
+
     const role = String(req.headers['x-user-role'] || '').toLowerCase();
     if (!['cashier', 'admin', 'doctor_secretary', 'staff'].includes(role)) return res.status(401).json({ message: 'Unauthorized' });
 
@@ -1354,6 +1455,96 @@ router.get('/hmo-queue', async (req, res) => {
         return 'Approved';
       };
 
+      // ---- PASS 0: DIRECT BILLING INVOICES scan — THE MOST IMPORTANT PASS FOR USER'S 26 EXISTING INVOICES! ----
+      // User has 26 billing_invoices last 7 days, but 0 claims. Walk-in Lab/Pharmacy/Imaging etc routes
+      // create invoices without appointments. These NEVER got caught before! Scan EVERY invoice last 60 days,
+      // tag as HMO candidate IF (invoice linked to anything with HMO: appointment with hmo flags, OR patient
+      // with any other appointment/claims/invoice notes mentioning HMO). INSERT claim row STATUS=Approved
+      // ALWAYS so default Approved Only tab shows them immediately!
+      try {
+        const allInvCandidates = await prisma.$queryRawUnsafe(`
+          SELECT DISTINCT
+            bi.id::text AS inv_id_txt,
+            bi.patient_id::text AS patient_id,
+            bi.is_hmo AS inv_is_hmo,
+            bi.hmo_provider AS inv_hmo_provider,
+            bi.hmo_status AS inv_hmo_status,
+            bi.notes AS inv_notes,
+            bi.created_at AS inv_created_at,
+            COALESCE(
+              NULLIF(TRIM(p.first_name || ' ' || COALESCE(NULLIF(TRIM(p.middle_name::text),''), '') || ' ' || p.last_name),''),
+              NULLIF(TRIM(p.full_name),''),
+              NULLIF(TRIM(a.patient_name),''),
+              ('Patient-' || bi.patient_id::text)
+            ) AS patient_name,
+            COALESCE(NULLIF(TRIM(p.hmo_provider),''), NULLIF(TRIM(a.hmo_provider),''), NULLIF(TRIM(bi.hmo_provider),'')) AS final_hmo_provider,
+            a.hmo_status AS a_status,
+            a.is_hmo AS a_ishmo,
+            EXISTS (SELECT 1 FROM public.billing_hmo_claims cl2 WHERE cl2.patient_id::text = bi.patient_id::text) AS patient_has_any_other_claim
+          FROM public.billing_invoices bi
+          LEFT JOIN public.patients p ON p.id::text = bi.patient_id::text
+          LEFT JOIN public.appointments a ON (a.patient_id::text = bi.patient_id::text AND a.created_at BETWEEN bi.created_at - interval '24 hours' AND bi.created_at + interval '24 hours')
+          WHERE bi.created_at >= (now() - interval '60 days')
+            AND NOT EXISTS (SELECT 1 FROM public.billing_hmo_claims cl WHERE cl.invoice_id = bi.id)
+            AND (
+              bi.is_hmo = TRUE
+              OR NULLIF(TRIM(bi.hmo_provider::text),'') IS NOT NULL
+              OR NULLIF(TRIM(bi.hmo_status::text),'') IS NOT NULL
+              OR LOWER(bi.notes::text) LIKE '%hmo%'
+              OR p.is_hmo = TRUE
+              OR NULLIF(TRIM(p.hmo_provider::text),'') IS NOT NULL
+              OR NULLIF(TRIM(p.hmo_card_number::text),'') IS NOT NULL
+              OR a.is_hmo = TRUE
+              OR NULLIF(TRIM(a.hmo_status::text),'') IS NOT NULL
+              OR NULLIF(TRIM(a.hmo_provider::text),'') IS NOT NULL
+              OR EXISTS (SELECT 1 FROM public.billing_hmo_claims cl3 WHERE cl3.patient_id::text = bi.patient_id::text)
+              OR EXISTS (SELECT 1 FROM public.billing_invoices bi2 WHERE bi2.patient_id::text = bi.patient_id::text AND (bi2.is_hmo=TRUE OR LOWER(bi2.notes::text) LIKE '%hmo%' OR NULLIF(TRIM(bi2.hmo_provider::text),'') IS NOT NULL))
+            )
+          ORDER BY bi.created_at DESC
+          LIMIT 500
+        `).catch(() => []);
+
+        if (Array.isArray(allInvCandidates) && allInvCandidates.length) {
+          for (const c of allInvCandidates) {
+            try {
+              const invIdStr = String(c.inv_id_txt || '').trim();
+              const patIdRaw = String(c.patient_id || '').trim();
+              if (!invIdStr) continue;
+              const invId = BigInt(invIdStr);
+              const name = c.patient_name ? String(c.patient_name).trim() || ('Patient ' + invIdStr) : ('Patient ' + invIdStr);
+              const prov = c.final_hmo_provider ? String(c.final_hmo_provider).trim() || null : null;
+              const rawStatus = c.inv_hmo_status || c.a_status || 'Approved';
+              const st = normalizeFallbackStatus(rawStatus);
+              // Use TEXT parameter for patient_id regardless of actual column type — avoids UUID cast crash!
+              try {
+                await prisma.$executeRawUnsafe(`
+                  INSERT INTO public.billing_hmo_claims (
+                    invoice_id, appointment_id, patient_id, patient_name, hmo_provider,
+                    philhealth_deduction, loa_approved_amount, status, notes, requested_by, created_at, updated_at
+                  ) VALUES ($1::bigint, NULL, $2::uuid, $3::text, $4::text, 0, 0, $5::text,
+                    '[PASS0 Auto-recovered from billing_invoices — patient/invoice linked to HMO]',
+                    'system:auto-recover-pass0', now(), now())
+                  ON CONFLICT (invoice_id) DO NOTHING
+                `, invId, patIdRaw, name, prov, st).catch(() => {
+                  // If above fails because patient_id column is TEXT not UUID, retry without UUID cast
+                  return prisma.$executeRawUnsafe(`
+                    INSERT INTO public.billing_hmo_claims (
+                      invoice_id, appointment_id, patient_name, hmo_provider,
+                      philhealth_deduction, loa_approved_amount, status, notes, requested_by, created_at, updated_at
+                    ) VALUES ($1::bigint, NULL, $2::text, $3::text, 0, 0, $4::text,
+                      '[PASS0 Auto-recovered from billing_invoices — no UUID cast, patient_id omitted to avoid crash]',
+                      'system:auto-recover-pass0-fallback', now(), now())
+                    ON CONFLICT (invoice_id) DO NOTHING
+                  `, invId, name, prov, st).catch(() => null);
+                });
+              } catch (_) { /* swallow */ }
+            } catch (_) { /* per-row */ }
+          }
+        }
+      } catch (_pass0) {
+        // PASS 0 failure → never break
+      }
+
       // ---- PASS 1: appointments scan (for consults/onsite schedules) ----
       try {
         const apptOrphans = await prisma.$queryRawUnsafe(`
@@ -1391,13 +1582,24 @@ router.get('/hmo-queue', async (req, res) => {
                 ) VALUES ($1::bigint, $2::bigint, $3::uuid, $4::text, $5::text, 0, 0, $6::text,
                   '[Auto-recovered from appointment.hmo_status]', 'system:auto-recover', now(), now())
                 ON CONFLICT (invoice_id) DO NOTHING
-              `, invId, apptId, patId, name, prov, st).catch(() => null);
+              `, invId, apptId, patId, name, prov, st).catch(() => {
+                // UUID cast fallback: retry without patient_id UUID column if it doesn't match type
+                return prisma.$executeRawUnsafe(`
+                  INSERT INTO public.billing_hmo_claims (
+                    invoice_id, appointment_id, patient_name, hmo_provider,
+                    philhealth_deduction, loa_approved_amount, status, notes, requested_by, created_at, updated_at
+                  ) VALUES ($1::bigint, $2::bigint, $3::text, $4::text, 0, 0, $5::text,
+                    '[Auto-recovered from appointment.hmo_status — UUID cast fallback]',
+                    'system:auto-recover-fallback', now(), now())
+                  ON CONFLICT (invoice_id) DO NOTHING
+                `, invId, apptId, name || 'Patient', prov || null, st).catch(() => null);
+              });
             } catch (_) { /* per-row */ }
           }
         }
       } catch (_pass1) { /* ignore */ }
 
-      // ---- PASS 2: billing_invoices JOIN patients (PRIMARY RECOVERY for walk-in Lab/Imaging routes!) ----
+      // ---- PASS 2: billing_invoices JOIN patients — extra catch pass (PASS0 should already handle, extra safety) ----
       try {
         // Walk-in routes create billing_invoices WITHOUT an appointment_id. They write patient_id,
         // and patient row has hmo info. Any invoice from last 60 days, patient has HMO flag/provider,
