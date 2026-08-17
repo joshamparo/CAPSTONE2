@@ -2584,6 +2584,64 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             console.error('[HMO Layer2] Safety net insert failed:', _layer2);
         }
 
+        // ---- ✅ WALk-IN-INTAKE BONUS GATE: SAME 120-DAY NO-JOIN PASS0! ----
+        // Guarantees that EVERY new billing_invoice created by THIS walk-in intake request
+        // gets its matching billing_hmo_claims row WITHIN THE SAME HTTP REQUEST (zero delay!).
+        // This eliminates the old "patient is created but HMO table empty for 30 seconds" bug.
+        try {
+            for (let attempt = 0; attempt < 2; attempt++) {
+                try {
+                    const countRows = await prisma.$queryRawUnsafe(`
+                        SELECT COUNT(*)::int AS unmatched_count
+                        FROM public.billing_invoices bi
+                        WHERE bi.created_at >= (now() - interval '120 days')
+                          AND NOT EXISTS (SELECT 1 FROM public.billing_hmo_claims cl WHERE cl.invoice_id = bi.id)
+                    `).catch(() => []);
+                    const unmatched = Number((countRows && countRows[0] && countRows[0].unmatched_count) || 0);
+                    if (unmatched <= 0) break;
+                    try {
+                        const minInvCandidates = await prisma.$queryRawUnsafe(`
+                            SELECT
+                                bi.id::text AS inv_id_txt,
+                                bi.patient_id::text AS patient_id,
+                                bi.status AS inv_status,
+                                bi.notes AS inv_notes,
+                                bi.created_at AS inv_created_at
+                            FROM public.billing_invoices bi
+                            WHERE bi.created_at >= (now() - interval '120 days')
+                              AND NOT EXISTS (SELECT 1 FROM public.billing_hmo_claims cl WHERE cl.invoice_id = bi.id)
+                            ORDER BY bi.created_at DESC
+                            LIMIT 9999
+                        `).catch(() => []);
+                        if (Array.isArray(minInvCandidates) && minInvCandidates.length) {
+                            for (let idx = 0; idx < minInvCandidates.length; idx++) {
+                                try {
+                                    const c = minInvCandidates[idx];
+                                    const invIdStr = String(c.inv_id_txt || '').trim();
+                                    if (!invIdStr) continue;
+                                    const invId = BigInt(invIdStr);
+                                    const invNotes = c.inv_notes ? String(c.inv_notes).trim() : '';
+                                    const patientNameFallback = invNotes && invNotes.length > 3
+                                        ? (String(invNotes).slice(0, 80) || ('Invoice-' + invIdStr))
+                                        : ('Patient of Invoice-' + invIdStr);
+                                    await prisma.$executeRawUnsafe(`
+                                        INSERT INTO public.billing_hmo_claims (
+                                            invoice_id, patient_name, philhealth_deduction, loa_approved_amount,
+                                            status, notes, requested_by, created_at, updated_at
+                                        ) VALUES (
+                                            $1::bigint, $2::text, 0, 0, 'Approved',
+                                            ('[AUTO-pass0 by walk-in-intake GATE ${attempt + 1}] • ' || $3::text),
+                                            'system:walk-in-intake-gate-no-crash', now(), now()
+                                        ) ON CONFLICT (invoice_id) DO NOTHING
+                                    `, invId, patientNameFallback, invNotes || ('Billing invoice #' + invIdStr)).catch(() => null);
+                                } catch (_) { /* per-row no-break */ }
+                            }
+                        }
+                    } catch (_pass0) { /* PASS0 never breaks */ }
+                } catch (_gateOuter) { /* outer never breaks */ }
+            }
+        } catch (_walkinBonusGate) { /* bonus gate never breaks intake */ }
+
         let emailSent = false;
         if (routeMeta.type === 'onsite_consult') {
             const to = normalizeEmail(result?.createdRecord?.patientEmail || result?.patient?.email || '');

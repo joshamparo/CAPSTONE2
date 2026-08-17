@@ -3059,7 +3059,13 @@ export default function OfficeStaffDashboard({ mode }) {
                           <button
                             type="button"
                             className="office-btn ghost"
-                            onClick={() => setHmoQuickEdit(row)}
+                            onClick={() => {
+                              try {
+                                setHmoQuickEdit(row);
+                              } catch (err) {
+                                alert('⚠️ Update error: ' + String(err?.message || err));
+                              }
+                            }}
                           >
                             Update
                           </button>
@@ -3067,14 +3073,18 @@ export default function OfficeStaffDashboard({ mode }) {
                             type="button"
                             className="office-btn"
                             onClick={async () => {
-                              if (row.invoice_id) {
-                                await openInvoice(String(row.invoice_id));
-                                setView('billing');
-                              } else {
-                                setSuccessMessage('No invoice linked yet. Use "Update" to encode LOA and amounts first.');
-                                setModalType('success');
-                                setShowSuccessModal(true);
-                                setHmoQuickEdit(row);
+                              try {
+                                if (row.invoice_id) {
+                                  await openInvoice(String(row.invoice_id));
+                                  setView('billing');
+                                } else {
+                                  setSuccessMessage('No invoice linked yet. Use "Update" to encode LOA and amounts first.');
+                                  setModalType('success');
+                                  setShowSuccessModal(true);
+                                  setHmoQuickEdit(row);
+                                }
+                              } catch (err) {
+                                alert('⚠️ Invoice error: ' + String(err?.message || err));
                               }
                             }}
                           >
@@ -3084,28 +3094,32 @@ export default function OfficeStaffDashboard({ mode }) {
                             type="button"
                             className="office-btn primary"
                             onClick={() => {
-                              const slip = [
-                                `HMO STATEMENT OF ACCOUNT (SOA)`,
-                                `Patient: ${row.patient_name || ''}`,
-                                `HMO: ${claim.provider || ''}   LOA #: ${claim.loa_number || ''}   HMO Card: ${claim.hmo_card_number || ''}`,
-                                `Status: ${status}`,
-                                ``,
-                                `Workups: ${row.workups_list || '—'}`,
-                                ``,
-                                `Total Gross Bill:   ₱ ${toMoney(totalNow)}`,
-                                `Less PhilHealth:   -₱ ${toMoney(phNow)}`,
-                                `Less HMO Covered:  -₱ ${toMoney(hmoNow)}`,
-                                `────────────────────────────`,
-                                `PATIENT PAYS:      ₱ ${toMoney(patientDue)}`,
-                                ``,
-                                `* PhilHealth deducted first per OPD protocol, remainder covered by HMO LOA.`
-                              ].join('\n');
-                              if (typeof window !== 'undefined') {
-                                navigator.clipboard?.writeText(slip).catch(() => {});
+                              try {
+                                const slip = [
+                                  `HMO STATEMENT OF ACCOUNT (SOA)`,
+                                  `Patient: ${row.patient_name || ''}`,
+                                  `HMO: ${claim.provider || ''}   LOA #: ${claim.loa_number || ''}   HMO Card: ${claim.hmo_card_number || ''}`,
+                                  `Status: ${status}`,
+                                  ``,
+                                  `Workups: ${row.workups_list || '—'}`,
+                                  ``,
+                                  `Total Gross Bill:   ₱ ${toMoney(totalNow)}`,
+                                  `Less PhilHealth:   -₱ ${toMoney(phNow)}`,
+                                  `Less HMO Covered:  -₱ ${toMoney(hmoNow)}`,
+                                  `────────────────────────────`,
+                                  `PATIENT PAYS:      ₱ ${toMoney(patientDue)}`,
+                                  ``,
+                                  `* PhilHealth deducted first per OPD protocol, remainder covered by HMO LOA.`
+                                ].join('\n');
+                                if (typeof window !== 'undefined') {
+                                  navigator.clipboard?.writeText(slip).catch(() => {});
+                                }
+                                setSuccessMessage('SOA copied to clipboard (thermal-print ready).');
+                                setModalType('success');
+                                setShowSuccessModal(true);
+                              } catch (err) {
+                                alert('⚠️ SOA error: ' + String(err?.message || err));
                               }
-                              setSuccessMessage('SOA copied to clipboard (thermal-print ready).');
-                              setModalType('success');
-                              setShowSuccessModal(true);
                             }}
                           >
                             Print SOA
