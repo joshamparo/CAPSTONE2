@@ -1,2 +1,5 @@
 node_modules
 .env
+# BUG FIX: NEVER commit build folder. Forces Vercel to rebuild from source.
+/build/
+build/
