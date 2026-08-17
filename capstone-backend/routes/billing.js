@@ -2297,6 +2297,7 @@ router.get('/hmo-queue', async (req, res) => {
 
     builtList = builtList.filter((row) => {
       if (!query) return true;
+      const qLower = String(query || '').toLowerCase();
       const haystack = [
         row.patient_name,
         row.contact_number,
@@ -2311,7 +2312,7 @@ router.get('/hmo-queue', async (req, res) => {
       ]
         .map((value) => String(value || '').toLowerCase())
         .join(' ');
-      return haystack.includes(query);
+      return haystack.includes(qLower);
     });
 
     const totalCount = builtList.length;

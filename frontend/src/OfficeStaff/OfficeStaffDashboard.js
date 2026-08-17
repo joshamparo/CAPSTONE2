@@ -746,14 +746,15 @@ export default function OfficeStaffDashboard({ mode }) {
     setHmoRefSearchLoading(true);
     setHmoHighlightRowId(null);
     try {
-      // Always do a regular search first via queue endpoint.
+      // Always do a regular search first via queue endpoint. Keep user's typed case for text search.
       setHmoQueuePage(1);
       setHmoQueueQuery(refRaw);
 
       // Try ref search to detect exact match for highlight + auto open modal
+      // Endpoint expects uppercase ref since columns store "PGHYYMMDD-NNNNN" uppercase.
       let matchedInvoiceIds = [];
       try {
-        const result = await fetchJson(`/api/billing/search-by-ref?ref=${encodeURIComponent(refRaw)}`, {
+        const result = await fetchJson(`/api/billing/search-by-ref?ref=${encodeURIComponent(refRaw.toUpperCase())}`, {
           apiBase: API_BASE,
           headers: buildHeaders(user),
           timeoutMs: 60000
@@ -790,7 +791,7 @@ export default function OfficeStaffDashboard({ mode }) {
       if (matchedInvoiceIds.length) {
         firstMatch = (Array.isArray(safe.rows) ? safe.rows : []).find((r) => {
           const inv = String(r.invoice_id || (r.hmo_claim && r.hmo_claim.invoice_id) || '').trim();
-          return matchedInvoiceIds.includes(inv) || Boolean(r.patient_reference) && String(r.patient_reference).toUpperCase() === refRaw.toUpperCase();
+          return matchedInvoiceIds.includes(inv) || Boolean(r.patient_reference) && String(r.patient_reference).toUpperCase() === String(refRaw).toUpperCase();
         }) || (safe.rows && safe.rows[0]);
       } else {
         // If no ref match AND we got at least one row from text search (patient/provider name), do nothing extra, just show rows
@@ -2976,8 +2977,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   value={hmoRefSearch}
                   onChange={(e) => {
                     const raw = String(e.target.value || '');
-                    const upperCased = raw.toUpperCase();
-                    const cleaned = upperCased.replace(/[^A-Z0-9-\s]/g, '');
+                    const cleaned = raw.replace(/[^A-Za-z0-9-\s]/g, '');
                     setHmoRefSearch(cleaned);
                   }}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleRefGoSearch(); }}
