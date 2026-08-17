@@ -1095,6 +1095,100 @@ router.put('/invoices/:id/hmo', async (req, res) => {
   }
 });
 
+router.get('/hmo-debug', async (req, res) => {
+  try {
+    const role = String(req.headers['x-user-role'] || '').toLowerCase();
+    if (!['cashier', 'admin', 'doctor_secretary', 'staff'].includes(role)) return res.status(401).json({ message: 'Unauthorized' });
+
+    const safeCount = async (tableName, whereClause = '') => {
+      try {
+        const rows = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int AS c FROM public.${tableName}${whereClause ? ' WHERE ' + whereClause : ''}`).catch(() => []);
+        return Number(rows?.[0]?.c || 0);
+      } catch (_e) { return 0; }
+    };
+    const safeRaw = async (sql, limit = 5) => {
+      try {
+        const rows = await prisma.$queryRawUnsafe(sql + ` LIMIT ${limit}`).catch(() => []);
+        return (Array.isArray(rows) ? rows : []).map((r) => {
+          const out = {};
+          for (const k of Object.keys(r || {})) {
+            const v = r[k];
+            out[k] = typeof v === 'bigint' ? String(v) : (v instanceof Date ? v.toISOString() : v);
+          }
+          return out;
+        });
+      } catch (_e) { return []; }
+    };
+
+    const [
+      claimsAllCount,
+      claimsApprovedCount,
+      invoicesCount7d,
+      patientsHmoCount,
+      apptsHmoCount,
+      claimsLast5,
+      invoicesLast5,
+      patientsLast5,
+      apptsLast5
+    ] = await Promise.all([
+      safeCount('billing_hmo_claims'),
+      safeCount('billing_hmo_claims', "LOWER(COALESCE(status,'')) IN ('approved','partially approved','ok','cleared','confirmed','pre-approved')"),
+      safeCount('billing_invoices', "created_at >= now() - interval '7 days'"),
+      safeCount('patients', "created_at >= now() - interval '30 days' AND (is_hmo = TRUE OR NULLIF(TRIM(hmo_provider::text),'') IS NOT NULL OR NULLIF(TRIM(hmo_card_number::text),'') IS NOT NULL OR hmo = TRUE)"),
+      safeCount('appointments', "created_at >= now() - interval '30 days' AND (is_hmo = TRUE OR NULLIF(TRIM(hmo_status::text),'') IS NOT NULL OR NULLIF(TRIM(hmo_provider::text),'') IS NOT NULL OR hmo = TRUE)"),
+      safeRaw("SELECT * FROM public.billing_hmo_claims ORDER BY id DESC", 5),
+      safeRaw("SELECT id, patient_id, status, total_amount, created_at FROM public.billing_invoices ORDER BY id DESC", 5),
+      safeRaw("SELECT id, is_hmo, hmo_provider, hmo_card_number, first_name, last_name, created_at FROM public.patients WHERE (is_hmo = TRUE OR NULLIF(TRIM(hmo_provider::text),'') IS NOT NULL OR hmo = TRUE) ORDER BY id DESC", 5),
+      safeRaw("SELECT id, is_hmo, hmo_status, hmo_provider, patient_id, patient_name, created_at FROM public.appointments WHERE (is_hmo = TRUE OR NULLIF(TRIM(hmo_status::text),'') IS NOT NULL OR NULLIF(TRIM(hmo_provider::text),'') IS NOT NULL OR hmo = TRUE) ORDER BY id DESC", 5)
+    ]);
+
+    // Probe column names
+    const probeCols = async (tbl, cols) => {
+      try {
+        const rows = await prisma.$queryRawUnsafe(`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1`, tbl).catch(() => []);
+        const have = new Set((Array.isArray(rows) ? rows : []).map((r) => String(r.column_name || '').toLowerCase()));
+        const out = {};
+        cols.forEach((wants) => {
+          const match = wants.find((c) => have.has(String(c || '').toLowerCase()));
+          out[wants[0]] = match ? String(match) : null;
+        });
+        return out;
+      } catch (_e) { return {}; }
+    };
+    const cols = {
+      patients: await probeCols('patients', [
+        ['id','id'],['first_name','first_name','firstname','firstName'],['last_name','last_name','lastname','lastName'],
+        ['is_hmo','is_hmo','hmo','hmo_active'],['hmo_provider','hmo_provider'],['hmo_card_number','hmo_card_number']
+      ]),
+      appointments: await probeCols('appointments', [
+        ['id','id'],['patient_id','patient_id'],['is_hmo','is_hmo','hmo'],['hmo_status','hmo_status','hmostatus'],['hmo_provider','hmo_provider']
+      ]),
+      billing_hmo_claims: await probeCols('billing_hmo_claims', [
+        ['id','id'],['invoice_id','invoice_id'],['patient_id','patient_id'],['patient_name','patient_name'],['status','status'],['hmo_provider','hmo_provider']
+      ])
+    };
+
+    return res.status(200).json({
+      ts: new Date().toISOString(),
+      role,
+      counts: {
+        billing_hmo_claims_ALL: claimsAllCount,
+        billing_hmo_claims_APPROVED: claimsApprovedCount,
+        billing_invoices_last_7d: invoicesCount7d,
+        patients_HMO_last_30d: patientsHmoCount,
+        appointments_HMO_last_30d: apptsHmoCount,
+      },
+      columnNames_found: cols,
+      last5_billing_hmo_claims: claimsLast5,
+      last5_billing_invoices: invoicesLast5,
+      last5_patients_HMO: patientsLast5,
+      last5_appointments_HMO: apptsLast5
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message || err) });
+  }
+});
+
 router.get('/hmo-queue', async (req, res) => {
   try {
     await ensureBillingTablesExist();

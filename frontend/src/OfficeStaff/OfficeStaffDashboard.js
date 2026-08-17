@@ -2874,6 +2874,33 @@ export default function OfficeStaffDashboard({ mode }) {
               </button>
             </div>
             <div className="office-row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 9,
+                  border: '1px solid #fca5a5',
+                  background: 'linear-gradient(180deg,#fee2e2 0%, #fecaca 100%)',
+                  color: '#991b1b',
+                  fontWeight: 900,
+                  fontSize: 11.5,
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 2px rgba(127,29,29,0.08)'
+                }}
+                disabled={!user || hmoQueueLoading}
+                title="Debug DB row counts & contents"
+                onClick={async () => {
+                  try {
+                    const res = await fetchJson('/api/billing/hmo-debug', { apiBase: API_BASE, headers: buildHeaders(user) });
+                    const safe = typeof res === 'object' && res ? res : { result: String(res || 'empty') };
+                    alert(JSON.stringify(safe, null, 2).slice(0, 4000));
+                  } catch (err) {
+                    alert('DEBUG ERROR: ' + String(err.message || err));
+                  }
+                }}
+              >
+                🔍 Debug DB
+              </button>
               {[
                 { key: 'approved', label: 'Approved Only' },
                 { key: 'all', label: 'All Claims · Audit' }
