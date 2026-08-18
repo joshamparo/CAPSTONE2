@@ -352,6 +352,7 @@ export default function OfficeStaffDashboard({ mode }) {
   const [invoiceStatus, setInvoiceStatus] = useState(role === 'cashier' ? 'Ready' : 'All');
   const [invoiceRange, setInvoiceRange] = useState('All');
   const [invoiceQuery, setInvoiceQuery] = useState('');
+  const [invoicePage, setInvoicePage] = useState(1);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [selectedInvoiceLoading, setSelectedInvoiceLoading] = useState(false);
 
@@ -1419,7 +1420,7 @@ export default function OfficeStaffDashboard({ mode }) {
   }, [paymentsQuery, paymentsSource]);
 
   const pagedPaymentHistory = useMemo(() => {
-    const perPage = 15;
+    const perPage = 8;
     const list = filteredPaymentHistory;
     const totalPages = Math.max(1, Math.ceil(list.length / perPage));
     const currentPage = Math.min(Math.max(1, paymentsPage), totalPages);
@@ -1428,6 +1429,9 @@ export default function OfficeStaffDashboard({ mode }) {
       perPage,
       totalPages,
       currentPage,
+      startIndex,
+      endIndex: startIndex + perPage,
+      totalCount: list.length,
       items: list.slice(startIndex, startIndex + perPage)
     };
   }, [filteredPaymentHistory, paymentsPage]);
@@ -1463,6 +1467,27 @@ export default function OfficeStaffDashboard({ mode }) {
     };
     return list.filter((inv) => inRange(inv.created_at || inv.createdAt || null));
   }, [invoiceRange, invoices]);
+
+  useEffect(() => {
+    setInvoicePage(1);
+  }, [invoiceStatus, invoiceRange, invoices.length]);
+
+  const pagedDisplayedInvoices = useMemo(() => {
+    const perPage = 8;
+    const list = displayedInvoices;
+    const totalPages = Math.max(1, Math.ceil(list.length / perPage));
+    const currentPage = Math.min(Math.max(1, invoicePage), totalPages);
+    const startIndex = (currentPage - 1) * perPage;
+    return {
+      perPage,
+      totalPages,
+      currentPage,
+      startIndex,
+      endIndex: startIndex + perPage,
+      totalCount: list.length,
+      items: list.slice(startIndex, startIndex + perPage)
+    };
+  }, [displayedInvoices, invoicePage]);
 
   const displayedLabOrders = useMemo(() => {
     const list = Array.isArray(labOrders) ? labOrders : [];
@@ -1573,9 +1598,6 @@ export default function OfficeStaffDashboard({ mode }) {
                    view === 'lab-payments' ? 'Lab Payments' :
                    view === 'closeout' ? 'Daily Closeout' :
                    view.charAt(0).toUpperCase() + view.slice(1)}
-                </div>
-                <div style={{ marginTop: 4, fontSize: '10.5px', fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0f172a', background: '#dcfce7', display: 'inline-block', padding: '2px 8px', borderRadius: 6, border: '1px solid #86efac' }}>
-                  [BUILD 2026-08-17 v3 · Ref Search + Intake Report Fixes Active]
                 </div>
               </div>
             </div>
@@ -2307,7 +2329,7 @@ export default function OfficeStaffDashboard({ mode }) {
                         <td colSpan="7" className="text-center py-8 text-slate-500">No invoices match your filters.</td>
                       </tr>
                     ) : (
-                      displayedInvoices.slice(0, 80).map((inv) => {
+                      pagedDisplayedInvoices.items.map((inv) => {
                         const p = inv.patients;
                         const patientName = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : '—';
                         const status = inv.status || 'Draft';
@@ -2387,6 +2409,54 @@ export default function OfficeStaffDashboard({ mode }) {
                   </tbody>
                 </table>
               </div>
+              {pagedDisplayedInvoices.totalCount > 0 ? (
+                <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', fontSize: '0.8rem', fontWeight: 700 }}>
+                    Showing {pagedDisplayedInvoices.totalCount === 0 ? 0 : pagedDisplayedInvoices.startIndex + 1}–{Math.min(pagedDisplayedInvoices.endIndex, pagedDisplayedInvoices.totalCount)} of {pagedDisplayedInvoices.totalCount}
+                  </div>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      type="button"
+                      aria-label="Previous page"
+                      disabled={pagedDisplayedInvoices.currentPage <= 1 || invoiceLoading}
+                      onClick={() => setInvoicePage(p => Math.max(1, p - 1))}
+                      style={{
+                        width: 34, height: 34,
+                        borderRadius: 9,
+                        border: pagedDisplayedInvoices.currentPage <= 1 || invoiceLoading ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
+                        background: pagedDisplayedInvoices.currentPage <= 1 || invoiceLoading ? '#f8fafc' : '#ffffff',
+                        color: pagedDisplayedInvoices.currentPage <= 1 || invoiceLoading ? '#cbd5e1' : '#334155',
+                        fontWeight: 900,
+                        cursor: pagedDisplayedInvoices.currentPage <= 1 || invoiceLoading ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0
+                      }}
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 10px', borderRadius: 9, background: '#ffffff', border: '1px solid #e2e8f0', color: '#334155', fontSize: '0.8rem', fontWeight: 700, minWidth: 60, justifyContent: 'center' }}>
+                      {pagedDisplayedInvoices.currentPage} / {pagedDisplayedInvoices.totalPages}
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Next page"
+                      disabled={pagedDisplayedInvoices.currentPage >= pagedDisplayedInvoices.totalPages || invoiceLoading}
+                      onClick={() => setInvoicePage(p => Math.min(pagedDisplayedInvoices.totalPages, p + 1))}
+                      style={{
+                        width: 34, height: 34,
+                        borderRadius: 9,
+                        border: pagedDisplayedInvoices.currentPage >= pagedDisplayedInvoices.totalPages || invoiceLoading ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
+                        background: pagedDisplayedInvoices.currentPage >= pagedDisplayedInvoices.totalPages || invoiceLoading ? '#f8fafc' : '#ffffff',
+                        color: pagedDisplayedInvoices.currentPage >= pagedDisplayedInvoices.totalPages || invoiceLoading ? '#cbd5e1' : '#334155',
+                        fontWeight: 900,
+                        cursor: pagedDisplayedInvoices.currentPage >= pagedDisplayedInvoices.totalPages || invoiceLoading ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0
+                      }}
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
           </div>
@@ -2596,30 +2666,34 @@ export default function OfficeStaffDashboard({ mode }) {
               {paymentHistoryError ? <div className="admin-alert error" style={{ marginTop: 12 }}>{paymentHistoryError}</div> : null}
 
               <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                <div className="office-subtitle">{filteredPaymentHistory.length} result(s)</div>
-                <div className="office-row">
+                <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', fontSize: '0.8rem', fontWeight: 700 }}>
+                  Showing {pagedPaymentHistory.totalCount === 0 ? 0 : pagedPaymentHistory.startIndex + 1}–{Math.min(pagedPaymentHistory.endIndex, pagedPaymentHistory.totalCount)} of {pagedPaymentHistory.totalCount}
+                </div>
+                <div className="office-row" style={{ gap: 8 }}>
                   <button
                     type="button"
+                    aria-label="Previous page"
                     className="office-btn ghost"
                     onClick={() => setPaymentsPage((p) => Math.max(1, p - 1))}
                     disabled={paymentHistoryLoading || pagedPaymentHistory.currentPage <= 1}
+                    style={{ width: 34, height: 34, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
                     title="Previous page"
                   >
-                    <ChevronLeft size={16} />
-                    Prev
+                    <ChevronLeft size={18} />
                   </button>
-                  <div style={{ fontWeight: 800, color: '#0f172a' }}>
-                    Page {pagedPaymentHistory.currentPage} / {pagedPaymentHistory.totalPages}
+                  <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 10px', borderRadius: 9, background: '#ffffff', border: '1px solid #e2e8f0', color: '#334155', fontSize: '0.8rem', fontWeight: 700, minWidth: 60, justifyContent: 'center' }}>
+                    {pagedPaymentHistory.currentPage} / {pagedPaymentHistory.totalPages}
                   </div>
                   <button
                     type="button"
+                    aria-label="Next page"
                     className="office-btn ghost"
                     onClick={() => setPaymentsPage((p) => Math.min(pagedPaymentHistory.totalPages, p + 1))}
                     disabled={paymentHistoryLoading || pagedPaymentHistory.currentPage >= pagedPaymentHistory.totalPages}
+                    style={{ width: 34, height: 34, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
                     title="Next page"
                   >
-                    Next
-                    <ChevronRight size={16} />
+                    <ChevronRight size={18} />
                   </button>
                 </div>
               </div>

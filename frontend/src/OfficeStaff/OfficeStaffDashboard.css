@@ -10,7 +10,8 @@
 
 .office-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--office-bg);
 }
 
@@ -21,6 +22,11 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 10;
   transition: width 0.28s cubic-bezier(.22,.61,.36,1), padding 0.28s ease;
 }
 
@@ -223,7 +229,10 @@
 .office-main {
   flex: 1;
   padding: 20px;
-  min-height: 100vh;
+  min-height: auto;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -2312,6 +2321,8 @@
 @media (max-width: 768px) {
   .office-shell {
     min-height: 100dvh;
+    height: auto;
+    overflow: visible;
   }
 
   .office-sidebar {
@@ -2334,6 +2345,9 @@
   .office-main {
     padding: 14px;
     width: 100%;
+    height: auto;
+    overflow: visible;
+    min-height: 0;
   }
 
   .office-header {

@@ -5871,9 +5871,6 @@ function NurseDashboard() {
                 <div>
                   <h2 className="header-title">Nurse Dashboard</h2>
                   <p className="header-subtitle">{nurseWorkspace.label} • {user.departmentLabel || formatDepartmentLabel(activeDept)}</p>
-                  <div style={{ marginTop: 4, fontSize: '10.5px', fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0f172a', background: '#fef9c3', display: 'inline-block', padding: '2px 8px', borderRadius: 6, border: '1px solid #facc15' }}>
-                    [BUILD 2026-08-17 v3 · Nurse Intake Report Fixes Active]
-                  </div>
                 </div>
             </div>
 
