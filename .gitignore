@@ -29,3 +29,6 @@ scripts/
 map_*.js
 tmp_*.js
 *.txt
+
+.vercel
+.env*
