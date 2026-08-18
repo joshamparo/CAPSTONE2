@@ -273,6 +273,7 @@ export default function OfficeStaffDashboard({ mode }) {
       setProfileAvatarUrl(data.avatarUrl);
       const updatedUser = { ...user, avatarUrl: data.avatarUrl, avatar_url: data.avatarUrl };
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      setUser(updatedUser);
       setProfileMessage({ text: 'Profile picture updated!', type: 'success' });
     } catch (e) {
       setProfileMessage({ text: String(e?.message || 'Failed to upload image'), type: 'error' });
@@ -1631,9 +1632,6 @@ export default function OfficeStaffDashboard({ mode }) {
                    view === 'lab-payments' ? 'Lab Payments' :
                    view === 'closeout' ? 'Daily Closeout' :
                    view.charAt(0).toUpperCase() + view.slice(1)}
-                </div>
-                <div style={{ marginTop: 4, fontSize: '10.5px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0f172a', background: '#f8fafc', display: 'inline-block', padding: '2px 8px', borderRadius: 6, border: '1px solid #cbd5e1' }}>
-                  [DEPLOY 2026-08-18 v6 · 8/page · Pill · Sidebar Fixed]
                 </div>
               </div>
             </div>

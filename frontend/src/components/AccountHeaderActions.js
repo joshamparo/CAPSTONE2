@@ -787,8 +787,8 @@ export default function AccountHeaderActions({
             <span className="aha-profile-role">{role}</span>
           </div>
           <div className="aha-avatar-circle">
-            {user?.profilePicture || user?.profile_picture || user?.avatar_url ? (
-              <img src={user.profilePicture || user.profile_picture || user.avatar_url} alt="Profile" />
+            {user?.avatarUrl || user?.profilePicture || user?.profile_picture || user?.avatar_url ? (
+              <img src={user.avatarUrl || user.profilePicture || user.profile_picture || user.avatar_url} alt="Profile" />
             ) : (
               <span>{letter}</span>
             )}
