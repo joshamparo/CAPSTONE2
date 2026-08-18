@@ -419,6 +419,7 @@ export default function OfficeStaffDashboard({ mode }) {
   const [labOrdersError, setLabOrdersError] = useState('');
   const [labOrdersRange, setLabOrdersRange] = useState('All');
   const [labOrdersQuery, setLabOrdersQuery] = useState('');
+  const [labPage, setLabPage] = useState(1);
   const [selectedLabOrder, setSelectedLabOrder] = useState(null);
   const [selectedLabOrderHmo, setSelectedLabOrderHmo] = useState(null);
   const [labPaymentMethod, setLabPaymentMethod] = useState('Cash');
@@ -1472,6 +1473,10 @@ export default function OfficeStaffDashboard({ mode }) {
     setInvoicePage(1);
   }, [invoiceStatus, invoiceRange, invoices.length]);
 
+  useEffect(() => {
+    setLabPage(1);
+  }, [labOrdersRange, labOrdersQuery, labOrders.length]);
+
   const pagedDisplayedInvoices = useMemo(() => {
     const perPage = 8;
     const list = displayedInvoices;
@@ -1510,10 +1515,29 @@ export default function OfficeStaffDashboard({ mode }) {
       const when = o.createdAt || o.scheduledAt || null;
       if (!inRange(when)) return false;
       if (!q) return true;
-      const hay = `${o.patientName || ''} ${o.service || ''} ${o.kind || ''}`.toLowerCase();
+      const hmoProv = String(o.hmoIndicators?.provider || '').toLowerCase();
+      const hmoLoa = String(o.hmoIndicators?.loaNumber || '').toLowerCase();
+      const hay = `${o.patientName || ''} ${o.service || ''} ${o.kind || ''} ${hmoProv} ${hmoLoa}`.toLowerCase();
       return hay.includes(q);
     });
   }, [labOrders, labOrdersQuery, labOrdersRange]);
+
+  const pagedLabOrders = useMemo(() => {
+    const perPage = 8;
+    const list = displayedLabOrders;
+    const totalPages = Math.max(1, Math.ceil(list.length / perPage));
+    const currentPage = Math.min(Math.max(1, labPage), totalPages);
+    const startIndex = (currentPage - 1) * perPage;
+    return {
+      perPage,
+      totalPages,
+      currentPage,
+      startIndex,
+      endIndex: startIndex + perPage,
+      totalCount: list.length,
+      items: list.slice(startIndex, startIndex + perPage)
+    };
+  }, [displayedLabOrders, labPage]);
 
   const selectedLabOrderDue = useMemo(() => {
     const gross = Number(selectedLabOrder?.amountDue ?? selectedLabOrder?.unitPrice ?? 0);
@@ -2492,7 +2516,12 @@ export default function OfficeStaffDashboard({ mode }) {
                     <th>Order</th>
                     <th>Patient</th>
                     <th>Service</th>
-                    <th>Amount Due</th>
+                    <th>HMO Provider</th>
+                    <th>LOA #</th>
+                    <th style={{ textAlign: 'right' }}>Total</th>
+                    <th style={{ textAlign: 'right' }}>Philhealth</th>
+                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>HMO Covered</th>
+                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Patient Pays</th>
                     <th>Status</th>
                     <th>Created</th>
                     <th className="inc-right">Actions</th>
@@ -2501,23 +2530,26 @@ export default function OfficeStaffDashboard({ mode }) {
                 <tbody>
                   {labOrdersLoading ? (
                     <tr>
-                      <td colSpan="7" className="text-center py-8 text-slate-500">Loading…</td>
+                      <td colSpan="12" className="text-center py-8 text-slate-500">Loading…</td>
                     </tr>
                   ) : displayedLabOrders.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="text-center py-8 text-slate-500">No lab/imaging orders found. Check filters or create a walk-in patient with lab/imaging services.</td>
+                      <td colSpan="12" className="text-center py-8 text-slate-500">No lab/imaging orders found. Check filters or create a walk-in patient with lab/imaging services.</td>
                     </tr>
                   ) : (
-                    displayedLabOrders.slice(0, 120).map((o) => {
+                    pagedLabOrders.items.map((o) => {
                       const statusNorm = String(o.status || '').toLowerCase();
                       const isPrePaid = statusNorm === 'paid';
                       const servicePrice = Number(o.configuredUnitPrice ?? o.unitPrice ?? o.amountDue ?? 0);
                       const rowPatientDue = isPrePaid ? 0 : Number(o.amountDue ?? o.patientPayable ?? servicePrice);
+                      const hmo = o.hmoIndicators && typeof o.hmoIndicators === 'object' ? o.hmoIndicators : {};
+                      const phNow = Number(o.philhealthApplied || 0);
+                      const hmoNow = Number(o.hmoCoverageApplied || 0);
                       return (
                       <tr key={String(o.id)} style={{ background: isPrePaid ? '#ffffff' : undefined }}>
                         <td className="text-sm font-medium text-slate-900">#{o.id}</td>
-                        <td className="text-sm text-slate-900">{o.patientName || '—'}</td>
-                        <td className="text-sm text-slate-900">
+                        <td className="text-sm text-slate-900" style={{ fontWeight: 700, color: '#0f172a' }}>{o.patientName || '—'}</td>
+                        <td className="text-sm text-slate-900" style={{ maxWidth: 260 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <span>{o.service || o.kind || '—'}</span>
                             {isPrePaid ? (
@@ -2528,24 +2560,42 @@ export default function OfficeStaffDashboard({ mode }) {
                                 border: '1px solid #cbd5e1',
                                 fontSize: '11px', fontWeight: 700
                               }}>
-                                ✅ HMO COVERED • NO PAYMENT NEEDED
+                                HMO COVERED • NO PAYMENT NEEDED
                               </span>
                             ) : null}
                           </div>
                         </td>
-                        <td className="text-sm" style={{ color: '#0f172a', fontWeight: isPrePaid ? 800 : 600 }}>
-                          {isPrePaid ? (
-                            <div>
-                              <div style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 500, fontSize: '12px', color: '#475569' }}>
-                                ₱ {toMoney(servicePrice)}
-                              </div>
-                              <div style={{ fontWeight: 900, color: '#0f172a' }}>
-                                ₱ 0.00 (covered by HMO)
-                              </div>
-                            </div>
+                        <td className="text-sm text-slate-600">
+                          <div style={{ fontWeight: 700, color: hmo.provider ? '#0f172a' : '#94a3b8', fontSize: '0.82rem' }}>{hmo.provider || '—'}</div>
+                          {hmo.cardNumber ? <div className="office-billing-subline" style={{ color: '#64748b', fontSize: '0.72rem' }}>Card: {String(hmo.cardNumber)}</div> : null}
+                        </td>
+                        <td className="text-sm text-slate-600">
+                          {hmo.loaNumber ? (
+                            <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#2563eb', fontWeight: 800, fontSize: '0.82rem' }}>{String(hmo.loaNumber)}</div>
                           ) : (
-                            o.priceConfigured ? `₱ ${toMoney(rowPatientDue)}` : 'Needs setup'
+                            <div style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.78rem' }}>no LOA</div>
                           )}
+                          {hmo.status ? (
+                            <div style={{ marginTop: 3 }}>
+                              <span className={`status-badge-table ${
+                                String(hmo.status || '').toLowerCase() === 'approved' ? 'status-duty' :
+                                String(hmo.status || '').toLowerCase() === 'partially approved' ? 'status-scheduled' :
+                                'status-off'
+                              }`} style={{ fontSize: '0.68rem', padding: '2px 7px', fontWeight: 800 }}>{hmo.status}</span>
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="text-sm" style={{ color: '#0f172a', textAlign: 'right', fontWeight: 600 }}>
+                          ₱ {toMoney(servicePrice)}
+                        </td>
+                        <td className="text-sm" style={{ color: phNow > 0 ? '#0f172a' : '#94a3b8', textAlign: 'right', fontWeight: 600 }}>
+                          {phNow > 0 ? `₱ ${toMoney(phNow)}` : '—'}
+                        </td>
+                        <td className="text-sm" style={{ color: hmoNow > 0 ? '#15803d' : '#94a3b8', textAlign: 'right', fontWeight: 700 }}>
+                          {hmoNow > 0 ? `₱ ${toMoney(hmoNow)}` : '—'}
+                        </td>
+                        <td className="text-sm" style={{ color: rowPatientDue > 0 && !isPrePaid ? '#b91c1c' : '#0f172a', textAlign: 'right', fontWeight: 900 }}>
+                          {isPrePaid ? '₱ 0.00' : `₱ ${toMoney(rowPatientDue)}`}
                         </td>
                         <td>
                           {isPrePaid ? (
@@ -2560,7 +2610,7 @@ export default function OfficeStaffDashboard({ mode }) {
                             }`}>{o.status || '—'}</span>
                           )}
                         </td>
-                        <td className="text-sm text-slate-900">{o.createdAt ? new Date(o.createdAt).toLocaleString() : '—'}</td>
+                        <td className="text-sm text-slate-600" style={{ fontSize: '0.78rem' }}>{o.createdAt ? new Date(o.createdAt).toLocaleString() : '—'}</td>
                         <td className="inc-right">
                           {isPrePaid ? (
                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
@@ -2570,7 +2620,7 @@ export default function OfficeStaffDashboard({ mode }) {
                                 onClick={async () => { await openLabOrderPos(o); }}
                               >
                                 <FileText size={14} style={{ marginRight: 4 }} />
-                                View Record
+                                View
                               </button>
                               <button
                                 type="button"
@@ -2585,7 +2635,7 @@ export default function OfficeStaffDashboard({ mode }) {
                                   }
                                 }}
                               >
-                                Print Slip
+                                Print
                               </button>
                             </div>
                           ) : (
@@ -2604,6 +2654,54 @@ export default function OfficeStaffDashboard({ mode }) {
                 </tbody>
               </table>
             </div>
+            {pagedLabOrders.totalCount > 0 ? (
+              <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', fontSize: '0.8rem', fontWeight: 700 }}>
+                  Showing {pagedLabOrders.totalCount === 0 ? 0 : pagedLabOrders.startIndex + 1}–{Math.min(pagedLabOrders.endIndex, pagedLabOrders.totalCount)} of {pagedLabOrders.totalCount}
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    type="button"
+                    aria-label="Previous page"
+                    disabled={pagedLabOrders.currentPage <= 1 || labOrdersLoading}
+                    onClick={() => setLabPage(p => Math.max(1, p - 1))}
+                    style={{
+                      width: 34, height: 34,
+                      borderRadius: 9,
+                      border: pagedLabOrders.currentPage <= 1 || labOrdersLoading ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
+                      background: pagedLabOrders.currentPage <= 1 || labOrdersLoading ? '#f8fafc' : '#ffffff',
+                      color: pagedLabOrders.currentPage <= 1 || labOrdersLoading ? '#cbd5e1' : '#334155',
+                      fontWeight: 900,
+                      cursor: pagedLabOrders.currentPage <= 1 || labOrdersLoading ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0
+                    }}
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 10px', borderRadius: 9, background: '#ffffff', border: '1px solid #e2e8f0', color: '#334155', fontSize: '0.8rem', fontWeight: 700, minWidth: 60, justifyContent: 'center' }}>
+                    {pagedLabOrders.currentPage} / {pagedLabOrders.totalPages}
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Next page"
+                    disabled={pagedLabOrders.currentPage >= pagedLabOrders.totalPages || labOrdersLoading}
+                    onClick={() => setLabPage(p => Math.min(pagedLabOrders.totalPages, p + 1))}
+                    style={{
+                      width: 34, height: 34,
+                      borderRadius: 9,
+                      border: pagedLabOrders.currentPage >= pagedLabOrders.totalPages || labOrdersLoading ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
+                      background: pagedLabOrders.currentPage >= pagedLabOrders.totalPages || labOrdersLoading ? '#f8fafc' : '#ffffff',
+                      color: pagedLabOrders.currentPage >= pagedLabOrders.totalPages || labOrdersLoading ? '#cbd5e1' : '#334155',
+                      fontWeight: 900,
+                      cursor: pagedLabOrders.currentPage >= pagedLabOrders.totalPages || labOrdersLoading ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0
+                    }}
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

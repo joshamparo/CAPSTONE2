@@ -2237,6 +2237,132 @@ router.get('/hmo-queue', async (req, res) => {
         }
       } catch (_) { /* ignore */ }
 
+      // ✅ NEW: LAB ORDER CROSS-REFERENCE PATIENT LOOKUP (for auto-created Walk-in Lab Order invoices)
+      // If billing_invoices has no patient_id AND hmo_claim has no patient_id, BUT patient_name/workups contains "Lab Order #N"
+      // → look up clinical_orders id=N to get the real patient_id. This fixes rows that show "Patient (click Update)".
+      try {
+        const labOrderIdsToLookup = new Set();
+        const labOrderRowIndexMap = new Map(); // labOrderIdStr -> array of builtList indices
+        for (let i = 0; i < builtList.length; i++) {
+          const r = builtList[i];
+          let pid = String(r.hmo_claim?.patient_id || '').trim();
+          if ((!pid || pid === 'null' || pid === '') && r.invoice_id) {
+            const cand = invToPat.get(String(r.invoice_id));
+            if (cand) pid = String(cand).trim();
+          }
+          if (!pid || pid === 'null' || pid === '') {
+            const haystack = `${String(r.patient_name || '')} ${String(r.workups_list || '')} ${String(r.invoice_notes || '')} ${String(r.notes || '')}`.toLowerCase();
+            const m = haystack.match(/lab order #?\s*(\d+)/i);
+            if (m && m[1]) {
+              const loId = String(m[1]).trim();
+              if (loId && !isNaN(Number(loId))) {
+                labOrderIdsToLookup.add(loId);
+                if (!labOrderRowIndexMap.has(loId)) labOrderRowIndexMap.set(loId, []);
+                labOrderRowIndexMap.get(loId).push(i);
+              }
+            }
+          }
+        }
+        if (labOrderIdsToLookup.size > 0) {
+          const labArr = Array.from(labOrderIdsToLookup);
+          const labPh = labArr.map((_, i) => `$${i + 1}`).join(',');
+          const labParams = labArr.map((x) => BigInt(x));
+          const coRows = await prisma.$queryRawUnsafe(
+            `SELECT id::text AS coid, patient_id::text AS pid, patient_name AS pname
+             FROM public.clinical_orders WHERE id::text IN (${labPh})`,
+            ...labParams
+          ).catch(() => []);
+          if (Array.isArray(coRows)) {
+            for (const x of coRows) {
+              const coid = String(x.coid || '').trim();
+              const newPid = String(x.pid || '').trim();
+              const pnameFromCo = String(x.pname || '').trim();
+              const indices = labOrderRowIndexMap.get(coid) || [];
+              if (newPid && newPid !== '' && newPid !== 'null') {
+                patNameIds.add(newPid);
+                for (const i of indices) {
+                  const r = builtList[i];
+                  if (r && r.invoice_id) invToPat.set(String(r.invoice_id), newPid);
+                  if (r && pnameFromCo && (!String(r.patient_name || '').trim() || String(r.patient_name).length <= 12 || String(r.patient_name).toLowerCase().includes('lab order'))) {
+                    builtList[i] = { ...r, patient_name: pnameFromCo };
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (_labLookup) { /* never break page */ }
+
+      // ✅ NEW: DIRECT HMO CLAIM BULK LOOKUP (populate missing hmo_claim fields for any row with invoice_id)
+      // Rows created indirectly via auto-invoices sometimes miss hmo_claim in the UNION, so we fill them here.
+      try {
+        const hmoInvIds = new Set();
+        for (const r of builtList) {
+          if (r.invoice_id && String(r.invoice_id) !== '' && String(r.invoice_id) !== '0' && String(r.invoice_id) !== 'null') {
+            const claim = r.hmo_claim && typeof r.hmo_claim === 'object' ? r.hmo_claim : null;
+            const claimHasData = claim && (String(claim.provider || '').trim() || String(claim.loa_number || '').trim() || Number(claim.philhealth_deduction || 0) > 0 || Number(claim.loa_approved_amount || 0) > 0);
+            if (!claimHasData) hmoInvIds.add(String(r.invoice_id));
+          }
+        }
+        if (hmoInvIds.size > 0) {
+          const hArr = Array.from(hmoInvIds);
+          const hPh = hArr.map((_, i) => `$${i + 1}`).join(',');
+          const hParams = hArr.map((x) => BigInt(x));
+          const claimRows = await prisma.$queryRawUnsafe(
+            `SELECT invoice_id::text AS invid,
+                    hmo_provider AS provider,
+                    hmo_loa_number AS loa_number,
+                    hmo_card_number AS hmo_card_number,
+                    philhealth_deduction AS philhealth_deduction,
+                    loa_approved_amount AS loa_approved_amount,
+                    patient_payable AS patient_payable,
+                    patient_id::text AS patient_id,
+                    patient_reference AS patient_reference,
+                    status AS claim_status,
+                    company AS company,
+                    patient_contact AS patient_contact,
+                    gross_amount AS gross_amount
+             FROM public.billing_hmo_claims
+             WHERE invoice_id IN (${hPh})`,
+            ...hParams
+          ).catch(() => []);
+          const claimMap = new Map();
+          if (Array.isArray(claimRows)) {
+            for (const c of claimRows) {
+              const k = String(c.invid || '').trim();
+              if (k) claimMap.set(k, c);
+            }
+            for (let i = 0; i < builtList.length; i++) {
+              const r = builtList[i];
+              if (!r || !r.invoice_id) continue;
+              const k = String(r.invoice_id).trim();
+              if (!claimMap.has(k)) continue;
+              const c = claimMap.get(k);
+              const existingClaim = r.hmo_claim && typeof r.hmo_claim === 'object' ? { ...r.hmo_claim } : {};
+              const merged = { ...existingClaim };
+              if (c.provider && !String(merged.provider || '').trim()) merged.provider = String(c.provider).trim();
+              if (c.loa_number && !String(merged.loa_number || '').trim()) merged.loa_number = String(c.loa_number).trim();
+              if (c.hmo_card_number && !String(merged.hmo_card_number || '').trim()) merged.hmo_card_number = String(c.hmo_card_number).trim();
+              if (Number(c.philhealth_deduction || 0) > 0 && !Number(merged.philhealth_deduction || 0)) merged.philhealth_deduction = Number(c.philhealth_deduction);
+              if (Number(c.loa_approved_amount || 0) > 0 && !Number(merged.loa_approved_amount || 0)) merged.loa_approved_amount = Number(c.loa_approved_amount);
+              if (Number(c.patient_payable || 0) > 0 && !Number(merged.patient_payable || 0)) merged.patient_payable = Number(c.patient_payable);
+              if (Number(c.gross_amount || 0) > 0 && !Number(merged.total_amount || 0)) merged.total_amount = Number(c.gross_amount);
+              if (String(c.patient_id || '').trim() && String(c.patient_id) !== 'null' && !String(merged.patient_id || '').trim()) merged.patient_id = String(c.patient_id).trim();
+              if (String(c.patient_reference || '').trim() && !String(merged.patient_reference || '').trim()) merged.patient_reference = String(c.patient_reference).trim();
+              if (String(c.claim_status || '').trim() && !String(r.claim_status || '').trim()) r.claim_status = String(c.claim_status).trim();
+              if (String(c.company || '').trim() && !String(merged.company || '').trim()) merged.company = String(c.company).trim();
+              if (String(c.patient_contact || '').trim() && !String(merged.patient_contact || '').trim()) merged.patient_contact = String(c.patient_contact).trim();
+              builtList[i] = { ...r, hmo_claim: merged };
+              // Also propagate patient_id from merged claim back to invToPat so name enrichment can still pick it up
+              if (String(merged.patient_id || '').trim() && String(merged.patient_id) !== 'null' && r.invoice_id) {
+                invToPat.set(String(r.invoice_id), String(merged.patient_id).trim());
+                patNameIds.add(String(merged.patient_id).trim());
+              }
+            }
+          }
+        }
+      } catch (_claimDirectLookup) { /* never break page */ }
+
       if (patNameArr.length || invToPat.size > 0) {
         const patNameArrFinal = Array.from(patNameIds).filter(Boolean);
         let realNames = [];
