@@ -93,6 +93,10 @@ const defaultAllowedOrigins = [
   'http://localhost:3000'
 ];
 
+const allowedSuffixes = [
+  '.vercel.app'
+];
+
 // Middleware
 const allowedOrigins = new Set(
   [...defaultAllowedOrigins, ...String(process.env.CORS_ORIGINS || '').split(',')]
@@ -100,11 +104,22 @@ const allowedOrigins = new Set(
     .filter(Boolean)
 );
 
+function isOriginAllowed(origin) {
+  const normalized = normalizeOriginValue(origin);
+  if (!normalized) return true;
+  if (allowedOrigins.has(normalized)) return true;
+  try {
+    const parsed = new URL(normalized);
+    return allowedSuffixes.some((suf) => parsed.host.toLowerCase().endsWith(suf));
+  } catch (_) {
+    return false;
+  }
+}
+
 const corsOptions = {
   origin(origin, callback) {
-    const normalizedOrigin = normalizeOriginValue(origin);
     if (!origin) return callback(null, true);
-    if (allowedOrigins.has(normalizedOrigin)) return callback(null, true);
+    if (isOriginAllowed(origin)) return callback(null, true);
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
   credentials: true,
@@ -116,8 +131,7 @@ app.use(cors(corsOptions));
 // Robust preflight handler: echo requested headers to avoid "header not allowed" failures.
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  const normalizedOrigin = normalizeOriginValue(origin);
-  if (origin && allowedOrigins.has(normalizedOrigin)) {
+  if (origin && isOriginAllowed(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -140,8 +154,7 @@ app.use((err, req, res, next) => {
   if (!err) return next();
   if (!res.headersSent) {
     const origin = req.headers.origin;
-    const normalizedOrigin = normalizeOriginValue(origin);
-    if (origin && allowedOrigins.has(normalizedOrigin)) {
+    if (origin && isOriginAllowed(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Vary', 'Origin');
       res.setHeader('Access-Control-Allow-Credentials', 'true');
