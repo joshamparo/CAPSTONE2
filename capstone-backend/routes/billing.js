@@ -2363,8 +2363,9 @@ router.get('/hmo-queue', async (req, res) => {
         }
       } catch (_claimDirectLookup) { /* never break page */ }
 
-      if (patNameArr.length || invToPat.size > 0) {
-        const patNameArrFinal = Array.from(patNameIds).filter(Boolean);
+      // Always re-evaluate based on CURRENT state of patNameIds and invToPat (patNameArr was computed before new cross-ref lookups added new IDs)
+      const patNameArrFinal = Array.from(patNameIds).filter(Boolean);
+      if (patNameArrFinal.length > 0 || invToPat.size > 0) {
         let realNames = [];
         if (patNameArrFinal.length) {
           realNames = await prisma.$queryRawUnsafe(

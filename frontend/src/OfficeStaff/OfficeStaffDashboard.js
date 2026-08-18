@@ -3293,7 +3293,19 @@ export default function OfficeStaffDashboard({ mode }) {
                   const totalNow = Number(row.total_amount === '₱ 0.00' ? 0 : (row.total_amount ? String(row.total_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.total_amount || claim.gross_amount || 0);
                   const invoiceIdTxt = String(row.invoice_id || claim.invoice_id || '').trim();
                   const rawPatientName = String(claim.patient_name || row.patient_name || '').trim();
-                  const isFallbackName = !rawPatientName || rawPatientName.toLowerCase().startsWith('patient of invoice') || rawPatientName.toLowerCase().includes('[pass0-auto') || rawPatientName.toLowerCase().startsWith('invoice-') || rawPatientName.toLowerCase().startsWith('lab order #') || rawPatientName.toLowerCase().startsWith('walk-in') || rawPatientName.toLowerCase().startsWith('nurse walk-in');
+                  const isBadShort = rawPatientName.length > 0 && rawPatientName.length <= 9;
+                  const isFallbackName = !rawPatientName
+                    || isBadShort
+                    || rawPatientName.toLowerCase() === 'patient'
+                    || rawPatientName.toLowerCase().startsWith('patient (click')
+                    || rawPatientName.toLowerCase().startsWith('patient of')
+                    || rawPatientName.toLowerCase().startsWith('patient of invoice')
+                    || rawPatientName.toLowerCase().includes('[pass0-auto')
+                    || rawPatientName.toLowerCase().startsWith('invoice-')
+                    || rawPatientName.toLowerCase().startsWith('lab order #')
+                    || rawPatientName.toLowerCase().startsWith('walk-in')
+                    || rawPatientName.toLowerCase().startsWith('nurse walk-in')
+                    || rawPatientName.toLowerCase().startsWith('nurse walk');
                   const displayPatientName = isFallbackName ? 'Patient (click Update to fill name)' : rawPatientName;
                   const subtitleText = (() => {
                     const parts = [];
