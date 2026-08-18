@@ -5871,6 +5871,9 @@ function NurseDashboard() {
                 <div>
                   <h2 className="header-title">Nurse Dashboard</h2>
                   <p className="header-subtitle">{nurseWorkspace.label} • {user.departmentLabel || formatDepartmentLabel(activeDept)}</p>
+                  <div style={{ marginTop: 4, fontSize: '10.5px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0f172a', background: '#f8fafc', display: 'inline-block', padding: '2px 8px', borderRadius: 6, border: '1px solid #cbd5e1' }}>
+                    [DEPLOY 2026-08-18 v6 · Intake Report Fixes · Pill Removed]
+                  </div>
                 </div>
             </div>
 

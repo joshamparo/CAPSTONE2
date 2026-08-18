@@ -1623,6 +1623,9 @@ export default function OfficeStaffDashboard({ mode }) {
                    view === 'closeout' ? 'Daily Closeout' :
                    view.charAt(0).toUpperCase() + view.slice(1)}
                 </div>
+                <div style={{ marginTop: 4, fontSize: '10.5px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0f172a', background: '#f8fafc', display: 'inline-block', padding: '2px 8px', borderRadius: 6, border: '1px solid #cbd5e1' }}>
+                  [DEPLOY 2026-08-18 v6 · 8/page · Pill · Sidebar Fixed]
+                </div>
               </div>
             </div>
             <div className="office-header-right">
