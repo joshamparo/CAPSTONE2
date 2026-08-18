@@ -2363,6 +2363,62 @@ router.get('/hmo-queue', async (req, res) => {
         }
       } catch (_claimDirectLookup) { /* never break page */ }
 
+      // ✅ NEW: PATIENT_REFERENCE → PATIENT_ID REVERSE LOOKUP (for OLD rows!)
+      // Old rows (registered before the fixes) often have billing_hmo_claims.patient_reference populated from
+      // schema warmup backfills, but billing_invoices.patient_id = NULL AND hmo_claim.patient_id = NULL.
+      // Since patient_reference EXISTS on the enriched row (from L2110 step above), we can look up patients table
+      // by patient_reference and find the REAL patient_id. This covers the LARGEST batch of orphaned old rows.
+      try {
+        const refsToLookup = new Set();
+        const refRowIndexMap = new Map();
+        for (let i = 0; i < builtList.length; i++) {
+          const r = builtList[i];
+          let pid = String(r.hmo_claim?.patient_id || '').trim();
+          if ((!pid || pid === 'null' || pid === '') && r.invoice_id) {
+            const cand = invToPat.get(String(r.invoice_id));
+            if (cand) pid = String(cand).trim();
+          }
+          if (!pid || pid === 'null' || pid === '') {
+            const ref = String(r.patient_reference || r.hmo_claim?.patient_reference || '').trim();
+            if (ref && ref.length >= 8 && ref !== 'null') {
+              refsToLookup.add(ref);
+              if (!refRowIndexMap.has(ref)) refRowIndexMap.set(ref, []);
+              refRowIndexMap.get(ref).push(i);
+            }
+          }
+        }
+        if (refsToLookup.size > 0) {
+          const refArr = Array.from(refsToLookup);
+          const refPh = refArr.map((_, i) => `$${i + 1}`).join(',');
+          const patByRefRows = await prisma.$queryRawUnsafe(
+            `SELECT id::text AS pid, patient_reference AS pr FROM public.patients WHERE patient_reference IN (${refPh})`,
+            ...refArr
+          ).catch(() => []);
+          if (Array.isArray(patByRefRows)) {
+            for (const x of patByRefRows) {
+              const pr = String(x.pr || '').trim();
+              const pid = String(x.pid || '').trim();
+              if (!pr || !pid || pid === 'null') continue;
+              const indices = refRowIndexMap.get(pr) || [];
+              if (indices.length > 0) {
+                patNameIds.add(pid);
+                for (const i of indices) {
+                  const r = builtList[i];
+                  if (!r) continue;
+                  if (r.invoice_id) invToPat.set(String(r.invoice_id), pid);
+                  // Also inject the patient_id into hmo_claim so the later enrichment loop can pick it up easily
+                  const existingClaim = r.hmo_claim && typeof r.hmo_claim === 'object' ? { ...r.hmo_claim } : {};
+                  if (!String(existingClaim.patient_id || '').trim() || String(existingClaim.patient_id) === 'null') {
+                    existingClaim.patient_id = pid;
+                    builtList[i] = { ...r, hmo_claim: existingClaim };
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (_refReverseLookup) { /* never break page */ }
+
       // Always re-evaluate based on CURRENT state of patNameIds and invToPat (patNameArr was computed before new cross-ref lookups added new IDs)
       const patNameArrFinal = Array.from(patNameIds).filter(Boolean);
       if (patNameArrFinal.length > 0 || invToPat.size > 0) {
