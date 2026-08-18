@@ -317,8 +317,17 @@ export default function OfficeStaffDashboard({ mode }) {
         body: JSON.stringify(payload)
       });
 
-      const updatedUser = { ...user, ...data.user };
+      // The staff endpoint returns the user object directly.  Support the
+      // legacy wrapped response too, so the updated details persist locally.
+      const savedUser = data?.user || data || {};
+      const updatedUser = {
+        ...user,
+        ...savedUser,
+        firstName: savedUser.first_name || savedUser.firstName || profileForm.firstName,
+        lastName: savedUser.last_name || savedUser.lastName || profileForm.lastName
+      };
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      setUser(updatedUser);
       setProfileMessage({ text: 'Profile updated successfully!', type: 'success' });
       setProfileForm(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
     } catch (e) {

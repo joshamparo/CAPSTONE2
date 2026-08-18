@@ -2171,7 +2171,7 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             if (phoneClean) {
                 if (!isValidPHPhone(phoneClean)) bodyErrors.push("Invalid PH phone number. Use format: 09XX XXX XXXX or +63 9XX XXX XXXX.");
             }
-        } else {
+        } else if (model === 'nurses' || model === 'doctors') {
             if (!phoneClean) bodyErrors.push("Phone number is required.");
             else if (!isValidPHPhone(phoneClean)) bodyErrors.push("Invalid PH phone number. Use format: 09XX XXX XXXX or +63 9XX XXX XXXX.");
         }
@@ -2221,7 +2221,6 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
                 return res.status(400).json({ message: "Current password is required to save profile changes." });
             }
             if (user?.password) {
-                const bcrypt = require('bcrypt');
                 let isMatch = false;
                 try {
                     if (/^\$2[aby]\$/.test(String(user.password || ''))) {
@@ -2268,11 +2267,20 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         
         let updateData = { ...restData };
         if (emailClean && updateData.email !== undefined) updateData.email = emailClean;
-        if (model !== 'accounts' && firstNameClean && updateData.firstName === undefined && updateData.first_name === undefined) {
-            updateData.first_name = firstNameClean;
-        }
-        if (model !== 'accounts' && lastNameClean && updateData.lastName === undefined && updateData.last_name === undefined) {
-            updateData.last_name = lastNameClean;
+        if (model !== 'accounts') {
+            // The API accepts the frontend's camelCase fields, while Prisma uses
+            // snake_case columns for staff/nurse/doctor records.
+            if (firstNameClean) updateData.first_name = firstNameClean;
+            if (lastNameClean) updateData.last_name = lastNameClean;
+            delete updateData.firstName;
+            delete updateData.lastName;
+        } else {
+            // Accounts has a single `name` column, not firstName/lastName.
+            if (req.body?.firstName !== undefined || req.body?.lastName !== undefined) {
+                updateData.name = `${firstNameClean} ${lastNameClean}`.trim() || user.name;
+            }
+            delete updateData.firstName;
+            delete updateData.lastName;
         }
         
         if (model === 'accounts') {
@@ -2306,7 +2314,8 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             data: updateData
         });
         
-        const resUser = { ...updatedUser, id: updatedUser.id ? updatedUser.id.toString() : undefined };
+        const { password: _password, ...safeUpdatedUser } = updatedUser;
+        const resUser = { ...safeUpdatedUser, id: updatedUser.id ? updatedUser.id.toString() : undefined };
         if (resUser.contact_number) resUser.contact_number = resUser.contact_number.toString();
         res.json(resUser);
     } catch (err) {
