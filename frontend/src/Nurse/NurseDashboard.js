@@ -20,6 +20,7 @@ function NurseDashboard() {
   const navigate = useNavigate();
   const [backendHealth, setBackendHealth] = useState({ checked: false, ok: true, error: '' });
   const [view, setView] = useState('overview');
+  const [activityPage, setActivityPage] = useState(1);
   const [bedSearch, setBedSearch] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [statsError, setStatsError] = useState('');
@@ -3500,6 +3501,20 @@ function NurseDashboard() {
       [allRecentActivities]
   );
 
+  const activityPageSize = 8;
+  const activityPageCount = Math.max(1, Math.ceil(allRecentActivities.length / activityPageSize));
+  const currentActivityPage = Math.min(activityPage, activityPageCount);
+  const pagedRecentActivities = useMemo(() => {
+      const start = (currentActivityPage - 1) * activityPageSize;
+      return allRecentActivities.slice(start, start + activityPageSize);
+  }, [allRecentActivities, currentActivityPage]);
+  const activityRangeStart = allRecentActivities.length ? ((currentActivityPage - 1) * activityPageSize) + 1 : 0;
+  const activityRangeEnd = allRecentActivities.length ? activityRangeStart + pagedRecentActivities.length - 1 : 0;
+
+  useEffect(() => {
+      setActivityPage((page) => Math.min(Math.max(1, page), activityPageCount));
+  }, [activityPageCount]);
+
   const overviewSupportTasks = useMemo(() => {
       const taskRows = tasks
           .filter((task) => !task.completed)
@@ -6494,7 +6509,7 @@ function NurseDashboard() {
                             <div className="overview-card">
                                 <div className="card-header">
                                     <h3>Recent Activity</h3>
-                                    <button className="text-btn" onClick={() => setView('activity')}>View All</button>
+                                    <button className="text-btn" onClick={() => { setActivityPage(1); setView('activity'); }}>View All</button>
                                 </div>
                                 <div className="activity-timeline">
                                     {recentOverviewActivities.length === 0 ? (
@@ -8037,35 +8052,59 @@ function NurseDashboard() {
                 </div>
             )}
             {view === 'activity' && (
-                <div className="tasks-board-container">
-                    <div className="tasks-header">
-                        <div>
-                            <h2 className="page-title">Recent Activity</h2>
-                            <p className="page-subtitle">Latest nurse and patient-care workflow updates</p>
+                <div className="tasks-board-container nurse-activity-page">
+                    <div className="nurse-activity-hero">
+                        <div className="nurse-activity-heading">
+                            <div className="nurse-activity-heading-icon"><Activity size={24} /></div>
+                            <div>
+                                <h2 className="page-title">Recent Activity</h2>
+                                <p className="page-subtitle">Latest nurse and patient-care workflow updates</p>
+                            </div>
                         </div>
                         <button type="button" className="btn-gray" onClick={() => setView('overview')}>
                             <ArrowLeft size={18} /> Back to Dashboard
                         </button>
                     </div>
-                    <div className="overview-card">
-                        <div className="activity-timeline">
+                    <div className="overview-card nurse-activity-card">
+                        <div className="nurse-activity-toolbar">
+                            <div>
+                                <span className="nurse-activity-count">{allRecentActivities.length}</span>
+                                <span> recorded activities</span>
+                            </div>
+                            <div className="nurse-activity-range">
+                                {activityRangeStart}-{activityRangeEnd} of {allRecentActivities.length}
+                            </div>
+                        </div>
+                        <div className="activity-timeline nurse-activity-scroll" tabIndex="0" aria-label="Recent activity list">
                             {allRecentActivities.length === 0 ? (
-                                <div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
+                                <div className="nurse-activity-empty">
+                                    <Activity size={28} />
                                     <p>No recent activity recorded.</p>
                                 </div>
-                            ) : allRecentActivities.map((activity) => (
-                                <div key={activity.id} className="activity-item" style={{ display: 'flex', gap: 16, padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
-                                    <div className={`activity-icon ${activity.type}`} style={{ width: 36, height: 36, flexShrink: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: activity.type === 'success' ? '#f0fdf4' : activity.type === 'alert' ? '#fef2f2' : '#eff6ff' }}>
+                            ) : pagedRecentActivities.map((activity) => (
+                                <div key={activity.id} className={`activity-item nurse-activity-row ${activity.type || 'info'}`}>
+                                    <div className={`activity-icon ${activity.type}`}>
                                         {activity.type === 'success' ? <CheckCircle size={18} color="#22c55e" /> : activity.type === 'alert' ? <AlertTriangle size={18} color="#ef4444" /> : <Info size={18} color="#3b82f6" />}
                                     </div>
                                     <div className="activity-content">
-                                        <p style={{ margin: 0, fontWeight: 700 }}>{activity.title}</p>
-                                        <p style={{ margin: '3px 0 0', color: '#64748b' }}>{activity.message}</p>
-                                        <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{activity.time}</span>
+                                        <p className="nurse-activity-title">{activity.title}</p>
+                                        <p className="nurse-activity-message">{activity.message}</p>
+                                        <span className="nurse-activity-time"><Clock size={12} /> {activity.time}</span>
                                     </div>
                                 </div>
                             ))}
                         </div>
+                        {allRecentActivities.length > activityPageSize ? (
+                            <div className="nurse-activity-pagination">
+                                <button type="button" className="patient-page-btn" onClick={() => setActivityPage((page) => Math.max(1, page - 1))} disabled={currentActivityPage <= 1} aria-label="Previous activity page">
+                                    <ChevronLeft size={17} />
+                                </button>
+                                <span>Page {currentActivityPage} of {activityPageCount}</span>
+                                <button type="button" className="patient-page-btn" onClick={() => setActivityPage((page) => Math.min(activityPageCount, page + 1))} disabled={currentActivityPage >= activityPageCount} aria-label="Next activity page">
+                                    <ChevronRight size={17} />
+                                </button>
+                            </div>
+                        ) : null}
                     </div>
                 </div>
             )}
