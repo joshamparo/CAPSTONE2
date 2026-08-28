@@ -2454,6 +2454,33 @@ function DoctorDashboard() {
     }
   };
 
+  const addQuickConsultationNote = (field, label, text = label) => {
+    const currentText = String(noteForm?.[field] || '');
+    const normalizeQuickText = (value) => String(value || '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+    const normalizedCurrent = normalizeQuickText(currentText);
+    const normalizedLabel = normalizeQuickText(label);
+    const normalizedText = normalizeQuickText(text);
+
+    if (
+      (normalizedText && normalizedCurrent.includes(normalizedText)) ||
+      (normalizedLabel && normalizedCurrent.includes(normalizedLabel))
+    ) {
+      setToast({ type: 'error', message: `"${label}" is already included in the consultation notes.` });
+      return;
+    }
+
+    const separator = !currentText.trim()
+      ? ''
+      : (field === 'objective' && currentText.trimEnd().endsWith('.') ? ' ' : ', ');
+    setNoteForm((previous) => ({
+      ...previous,
+      [field]: `${String(previous?.[field] || '')}${separator}${text}`
+    }));
+  };
+
   const addPrescriptionItem = () => {
     setPrescriptionItems((items) => [...items, { medication: '', dosage: '', frequency: '', duration: '', notes: '' }]);
   };
@@ -4774,13 +4801,7 @@ function DoctorDashboard() {
                             uppercase={false}
                             showDot={false}
                             label={`+ ${chip}`}
-                            onClick={() => {
-                              setNoteForm(prev => {
-                                const curr = prev.subjective || '';
-                                const sep = curr ? ', ' : '';
-                                return { ...prev, subjective: curr + sep + chip };
-                              });
-                            }}
+                            onClick={() => addQuickConsultationNote('subjective', chip)}
                           />
                         ))}
                       </div>
@@ -4800,14 +4821,13 @@ function DoctorDashboard() {
                             showDot={false}
                             style={chip === 'Normal Exam' ? { fontWeight: 700 } : undefined}
                             label={`+ ${chip}`}
-                            onClick={() => {
-                              setNoteForm(prev => {
-                                const curr = prev.objective || '';
-                                const sep = curr ? (curr.endsWith('.') ? ' ' : ', ') : '';
-                                const text = chip === 'Normal Exam' ? 'Alert, coherent, oriented to 3 spheres, not in cardiorespiratory distress. Vital signs stable. Clear breath sounds bilaterally. Regular heart rhythm. Soft abdomen, no tenderness.' : chip;
-                                return { ...prev, objective: curr + sep + text };
-                              });
-                            }}
+                            onClick={() => addQuickConsultationNote(
+                              'objective',
+                              chip,
+                              chip === 'Normal Exam'
+                                ? 'Alert, coherent, oriented to 3 spheres, not in cardiorespiratory distress. Vital signs stable. Clear breath sounds bilaterally. Regular heart rhythm. Soft abdomen, no tenderness.'
+                                : chip
+                            )}
                           />
                         ))}
                       </div>
