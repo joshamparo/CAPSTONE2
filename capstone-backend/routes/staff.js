@@ -976,41 +976,38 @@ router.get('/doctor-secretaries', requireRole(['admin', 'nurse', 'doctor_secreta
         const specRaw = String(req.query.specialization || req.query.spec || '').trim();
         if (!specRaw) return res.json([]);
 
-        const normalize = (s) => String(s || '').trim().toLowerCase();
-        const spec = normalize(specRaw);
-        const needles = (() => {
-            if (!spec) return [];
-            if (spec.includes('ob')) return ['ob-gyn', 'obgyn', 'obstetrics', 'gyne', 'gyn'];
-            if (spec.includes('pedia')) return ['pediatrics', 'pedia'];
-            if (spec === 'ent' || spec.includes('otol')) return ['ent', 'otolaryngology'];
-            if (spec.includes('dental')) return ['dental'];
-            if (spec.includes('ortho')) return ['orthopedics', 'orthopedrics', 'ortho'];
-            return [spec];
-        })();
+        const canonicalSpecialization = (value) => {
+            const normalized = String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+            if (!normalized) return '';
+            if (/^(obgyn|obstetricsgynecology|obstetricsandgynecology|gynecology)$/.test(normalized)) return 'obgyn';
+            if (/^(ent|otolaryngology|otorhinolaryngology)$/.test(normalized)) return 'ent';
+            if (/^(pediatric|pediatrics|pedia)$/.test(normalized)) return 'pediatrics';
+            if (/^(orthopedic|orthopedics|orthopedrics|ortho)$/.test(normalized)) return 'orthopedics';
+            if (/^(dental|dentalmedicine|dentistry)$/.test(normalized)) return 'dental';
+            return normalized;
+        };
+        const requestedSpec = canonicalSpecialization(specRaw);
 
         const doctorRows = await prisma.doctors
             .findMany({
-                where: {
-                    OR: needles.map((n) => ({ specialization: { contains: n, mode: 'insensitive' } }))
-                },
                 select: { id: true, first_name: true, last_name: true, specialization: true },
                 take: 500
-            })
-            .catch(() => []);
-        const doctorIds = (Array.isArray(doctorRows) ? doctorRows : []).map((d) => String(d?.id || '').trim()).filter(Boolean);
+            });
+        const matchingDoctors = (Array.isArray(doctorRows) ? doctorRows : [])
+            .filter((doctor) => canonicalSpecialization(doctor?.specialization) === requestedSpec);
+        const doctorIds = matchingDoctors.map((d) => String(d?.id || '').trim()).filter(Boolean);
         if (!doctorIds.length) return res.json([]);
 
         const accounts = await prisma.accounts
             .findMany({
                 where: {
-                    roles: { equals: 'doctor_secretary' },
+                    roles: { equals: 'doctor_secretary', mode: 'insensitive' },
                     linked_doctor_id: { in: doctorIds }
                 },
-                select: { id: true, name: true, email: true, linked_doctor_id: true }
-            })
-            .catch(() => []);
+                select: { id: true, name: true, email: true, linked_doctor_id: true, status: true }
+            });
 
-        const docMap = new Map((Array.isArray(doctorRows) ? doctorRows : []).map((d) => {
+        const docMap = new Map(matchingDoctors.map((d) => {
             const id = String(d.id);
             const name = `Dr. ${String(d.first_name || '').trim()} ${String(d.last_name || '').trim()}`.trim();
             return [id, { id, name, specialization: d.specialization || null }];
@@ -1018,6 +1015,7 @@ router.get('/doctor-secretaries', requireRole(['admin', 'nurse', 'doctor_secreta
 
         res.json(
             (Array.isArray(accounts) ? accounts : [])
+                .filter((acc) => !['inactive', 'disabled', 'suspended'].includes(String(acc.status || '').trim().toLowerCase()))
                 .map((acc) => ({
                     id: acc.id != null ? acc.id.toString() : String(acc.id),
                     name: String(acc.name || '').trim() || 'Doctor Secretary',

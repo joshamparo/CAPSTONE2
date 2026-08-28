@@ -368,7 +368,7 @@ async function loadEmergencyLiveBoard() {
 async function loadRecentNurseActivities(department) {
   const logs = await prisma.activity_logs.findMany({
     orderBy: { timestamp: 'desc' },
-    take: 24
+    take: 100
   }).catch(() => []);
 
   const relevant = (Array.isArray(logs) ? logs : [])
@@ -388,7 +388,7 @@ async function loadRecentNurseActivities(department) {
       }
       return ['nurse', 'doctor', 'admin'].includes(role);
     })
-    .slice(0, 8)
+    .slice(0, 50)
     .map((log) => {
       const action = String(log.action || '').trim() || 'Workflow Update';
       const details = String(log.details || '').trim();

@@ -3482,11 +3482,11 @@ function NurseDashboard() {
       });
   }, [criticalVitals, activeDept, liveBoard, nurseWorkspace.type]);
 
-  const recentOverviewActivities = useMemo(() => {
+  const allRecentActivities = useMemo(() => {
       if (Array.isArray(recentWorkflowActivities) && recentWorkflowActivities.length) {
-          return recentWorkflowActivities.slice(0, 6);
+          return recentWorkflowActivities;
       }
-      return notifications.slice(0, 6).map((notif) => ({
+      return notifications.map((notif) => ({
           id: notif.id,
           title: notif.title,
           message: notif.message,
@@ -3494,6 +3494,11 @@ function NurseDashboard() {
           type: notif.type
       }));
   }, [recentWorkflowActivities, notifications]);
+
+  const recentOverviewActivities = useMemo(
+      () => allRecentActivities.slice(0, 5),
+      [allRecentActivities]
+  );
 
   const overviewSupportTasks = useMemo(() => {
       const taskRows = tasks
@@ -5012,6 +5017,21 @@ function NurseDashboard() {
     const email = String(editFormData.email || '').trim();
     const contact = String(editFormData.phone || editFormData.contactNumber || '').trim();
     const errs = [];
+    const editableValues = [
+      editFormData.firstName, editFormData.lastName, editFormData.middleName,
+      editFormData.dateOfBirth, editFormData.sex, editFormData.phone,
+      editFormData.streetAddress, editFormData.city, editFormData.province,
+      editFormData.postalCode, editFormData.employeeId, editFormData.civilStatus,
+      editFormData.nationality, editFormData.emergencyName1, editFormData.emergencyRel1,
+      editFormData.emergencyContact1, editFormData.emergencyName2, editFormData.emergencyRel2,
+      editFormData.emergencyContact2, editFormData.emergencyName3, editFormData.emergencyRel3,
+      editFormData.emergencyContact3, editFormData.bloodType, editFormData.allergies,
+      editFormData.philHealthNumber, editFormData.wardNumber, editFormData.email
+    ];
+    if (!editableValues.some((value) => String(value == null ? '' : value).trim())) {
+      setUpdatePatientError('Patient information cannot be empty. Enter the required patient details before saving.');
+      return;
+    }
     if (!fn) errs.push('First name is required.');
     else if (fn.length < 2) errs.push('First name is too short (min 2 characters).');
     if (!ln) errs.push('Last name is required.');
@@ -5871,9 +5891,6 @@ function NurseDashboard() {
                 <div>
                   <h2 className="header-title">Nurse Dashboard</h2>
                   <p className="header-subtitle">{nurseWorkspace.label} • {user.departmentLabel || formatDepartmentLabel(activeDept)}</p>
-                  <div style={{ marginTop: 4, fontSize: '10.5px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0f172a', background: '#f8fafc', display: 'inline-block', padding: '2px 8px', borderRadius: 6, border: '1px solid #cbd5e1' }}>
-                    [DEPLOY 2026-08-18 v6 · Intake Report Fixes · Pill Removed]
-                  </div>
                 </div>
             </div>
 
@@ -6478,15 +6495,15 @@ function NurseDashboard() {
                             <div className="overview-card">
                                 <div className="card-header">
                                     <h3>Recent Activity</h3>
-                                    <button className="text-btn" onClick={() => setView('tasks')}>View All</button>
+                                    <button className="text-btn" onClick={() => setView('activity')}>View All</button>
                                 </div>
                                 <div className="activity-timeline">
-                                    {notifications.length === 0 ? (
+                                    {recentOverviewActivities.length === 0 ? (
                                         <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
                                             <p>No recent activity recorded.</p>
                                         </div>
                                     ) : (
-                                        notifications.slice(0, 5).map(notif => (
+                                        recentOverviewActivities.map(notif => (
                                             <div key={notif.id} className="activity-item" style={{ 
                                                 display: 'flex', 
                                                 gap: '16px', 
@@ -8018,6 +8035,39 @@ function NurseDashboard() {
                         </div>
                     </div>
                     )}
+                </div>
+            )}
+            {view === 'activity' && (
+                <div className="tasks-board-container">
+                    <div className="tasks-header">
+                        <div>
+                            <h2 className="page-title">Recent Activity</h2>
+                            <p className="page-subtitle">Latest nurse and patient-care workflow updates</p>
+                        </div>
+                        <button type="button" className="btn-gray" onClick={() => setView('overview')}>
+                            <ArrowLeft size={18} /> Back to Dashboard
+                        </button>
+                    </div>
+                    <div className="overview-card">
+                        <div className="activity-timeline">
+                            {allRecentActivities.length === 0 ? (
+                                <div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
+                                    <p>No recent activity recorded.</p>
+                                </div>
+                            ) : allRecentActivities.map((activity) => (
+                                <div key={activity.id} className="activity-item" style={{ display: 'flex', gap: 16, padding: '16px 0', borderBottom: '1px solid #f1f5f9' }}>
+                                    <div className={`activity-icon ${activity.type}`} style={{ width: 36, height: 36, flexShrink: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: activity.type === 'success' ? '#f0fdf4' : activity.type === 'alert' ? '#fef2f2' : '#eff6ff' }}>
+                                        {activity.type === 'success' ? <CheckCircle size={18} color="#22c55e" /> : activity.type === 'alert' ? <AlertTriangle size={18} color="#ef4444" /> : <Info size={18} color="#3b82f6" />}
+                                    </div>
+                                    <div className="activity-content">
+                                        <p style={{ margin: 0, fontWeight: 700 }}>{activity.title}</p>
+                                        <p style={{ margin: '3px 0 0', color: '#64748b' }}>{activity.message}</p>
+                                        <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{activity.time}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             )}
             {view === 'tasks' && (

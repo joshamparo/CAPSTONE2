@@ -2758,6 +2758,15 @@ router.put('/:id', async (req, res) => {
 
         const { password, address, emergencyContacts, ...updateData } = req.body || {};
 
+        const submittedValues = Object.entries(updateData)
+            .filter(([key]) => !['_id', 'id', 'createdAt', 'updatedAt'].includes(key))
+            .map(([, value]) => value)
+            .concat(address && typeof address === 'object' ? Object.values(address) : [])
+            .concat(Array.isArray(emergencyContacts) ? emergencyContacts.flatMap((contact) => Object.values(contact || {})) : []);
+        if (!submittedValues.some((value) => String(value == null ? '' : value).trim())) {
+            return res.status(400).json({ message: 'Patient information cannot be empty. Enter the required patient details before saving.' });
+        }
+
         const cleanStr = (v, maxLen) => {
             const s = String(v == null ? '' : v).trim();
             return maxLen && s.length > maxLen ? s.slice(0, maxLen) : s;
