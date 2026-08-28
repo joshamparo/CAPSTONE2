@@ -33,15 +33,24 @@ router.post('/', requireRole(['doctor', 'admin']), async (req, res) => {
     if (!patientId || !doctorName) {
       return res.status(400).json({ message: 'patientId and doctorName are required' });
     }
+    const requiredFields = { subjective, objective, assessment, plan };
+    const missingFields = Object.entries(requiredFields)
+      .filter(([, value]) => !String(value || '').trim())
+      .map(([field]) => field.charAt(0).toUpperCase() + field.slice(1));
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        message: `Complete the required consultation fields: ${missingFields.join(', ')}.`
+      });
+    }
 
     const created = await prisma.doctor_notes.create({
       data: {
         patient_id: patientId,
         doctor_name: doctorName,
-        subjective,
-        objective,
-        assessment,
-        plan,
+        subjective: String(subjective).trim(),
+        objective: String(objective).trim(),
+        assessment: String(assessment).trim(),
+        plan: String(plan).trim(),
         vitals
       }
     });

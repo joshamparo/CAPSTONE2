@@ -2410,14 +2410,27 @@ function DoctorDashboard() {
       setToast({ type: 'error', message: 'Session missing. Please login again.' });
       return;
     }
+    const requiredNoteFields = [
+      ['subjective', 'Subjective'],
+      ['objective', 'Objective'],
+      ['assessment', 'Assessment'],
+      ['plan', 'Plan']
+    ];
+    const missingFields = requiredNoteFields
+      .filter(([field]) => !String(noteForm?.[field] || '').trim())
+      .map(([, label]) => label);
+    if (missingFields.length > 0) {
+      setToast({ type: 'error', message: `Complete the required consultation fields: ${missingFields.join(', ')}.` });
+      return;
+    }
     setSavingNote(true);
     const payload = {
       patientId: selectedPatient._id,
       doctorName,
-      subjective: noteForm.subjective,
-      objective: noteForm.objective,
-      assessment: noteForm.assessment,
-      plan: noteForm.plan,
+      subjective: noteForm.subjective.trim(),
+      objective: noteForm.objective.trim(),
+      assessment: noteForm.assessment.trim(),
+      plan: noteForm.plan.trim(),
       vitals: {
         bp: noteForm.bp,
         hr: noteForm.hr,
@@ -4833,10 +4846,10 @@ function DoctorDashboard() {
                       </div>
                     </div>
 
-                    <textarea className="doc-textarea" placeholder="Subjective" value={noteForm.subjective} onChange={(e) => setNoteForm((v) => ({ ...v, subjective: e.target.value }))} />
-                    <textarea className="doc-textarea" placeholder="Objective" value={noteForm.objective} onChange={(e) => setNoteForm((v) => ({ ...v, objective: e.target.value }))} />
-                    <textarea className="doc-textarea" placeholder="Assessment" value={noteForm.assessment} onChange={(e) => setNoteForm((v) => ({ ...v, assessment: e.target.value }))} />
-                    <textarea className="doc-textarea" placeholder="Plan" value={noteForm.plan} onChange={(e) => setNoteForm((v) => ({ ...v, plan: e.target.value }))} />
+                    <textarea className="doc-textarea" required aria-label="Subjective" placeholder="Subjective *" value={noteForm.subjective} onChange={(e) => setNoteForm((v) => ({ ...v, subjective: e.target.value }))} />
+                    <textarea className="doc-textarea" required aria-label="Objective" placeholder="Objective *" value={noteForm.objective} onChange={(e) => setNoteForm((v) => ({ ...v, objective: e.target.value }))} />
+                    <textarea className="doc-textarea" required aria-label="Assessment" placeholder="Assessment *" value={noteForm.assessment} onChange={(e) => setNoteForm((v) => ({ ...v, assessment: e.target.value }))} />
+                    <textarea className="doc-textarea" required aria-label="Plan" placeholder="Plan *" value={noteForm.plan} onChange={(e) => setNoteForm((v) => ({ ...v, plan: e.target.value }))} />
 
                     <button className="doc-primary" type="button" onClick={saveNote} disabled={savingNote}>
                       Save Note
@@ -4853,7 +4866,18 @@ function DoctorDashboard() {
                               <span className="doc-history-doctor">{n.doctorName}</span>
                               <span className="doc-muted">{new Date(n.created_at || n.createdAt || n.timestamp || Date.now()).toLocaleString()}</span>
                             </div>
-                            <div className="doc-history-sub">{n.assessment || '—'}</div>
+                            <div style={{ display: 'grid', gap: '6px', marginTop: '8px', fontSize: '0.82rem', lineHeight: 1.45 }}>
+                              {[
+                                ['Subjective', n.subjective],
+                                ['Objective', n.objective],
+                                ['Assessment', n.assessment],
+                                ['Plan', n.plan]
+                              ].map(([label, value]) => (
+                                <div key={label} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                                  <strong>{label}:</strong> {String(value || '').trim() || '—'}
+                                </div>
+                              ))}
+                            </div>
                             <button
                               type="button"
                               className="doc-btn"
