@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, User, Users, MessageSquare, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Settings, AlertCircle, AlertOctagon, Printer, Search, Eye, BedDouble, Bed, LayoutDashboard, Activity, FileText, Calendar, ClipboardList, ArrowLeft, Stethoscope, UserCheck, Clipboard, Check, Trash2, FilePenLine, LogIn, Pill, FlaskConical, Package, Clock, CheckCircle, XCircle, X, Plus, Phone, AlertTriangle, Info, MapPin, Copy, Save, Megaphone, RotateCw, Send, Upload, Menu, ShieldAlert, Mail, Briefcase, Key, Shield, EyeOff } from 'lucide-react';
 import './NurseDashboard.css';
@@ -3393,6 +3393,7 @@ function NurseDashboard() {
   const [recentOrdersError, setRecentOrdersError] = useState('');
   const [selectedRecentOrder, setSelectedRecentOrder] = useState(null);
   const [recentOrdersPage, setRecentOrdersPage] = useState(1);
+  const recentOrderDetailRef = useRef(null);
 
   const recentOrdersPageSize = 8;
   const recentOrdersPageCount = Math.max(1, Math.ceil(recentOrders.length / recentOrdersPageSize));
@@ -3407,6 +3408,14 @@ function NurseDashboard() {
   useEffect(() => {
     setRecentOrdersPage((page) => Math.min(Math.max(1, page), recentOrdersPageCount));
   }, [recentOrdersPageCount]);
+
+  useEffect(() => {
+    if (!selectedRecentOrder) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      recentOrderDetailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedRecentOrder]);
 
   // Stats State
   const [stats, setStats] = useState({
@@ -8094,7 +8103,7 @@ function NurseDashboard() {
                             </div>
                             <div className="orders-list-scroll">
                                 {selectedRecentOrder ? (
-                                    <div className="recent-order-detail" role="region" aria-label="Selected order details">
+                                    <div ref={recentOrderDetailRef} className="recent-order-detail" role="region" aria-label="Selected order details" tabIndex="-1">
                                         <div className="recent-order-detail-head">
                                             <div>
                                                 <span className="recent-order-detail-kicker">{selectedRecentOrder.source || selectedRecentOrder.type}</span>

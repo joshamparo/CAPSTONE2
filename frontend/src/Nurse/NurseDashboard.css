@@ -4720,6 +4720,7 @@ body.compact-mode .workspace-queue-item {
 }
 
 .recent-order-detail {
+  scroll-margin-top: 16px;
   padding: 16px;
   border: 1px solid #fdba74;
   border-radius: 16px;
