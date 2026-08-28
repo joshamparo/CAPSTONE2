@@ -11424,11 +11424,11 @@ function NurseDashboard() {
                               </div>
                             ) : null}
                           </div>
-                          <div style={{marginTop: 10, border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', background: '#fff'}}>
+                          <div className="walkin-patient-results" style={{marginTop: 10, border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff'}}>
                             {walkInPatientMatches.length === 0 ? (
                               <div style={{padding: '12px 14px', color: '#64748b', fontWeight: 700, fontSize: '0.82rem'}}>No matching patient.</div>
                             ) : (
-                              walkInPatientPageItems.slice(0, 3).map((patient) => {
+                              walkInPatientPageItems.map((patient) => {
                                 const selected = String(addPatientData.existingPatientId || '') === String(patient._id || patient.id || '');
                                 return (
                                   <button
