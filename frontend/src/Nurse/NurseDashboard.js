@@ -5018,20 +5018,19 @@ function NurseDashboard() {
     const contact = String(editFormData.phone || editFormData.contactNumber || '').trim();
     const errs = [];
     const editableValues = [
-      editFormData.firstName, editFormData.lastName, editFormData.middleName,
-      editFormData.dateOfBirth, editFormData.sex, editFormData.phone,
-      editFormData.streetAddress, editFormData.city, editFormData.province,
-      editFormData.postalCode, editFormData.employeeId, editFormData.civilStatus,
-      editFormData.nationality, editFormData.emergencyName1, editFormData.emergencyRel1,
+      editFormData.emergencyName1, editFormData.emergencyRel1,
       editFormData.emergencyContact1, editFormData.emergencyName2, editFormData.emergencyRel2,
       editFormData.emergencyContact2, editFormData.emergencyName3, editFormData.emergencyRel3,
       editFormData.emergencyContact3, editFormData.bloodType, editFormData.allergies,
-      editFormData.philHealthNumber, editFormData.wardNumber, editFormData.email
+      editFormData.philHealthNumber, editFormData.wardNumber
     ];
     if (!editableValues.some((value) => String(value == null ? '' : value).trim())) {
-      setUpdatePatientError('Patient information cannot be empty. Enter the required patient details before saving.');
+      setUpdatePatientError('No editable patient information was entered. Fill in the required emergency contact fields before saving.');
       return;
     }
+    if (!String(editFormData.emergencyName1 || '').trim()) errs.push('Emergency contact name is required.');
+    if (!String(editFormData.emergencyRel1 || '').trim()) errs.push('Emergency contact relationship is required.');
+    if (!String(editFormData.emergencyContact1 || '').trim()) errs.push('Emergency contact number is required.');
     if (!fn) errs.push('First name is required.');
     else if (fn.length < 2) errs.push('First name is too short (min 2 characters).');
     if (!ln) errs.push('Last name is required.');
@@ -6897,7 +6896,7 @@ function NurseDashboard() {
                             <h1 className="form-main-title">Edit Patient Information</h1>
                           </header>
 
-                          <form className="compact-form" onSubmit={handleSaveEdit}>
+                          <form className="compact-form" onSubmit={handleSaveEdit} noValidate>
                             <div className="form-section-container">
                               <div className="form-grid-main">
                                 <div className="form-left-col">
