@@ -830,6 +830,7 @@ router.post('/med-admin', async (req, res) => {
     const medicationName = String(req.body?.medicationName || '').trim();
     const statusRaw = String(req.body?.status || '').trim().toLowerCase();
     const patientName = String(req.body?.patientName || '').trim();
+    const noteRaw = String(req.body?.note || '').trim();
     const quantityRaw = req.body?.quantity;
     const allowedStatus = new Set(['administered', 'held', 'missed']);
     const status = allowedStatus.has(statusRaw) ? statusRaw : null;
@@ -837,6 +838,9 @@ router.post('/med-admin', async (req, res) => {
     if (!medicationName) return res.status(400).json({ message: 'medicationName is required' });
     if (medicationName.length > 200) return res.status(400).json({ message: 'medicationName is too long (max 200 characters)' });
     if (!status) return res.status(400).json({ message: `Invalid status '${statusRaw}'. Allowed: administered, held, missed.` });
+    if ((status === 'held' || status === 'missed') && noteRaw.length < 3) {
+      return res.status(400).json({ message: `A reason of at least 3 characters is required when medication is ${status}.` });
+    }
     let quantity = 1;
     if (quantityRaw !== undefined && quantityRaw !== null && String(quantityRaw).trim() !== '') {
       const n = Number(quantityRaw);
@@ -846,7 +850,7 @@ router.post('/med-admin', async (req, res) => {
       quantity = n;
     }
     const dosage = req.body?.dosage != null ? String(req.body.dosage).slice(0, 200) : null;
-    const note = req.body?.note != null ? String(req.body.note).slice(0, 1000) : null;
+    const note = noteRaw ? noteRaw.slice(0, 1000) : null;
     const requestIdRaw = req.body?.requestId;
     let requestId = null;
     if (requestIdRaw !== undefined && requestIdRaw !== null && String(requestIdRaw).trim() !== '') {
@@ -855,8 +859,27 @@ router.post('/med-admin', async (req, res) => {
       requestId = s;
     }
     const patientId = req.body?.patientId || null;
+    if (!requestId) return res.status(400).json({ message: 'requestId is required' });
+    if (!patientId && !patientName) return res.status(400).json({ message: 'patient information is required' });
 
     const result = await prisma.$transaction(async (tx) => {
+      const duplicateRows = await tx.$queryRawUnsafe(
+        `
+          SELECT id
+          FROM public.nurse_med_admin_logs
+          WHERE medication_request_id = $1::bigint
+            AND status = $2
+          ORDER BY created_at DESC
+          LIMIT 1
+        `,
+        requestId,
+        status
+      );
+      if (Array.isArray(duplicateRows) && duplicateRows.length) {
+        const duplicateError = new Error(`This medication request is already marked as ${status}.`);
+        duplicateError.code = 'DUPLICATE_MED_ADMIN';
+        throw duplicateError;
+      }
       const rows = await tx.$queryRawUnsafe(
         `
           INSERT INTO public.nurse_med_admin_logs
@@ -903,6 +926,9 @@ router.post('/med-admin', async (req, res) => {
     res.status(201).json(serializeRow(result));
   } catch (error) {
     console.error('Error recording medication administration:', error);
+    if (error?.code === 'DUPLICATE_MED_ADMIN') {
+      return res.status(409).json({ message: error.message });
+    }
     res.status(500).json({ message: 'Unable to record medication administration' });
   }
 });

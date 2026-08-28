@@ -3227,13 +3227,40 @@ function NurseDashboard() {
       const statusClean = String(status || '').trim().toLowerCase();
       const requestId = String(request?.requestId || '').trim();
       const medicationName = String(request?.medicationName || '').trim();
+      const patientId = String(request?.patientId || '').trim();
+      const patientName = String(request?.patientName || '').trim();
       const allowedStatus = new Set(['administered', 'held', 'missed']);
+      if (medAdminActionId) {
+        medErr('A medication update is already being processed. Please wait.');
+        return;
+      }
       if (!allowedStatus.has(statusClean)) {
         medErr(`Invalid medication status '${statusClean}'.`);
         return;
       }
       if (!medicationName) {
         medErr('Medication name is required to record administration.');
+        return;
+      }
+      if (!requestId || !/^\d+$/.test(requestId)) {
+        medErr('A valid medication request is required before recording administration.');
+        return;
+      }
+      if (!patientId && !patientName) {
+        medErr('Patient information is missing from this medication request.');
+        return;
+      }
+      let note = '';
+      if (statusClean === 'held' || statusClean === 'missed') {
+        const label = statusClean === 'held' ? 'holding' : 'marking as missed';
+        const entered = window.prompt(`Enter the reason for ${label} ${medicationName}:`, '');
+        if (entered === null) return;
+        note = String(entered || '').trim();
+        if (note.length < 3) {
+          medErr(`A reason of at least 3 characters is required when medication is ${statusClean}.`);
+          return;
+        }
+      } else if (!window.confirm(`Confirm ${medicationName} was administered to ${patientName || 'this patient'}?`)) {
         return;
       }
       const quantityRaw = request?.quantity;
@@ -3255,12 +3282,13 @@ function NurseDashboard() {
               body: JSON.stringify({
                   department: activeDept,
                   requestId: requestId || null,
-                  patientId: request?.patientId || null,
-                  patientName: request?.patientName || '',
+                  patientId: patientId || null,
+                  patientName,
                   medicationName,
                   dosage: request?.dosage || '',
                   quantity,
-                  status: statusClean
+                  status: statusClean,
+                  note: note || null
               })
           });
           await refreshNurseWorkflow({ silent: true });
@@ -4229,6 +4257,8 @@ function NurseDashboard() {
   const [patientOrdersError, setPatientOrdersError] = useState('');
   const [orderRemarkDraft, setOrderRemarkDraft] = useState({});
   const [orderDetailsById, setOrderDetailsById] = useState({});
+  const [orderDetailsErrorById, setOrderDetailsErrorById] = useState({});
+  const [expandedOrderHistoryId, setExpandedOrderHistoryId] = useState('');
   const [orderDetailsLoadingId, setOrderDetailsLoadingId] = useState(null);
   const [orderActionLoadingId, setOrderActionLoadingId] = useState(null);
 
@@ -5215,15 +5245,21 @@ function NurseDashboard() {
 
   const fetchOrderDetails = async (orderId) => {
     const oid = String(orderId || '').trim();
-    if (!oid) return;
+    if (!/^\d+$/.test(oid)) {
+      setOrderDetailsErrorById((prev) => ({ ...prev, [oid || 'unknown']: 'This order has an invalid identifier.' }));
+      return;
+    }
     setOrderDetailsLoadingId(oid);
+    setExpandedOrderHistoryId(oid);
+    setOrderDetailsErrorById((prev) => ({ ...prev, [oid]: '' }));
     try {
       const res = await fetch(`${API_BASE}/api/clinical-orders/${encodeURIComponent(oid)}`, { headers: { ...getAuthHeaders() } });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.message || 'Unable to load order history.');
       setOrderDetailsById((prev) => ({ ...prev, [oid]: data }));
-    } catch (_) {
+    } catch (error) {
       setOrderDetailsById((prev) => ({ ...prev, [oid]: { order: null, events: [], results: [] } }));
+      setOrderDetailsErrorById((prev) => ({ ...prev, [oid]: String(error?.message || 'Unable to load order history.') }));
     } finally {
       setOrderDetailsLoadingId(null);
     }
@@ -5372,6 +5408,8 @@ function NurseDashboard() {
     setPatientOrdersError('');
     setOrderRemarkDraft({});
     setOrderDetailsById({});
+    setOrderDetailsErrorById({});
+    setExpandedOrderHistoryId('');
     setOrderDetailsLoadingId(null);
     setOrderActionLoadingId(null);
     setRestockMineError('');
@@ -8256,13 +8294,13 @@ function NurseDashboard() {
                                                         <span>{request.dosage || 'No dosing note'}</span>
                                                     </div>
                                                     <div className="med-admin-actions">
-                                                        <button className="btn-orange-sm" type="button" disabled={medAdminActionId === `${request.requestId}-administered`} onClick={() => recordMedicationAdministration(request, 'administered')}>
+                                                        <button className="btn-orange-sm" type="button" disabled={Boolean(medAdminActionId)} onClick={() => recordMedicationAdministration(request, 'administered')}>
                                                             <Check size={15} /> Administer
                                                         </button>
-                                                        <button className="btn-gray" type="button" disabled={medAdminActionId === `${request.requestId}-held`} onClick={() => recordMedicationAdministration(request, 'held')}>
+                                                        <button className="btn-gray" type="button" disabled={Boolean(medAdminActionId)} onClick={() => recordMedicationAdministration(request, 'held')}>
                                                             <Clock size={15} /> Hold
                                                         </button>
-                                                        <button className="btn-gray" type="button" disabled={medAdminActionId === `${request.requestId}-missed`} onClick={() => recordMedicationAdministration(request, 'missed')}>
+                                                        <button className="btn-gray" type="button" disabled={Boolean(medAdminActionId)} onClick={() => recordMedicationAdministration(request, 'missed')}>
                                                             <XCircle size={15} /> Missed
                                                         </button>
                                                     </div>
@@ -8776,6 +8814,8 @@ function NurseDashboard() {
                         const whenText = when ? new Date(when).toLocaleString() : '—';
                         const details = orderDetailsById[oid] || null;
                         const events = Array.isArray(details?.events) ? details.events : [];
+                        const historyOpen = expandedOrderHistoryId === oid;
+                        const historyError = String(orderDetailsErrorById[oid] || '');
 
                         return (
                           <div key={oid} style={{ border: `1px solid ${isStat ? '#ef4444' : '#e2e8f0'}`, borderRadius: 16, background: 'white', overflow: 'hidden' }}>
@@ -8859,18 +8899,28 @@ function NurseDashboard() {
                                 <button
                                   type="button"
                                   className="btn-ghost"
-                                  onClick={() => fetchOrderDetails(oid)}
+                                  onClick={() => {
+                                    if (historyOpen) setExpandedOrderHistoryId('');
+                                    else fetchOrderDetails(oid);
+                                  }}
                                   disabled={orderDetailsLoadingId === oid}
                                 >
-                                  <Eye size={16} /> {orderDetailsLoadingId === oid ? 'Loading…' : 'View History'}
+                                  <Eye size={16} /> {orderDetailsLoadingId === oid ? 'Loading…' : historyOpen ? 'Hide History' : 'View History'}
                                 </button>
                               </div>
 
-                              {events.length > 0 ? (
+                              {historyOpen ? (
                                 <div style={{ marginTop: 12, borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
                                   <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#475569', marginBottom: 8 }}>History</div>
+                                  {orderDetailsLoadingId === oid ? (
+                                    <div className="empty-state-small">Loading order history…</div>
+                                  ) : historyError ? (
+                                    <div className="form-error-message">{historyError}</div>
+                                  ) : events.length === 0 ? (
+                                    <div className="empty-state-small">No history entries have been recorded for this order yet.</div>
+                                  ) : (
                                   <div style={{ display: 'grid', gap: 6 }}>
-                                    {events.slice(0, 6).map((ev) => (
+                                    {events.map((ev) => (
                                       <div key={String(ev.id || ev.createdAt)} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 12px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: '0.82rem', color: '#64748b', fontWeight: 800 }}>
                                           <div>{ev.actorName ? `${String(ev.actorRole || '').toUpperCase()} • ${ev.actorName}` : String(ev.actorRole || '').toUpperCase()}</div>
@@ -8885,6 +8935,7 @@ function NurseDashboard() {
                                       </div>
                                     ))}
                                   </div>
+                                  )}
                                 </div>
                               ) : null}
                             </div>
