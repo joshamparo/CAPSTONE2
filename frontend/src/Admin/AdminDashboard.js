@@ -172,6 +172,25 @@ function AdminDashboard() {
     return { key, label: STAFF_ROLE_LABEL_BY_KEY[key] };
   }
 
+  function getStaffEditClassification(staff) {
+    const info = getStaffRoleInfo(staff);
+    const existingSpecialization = String(staff?.specialization || '').trim();
+    const classificationByKey = {
+      admin: { role: 'Admin', specialization: 'System Administrator' },
+      doctor: { role: 'Doctor', specialization: existingSpecialization || 'General Doctor' },
+      nurse: { role: 'Nurse', specialization: existingSpecialization || String(staff?.department || '').trim() || 'General Nursing' },
+      pharmacist: { role: 'Pharmacist', specialization: 'Pharmacy Management' },
+      cashier: { role: 'Office Staff', specialization: 'Cashier' },
+      doctor_secretary: { role: 'Office Staff', specialization: 'Doctor Secretary' },
+      medtech: { role: 'Clinical Staff', specialization: 'MedTech' },
+      radiographer: { role: 'Clinical Staff', specialization: 'Radiographer' },
+      ecg_operator: { role: 'Clinical Staff', specialization: 'ECG Operator' },
+      physical_therapist: { role: 'Clinical Staff', specialization: 'Physical Therapist' },
+      staff: { role: String(staff?.role || 'Staff').trim() || 'Staff', specialization: existingSpecialization || info.label }
+    };
+    return classificationByKey[info.key] || classificationByKey.staff;
+  }
+
   const fetchDashboardStats = async () => {
     setDashboardStatsLoading(true);
     try {
@@ -2646,11 +2665,13 @@ function AdminDashboard() {
   };
 
   const handleEditStaff = (staff) => {
+    const classification = getStaffEditClassification(staff);
     setEditingStaff(staff);
     setEditFormData({
       firstName: staff.firstName,
       lastName: staff.lastName,
-      role: staff.role,
+      role: classification.role,
+      specialization: classification.specialization,
       email: staff.email,
       phone: staff.phone
     });
@@ -2838,6 +2859,12 @@ function AdminDashboard() {
         };
         delete payload.id;
         delete payload._id;
+        // Account classification is displayed in this profile editor but is
+        // intentionally not sent as a raw Prisma field. Role migration/reset
+        // is a separate administrative operation.
+        delete payload.role;
+        delete payload.specialization;
+        delete payload.accountType;
         const updatedStaff = await fetchJson(`/api/staff/${editingStaff.id}`, {
           apiBase: API_BASE,
           method: 'PUT',
@@ -6796,22 +6823,36 @@ function AdminDashboard() {
 
                       <div className="form-grid-2-col mt-4">
                         <div className="input-group">
-                          <label className="form-label">Role / Position</label>
+                          <label className="form-label">Account Group</label>
                           <select
                             name="role"
                             value={editFormData.role}
-                            onChange={handleEditFormChange}
-                            required
-                            className="white-input"
+                            disabled
+                            className="white-input input-disabled-bg"
                           >
                             <option value="">Select Role</option>
                             <option value="Admin">Admin</option>
                             <option value="Doctor">Doctor</option>
                             <option value="Nurse">Nurse</option>
+                            <option value="Pharmacist">Pharmacist</option>
+                            <option value="Office Staff">Office Staff</option>
+                            <option value="Clinical Staff">Clinical Staff</option>
                             <option value="Staff">Staff</option>
                           </select>
                         </div>
+                        <div className="input-group">
+                          <label className="form-label">Current Sub-role / Specialization</label>
+                          <input
+                            type="text"
+                            value={editFormData.specialization || ''}
+                            readOnly
+                            className="white-input input-disabled-bg"
+                          />
+                        </div>
                       </div>
+                      <p className="field-notice" style={{ marginTop: 8 }}>
+                        Account group and sub-role are shown for verification. Use the dedicated account-role workflow for role migration.
+                      </p>
                     </div>
 
                     <div className="mm-section">

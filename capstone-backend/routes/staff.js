@@ -2210,9 +2210,13 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             return res.status(400).json({ message: "Cannot update password for this account type" });
         }
 
-        // Strict: ANY profile change OR password change OR explicit auth REQUIRES current password
+        // Admins may update staff profile fields without knowing the staff
+        // member's password. Non-admin self-service changes still require the
+        // account's current password.
+        const requesterRole = normalizeRole(req.headers['x-user-role'] || '');
+        const requesterIsAdmin = requesterRole === 'admin';
         const hasAnyDataChange = Object.keys(req.body || {}).some(k => !['id', '_id', 'requiresPasswordAuth', 'currentPassword'].includes(k));
-        const needsCurrentPassword = Boolean(hasPasswordUpdate || hasAnyDataChange || (typeof req.body.requiresPasswordAuth !== 'undefined' && req.body.requiresPasswordAuth) || providedCurrentPassword);
+        const needsCurrentPassword = !requesterIsAdmin && Boolean(hasPasswordUpdate || hasAnyDataChange || (typeof req.body.requiresPasswordAuth !== 'undefined' && req.body.requiresPasswordAuth) || providedCurrentPassword);
 
         if (needsCurrentPassword) {
             if (!providedCurrentPassword) {
@@ -2261,7 +2265,7 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             req.body.password = await bcrypt.hash(trimmedPassword, salt);
         }
 
-        const { currentPassword, requiresPasswordAuth, _id, id, newPassword, confirmNewPassword, profilePicture, avatarUrl, avatar_url, department, phone, ...restData } = req.body;
+        const { currentPassword, requiresPasswordAuth, _id, id, newPassword, confirmNewPassword, profilePicture, avatarUrl, avatar_url, department, phone, role, accountType, account_type, specialization, linkedDoctorId, linked_doctor_id, ...restData } = req.body;
         
         let updateData = { ...restData };
         if (emailClean && updateData.email !== undefined) updateData.email = emailClean;
