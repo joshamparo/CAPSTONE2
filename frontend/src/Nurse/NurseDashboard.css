@@ -4953,7 +4953,23 @@ body.compact-mode .workspace-queue-item {
 }
 
 .recent-orders-section .orders-list-scroll {
-  overflow: visible;
+  max-height: min(620px, calc(100vh - 250px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.recent-orders-section .orders-list-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.recent-orders-header-pages {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .orders-container {

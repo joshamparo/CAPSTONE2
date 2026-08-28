@@ -8079,6 +8079,16 @@ function NurseDashboard() {
                                 <div className="recent-orders-header-meta">
                                     <span>{recentOrdersRangeStart}-{recentOrdersRangeEnd} of {recentOrders.length}</span>
                                     <span className="badge-count">{recentOrders.length}</span>
+                                    {recentOrders.length > recentOrdersPageSize ? (
+                                        <div className="recent-orders-header-pages">
+                                            <button type="button" className="patient-page-btn" onClick={() => { setSelectedRecentOrder(null); setRecentOrdersPage((page) => Math.max(1, page - 1)); }} disabled={currentRecentOrdersPage <= 1} aria-label="Previous orders page">
+                                                <ChevronLeft size={17} />
+                                            </button>
+                                            <button type="button" className="patient-page-btn" onClick={() => { setSelectedRecentOrder(null); setRecentOrdersPage((page) => Math.min(recentOrdersPageCount, page + 1)); }} disabled={currentRecentOrdersPage >= recentOrdersPageCount} aria-label="Next orders page">
+                                                <ChevronRight size={17} />
+                                            </button>
+                                        </div>
+                                    ) : null}
                                 </div>
                             </div>
                             <div className="orders-list-scroll">
