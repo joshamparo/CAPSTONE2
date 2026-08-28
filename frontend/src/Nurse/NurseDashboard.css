@@ -4956,6 +4956,33 @@ body.compact-mode .workspace-queue-item {
   overflow: visible;
 }
 
+.orders-container {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+.orders-container .orders-content-grid {
+  flex: 0 0 auto;
+  overflow: visible;
+  align-items: start;
+}
+
+.orders-container .recent-orders-section {
+  align-self: start;
+  width: 100%;
+}
+
+.orders-container .order-item-card {
+  padding: 12px 14px;
+  gap: 12px;
+}
+
+.orders-container .order-icon-wrapper {
+  width: 36px;
+  height: 36px;
+}
+
 .recent-orders-pagination {
   display: flex;
   align-items: center;
