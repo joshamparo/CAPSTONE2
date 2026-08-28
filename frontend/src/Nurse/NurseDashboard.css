@@ -4953,23 +4953,24 @@ body.compact-mode .workspace-queue-item {
 }
 
 .recent-orders-section .orders-list-scroll {
-  max-height: min(620px, calc(100vh - 250px));
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.recent-orders-section .orders-list-scroll::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  max-height: none;
+  overflow: visible;
+  padding: 10px;
+  gap: 6px;
 }
 
 .recent-orders-header-pages {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.recent-orders-page-label {
+  min-width: 30px;
+  color: #475569;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 900;
 }
 
 .orders-container {
@@ -4990,13 +4991,29 @@ body.compact-mode .workspace-queue-item {
 }
 
 .orders-container .order-item-card {
-  padding: 12px 14px;
-  gap: 12px;
+  min-height: 48px;
+  padding: 7px 10px;
+  gap: 10px;
+  align-items: center;
 }
 
 .orders-container .order-icon-wrapper {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.orders-container .order-title {
+  font-size: 0.82rem;
+}
+
+.orders-container .order-patient {
+  margin-bottom: 1px;
+  font-size: 0.74rem;
+}
+
+.orders-container .order-time {
+  font-size: 0.66rem;
 }
 
 .recent-orders-pagination {

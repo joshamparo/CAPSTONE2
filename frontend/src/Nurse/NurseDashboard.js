@@ -8084,6 +8084,7 @@ function NurseDashboard() {
                                             <button type="button" className="patient-page-btn" onClick={() => { setSelectedRecentOrder(null); setRecentOrdersPage((page) => Math.max(1, page - 1)); }} disabled={currentRecentOrdersPage <= 1} aria-label="Previous orders page">
                                                 <ChevronLeft size={17} />
                                             </button>
+                                            <span className="recent-orders-page-label">{currentRecentOrdersPage}/{recentOrdersPageCount}</span>
                                             <button type="button" className="patient-page-btn" onClick={() => { setSelectedRecentOrder(null); setRecentOrdersPage((page) => Math.min(recentOrdersPageCount, page + 1)); }} disabled={currentRecentOrdersPage >= recentOrdersPageCount} aria-label="Next orders page">
                                                 <ChevronRight size={17} />
                                             </button>
@@ -8165,17 +8166,6 @@ function NurseDashboard() {
                                     ))
                                 )}
                             </div>
-                            {recentOrders.length > recentOrdersPageSize ? (
-                                <div className="recent-orders-pagination">
-                                    <button type="button" className="patient-page-btn" onClick={() => { setSelectedRecentOrder(null); setRecentOrdersPage((page) => Math.max(1, page - 1)); }} disabled={currentRecentOrdersPage <= 1} aria-label="Previous orders page">
-                                        <ChevronLeft size={17} />
-                                    </button>
-                                    <span>Page {currentRecentOrdersPage} of {recentOrdersPageCount}</span>
-                                    <button type="button" className="patient-page-btn" onClick={() => { setSelectedRecentOrder(null); setRecentOrdersPage((page) => Math.min(recentOrdersPageCount, page + 1)); }} disabled={currentRecentOrdersPage >= recentOrdersPageCount} aria-label="Next orders page">
-                                        <ChevronRight size={17} />
-                                    </button>
-                                </div>
-                            ) : null}
                         </div>
                     </div>
                     )}
