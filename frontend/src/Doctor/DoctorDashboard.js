@@ -962,16 +962,30 @@ function DoctorDashboard() {
 
   const normalizeSpecKey = (value) => {
     const raw = String(value || '').trim().toLowerCase();
-    if (!raw) return '';
-    if (raw.includes('pedi')) return 'pediatrics';
-    if (raw.includes('physical therapy') || raw === 'pt' || raw.includes('physio')) return 'physical_therapy';
-    if (raw.includes('ob-gyn') || raw.includes('obgyn') || raw === 'ob') return 'ob_gyn';
-    if (raw.includes('cardio')) return 'cardiology';
-    if (raw.includes('derma')) return 'dermatology';
-    if (raw.includes('surg')) return 'surgery';
-    if (raw.includes('medicine') || raw.includes('internal')) return 'medicine';
-    return raw.replace(/\s+/g, '_');
+    const compact = raw.replace(/[^a-z0-9]+/g, '');
+    if (!compact) return '';
+    if (compact.includes('pedi')) return 'pediatrics';
+    if (compact === 'pt' || compact.includes('physicaltherapy') || compact.includes('physio')) return 'physical_therapy';
+    if (compact === 'ob' || compact.includes('obgyn') || compact.includes('obstetricsgynecology')) return 'ob_gyn';
+    if (compact.includes('cardio')) return 'cardiology';
+    if (compact.includes('derma')) return 'dermatology';
+    if (compact.includes('surg')) return 'surgery';
+    if (compact.includes('medicine') || compact.includes('internal')) return 'medicine';
+    if (compact === 'ent' || compact.includes('otolaryng')) return 'otolaryngology';
+    if (compact.includes('ophthalm')) return 'ophthalmology';
+    if (compact.includes('anesth')) return 'anesthesia';
+    if (compact.includes('ortho')) return 'orthopedics';
+    if (compact.includes('dental') || compact.includes('dentist')) return 'dental_medicine';
+    if (compact.includes('radio')) return 'radiology';
+    if (compact.includes('patholog')) return 'pathology';
+    if (compact.includes('urolog')) return 'urology';
+    return compact;
   };
+
+  const currentDoctorUuid = String(
+    currentUser?.doctorUuid || currentUser?.doctor_uuid || currentUser?.doctorId ||
+    currentUser?.doctor_id || currentUser?.id || currentUser?._id || ''
+  ).trim();
 
   const isVideoConsult = (apt) => {
     const mode = String(apt?.consultationMode || apt?.consultation_mode || '').trim().toLowerCase();
@@ -1049,22 +1063,13 @@ function DoctorDashboard() {
         }
       });
       // #endregion
-      if (!supabase) {
-        throw new Error('Supabase client not initialized. Check .env configuration.');
-      }
-
       const sourceTable = String(apt?.sourceTable || apt?.source_table || 'appointments').trim() || 'appointments';
-      const { data, error } = await supabase.functions.invoke('daily-create-room', {
-        body: {
-          appointmentId: Number(apt.id),
-          action: 'start',
-          sourceTable
-        }
+      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/start`, {
+        apiBase: API_BASE,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ action: 'start', sourceTable })
       });
-
-      if (error) {
-        throw new Error(error.message || 'Error from daily-create-room');
-      }
 
       const meetingUrl = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();
       if (!meetingUrl) throw new Error(data?.message || data?.error || 'Failed to retrieve video room URL');
@@ -1130,11 +1135,11 @@ function DoctorDashboard() {
     const email = currentUser?.email || profileForm?.email || '';
     if (email) headers['x-user-email'] = email;
 
-    const doctorUuid = currentUser?.id || '';
+    const doctorUuid = currentDoctorUuid;
     if (doctorUuid) headers['x-doctor-uuid'] = doctorUuid;
 
     return headers;
-  }, [doctorInboxName, userRole, currentUser, profileForm?.email]);
+  }, [doctorInboxName, userRole, currentUser, currentDoctorUuid, profileForm?.email]);
 
   const rxDraftKey = useMemo(() => {
     if (!currentUser?.email || !selectedPatient?._id) return null;
@@ -1441,7 +1446,7 @@ function DoctorDashboard() {
       const { start, end } = computeWorklistDates();
       const startStr = formatDateParam(start);
       const endStr = formatDateParam(end);
-      const doctorUuid = String(currentUser?.id || '').trim();
+      const doctorUuid = currentDoctorUuid;
 
       const [apptJson, approvalsJson] = await Promise.all([
         fetchJson(`/api/appointments?start=${startStr}&end=${endStr}`, { apiBase: API_BASE, headers: { ...authHeaders } }),
@@ -1878,7 +1883,7 @@ function DoctorDashboard() {
     setApprovalInboxError('');
     try {
       const name = encodeURIComponent(doctorInboxName);
-      const doctorUuid = String(currentUser?.id || '').trim();
+      const doctorUuid = currentDoctorUuid;
       const json = await fetchJson(`/api/approval-requests/inbox?role=doctor&doctorId=${encodeURIComponent(doctorUuid)}&name=${name}&take=50`, {
         apiBase: API_BASE,
         headers: { ...authHeaders }
@@ -3367,7 +3372,7 @@ function DoctorDashboard() {
               }
               const target = normalizeAssignee(doctorInboxName || doctorName);
               const aptDoctor = normalizeAssignee(apt.doctor || apt.preferredDoctor);
-              const doctorUuid = String(currentUser?.id || '').trim();
+              const doctorUuid = currentDoctorUuid;
               const aptUuid = String(apt.doctorUuid || apt.doctor_uuid || '').trim();
               if (doctorUuid && aptUuid && aptUuid === doctorUuid) return true;
 
@@ -3484,7 +3489,7 @@ function DoctorDashboard() {
                       const target = normalizeAssignee(doctorInboxName || doctorName);
                       const aptDoctor = normalizeAssignee(apt.doctor || apt.preferredDoctor);
                       if (!target) return null;
-                      const doctorUuid = String(currentUser?.id || '').trim();
+                      const doctorUuid = currentDoctorUuid;
                       const aptUuid = String(apt.doctorUuid || apt.doctor_uuid || '').trim();
                       const isMine = (doctorUuid && aptUuid && aptUuid === doctorUuid) || aptDoctor === target;
                       const joinGate = getVideoJoinWindowState(apt);

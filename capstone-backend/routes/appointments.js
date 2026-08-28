@@ -2434,14 +2434,27 @@ router.post('/:id/video/start', requireRole(['doctor']), async (req, res) => {
         if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid appointment id.' });
         const id = BigInt(idRaw);
 
-        const doctorName = inferName(req);
-        if (!doctorName) return res.status(401).json({ message: 'Missing x-user-name.' });
+        const requestedDoctorName = inferName(req);
+        const requestedDoctorUuid = String(req.headers['x-doctor-uuid'] || '').trim();
+        const requesterEmail = inferEmail(req);
+        const doctorByEmail = requesterEmail
+            ? await prisma.doctors.findFirst({
+                where: { email: { equals: requesterEmail, mode: 'insensitive' } },
+                select: { id: true, first_name: true, last_name: true }
+            }).catch(() => null)
+            : null;
+        const reqDoctorUuid = String(doctorByEmail?.id || requestedDoctorUuid || '').trim();
+        const resolvedDoctorName = `${String(doctorByEmail?.first_name || '').trim()} ${String(doctorByEmail?.last_name || '').trim()}`.trim();
+        const doctorName = requestedDoctorName || resolvedDoctorName;
+        if (!doctorName && !reqDoctorUuid) {
+            return res.status(401).json({ message: 'Unable to resolve the logged-in doctor account. Sign in again or ask admin to verify the doctor email link.' });
+        }
         // #region debug-point A:start-entry
         reportVideoRoomDebug({
             hypothesisId: 'A',
             location: 'appointments.js:start-entry',
             msg: '[DEBUG] doctor start route entered',
-            data: { appointmentId: idRaw, doctorName, reqDoctorUuid: String(req.headers['x-doctor-uuid'] || '').trim() || null }
+            data: { appointmentId: idRaw, doctorName: doctorName || null, reqDoctorUuid: reqDoctorUuid || null, requesterEmail: requesterEmail || null }
         });
         // #endregion
 
@@ -2479,8 +2492,6 @@ router.post('/:id/video/start', requireRole(['doctor']), async (req, res) => {
             console.log(`[Video Start] 400 - Appointment ${idRaw} is not a video consult. Mode: ${apt.consultation_mode}, Reason: ${apt.reason}`);
             return res.status(400).json({ message: `DEBUG: Appointment ${idRaw} is not marked as a video consultation.` });
         }
-
-        const reqDoctorUuid = String(req.headers['x-doctor-uuid'] || '').trim();
 
         let isAssigned = false;
 
