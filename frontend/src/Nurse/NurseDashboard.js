@@ -3391,6 +3391,7 @@ function NurseDashboard() {
   const [recentOrders, setRecentOrders] = useState([]);
   const [recentOrdersLoading, setRecentOrdersLoading] = useState(false);
   const [recentOrdersError, setRecentOrdersError] = useState('');
+  const [selectedRecentOrder, setSelectedRecentOrder] = useState(null);
 
   // Stats State
   const [stats, setStats] = useState({
@@ -4057,11 +4058,17 @@ function NurseDashboard() {
             const rawIso = o.updatedAt || o.createdAt || null;
             return {
               id: `clinical-${o.id}`,
+              source: 'Clinical Order',
               type: o.kind || 'Order',
               item: o.service || '',
               patient: o.patientName || '',
               status: o.status || 'Pending',
               time: relativeTime(rawIso),
+              createdAt: rawIso,
+              priority: o.priority || 'Routine',
+              notes: o.notes || '',
+              requestedBy: o.orderedByName || '',
+              assignedRole: o.assignedRole || '',
               _ts: rawIso ? new Date(rawIso).getTime() : 0
             };
           });
@@ -4084,11 +4091,18 @@ function NurseDashboard() {
               const parsedType = String(r._parsed?.type || '').trim().toLowerCase();
               return {
                 id: `request-${r.id}`,
+                source: 'Request',
                 type: parsedType === 'medication' ? 'Medication' : 'Supply',
                 item: r._parsed?.item || '',
                 patient: r._parsed?.patient || '',
                 status: r.status || 'Pending',
                 time: relativeTime(rawIso),
+                createdAt: rawIso,
+                priority: r._parsed?.priority || 'Routine',
+                notes: r._parsed?.notes || '',
+                dosage: r._parsed?.dosage || '',
+                quantity: r._parsed?.quantity || '',
+                requestedBy: r.requested_by || r.requestedBy || '',
                 _ts: rawIso ? new Date(rawIso).getTime() : 0
               };
             });
@@ -8048,6 +8062,30 @@ function NurseDashboard() {
                                 <span className="badge-count">{recentOrders.length}</span>
                             </div>
                             <div className="orders-list-scroll">
+                                {selectedRecentOrder ? (
+                                    <div className="recent-order-detail" role="region" aria-label="Selected order details">
+                                        <div className="recent-order-detail-head">
+                                            <div>
+                                                <span className="recent-order-detail-kicker">{selectedRecentOrder.source || selectedRecentOrder.type}</span>
+                                                <h4>{selectedRecentOrder.item || 'Untitled Order'}</h4>
+                                            </div>
+                                            <button type="button" className="btn-icon-small" onClick={() => setSelectedRecentOrder(null)} aria-label="Close order details">
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                        <div className="recent-order-detail-grid">
+                                            <div><span>Patient</span><strong>{selectedRecentOrder.patient || 'Not specified'}</strong></div>
+                                            <div><span>Status</span><strong>{selectedRecentOrder.status || 'Pending'}</strong></div>
+                                            <div><span>Priority</span><strong>{selectedRecentOrder.priority || 'Routine'}</strong></div>
+                                            <div><span>Ordered</span><strong>{selectedRecentOrder.createdAt ? new Date(selectedRecentOrder.createdAt).toLocaleString() : selectedRecentOrder.time || 'Not available'}</strong></div>
+                                            {selectedRecentOrder.requestedBy ? <div><span>Requested by</span><strong>{selectedRecentOrder.requestedBy}</strong></div> : null}
+                                            {selectedRecentOrder.assignedRole ? <div><span>Assigned to</span><strong>{selectedRecentOrder.assignedRole}</strong></div> : null}
+                                            {selectedRecentOrder.quantity ? <div><span>Quantity</span><strong>{selectedRecentOrder.quantity}</strong></div> : null}
+                                            {selectedRecentOrder.dosage ? <div><span>Dosage</span><strong>{selectedRecentOrder.dosage}</strong></div> : null}
+                                        </div>
+                                        {selectedRecentOrder.notes ? <div className="recent-order-detail-notes"><span>Notes</span><p>{selectedRecentOrder.notes}</p></div> : null}
+                                    </div>
+                                ) : null}
                                 {recentOrdersLoading ? (
                                     <div className="empty-orders">
                                         <p>Loading…</p>
@@ -8062,7 +8100,20 @@ function NurseDashboard() {
                                     </div>
                                 ) : (
                                     recentOrders.map(order => (
-                                        <div key={order.id} className="order-item-card">
+                                        <div
+                                            key={order.id}
+                                            className={`order-item-card ${selectedRecentOrder?.id === order.id ? 'selected' : ''}`}
+                                            role="button"
+                                            tabIndex="0"
+                                            aria-label={`View details for ${order.item || 'order'}`}
+                                            onClick={() => setSelectedRecentOrder(order)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ' ') {
+                                                    event.preventDefault();
+                                                    setSelectedRecentOrder(order);
+                                                }
+                                            }}
+                                        >
                                             <div className="order-icon-wrapper">
                                                 {order.type === 'Medication' && <Pill size={16} className="text-blue" />}
                                                 {order.type === 'Lab' && <FlaskConical size={16} className="text-purple" />}

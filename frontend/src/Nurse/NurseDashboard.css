@@ -4711,6 +4711,95 @@ body.compact-mode .workspace-queue-item {
     background: #f8fafc;
 }
 
+.order-item-card:focus-visible,
+.order-item-card.selected {
+  outline: none;
+  background: #fff7ed;
+  border-color: #fb923c;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12);
+}
+
+.recent-order-detail {
+  padding: 16px;
+  border: 1px solid #fdba74;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #fff7ed 0%, #ffffff 72%);
+  box-shadow: 0 8px 20px rgba(249, 115, 22, 0.08);
+}
+
+.recent-order-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.recent-order-detail-head h4 {
+  margin: 3px 0 0;
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.recent-order-detail-kicker {
+  color: #ea580c;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.recent-order-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.recent-order-detail-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid #ffedd5;
+}
+
+.recent-order-detail-grid span,
+.recent-order-detail-notes span {
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.recent-order-detail-grid strong {
+  overflow-wrap: anywhere;
+  color: #334155;
+  font-size: 0.78rem;
+}
+
+.recent-order-detail-notes {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #ffedd5;
+}
+
+.recent-order-detail-notes p {
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 560px) {
+  .recent-order-detail-grid { grid-template-columns: 1fr; }
+}
+
 /* Full recent-activity view */
 .nurse-activity-page {
     max-width: 1040px;
