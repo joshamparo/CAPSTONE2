@@ -3392,6 +3392,21 @@ function NurseDashboard() {
   const [recentOrdersLoading, setRecentOrdersLoading] = useState(false);
   const [recentOrdersError, setRecentOrdersError] = useState('');
   const [selectedRecentOrder, setSelectedRecentOrder] = useState(null);
+  const [recentOrdersPage, setRecentOrdersPage] = useState(1);
+
+  const recentOrdersPageSize = 8;
+  const recentOrdersPageCount = Math.max(1, Math.ceil(recentOrders.length / recentOrdersPageSize));
+  const currentRecentOrdersPage = Math.min(recentOrdersPage, recentOrdersPageCount);
+  const pagedRecentOrders = useMemo(() => {
+    const start = (currentRecentOrdersPage - 1) * recentOrdersPageSize;
+    return recentOrders.slice(start, start + recentOrdersPageSize);
+  }, [recentOrders, currentRecentOrdersPage]);
+  const recentOrdersRangeStart = recentOrders.length ? ((currentRecentOrdersPage - 1) * recentOrdersPageSize) + 1 : 0;
+  const recentOrdersRangeEnd = recentOrders.length ? recentOrdersRangeStart + pagedRecentOrders.length - 1 : 0;
+
+  useEffect(() => {
+    setRecentOrdersPage((page) => Math.min(Math.max(1, page), recentOrdersPageCount));
+  }, [recentOrdersPageCount]);
 
   // Stats State
   const [stats, setStats] = useState({
@@ -4114,6 +4129,8 @@ function NurseDashboard() {
         .map(({ _ts, ...rest }) => rest);
 
       setRecentOrders(merged);
+      setRecentOrdersPage(1);
+      setSelectedRecentOrder(null);
     } catch (e) {
       setRecentOrders([]);
       setRecentOrdersError(String(e.message || 'Unable to load recent orders'));
@@ -8059,7 +8076,10 @@ function NurseDashboard() {
                         <div className="recent-orders-section">
                             <div className="recent-orders-header">
                                 <h3>Recent Orders</h3>
-                                <span className="badge-count">{recentOrders.length}</span>
+                                <div className="recent-orders-header-meta">
+                                    <span>{recentOrdersRangeStart}-{recentOrdersRangeEnd} of {recentOrders.length}</span>
+                                    <span className="badge-count">{recentOrders.length}</span>
+                                </div>
                             </div>
                             <div className="orders-list-scroll">
                                 {selectedRecentOrder ? (
@@ -8099,7 +8119,7 @@ function NurseDashboard() {
                                         <p>No recent orders</p>
                                     </div>
                                 ) : (
-                                    recentOrders.map(order => (
+                                    pagedRecentOrders.map(order => (
                                         <div
                                             key={order.id}
                                             className={`order-item-card ${selectedRecentOrder?.id === order.id ? 'selected' : ''}`}
@@ -8135,6 +8155,17 @@ function NurseDashboard() {
                                     ))
                                 )}
                             </div>
+                            {recentOrders.length > recentOrdersPageSize ? (
+                                <div className="recent-orders-pagination">
+                                    <button type="button" className="patient-page-btn" onClick={() => { setSelectedRecentOrder(null); setRecentOrdersPage((page) => Math.max(1, page - 1)); }} disabled={currentRecentOrdersPage <= 1} aria-label="Previous orders page">
+                                        <ChevronLeft size={17} />
+                                    </button>
+                                    <span>Page {currentRecentOrdersPage} of {recentOrdersPageCount}</span>
+                                    <button type="button" className="patient-page-btn" onClick={() => { setSelectedRecentOrder(null); setRecentOrdersPage((page) => Math.min(recentOrdersPageCount, page + 1)); }} disabled={currentRecentOrdersPage >= recentOrdersPageCount} aria-label="Next orders page">
+                                        <ChevronRight size={17} />
+                                    </button>
+                                </div>
+                            ) : null}
                         </div>
                     </div>
                     )}

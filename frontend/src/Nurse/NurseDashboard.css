@@ -4941,3 +4941,30 @@ body.compact-mode .workspace-queue-item {
     .nurse-activity-hero .btn-gray { width: 100%; justify-content: center; }
     .nurse-activity-toolbar { align-items: flex-start; flex-direction: column; }
 }
+
+/* Recent Orders pagination */
+.recent-orders-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.recent-orders-section .orders-list-scroll {
+  overflow: visible;
+}
+
+.recent-orders-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-top: 1px solid #f1f5f9;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 800;
+  background: #f8fafc;
+}
