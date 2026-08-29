@@ -1883,27 +1883,60 @@
 .gap-8 { gap: 8px; }
 
 @media print {
-  .pharm-sidebar, .pharm-header, .pharm-welcome, .pharm-pos-container, .pharm-modal-overlay {
-    display: none !important;
+  @page {
+    margin: 10mm;
   }
-  
-  .pharm-modal-overlay:has(.receipt) {
+
+  body {
+    margin: 0 !important;
+    background: #fff !important;
+  }
+
+  .pharm-shell * {
+    visibility: hidden !important;
+  }
+
+  .pharm-receipt-print-overlay,
+  .pharm-receipt-print-overlay * {
+    visibility: visible !important;
+  }
+
+  .pharm-receipt-print-overlay {
     display: block !important;
-    position: static;
-    background: white;
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
   }
-  
-  .pharm-modal-card.receipt {
-    box-shadow: none;
-    border: none;
-    max-width: 100%;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+
+  .pharm-receipt-print-overlay .pharm-modal-card.receipt {
+    display: block !important;
+    position: static !important;
+    box-shadow: none !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 0 !important;
+    max-width: 110mm !important;
+    width: 110mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
   }
-  
-  .no-print {
+
+  .pharm-receipt-print-overlay .pharm-modal-head,
+  .pharm-receipt-print-overlay .pharm-modal-actions,
+  .pharm-receipt-print-overlay .no-print {
     display: none !important;
+  }
+
+  .pharm-receipt-print-overlay .pharm-receipt-content {
+    display: block !important;
+    padding: 10mm !important;
+    color: #000 !important;
+    background: #fff !important;
   }
 }
 @keyframes pharm-spin-keyframes{to{transform:rotate(360deg)}}

@@ -5368,7 +5368,7 @@ function PharmacistDashboard() {
       )}
 
       {showReceipt && (
-        <div className="pharm-modal-overlay">
+        <div className="pharm-modal-overlay pharm-receipt-print-overlay">
           <div className="pharm-modal-card receipt" onClick={(e) => e.stopPropagation()}>
             <div className="pharm-modal-head">
               <div className="pharm-modal-title flex-row gap-8">
