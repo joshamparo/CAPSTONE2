@@ -507,6 +507,9 @@ function PatientDashboard() {
 
   const joinVideoCall = async (apt) => {
     if (!apt?.id) return;
+    // Reserve a direct tab while the click still has browser user activation.
+    // Privacy extensions commonly block Jitsi only when it is embedded.
+    const meetingWindow = window.open('about:blank', '_blank');
     try {
       // The backend returns the room persisted by the doctor start action.
       // Patients must not create a separate room directly from the browser.
@@ -521,8 +524,13 @@ function PatientDashboard() {
       }
 
       console.log(`[PatientDashboard] Successfully retrieved meeting URL: ${meetingUrl}`);
-      openVideoMeeting(meetingUrl, `Video Consultation • ${apt.doctor ? `Dr. ${apt.doctor}` : 'Doctor'}`);
+      if (meetingWindow) {
+        meetingWindow.location.replace(meetingUrl);
+      } else {
+        openVideoMeeting(meetingUrl, `Video Consultation • ${apt.doctor ? `Dr. ${apt.doctor}` : 'Doctor'}`);
+      }
     } catch (e) {
+      if (meetingWindow && !meetingWindow.closed) meetingWindow.close();
       console.error('[PatientDashboard] joinVideoCall error:', e);
       setAppointmentsError(String(e?.message || 'Unable to join call.'));
     }
