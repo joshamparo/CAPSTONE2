@@ -391,6 +391,13 @@
   gap: 10px;
 }
 
+.pharm-sales-apply-btn {
+  align-self: flex-start;
+  width: auto;
+  min-width: 82px;
+  padding-inline: 14px;
+}
+
 .pharm-sales-tabs {
   display: flex;
   gap: 8px;

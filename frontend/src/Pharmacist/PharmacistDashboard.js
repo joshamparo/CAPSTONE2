@@ -4377,7 +4377,7 @@ function PharmacistDashboard() {
 
                 <div className="pharm-field">
                   <div className="pharm-label"> </div>
-                  <button type="button" className="pharm-btn primary" onClick={applySalesFilters} disabled={salesLoading}>
+                  <button type="button" className="pharm-btn primary pharm-sales-apply-btn" onClick={applySalesFilters} disabled={salesLoading}>
                     {salesLoading ? 'Applying…' : 'Apply'}
                   </button>
                 </div>
