@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, RefreshCw, ShieldAlert, Upload, UserRound, X, XCircle, Menu, User, Mail, Briefcase, Phone, Key, Save, Shield, Eye, EyeOff, Check, Video } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, RefreshCw, ShieldAlert, Upload, UserRound, X, XCircle, Menu, User, Mail, Briefcase, Key, Save, Shield, Eye, EyeOff, Check, Video } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import './ClinicalStaffDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
@@ -86,7 +86,7 @@ const CLINICAL_PAGE_SIZE = 8;
 
 export default function ClinicalStaffDashboard({ forcedRole }) {
   const navigate = useNavigate();
-  const user = useMemo(() => safeJson(localStorage.getItem('currentUser') || 'null') || {}, []);
+  const [user, setUser] = useState(() => safeJson(localStorage.getItem('currentUser') || 'null') || {});
   const role = String(forcedRole || user.role || '').toLowerCase();
   const cfg = ROLE_CONFIG[role] || { label: 'Clinical Staff', kind: 'Procedure', resultType: 'Lab' };
   const isEcgOperator = role === 'ecg_operator';
@@ -130,6 +130,20 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const [videoAppointmentsLoading, setVideoAppointmentsLoading] = useState(false);
   const [videoAppointmentsError, setVideoAppointmentsError] = useState('');
   const [videoMeeting, setVideoMeeting] = useState(null);
+  const [profileForm, setProfileForm] = useState(() => ({
+    firstName: user.firstName || user.first_name || '',
+    lastName: user.lastName || user.last_name || '',
+    email: user.email || '',
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  }));
+  const [profileErrors, setProfileErrors] = useState({});
+  const [profileMessage, setProfileMessage] = useState({ type: '', text: '' });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState(user.avatarUrl || user.avatar_url || user.profilePicture || '');
+  const [showPasswords, setShowPasswords] = useState({ current: false, next: false, confirm: false });
 
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [eventForm, setEventForm] = useState({ title: '', startAt: '', endAt: '', location: '', notes: '' });
@@ -778,6 +792,128 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     navigate('/login');
   };
 
+  const passwordCriteria = {
+    length: profileForm.newPassword.length >= 11,
+    special: /[^A-Za-z0-9]/.test(profileForm.newPassword),
+    number: /\d/.test(profileForm.newPassword)
+  };
+
+  const updateProfileField = (field, value) => {
+    setProfileForm((previous) => ({ ...previous, [field]: value }));
+    setProfileErrors((previous) => ({ ...previous, [field]: '' }));
+    setProfileMessage({ type: '', text: '' });
+  };
+
+  const handleProfileSave = async (event) => {
+    event.preventDefault();
+    const firstName = String(profileForm.firstName || '').trim();
+    const lastName = String(profileForm.lastName || '').trim();
+    const email = String(profileForm.email || '').trim().toLowerCase();
+    const currentPassword = String(profileForm.currentPassword || '');
+    const newPassword = String(profileForm.newPassword || '');
+    const confirmPassword = String(profileForm.confirmPassword || '');
+    const nextErrors = {};
+    const namePattern = /^[A-Za-zÑñ][A-Za-zÑñ' .-]*$/;
+
+    if (firstName.length < 2) nextErrors.firstName = 'First name is required (at least 2 characters).';
+    else if (!namePattern.test(firstName)) nextErrors.firstName = 'Enter a valid first name.';
+    if (lastName.length < 2) nextErrors.lastName = 'Last name is required (at least 2 characters).';
+    else if (!namePattern.test(lastName)) nextErrors.lastName = 'Enter a valid last name.';
+    if (!email) nextErrors.email = 'Email address is required.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) nextErrors.email = 'Enter a valid email address.';
+
+    const originalFirstName = String(user.firstName || user.first_name || '').trim();
+    const originalLastName = String(user.lastName || user.last_name || '').trim();
+    const originalEmail = String(user.email || '').trim().toLowerCase();
+    const profileChanged = firstName !== originalFirstName || lastName !== originalLastName || email !== originalEmail;
+    const passwordStarted = Boolean(currentPassword || newPassword || confirmPassword);
+
+    if (!profileChanged && !passwordStarted) nextErrors.form = 'Make at least one profile change or enter a new password before saving.';
+    if ((profileChanged || passwordStarted) && !currentPassword) nextErrors.currentPassword = 'Current password is required to save changes.';
+    if (newPassword || confirmPassword) {
+      if (!newPassword) nextErrors.newPassword = 'New password is required.';
+      else if (!passwordCriteria.length || !passwordCriteria.special || !passwordCriteria.number) nextErrors.newPassword = 'Use at least 11 characters, one number, and one special character.';
+      if (!confirmPassword) nextErrors.confirmPassword = 'Please confirm the new password.';
+      else if (newPassword !== confirmPassword) nextErrors.confirmPassword = 'Passwords do not match.';
+    }
+
+    if (Object.keys(nextErrors).length) {
+      setProfileErrors(nextErrors);
+      setProfileMessage({ type: 'error', text: nextErrors.form || 'Please correct the highlighted fields.' });
+      return;
+    }
+
+    setSavingProfile(true);
+    setProfileErrors({});
+    setProfileMessage({ type: '', text: '' });
+    try {
+      const payload = { firstName, lastName, email, currentPassword, requiresPasswordAuth: true };
+      if (newPassword) payload.password = newPassword;
+      const saved = await fetchJson(`/api/staff/${encodeURIComponent(String(user.id || user._id))}`, {
+        apiBase: API_BASE,
+        method: 'PUT',
+        headers: { ...buildHeaders(user), 'x-user-role': role },
+        body: JSON.stringify(payload)
+      });
+      const updatedUser = {
+        ...user,
+        ...saved,
+        firstName: saved.first_name || saved.firstName || firstName,
+        first_name: saved.first_name || saved.firstName || firstName,
+        lastName: saved.last_name || saved.lastName || lastName,
+        last_name: saved.last_name || saved.lastName || lastName,
+        email: saved.email || email
+      };
+      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+      setProfileForm((previous) => ({ ...previous, firstName: updatedUser.firstName, lastName: updatedUser.lastName, email: updatedUser.email, currentPassword: '', newPassword: '', confirmPassword: '' }));
+      setProfileMessage({ type: 'success', text: 'Profile changes saved successfully.' });
+    } catch (e) {
+      setProfileMessage({ type: 'error', text: String(e?.message || 'Unable to save profile changes.') });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleProfileAvatar = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setProfileMessage({ type: 'error', text: 'Please select an image file.' });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setProfileMessage({ type: 'error', text: 'Profile image must be 5 MB or smaller.' });
+      return;
+    }
+    const formData = new FormData();
+    formData.append('avatar', file);
+    formData.append('email', profileForm.email || user.email || '');
+    formData.append('role', role);
+    formData.append('id', user.id || user._id || '');
+    setUploadingAvatar(true);
+    setProfileMessage({ type: '', text: '' });
+    try {
+      const data = await fetchJson('/api/staff/avatar', {
+        apiBase: API_BASE,
+        method: 'POST',
+        headers: { 'x-user-role': role, 'x-user-email': user.email || '' },
+        body: formData
+      });
+      const avatarUrl = String(data?.avatarUrl || '').trim();
+      const updatedUser = { ...user, avatarUrl, avatar_url: avatarUrl, profilePicture: avatarUrl };
+      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+      setProfileAvatarUrl(avatarUrl);
+      setProfileMessage({ type: 'success', text: 'Profile picture updated successfully.' });
+    } catch (e) {
+      setProfileMessage({ type: 'error', text: String(e?.message || 'Unable to upload profile picture.') });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   return (
     <div className="cs-layout" style={{ paddingTop: backendHealth.checked && !backendHealth.ok ? 44 : 0 }}>
       {backendHealth.checked && !backendHealth.ok ? (
@@ -1393,22 +1529,24 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
         )}
       
         {activeTab === 'profile' && (
-
         <div className="admin-profile-container">
           <div className="admin-profile-header-card">
             <div className="profile-image-section">
               <div className="large-avatar-circle">
-                <User size={64} color="#cbd5e1" />
+                {profileAvatarUrl ? <img src={profileAvatarUrl} alt="Profile" /> : <User size={64} color="#cbd5e1" />}
               </div>
-              <button type="button" className="btn-neutral-sm shadow-btn">Update Avatar</button>
+              <label className="btn-neutral-sm shadow-btn" style={{ cursor: uploadingAvatar ? 'wait' : 'pointer' }}>
+                {uploadingAvatar ? 'Uploading…' : 'Update Avatar'}
+                <input type="file" accept="image/*" hidden disabled={uploadingAvatar} onChange={handleProfileAvatar} />
+              </label>
             </div>
             <div className="profile-info-section">
-              <h1>{user?.name || user?.username || user?.firstName || 'Clinical Staff'}</h1>
-              <p className="admin-role-badge">Clinical Staff</p>
+              <h1>{`${profileForm.firstName} ${profileForm.lastName}`.trim() || user?.name || 'Physical Therapist'}</h1>
+              <p className="admin-role-badge">{cfg.label}</p>
             </div>
           </div>
 
-          <form className="admin-profile-form">
+          <form className="admin-profile-form" onSubmit={handleProfileSave} noValidate>
             <div className="profile-form-grid">
               <div className="profile-column">
                 <div className="profile-card">
@@ -1418,41 +1556,41 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                   </h3>
                   
                   <div className="profile-input-group">
-                    <label>Email Address</label>
+                    <label>First Name <span aria-hidden>*</span></label>
                     <div className="input-wrapper-relative">
-                      <Mail size={18} className="absolute-icon-left text-slate-400" />
+                      <User size={18} className="absolute-icon-left text-slate-400" />
                       <input 
-                        type="email" 
-                        value={user?.email || ''}
-                        readOnly
-                        className="profile-input input-with-icon-padding input-disabled-bg"
+                        type="text" value={profileForm.firstName}
+                        onChange={(e) => updateProfileField('firstName', e.target.value)}
+                        className={`profile-input input-with-icon-padding ${profileErrors.firstName ? 'field-error' : ''}`}
                       />
                     </div>
+                    {profileErrors.firstName ? <div className="profile-field-error">{profileErrors.firstName}</div> : null}
+                  </div>
+
+                  <div className="profile-input-group">
+                    <label>Last Name <span aria-hidden>*</span></label>
+                    <div className="input-wrapper-relative">
+                      <User size={18} className="absolute-icon-left text-slate-400" />
+                      <input type="text" value={profileForm.lastName} onChange={(e) => updateProfileField('lastName', e.target.value)} className={`profile-input input-with-icon-padding ${profileErrors.lastName ? 'field-error' : ''}`} />
+                    </div>
+                    {profileErrors.lastName ? <div className="profile-field-error">{profileErrors.lastName}</div> : null}
+                  </div>
+
+                  <div className="profile-input-group">
+                    <label>Email Address <span aria-hidden>*</span></label>
+                    <div className="input-wrapper-relative">
+                      <Mail size={18} className="absolute-icon-left text-slate-400" />
+                      <input type="email" value={profileForm.email} onChange={(e) => updateProfileField('email', e.target.value)} className={`profile-input input-with-icon-padding ${profileErrors.email ? 'field-error' : ''}`} />
+                    </div>
+                    {profileErrors.email ? <div className="profile-field-error">{profileErrors.email}</div> : null}
                   </div>
 
                   <div className="profile-input-group">
                     <label>Department / Role</label>
                     <div className="input-wrapper-relative">
                       <Briefcase size={18} className="absolute-icon-left text-slate-400" />
-                      <input 
-                        type="text" 
-                        value="Clinical Staff"
-                        readOnly
-                        className="profile-input input-with-icon-padding input-disabled-bg"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="profile-input-group">
-                    <label>Phone Number</label>
-                    <div className="input-wrapper-relative">
-                      <Phone size={18} className="absolute-icon-left text-slate-400" />
-                      <input 
-                        type="tel" 
-                        value={user?.phone || user?.contactNumber || ''}
-                        readOnly
-                        className="profile-input input-with-icon-padding input-disabled-bg"
-                      />
+                      <input type="text" value={cfg.label} readOnly className="profile-input input-with-icon-padding input-disabled-bg" />
                     </div>
                   </div>
                 </div>
@@ -1470,14 +1608,16 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <div className="input-wrapper-relative">
                       <Key size={18} className="absolute-icon-left text-slate-400" />
                       <input 
-                        type="password"
-                        className="profile-input input-with-icon-padding"
+                        type={showPasswords.current ? 'text' : 'password'} value={profileForm.currentPassword}
+                        onChange={(e) => updateProfileField('currentPassword', e.target.value)}
+                        className={`profile-input input-with-icon-padding ${profileErrors.currentPassword ? 'field-error' : ''}`}
                         placeholder="Enter current password"
                       />
-                      <button type="button" className="toggle-password-btn">
-                        <Eye size={20} />
+                      <button type="button" className="toggle-password-btn" onClick={() => setShowPasswords((previous) => ({ ...previous, current: !previous.current }))} aria-label="Toggle current password visibility">
+                        {showPasswords.current ? <EyeOff size={20} /> : <Eye size={20} />}
                       </button>
                     </div>
+                    {profileErrors.currentPassword ? <div className="profile-field-error">{profileErrors.currentPassword}</div> : null}
                   </div>
 
                   <div className="profile-input-group">
@@ -1485,26 +1625,28 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <div className="input-wrapper-relative">
                       <Key size={18} className="absolute-icon-left text-slate-400" />
                       <input 
-                        type="password"
-                        className="profile-input input-with-icon-padding"
+                        type={showPasswords.next ? 'text' : 'password'} value={profileForm.newPassword}
+                        onChange={(e) => updateProfileField('newPassword', e.target.value)}
+                        className={`profile-input input-with-icon-padding ${profileErrors.newPassword ? 'field-error' : ''}`}
                         placeholder="Enter new password"
                       />
-                      <button type="button" className="toggle-password-btn">
-                        <Eye size={20} />
+                      <button type="button" className="toggle-password-btn" onClick={() => setShowPasswords((previous) => ({ ...previous, next: !previous.next }))} aria-label="Toggle new password visibility">
+                        {showPasswords.next ? <EyeOff size={20} /> : <Eye size={20} />}
                       </button>
                     </div>
+                    {profileErrors.newPassword ? <div className="profile-field-error">{profileErrors.newPassword}</div> : null}
                     
                     <div className="password-checklist">
-                      <div className="checklist-item valid">
-                        <X size={14} />
+                      <div className={`checklist-item ${passwordCriteria.length ? 'valid' : ''}`}>
+                        {passwordCriteria.length ? <Check size={14} /> : <X size={14} />}
                         <span>At least 11 characters</span>
                       </div>
-                      <div className="checklist-item valid">
-                        <X size={14} />
+                      <div className={`checklist-item ${passwordCriteria.special ? 'valid' : ''}`}>
+                        {passwordCriteria.special ? <Check size={14} /> : <X size={14} />}
                         <span>Contains special characters</span>
                       </div>
-                      <div className="checklist-item valid">
-                        <X size={14} />
+                      <div className={`checklist-item ${passwordCriteria.number ? 'valid' : ''}`}>
+                        {passwordCriteria.number ? <Check size={14} /> : <X size={14} />}
                         <span>Contains numbers</span>
                       </div>
                     </div>
@@ -1515,23 +1657,27 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <div className="input-wrapper-relative">
                       <Key size={18} className="absolute-icon-left text-slate-400" />
                       <input 
-                        type="password"
-                        className="profile-input input-with-icon-padding"
+                        type={showPasswords.confirm ? 'text' : 'password'} value={profileForm.confirmPassword}
+                        onChange={(e) => updateProfileField('confirmPassword', e.target.value)}
+                        className={`profile-input input-with-icon-padding ${profileErrors.confirmPassword ? 'field-error' : ''}`}
                         placeholder="Confirm new password"
                       />
-                      <button type="button" className="toggle-password-btn">
-                        <Eye size={20} />
+                      <button type="button" className="toggle-password-btn" onClick={() => setShowPasswords((previous) => ({ ...previous, confirm: !previous.confirm }))} aria-label="Toggle password confirmation visibility">
+                        {showPasswords.confirm ? <EyeOff size={20} /> : <Eye size={20} />}
                       </button>
                     </div>
+                    {profileErrors.confirmPassword ? <div className="profile-field-error">{profileErrors.confirmPassword}</div> : null}
+                    {profileForm.confirmPassword ? <div className={`match-indicator ${profileForm.newPassword === profileForm.confirmPassword ? 'match-success' : 'match-error'}`}>{profileForm.newPassword === profileForm.confirmPassword ? 'Passwords match' : 'Passwords do not match'}</div> : null}
                   </div>
                 </div>
               </div>
             </div>
 
             <div className="form-actions-row">
-              <button type="submit" className="btn-neutral-large flex-center-gap-8">
+              {profileMessage.text ? <div className={`profile-form-message ${profileMessage.type}`}>{profileMessage.text}</div> : null}
+              <button type="submit" className="btn-neutral-large flex-center-gap-8" disabled={savingProfile}>
                 <Save size={18} />
-                Save Changes
+                {savingProfile ? 'Saving…' : 'Save Changes'}
               </button>
             </div>
           </form>
