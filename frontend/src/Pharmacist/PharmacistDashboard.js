@@ -837,6 +837,30 @@ function PharmacistDashboard() {
     }
   };
 
+  const applySalesFilters = async () => {
+    const minRaw = String(salesPayMin || '').trim();
+    const maxRaw = String(salesPayMax || '').trim();
+    const min = minRaw === '' ? null : Number(minRaw);
+    const max = maxRaw === '' ? null : Number(maxRaw);
+    if ((min != null && (!Number.isFinite(min) || min < 0)) || (max != null && (!Number.isFinite(max) || max < 0))) {
+      setSalesError('Payment filters must be valid non-negative amounts.');
+      return;
+    }
+    if (min != null && max != null && min > max) {
+      setSalesError('Payment Min cannot be greater than Payment Max.');
+      return;
+    }
+    if (salesPreset === 'custom' && salesFrom && salesTo && salesFrom > salesTo) {
+      setSalesError('From date cannot be later than To date.');
+      return;
+    }
+
+    if (salesQuery.trim() || salesDiscountType !== 'all' || min != null || max != null) {
+      setSalesTab('transactions');
+    }
+    await fetchSalesReports({ page: 1 });
+  };
+
   const submitSalesToAdmin = async () => {
     try {
       const rng = buildUtcRange(salesPreset, salesFrom, salesTo);
@@ -4293,7 +4317,12 @@ function PharmacistDashboard() {
               </div>
             </div>
 
-            <div className="pharm-sales-toolbar">
+            <div className="pharm-sales-toolbar" onKeyDown={(e) => {
+              if (e.key === 'Enter' && !salesLoading) {
+                e.preventDefault();
+                applySalesFilters();
+              }
+            }}>
               <div className="pharm-sales-filters">
                 <div className="pharm-field">
                   <div className="pharm-label">Date Range</div>
@@ -4362,8 +4391,8 @@ function PharmacistDashboard() {
 
                 <div className="pharm-field">
                   <div className="pharm-label"> </div>
-                  <button type="button" className="pharm-btn primary" onClick={() => fetchSalesReports({ page: 1 })} disabled={salesLoading}>
-                    Apply
+                  <button type="button" className="pharm-btn primary" onClick={applySalesFilters} disabled={salesLoading}>
+                    {salesLoading ? 'Applying…' : 'Apply'}
                   </button>
                 </div>
               </div>

@@ -387,6 +387,13 @@ router.get('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
     const paymentMin = req.query.paymentMin != null && String(req.query.paymentMin).trim() !== '' ? Number(req.query.paymentMin) : null;
     const paymentMax = req.query.paymentMax != null && String(req.query.paymentMax).trim() !== '' ? Number(req.query.paymentMax) : null;
     const { take, skip } = parseTakeSkip(req.query.take, req.query.skip);
+    const range = parseDateRange(req.query.from, req.query.to);
+    if (!range) return res.status(400).json({ message: 'Invalid date range' });
+    if (paymentMin != null && !Number.isFinite(paymentMin)) return res.status(400).json({ message: 'Invalid minimum payment' });
+    if (paymentMax != null && !Number.isFinite(paymentMax)) return res.status(400).json({ message: 'Invalid maximum payment' });
+    if (paymentMin != null && paymentMax != null && paymentMin > paymentMax) {
+      return res.status(400).json({ message: 'Minimum payment cannot exceed maximum payment' });
+    }
 
     const txn = q ? parseTxnNo(q) : null;
     if (txn) {
@@ -399,8 +406,16 @@ router.get('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
       });
       const found = Array.isArray(sale) && sale.length ? sale[0] : null;
       if (!found) return res.json({ total: 0, items: [] });
+      if (found.created_at < range.from || found.created_at >= range.to) return res.json({ total: 0, items: [] });
+      if (pharmacist && !String(found.pharmacist_name || '').toLowerCase().includes(pharmacist.toLowerCase())) {
+        return res.json({ total: 0, items: [] });
+      }
       const subtotal = computeSubtotal(found.items);
       const disc = extractDiscountMeta(found.items);
+      if (discountType && discountType !== 'all' && disc.discount_type !== discountType) return res.json({ total: 0, items: [] });
+      const paymentReceived = Number(found.payment_received || 0);
+      if (paymentMin != null && paymentReceived < paymentMin) return res.json({ total: 0, items: [] });
+      if (paymentMax != null && paymentReceived > paymentMax) return res.json({ total: 0, items: [] });
       const transaction_no = await computeTxnNoForSale(found);
       const linkMeta = await loadSalesLinkMeta([found.id.toString()]);
       const meta = linkMeta.get(found.id.toString()) || {};
@@ -427,9 +442,6 @@ router.get('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
         })
       );
     }
-
-    const range = parseDateRange(req.query.from, req.query.to);
-    if (!range) return res.status(400).json({ message: 'Invalid date range' });
 
     const discountWhere = buildDiscountWhere(discountType);
     const paymentWhere = {};
