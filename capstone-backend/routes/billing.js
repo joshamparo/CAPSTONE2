@@ -1692,6 +1692,16 @@ router.get('/hmo-queue', async (req, res) => {
             SELECT COUNT(*)::int AS unmatched_count
             FROM public.billing_invoices bi
             WHERE bi.created_at >= (now() - interval '120 days')
+              AND (
+                bi.is_hmo IS TRUE
+                OR NULLIF(TRIM(bi.hmo_provider::text), '') IS NOT NULL
+                OR NULLIF(TRIM(bi.hmo_status::text), '') IS NOT NULL
+                OR EXISTS (
+                  SELECT 1 FROM public.patients hp
+                  WHERE hp.id = bi.patient_id
+                    AND (hp.is_hmo IS TRUE OR hp.hmo IS TRUE OR NULLIF(TRIM(hp.hmo_provider::text), '') IS NOT NULL)
+                )
+              )
               AND NOT EXISTS (SELECT 1 FROM public.billing_hmo_claims cl WHERE cl.invoice_id = bi.id)
           `).catch(() => []);
           const unmatched = Number((countRows && countRows[0] && countRows[0].unmatched_count) || 0);
@@ -1708,6 +1718,16 @@ router.get('/hmo-queue', async (req, res) => {
                 bi.created_at AS inv_created_at
               FROM public.billing_invoices bi
               WHERE bi.created_at >= (now() - interval '120 days')
+                AND (
+                  bi.is_hmo IS TRUE
+                  OR NULLIF(TRIM(bi.hmo_provider::text), '') IS NOT NULL
+                  OR NULLIF(TRIM(bi.hmo_status::text), '') IS NOT NULL
+                  OR EXISTS (
+                    SELECT 1 FROM public.patients hp
+                    WHERE hp.id = bi.patient_id
+                      AND (hp.is_hmo IS TRUE OR hp.hmo IS TRUE OR NULLIF(TRIM(hp.hmo_provider::text), '') IS NOT NULL)
+                  )
+                )
                 AND NOT EXISTS (SELECT 1 FROM public.billing_hmo_claims cl WHERE cl.invoice_id = bi.id)
               ORDER BY bi.created_at DESC
               LIMIT 9999
@@ -1730,7 +1750,7 @@ router.get('/hmo-queue', async (req, res) => {
                       invoice_id, patient_name, philhealth_deduction, loa_approved_amount,
                       status, notes, requested_by, created_at, updated_at
                     ) VALUES (
-                      $1::bigint, $2::text, 0, 0, 'Approved',
+                      $1::bigint, $2::text, 0, 0, 'Awaiting LOA',
                       ('[AUTO-pass0 by hmo-queue GATE ${attempt + 1}] • ' || $3::text),
                       'system:hmo-queue-gate-no-crash', now(), now()
                     ) ON CONFLICT (invoice_id) DO NOTHING
@@ -1744,11 +1764,11 @@ router.get('/hmo-queue', async (req, res) => {
 
       const normalizeFallbackStatus = (raw) => {
         const s = String(raw || '').trim().toLowerCase();
-        const approved = ['approved', 'partially approved', 'confirmed', 'cleared', 'pre-approved', 'validated', 'forwarded', 'for hmo callback'];
-        const awaiting = ['awaiting loa', 'pending for loa', 'hold', 'pending', 'not yet confirmed'];
+        const approved = ['approved', 'partially approved', 'confirmed', 'cleared', 'pre-approved', 'validated', 'forwarded'];
+        const awaiting = ['awaiting loa', 'pending for loa', 'hold', 'pending', 'not yet confirmed', 'for hmo callback'];
         if (approved.includes(s)) return 'Approved';
-        if (awaiting.includes(s)) return 'Approved'; // For user visibility: treat awaiting as Approved on recovery since default tab = Approved Only.
-        return 'Approved';
+        if (awaiting.includes(s)) return 'Awaiting LOA';
+        return 'Pending';
       };
 
       // ---- PASS 0: DIRECT BILLING INVOICES scan — NO JOINS! NO COLUMN GUESSING! 100% GUARANTEED TO RUN! ----
@@ -1771,6 +1791,16 @@ router.get('/hmo-queue', async (req, res) => {
             bi.created_at AS inv_created_at
           FROM public.billing_invoices bi
           WHERE bi.created_at >= (now() - interval '60 days')
+            AND (
+              bi.is_hmo IS TRUE
+              OR NULLIF(TRIM(bi.hmo_provider::text), '') IS NOT NULL
+              OR NULLIF(TRIM(bi.hmo_status::text), '') IS NOT NULL
+              OR EXISTS (
+                SELECT 1 FROM public.patients hp
+                WHERE hp.id = bi.patient_id
+                  AND (hp.is_hmo IS TRUE OR hp.hmo IS TRUE OR NULLIF(TRIM(hp.hmo_provider::text), '') IS NOT NULL)
+              )
+            )
             AND NOT EXISTS (SELECT 1 FROM public.billing_hmo_claims cl WHERE cl.invoice_id = bi.id)
           ORDER BY bi.created_at DESC
           LIMIT 999
@@ -1796,7 +1826,7 @@ router.get('/hmo-queue', async (req, res) => {
                   invoice_id, patient_name, philhealth_deduction, loa_approved_amount,
                   status, notes, requested_by, created_at, updated_at
                 ) VALUES (
-                  $1::bigint, $2::text, 0, 0, 'Approved',
+                  $1::bigint, $2::text, 0, 0, 'Awaiting LOA',
                   ('[PASS0-AUTO Inserted by HMO page load] • ' || $3::text),
                   'system:pass0-no-crash-insert', now(), now()
                 ) ON CONFLICT (invoice_id) DO NOTHING
@@ -1895,8 +1925,8 @@ router.get('/hmo-queue', async (req, res) => {
               const invId = BigInt(invIdStr);
               const name = c.patient_name ? String(c.patient_name).trim() || null : null;
               const prov = c.hmo_provider ? String(c.hmo_provider).trim() || null : null;
-              const rawStatus = c.a_status || (c.is_hmo ? 'Approved' : null) || null;
-              const st = normalizeFallbackStatus(rawStatus || 'Approved');
+              const rawStatus = c.a_status || (c.is_hmo ? 'Awaiting LOA' : null) || null;
+              const st = normalizeFallbackStatus(rawStatus);
               await prisma.$executeRawUnsafe(`
                 INSERT INTO public.billing_hmo_claims (
                   invoice_id, appointment_id, patient_id, patient_name, hmo_provider,
@@ -1941,7 +1971,7 @@ router.get('/hmo-queue', async (req, res) => {
                 INSERT INTO public.billing_hmo_claims (
                   invoice_id, appointment_id, patient_id, patient_name, hmo_provider,
                   philhealth_deduction, loa_approved_amount, status, notes, requested_by, created_at, updated_at
-                ) VALUES ($1::bigint, NULL, $2::uuid, $3::text, $4::text, 0, 0, 'Approved',
+                ) VALUES ($1::bigint, NULL, $2::uuid, $3::text, $4::text, 0, 0, 'Awaiting LOA',
                   '[Auto-recovered from patient.is_hmo flag — no invoice claim row existed]', 'system:auto-recover', now(), now())
                 ON CONFLICT (invoice_id) DO NOTHING
               `, invId, patId, name, prov).catch(() => null);
@@ -2559,7 +2589,12 @@ router.get('/hmo-queue', async (req, res) => {
         let realNames = [];
         if (patNameArrFinal.length) {
           realNames = await prisma.$queryRawUnsafe(
-            `SELECT id::text AS pid, first_name, middle_name, last_name, contact_number, company, email FROM public.patients WHERE id::text IN (${patNameArrFinal.map((_, i) => `$${i + 1}`).join(',')})`,
+            `SELECT id::text AS pid, first_name, middle_name, last_name, contact_number, company, email,
+                    COALESCE(is_hmo, FALSE) AS is_hmo,
+                    COALESCE(hmo, FALSE) AS hmo,
+                    hmo_provider, hmo_card_number, hmo_loa_number
+             FROM public.patients
+             WHERE id::text IN (${patNameArrFinal.map((_, i) => `$${i + 1}`).join(',')})`,
             ...patNameArrFinal
           ).catch(() => []);
         }
@@ -2577,6 +2612,12 @@ router.get('/hmo-queue', async (req, res) => {
             if (String(p.contact_number || '').trim()) pMap.set(`pcontact:${pid}`, String(p.contact_number).trim());
             if (String(p.company || '').trim()) pMap.set(`pcompany:${pid}`, String(p.company).trim());
             if (String(p.email || '').trim()) pMap.set(`pemail:${pid}`, String(p.email).trim());
+            pMap.set(`phmo:${pid}`, Boolean(
+              p.is_hmo || p.hmo
+              || String(p.hmo_provider || '').trim()
+              || String(p.hmo_card_number || '').trim()
+              || String(p.hmo_loa_number || '').trim()
+            ));
           }
         }
         // Apply pMap to rows!
@@ -2592,6 +2633,16 @@ router.get('/hmo-queue', async (req, res) => {
             builtList[i] = { ...r, hmo_claim: r.hmo_claim ? { ...r.hmo_claim, patient_id: pid } : r.hmo_claim };
           }
           const full2 = pMap.get(`pid:${pid}`);
+          const patientHasHmo = Boolean(pMap.get(`phmo:${pid}`));
+          const currentClaim = builtList[i]?.hmo_claim || r.hmo_claim || {};
+          const claimHasHmo = Boolean(
+            String(currentClaim.provider || currentClaim.hmo_provider || '').trim()
+            || String(currentClaim.loa_number || currentClaim.hmo_loa_number || '').trim()
+            || String(currentClaim.hmo_card_number || '').trim()
+            || Number(currentClaim.philhealth_deduction || 0) > 0
+            || Number(currentClaim.loa_approved_amount || 0) > 0
+          );
+          builtList[i] = { ...builtList[i], has_hmo_evidence: patientHasHmo || claimHasHmo };
           if (full2) {
             const curr = String(r.patient_name || '').trim();
             const currLower = curr.toLowerCase();
@@ -2626,6 +2677,50 @@ router.get('/hmo-queue', async (req, res) => {
         }
       }
     } catch (_nameEnrichErr) { /* never break page */ }
+
+    builtList = builtList
+      .map((row) => {
+        if (row.has_hmo_evidence === true) return row;
+        const claim = row.hmo_claim || {};
+        const claimHasHmo = Boolean(
+          String(claim.provider || claim.hmo_provider || '').trim()
+          || String(claim.loa_number || claim.hmo_loa_number || '').trim()
+          || String(claim.hmo_card_number || '').trim()
+          || Number(claim.philhealth_deduction || 0) > 0
+          || Number(claim.loa_approved_amount || 0) > 0
+        );
+        return { ...row, has_hmo_evidence: claimHasHmo };
+      })
+      .filter((row) => row.has_hmo_evidence === true)
+      .map((row) => {
+        const claim = row.hmo_claim || {};
+        const requestedBy = String(claim.requested_by || '').toLowerCase();
+        const isLegacyCatchAll = requestedBy.includes('gate-no-crash')
+          || requestedBy.includes('pass0-no-crash')
+          || requestedBy === 'system:auto-recover'
+          || requestedBy === 'system:auto-recover-fallback';
+        const hasAuthorization = Boolean(
+          String(claim.provider || claim.hmo_provider || '').trim()
+          && (
+            String(claim.loa_number || claim.hmo_loa_number || '').trim()
+            || String(claim.hmo_card_number || '').trim()
+            || Number(claim.loa_approved_amount || 0) > 0
+          )
+        );
+        if (isLegacyCatchAll && !hasAuthorization && String(row.claim_status || '').toLowerCase() === 'approved') {
+          return {
+            ...row,
+            claim_status: 'Awaiting LOA',
+            hmo_claim: { ...claim, status: 'Awaiting LOA', applied_hmo_amount: 0 }
+          };
+        }
+        return row;
+      })
+      .filter((row) => {
+        if (filterMode !== 'approved') return true;
+        const status = String(row.claim_status || row.hmo_claim?.status || '').toLowerCase();
+        return status === 'approved' || status === 'partially approved';
+      });
 
     builtList = builtList.filter((row) => {
       if (!query) return true;

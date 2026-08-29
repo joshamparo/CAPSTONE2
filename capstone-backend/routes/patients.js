@@ -2639,11 +2639,11 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                             invoice_id, patient_name, philhealth_deduction, loa_approved_amount,
                                             status, notes, requested_by, created_at, updated_at
                                         ) VALUES (
-                                            $1::bigint, $2::text, 0, 0, 'Approved',
+                                            $1::bigint, $2::text, 0, 0, $4::text,
                                             ('[AUTO-pass0 by walk-in-intake GATE ${attempt + 1}] • ' || $3::text),
                                             'system:walk-in-intake-gate-no-crash', now(), now()
                                         ) ON CONFLICT (invoice_id) DO NOTHING
-                                    `, invId, patientNameFallback, invNotes || ('Billing invoice #' + invIdStr)).catch(() => null);
+                                    `, invId, patientNameFallback, invNotes || ('Billing invoice #' + invIdStr), desiredHmoStatus).catch(() => null);
                                 } catch (_) { /* per-row no-break */ }
                             }
                         }
