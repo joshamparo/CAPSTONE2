@@ -758,6 +758,10 @@ async function ensureWalkInHmoSupport() {
             `).catch(() => {});
             await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_appointment ON public.billing_hmo_claims (appointment_id);`).catch(() => {});
             await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_patient ON public.billing_hmo_claims (patient_id);`).catch(() => {});
+            await prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_provider text NULL`).catch(() => {});
+            await prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_loa_number text NULL`).catch(() => {});
+            await prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_card_number text NULL`).catch(() => {});
+            await prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS coverage_json jsonb NULL`).catch(() => {});
         })().catch((err) => {
             walkInHmoSchemaPromise = null;
             throw err;
@@ -1368,8 +1372,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS appointment_id bigint NULL`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_id uuid NULL`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_name text NULL`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_provider text NULL`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_loa_number text NULL`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_card_number text NULL`).catch(() => null),
+            prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS coverage_json jsonb NULL`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS requested_by text NULL`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS updated_by text NULL`).catch(() => null),
             prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'Pending'`).catch(() => null),
@@ -2359,15 +2365,14 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     const hmoProv = String(payload.hmoProvider || '').trim() || null;
                     const hmoCard = String(payload.hmoCardNumber || '').trim() || null;
                     const phAmt = Number(payload.philhealthDeduction) || 0;
-                    await tx.patients.update({
-                        where: { id: patient.id },
-                        data: {
-                            is_hmo: true,
-                            hmo_provider: hmoProv,
-                            hmo_card_number: hmoCard,
-                            philhealth_amount: phAmt
-                        }
-                    }).catch(() => null);
+                    await tx.$executeRawUnsafe(`
+                        UPDATE public.patients
+                        SET is_hmo = TRUE,
+                            hmo_provider = $1::text,
+                            hmo_card_number = $2::text,
+                            philhealth_amount = $3::numeric
+                        WHERE id::text = $4::text
+                    `, hmoProv, hmoCard, phAmt, String(patient.id));
                 } catch (_hpat) {
                     console.warn('[HMO Intake] Patient HMO flag update failed (non-fatal):', _hpat);
                 }
@@ -2377,7 +2382,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 const hmoCard = String(payload.hmoCardNumber || '').trim() || null;
                 const hmoNts = String(payload.hmoNotes || '').trim() || null;
                 const phAmt = Number(payload.philhealthDeduction) || 0;
-                
+
                 // Ensure we have an invoice to link to
                 if (!linkedInvoiceId) {
                     await ensureBillingTablesExist(tx).catch(() => null);
@@ -2394,6 +2399,12 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     });
                     linkedInvoiceId = inv.id;
                 }
+
+                await tx.$executeRawUnsafe(`
+                    UPDATE public.billing_invoices
+                    SET is_hmo = TRUE, hmo_provider = $1::text, hmo_status = $2::text, updated_at = now()
+                    WHERE id = $3::bigint
+                `, hmoProv, desiredHmoStatus, BigInt(linkedInvoiceId)).catch(() => null);
 
                 // Insert into billing_hmo_claims using the unified schema
                 const onSiteAmount = hasServices ? 100 : 0;

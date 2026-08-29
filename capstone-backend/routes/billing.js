@@ -160,6 +160,14 @@ async function ensureBillingHmoClaimsTableExist() {
   `;
   const info = Array.isArray(reg) ? reg[0] : null;
   if (info && info.billing_hmo_claims) {
+    await Promise.all([
+      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_provider text NULL`),
+      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_loa_number text NULL`),
+      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_card_number text NULL`),
+      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS coverage_json jsonb NULL`),
+      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_id uuid NULL`),
+      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_name text NULL`)
+    ]);
     billingSchemaEnsureState.hmoClaimsCheckedAt = now;
     return;
   }
@@ -171,6 +179,7 @@ async function ensureBillingHmoClaimsTableExist() {
       hmo_provider text NULL,
     hmo_loa_number text NULL,
     hmo_card_number text NULL,
+    coverage_json jsonb NULL,
     philhealth_deduction numeric(12,2) NOT NULL DEFAULT 0,
     loa_approved_amount numeric(12,2) NOT NULL DEFAULT 0,
       status text NOT NULL DEFAULT 'Pending',
@@ -1410,8 +1419,10 @@ router.get('/hmo-queue', async (req, res) => {
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS appointment_id bigint NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_id uuid NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_name text NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_provider text NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_loa_number text NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_card_number text NULL`).catch(() => null),
+        prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS coverage_json jsonb NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS requested_by text NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS updated_by text NULL`).catch(() => null),
         prisma.$executeRawUnsafe(`ALTER TABLE IF EXISTS public.billing_hmo_claims ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'Pending'`).catch(() => null)
@@ -1599,7 +1610,7 @@ router.get('/hmo-queue', async (req, res) => {
         ['appointment_id', 'appointment_id'],
         ['patient_id', 'patient_id'],
         ['patient_name', 'patient_name'],
-        ['hmo_provider', 'hmo_provider'],
+        ['hmo_provider', 'hmo_provider', 'provider'],
         ['hmo_loa_number', 'hmo_loa_number'],
         ['hmo_card_number', 'hmo_card_number'],
         ['philhealth_deduction', 'philhealth_deduction'],
@@ -2682,7 +2693,10 @@ router.get('/hmo-queue', async (req, res) => {
       .map((row) => {
         if (row.has_hmo_evidence === true) return row;
         const claim = row.hmo_claim || {};
+        const isNurseHmoIntake = String(claim.requested_by || '').toLowerCase() === 'system:walk-in-intake-gate-no-crash';
         const claimHasHmo = Boolean(
+          isNurseHmoIntake
+          ||
           String(claim.provider || claim.hmo_provider || '').trim()
           || String(claim.loa_number || claim.hmo_loa_number || '').trim()
           || String(claim.hmo_card_number || '').trim()
