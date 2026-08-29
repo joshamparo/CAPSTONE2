@@ -2165,20 +2165,6 @@ router.get('/hmo-queue', async (req, res) => {
         };
       })
       .filter((row) => {
-        const requestedBy = String(row.hmo_claim?.requested_by || '').toLowerCase();
-        const isSyntheticCatchAll = requestedBy.includes('gate-no-crash');
-        const hasRealHmoData = Boolean(
-          row.hmo_claim?.patient_id
-          || row.hmo_claim?.provider
-          || row.hmo_claim?.loa_number
-          || row.hmo_claim?.hmo_card_number
-          || Number(row.hmo_claim?.philhealth_deduction || 0) > 0
-          || Number(row.hmo_claim?.loa_approved_amount || 0) > 0
-        );
-        // Old walk-in safety code accidentally created Approved HMO claims for every
-        // unmatched invoice, including ordinary cash lab orders. Never show those
-        // fabricated empty claims in HMO Monitoring.
-        if (isSyntheticCatchAll && !hasRealHmoData) return false;
         if (filterMode === 'approved') {
           const norm = String(row.claim_status || '').toLowerCase();
           return norm === 'approved' || norm === 'partially approved';
