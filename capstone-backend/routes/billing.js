@@ -2260,7 +2260,18 @@ router.get('/hmo-queue', async (req, res) => {
         const invIdsExtra = [];
         for (const r of builtList) {
           const nameNow = String(r.patient_name || '').trim();
-          const isBadName = (!nameNow) || (nameNow.length <= 9) || nameNow.toLowerCase().startsWith('patient of') || nameNow.toLowerCase().startsWith('invoice') || nameNow.toLowerCase().startsWith('walk-in') || nameNow.toLowerCase().includes('lab order #') || nameNow.toLowerCase().startsWith('nurse walk');
+          const nameLower = nameNow.toLowerCase();
+          const isBadName = (!nameNow) || (nameNow.length <= 9)
+            || nameLower.startsWith('patient of')
+            || nameLower.startsWith('invoice')
+            || nameLower.startsWith('walk-in')
+            || nameLower.includes('lab order #')
+            || nameLower.startsWith('nurse walk')
+            || nameLower.startsWith('onsite consultation')
+            || nameLower.startsWith('online consultation')
+            || nameLower.startsWith('video consultation')
+            || nameLower.includes('[appointment]')
+            || nameLower.includes('[triage ');
           if (isBadName && r.invoice_id && String(r.invoice_id) !== '' && String(r.invoice_id) !== '0' && String(r.invoice_id) !== 'null') {
             invIdsExtra.push(String(r.invoice_id));
           }
@@ -2583,7 +2594,19 @@ router.get('/hmo-queue', async (req, res) => {
           const full2 = pMap.get(`pid:${pid}`);
           if (full2) {
             const curr = String(r.patient_name || '').trim();
-            const isBadNow = (!curr) || curr.length <= 9 || curr.toLowerCase().startsWith('patient of') || curr.toLowerCase().startsWith('invoice') || curr.toLowerCase().startsWith('walk-in') || curr.toLowerCase().includes('lab order #') || curr.toLowerCase().startsWith('nurse walk') || curr === 'Patient';
+            const currLower = curr.toLowerCase();
+            const isBadNow = (!curr) || curr.length <= 9
+              || currLower === 'patient'
+              || currLower.startsWith('patient of')
+              || currLower.startsWith('invoice')
+              || currLower.startsWith('walk-in')
+              || currLower.includes('lab order #')
+              || currLower.startsWith('nurse walk')
+              || currLower.startsWith('onsite consultation')
+              || currLower.startsWith('online consultation')
+              || currLower.startsWith('video consultation')
+              || currLower.includes('[appointment]')
+              || currLower.includes('[triage ');
             if (isBadNow) {
               const patched = { ...r, patient_name: full2 };
               const cc = pMap.get(`pcontact:${pid}`);

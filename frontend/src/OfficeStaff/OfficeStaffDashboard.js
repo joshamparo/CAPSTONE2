@@ -3382,8 +3382,13 @@ export default function OfficeStaffDashboard({ mode }) {
                     || rawPatientName.toLowerCase().startsWith('lab order #')
                     || rawPatientName.toLowerCase().startsWith('walk-in')
                     || rawPatientName.toLowerCase().startsWith('nurse walk-in')
-                    || rawPatientName.toLowerCase().startsWith('nurse walk');
-                  const displayPatientName = isFallbackName ? 'Patient (click Update to fill name)' : rawPatientName;
+                    || rawPatientName.toLowerCase().startsWith('nurse walk')
+                    || rawPatientName.toLowerCase().startsWith('onsite consultation')
+                    || rawPatientName.toLowerCase().startsWith('online consultation')
+                    || rawPatientName.toLowerCase().startsWith('video consultation')
+                    || rawPatientName.toLowerCase().includes('[appointment]')
+                    || rawPatientName.toLowerCase().includes('[triage ');
+                  const displayPatientName = isFallbackName ? 'Patient name unavailable' : rawPatientName;
                   const subtitleText = (() => {
                     const parts = [];
                     if (invoiceIds.length > 1) parts.push(`${invoiceIds.length} invoices: #${invoiceIds.join(', #')}`);
@@ -3405,9 +3410,6 @@ export default function OfficeStaffDashboard({ mode }) {
                     >
                       <td className="text-sm font-medium text-slate-700">
                         <div style={{ fontWeight: 900, fontSize: '0.93rem', color: isFallbackName ? '#475569' : '#0f172a' }}>{displayPatientName}</div>
-                        {invoiceCount > 1 ? <div className="office-billing-subline" style={{ color: '#2563eb', fontWeight: 800, marginTop: 2 }}>{invoiceCount} invoices in this encounter</div> : null}
-                        {String(row.contact_number || '').trim() ? <div className="office-billing-subline" style={{ color: '#64748b', marginTop: 2 }}>{String(row.contact_number).trim()}</div> : null}
-                        {subtitleText ? <div className="office-billing-subline" style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: String(row.contact_number || '').trim() ? 1 : 3 }}>{subtitleText}</div> : null}
                       </td>
                       <td className="text-sm text-slate-600">
                         <div style={{ fontWeight: 700, color: '#0f172a' }}>{claim.provider || String(row.hmo_claim?.provider) || '—'}</div>
@@ -3448,6 +3450,11 @@ export default function OfficeStaffDashboard({ mode }) {
                         ) : (
                           <span style={{ color: '#cbd5e1', fontSize: '0.78rem', fontStyle: 'italic' }}>No lab/imaging linked yet.</span>
                         )}
+                        {invoiceIds.length ? (
+                          <div className="office-billing-subline" style={{ color: '#64748b', marginTop: 4 }}>
+                            {invoiceCount > 1 ? `${invoiceCount} invoices: #${invoiceIds.join(', #')}` : `Invoice #${invoiceIds[0]}`}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="text-sm font-medium text-slate-700" style={{ textAlign: 'right' }}>₱ {toMoney(totalNow)}</td>
                       <td className="text-sm text-slate-600" style={{ textAlign: 'right' }}>
