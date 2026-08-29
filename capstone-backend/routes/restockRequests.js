@@ -253,10 +253,14 @@ router.post('/', async (req, res) => {
 
     res.status(201).json(serializeRow(created));
   } catch (err) {
-    if (/restock_requests_open_item_unique_idx/i.test(String(err?.message || '')) || /duplicate key value/i.test(String(err?.message || ''))) {
-      return res.status(409).json({ message: 'A restock request is already pending for this item.' });
+    const errorText = [err?.message, err?.meta?.message, err?.meta?.cause].filter(Boolean).join(' ');
+    const isOpenRequestConflict = String(err?.code || '') === '23505'
+      || String(err?.meta?.code || '') === '23505'
+      || /23505|restock_requests_open_item_unique_idx|already exists|duplicate key value/i.test(errorText);
+    if (isOpenRequestConflict) {
+      return res.status(409).json({ message: 'A restock request is already pending or in progress for this item.' });
     }
-    res.status(400).json({ message: err.message });
+    res.status(400).json({ message: String(err?.message || 'Unable to create restock request.') });
   }
 });
 

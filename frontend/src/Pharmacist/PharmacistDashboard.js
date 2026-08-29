@@ -1029,6 +1029,16 @@ function PharmacistDashboard() {
     if (!raw) return;
     const itemType = String(raw.type || raw.item_type || raw.itemType || '').toLowerCase();
     const itemId = raw.id ?? raw.item_id ?? raw.itemId;
+    const hasOpenRequest = restockRequests.some((request) => (
+      String(request.itemType || request.item_type || '').toLowerCase() === itemType
+      && String(request.itemId || request.item_id || '') === String(itemId)
+      && ['pending', 'in progress', 'approved'].includes(String(request.status || '').toLowerCase())
+    ));
+    if (hasOpenRequest) {
+      setToast({ type: 'error', text: 'A restock request is already pending or in progress for this item.' });
+      fetchRestocks(true);
+      return;
+    }
     const itemName = raw.name || raw.item_name || raw.itemName || '';
     const stock = Number(raw.stock ?? 0) || 0;
     const minLevel = Number(raw.min_level ?? raw.minLevel ?? 10) || 10;
@@ -1064,6 +1074,10 @@ function PharmacistDashboard() {
       fetchRestocks(true);
     } catch (e) {
       setToast({ type: 'error', text: String(e?.message || 'Failed to send restock request.') });
+      if (Number(e?.status) === 409) {
+        setRestockRequestModal(null);
+        await fetchRestocks(true);
+      }
     } finally {
       setRestockRequestSaving(false);
     }
