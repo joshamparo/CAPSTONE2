@@ -341,7 +341,7 @@ function DoctorDashboard() {
     const raw = String(doctorSpecialization || '').trim().toLowerCase();
     if (!raw) return '';
     if (raw.includes('pedi')) return 'pediatrics';
-    if (raw.includes('ob-gyn') || raw.includes('obgyn') || raw === 'ob') return 'ob_gyn';
+    if (raw.includes('ob-gyn') || raw.includes('obgyn') || raw.includes('obstetric') || raw.includes('gynecol') || raw === 'ob') return 'ob_gyn';
     if (raw.includes('cardio')) return 'cardiology';
     if (raw.includes('derma')) return 'dermatology';
     if (raw.includes('surg')) return 'surgery';
@@ -966,7 +966,7 @@ function DoctorDashboard() {
     if (!compact) return '';
     if (compact.includes('pedi')) return 'pediatrics';
     if (compact === 'pt' || compact.includes('physicaltherapy') || compact.includes('physio')) return 'physical_therapy';
-    if (compact === 'ob' || compact.includes('obgyn') || compact.includes('obstetricsgynecology')) return 'ob_gyn';
+    if (compact === 'ob' || compact.includes('obgyn') || compact.includes('obstetric') || compact.includes('gynecol')) return 'ob_gyn';
     if (compact.includes('cardio')) return 'cardiology';
     if (compact.includes('derma')) return 'dermatology';
     if (compact.includes('surg')) return 'surgery';

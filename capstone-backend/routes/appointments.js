@@ -2529,30 +2529,8 @@ router.post('/:id/video/start', requireRole(['doctor']), async (req, res) => {
         }
 
         if (!apt.meeting_room_id) {
-            const sb = getSupabaseAdmin();
-            if (sb) {
-                console.log(`[Video Start] Calling daily-create-room edge function for appointment ${idRaw}...`);
-                const { data: edgeData, error: edgeError } = await sb.functions.invoke('daily-create-room', {
-                    body: {
-                        appointmentId: Number(idRaw),
-                        action: 'start',
-                        sourceTable: 'appointments'
-                    }
-                });
-
-                if (!edgeError && edgeData?.url) {
-                    console.log(`[Video Start] Edge function success for ${idRaw}`);
-                    return res.json({
-                        success: true,
-                        url: edgeData.url,
-                        roomId: edgeData.roomId || edgeData.roomName,
-                        roomName: edgeData.roomName
-                    });
-                }
-                console.error(`[Video Start] Edge function failed:`, edgeError || edgeData?.message);
-            }
-
-            // Fallback to legacy manual generation if edge function fails or Supabase not configured
+            // Persist one appointment-owned room before returning it. Both doctor
+            // and patient subsequently resolve this same room through this API.
             const roomId = makeRoomId(idRaw);
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
@@ -2681,29 +2659,6 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor']), async (req, re
         // The doctor must explicitly start the call first so both web and app join the
         // same appointment-owned room from the backend record.
         if (!roomId || !startedAt) {
-            const sb = getSupabaseAdmin();
-            if (sb) {
-                console.log(`[Video Join] Calling daily-create-room edge function for appointment ${idRaw}...`);
-                const { data: edgeData, error: edgeError } = await sb.functions.invoke('daily-create-room', {
-                    body: {
-                        appointmentId: Number(idRaw),
-                        action: 'join',
-                        sourceTable: 'appointments'
-                    }
-                });
-
-                if (!edgeError && edgeData?.url) {
-                    console.log(`[Video Join] Edge function success for ${idRaw}`);
-                    return res.json({
-                        success: true,
-                        url: edgeData.url,
-                        roomId: edgeData.roomId || edgeData.roomName,
-                        roomName: edgeData.roomName
-                    });
-                }
-                console.error(`[Video Join] Edge function failed:`, edgeError || edgeData?.message);
-            }
-            
             // #region debug-point D:join-blocked
             reportVideoRoomDebug({
                 hypothesisId: 'D',
