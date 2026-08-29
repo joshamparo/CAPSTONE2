@@ -8,12 +8,16 @@
 .aha-sep{width:1px; height:34px; background:#e2e8f0;}
 
 .aha-dropdown{position:absolute; top:calc(100% + 10px); right:0; width:300px; background:#fff; border:1px solid #e2e8f0; border-radius:14px; box-shadow:0 14px 28px rgba(2,6,23,.12); overflow:hidden; z-index:70;}
-.aha-dropdown-head{padding:12px 14px; border-bottom:1px solid #f1f5f9; display:flex; align-items:center; justify-content:flex-start;}
+.aha-dropdown-head{padding:12px 14px; border-bottom:1px solid #f1f5f9; display:flex; align-items:center; justify-content:space-between; gap:10px;}
+.aha-dropdown-head-actions{display:flex; align-items:center; justify-content:flex-end; gap:10px;}
 .aha-dropdown-title{font-weight:900; color:#0f172a; font-size: 0.95rem;}
 .aha-dropdown-body{padding:10px;}
 .aha-muted{color:#64748b; font-weight:700; font-size:0.9rem;}
 .aha-badge{position:absolute; top:8px; right:8px; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#ea580c; color:#fff; font-size:0.72rem; font-weight:900; display:flex; align-items:center; justify-content:center; border:2px solid #fff; line-height:1;}
-.aha-link-btn{border:0; background:transparent; color:#ea580c; font-weight:900; cursor:pointer; padding:0; font-size:0.82rem;}
+.aha-link-btn{border:0; background:transparent; color:#ea580c; font-weight:900; cursor:pointer; padding:0; font-size:0.82rem; display:inline-flex; align-items:center; gap:4px;}
+.aha-link-btn:disabled{opacity:.55; cursor:not-allowed;}
+.aha-spin{animation:aha-spin-keyframes .8s linear infinite;}
+@keyframes aha-spin-keyframes{to{transform:rotate(360deg)}}
 .aha-link-btn:hover{text-decoration:underline;}
 
 .aha-notif-list{display:flex; flex-direction:column; gap:8px; max-height:320px; overflow-y:auto; padding-right:2px;}

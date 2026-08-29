@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, ChevronDown, LayoutGrid, LogOut, Settings, User } from 'lucide-react';
+import { Bell, ChevronDown, LayoutGrid, LogOut, RefreshCw, Settings, User } from 'lucide-react';
 import ChangePasswordModal from './ChangePasswordModal';
 import SignOutConfirmModal from './SignOutConfirmModal';
 import './AccountHeaderActions.css';
@@ -636,11 +636,22 @@ export default function AccountHeaderActions({
                   <div className="aha-dropdown" onClick={(e) => e.stopPropagation()}>
                     <div className="aha-dropdown-head">
                       <div className="aha-dropdown-title">Notifications</div>
-                      {notifUnreadCount > 0 ? (
-                        <button type="button" className="aha-link-btn" onClick={markAllNotificationsAsRead}>
-                          Mark all as read
+                      <div className="aha-dropdown-head-actions">
+                        <button
+                          type="button"
+                          className="aha-link-btn"
+                          onClick={() => fetchNotifications()}
+                          disabled={notifLoading}
+                          aria-label="Refresh notifications"
+                        >
+                          <RefreshCw size={14} className={notifLoading ? 'aha-spin' : ''} /> Refresh
                         </button>
-                      ) : null}
+                        {notifUnreadCount > 0 ? (
+                          <button type="button" className="aha-link-btn" onClick={markAllNotificationsAsRead}>
+                            Mark all as read
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                     <div className="aha-dropdown-body">
                       {notifLoading ? (
@@ -684,7 +695,7 @@ export default function AccountHeaderActions({
                           ))}
                         </div>
                       ) : (
-                        <div className="aha-muted">No new notifications.</div>
+                        <div className="aha-muted">You’re all caught up. No notifications right now.</div>
                       )}
                     </div>
                   </div>

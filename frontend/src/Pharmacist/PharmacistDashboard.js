@@ -2556,9 +2556,13 @@ function PharmacistDashboard() {
             </div>
             <AccountHeaderActions user={currentUser} showChangePasswordMenu={false} onMyProfile={() => setActiveTab('profile')} onSignOut={confirmLogout} onOpenNotification={(n) => {
               const type = String(n?.type || '').toLowerCase();
-              if (type.includes('inventory') || type.includes('stock') || type.includes('restock')) {
+              if (type.includes('prescription')) {
+                setActiveTab('requests');
+              } else if (type.includes('restock')) {
                 setActiveTab('restocks');
-              } else if (type.includes('request') || type.includes('prescription')) {
+              } else if (type.includes('inventory') || type.includes('stock') || type.includes('expiry')) {
+                setActiveTab('restocks');
+              } else if (type.includes('request')) {
                 setActiveTab('requests');
               } else if (type.includes('sale') || type.includes('pos') || type.includes('transaction')) {
                 setActiveTab('sales');

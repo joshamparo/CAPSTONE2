@@ -1416,6 +1416,141 @@ router.get('/notifications', async (req, res) => {
             items.push(...invItems.slice(0, 8));
         }
 
+        // Pharmacists need the same server-backed notification behavior as the
+        // Admin header, but with pharmacy-specific operational events.
+        if (role === 'pharmacist') {
+            const pharmacyItems = [];
+
+            const prescriptionRows = await prisma.$queryRawUnsafe(
+                `
+                    SELECT p.id::text AS id,
+                           p.doctor_name,
+                           p.diagnosis,
+                           p.created_at,
+                           COALESCE(p.pharmacy_status, 'Pending') AS pharmacy_status,
+                           pt.first_name AS patient_first_name,
+                           pt.last_name AS patient_last_name
+                    FROM public.prescriptions p
+                    LEFT JOIN public.patients pt ON pt.id = p.patient_id
+                    WHERE p.is_sent_to_pharmacy = true
+                      AND lower(COALESCE(p.pharmacy_status, 'pending')) NOT IN ('dispensed', 'bought outside', 'cancelled', 'canceled')
+                    ORDER BY p.created_at DESC NULLS LAST
+                    LIMIT 12
+                `
+            ).catch(() => []);
+
+            (Array.isArray(prescriptionRows) ? prescriptionRows : []).forEach((r) => {
+                const when = r.created_at || null;
+                const ms = when ? new Date(when).getTime() : 0;
+                const patientName = `${String(r.patient_first_name || '')} ${String(r.patient_last_name || '')}`.trim() || 'Patient';
+                const status = String(r.pharmacy_status || 'Pending').trim();
+                pharmacyItems.push({
+                    id: `pharmacy:rx:${String(r.id)}`,
+                    type: 'prescription',
+                    title: 'Prescription Ready for Review',
+                    message: `${patientName} • ${String(r.diagnosis || 'Prescription')} • ${status}`,
+                    createdAt: when,
+                    unreadCount: ms > lastReadMs ? 1 : 0,
+                    meta: { prescriptionId: String(r.id), severity: 'info', doctorName: r.doctor_name || null }
+                });
+            });
+
+            const restockRows = await prisma.$queryRawUnsafe(
+                `
+                    SELECT id::text AS id, item_type, item_id::text AS item_id, item_name,
+                           requested_qty, priority, status, updated_at, created_at
+                    FROM public.restock_requests
+                    WHERE lower(COALESCE(status, 'pending')) IN ('approved', 'in progress')
+                    ORDER BY COALESCE(updated_at, created_at) DESC NULLS LAST
+                    LIMIT 12
+                `
+            ).catch(() => []);
+
+            (Array.isArray(restockRows) ? restockRows : []).forEach((r) => {
+                const when = r.updated_at || r.created_at || null;
+                const ms = when ? new Date(when).getTime() : 0;
+                pharmacyItems.push({
+                    id: `pharmacy:restock:${String(r.id)}`,
+                    type: 'restock',
+                    title: String(r.status || '').toLowerCase() === 'approved' ? 'Restock Request Approved' : 'Restock In Progress',
+                    message: `${String(r.item_name || 'Inventory item')} • Qty ${Number(r.requested_qty || 0)} • ${String(r.priority || 'Normal')} priority`,
+                    createdAt: when,
+                    unreadCount: ms > lastReadMs ? 1 : 0,
+                    meta: { requestId: String(r.id), itemId: String(r.item_id || ''), itemType: r.item_type || null, severity: 'success' }
+                });
+            });
+
+            await ensureInventoryTimestampSchemaOnce().catch(() => {});
+            const medicineRows = await prisma.$queryRawUnsafe(
+                `
+                    SELECT id::text AS id, name, stock, min_level, expiry_date, updated_at
+                    FROM public.medicines
+                    WHERE COALESCE(stock, 0) <= COALESCE(min_level, 5)
+                       OR (expiry_date IS NOT NULL AND expiry_date <= CURRENT_DATE + INTERVAL '30 days')
+                    ORDER BY
+                        CASE WHEN COALESCE(stock, 0) = 0 THEN 0 ELSE 1 END,
+                        expiry_date ASC NULLS LAST,
+                        updated_at DESC NULLS LAST
+                    LIMIT 12
+                `
+            ).catch(() => []);
+
+            (Array.isArray(medicineRows) ? medicineRows : []).forEach((r) => {
+                const stock = Number(r.stock || 0);
+                const minLevel = Number(r.min_level || 5);
+                const expiry = r.expiry_date ? new Date(r.expiry_date) : null;
+                const expired = expiry && Number.isFinite(expiry.getTime()) && expiry.getTime() < Date.now();
+                const lowStock = stock <= minLevel;
+                const when = r.updated_at || r.expiry_date || null;
+                const ms = when ? new Date(when).getTime() : 0;
+                const status = stock === 0
+                    ? 'out of stock'
+                    : expired
+                        ? 'expired'
+                        : lowStock
+                            ? `low stock (${stock} remaining)`
+                            : `expiring on ${expiry.toLocaleDateString('en-PH')}`;
+                pharmacyItems.push({
+                    id: `pharmacy:medicine:${String(r.id)}:${stock}:${expiry ? expiry.toISOString().slice(0, 10) : 'none'}`,
+                    type: expired ? 'expiry' : 'inventory',
+                    title: expired ? 'Expired Medicine' : lowStock ? 'Medicine Stock Alert' : 'Medicine Expiry Alert',
+                    message: `${String(r.name || 'Medicine')} is ${status}.`,
+                    createdAt: when,
+                    unreadCount: ms > lastReadMs ? 1 : 0,
+                    meta: { itemId: String(r.id), itemType: 'medicine', stock, minLevel, expiryDate: r.expiry_date || null, severity: stock === 0 || expired ? 'alert' : 'info' }
+                });
+            });
+
+            const supplyRows = await prisma.$queryRawUnsafe(
+                `
+                    SELECT id::text AS id, item_name, stock, min_level, created_at
+                    FROM public.supplies
+                    WHERE COALESCE(stock, 0) <= COALESCE(min_level, 10)
+                    ORDER BY COALESCE(stock, 0) ASC, created_at DESC NULLS LAST
+                    LIMIT 8
+                `
+            ).catch(() => []);
+
+            (Array.isArray(supplyRows) ? supplyRows : []).forEach((r) => {
+                const stock = Number(r.stock || 0);
+                const minLevel = Number(r.min_level || 10);
+                const when = r.created_at || null;
+                const ms = when ? new Date(when).getTime() : 0;
+                pharmacyItems.push({
+                    id: `pharmacy:supply:${String(r.id)}:${stock}`,
+                    type: 'inventory',
+                    title: 'Supply Stock Alert',
+                    message: `${String(r.item_name || 'Supply')} is ${stock === 0 ? 'out of stock' : `low stock (${stock} remaining)`}.`,
+                    createdAt: when,
+                    unreadCount: ms > lastReadMs ? 1 : 0,
+                    meta: { itemId: String(r.id), itemType: 'supply', stock, minLevel, severity: stock === 0 ? 'alert' : 'info' }
+                });
+            });
+
+            pharmacyItems.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+            items.push(...pharmacyItems.slice(0, 24));
+        }
+
         if (role === 'patient') {
             let patient = null;
             if (isUuid(patientId)) {
