@@ -1309,6 +1309,21 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         if (hmoRejectedFlag) desiredHmoStatus = null; // EXPLICITLY REJECTED → skip ALL claim inserts, no HMO monitoring row
         else if (hmoApprovalStatusRaw === 'approved') desiredHmoStatus = 'Approved';
         else if (hmoApprovalStatusRaw === 'awaiting_loa') desiredHmoStatus = 'Awaiting LOA';
+        if (Boolean(payload.hasHmo)) {
+            const provider = String(payload.hmoProvider || '').trim();
+            const cardNumber = String(payload.hmoCardNumber || '').trim();
+            const loaNumber = String(payload.hmoLoaNumber || '').trim();
+            const approvedAmount = Number(payload.hmoLoaApprovedAmount || 0);
+            if (!hmoRejectedFlag && !desiredHmoStatus) {
+                return res.status(400).json({ message: 'Select the HMO result: Approved, Awaiting LOA, or Rejected.' });
+            }
+            if (!hmoRejectedFlag && (!provider || !cardNumber)) {
+                return res.status(400).json({ message: 'HMO provider and card number are required.' });
+            }
+            if (desiredHmoStatus === 'Approved' && (!loaNumber || !Number.isFinite(approvedAmount) || approvedAmount <= 0)) {
+                return res.status(400).json({ message: 'Approved HMO claims require an LOA number and an approved amount greater than zero.' });
+            }
+        }
         const paymentModeNoteTag = (() => {
           if (hmoPaymentModeRaw === 'temp_cash') return '[Patient temp paid full - refund HMO later]';
           if (hmoPaymentModeRaw === 'guarantee') return '[Hospital Guarantee / Charge on Account]';
@@ -2338,7 +2353,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 }
             }).catch(() => null);
 
-            if (hmoSave) {
+            if (Boolean(payload.hasHmo) && desiredHmoStatus) {
                 // Ensure patient registry row has HMO flags so fallback 3rd UNION ALL hmo-queue leg picks it up
                 try {
                     const hmoProv = String(payload.hmoProvider || '').trim() || null;
@@ -2382,7 +2397,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
 
                 // Insert into billing_hmo_claims using the unified schema
                 const onSiteAmount = hasServices ? 100 : 0;
-                const autoApproveAmount = onSiteAmount + mainClinicalOrderHmoCoveredCents + extraHmoTotalCents;
+                const autoApproveAmount = desiredHmoStatus === 'Approved'
+                    ? Math.max(0, Number(payload.hmoLoaApprovedAmount || 0))
+                    : 0;
                 const apptIdForClaim = createdRecord && createdRecord.id ? String(createdRecord.id) : null;
                 const coverageJson = (coverageExtra && Object.keys(coverageExtra).length > 0) ? JSON.stringify(coverageExtra) : null;
                 await tx.$executeRawUnsafe(`
@@ -2391,7 +2408,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                          philhealth_deduction, loa_approved_amount, status, coverage_json, notes, requested_by, created_at, updated_at)
                     VALUES
                         ($1::bigint, $2::bigint, $3::uuid, $4::text, $5::text, $6::text, $7::text,
-                         $8::numeric, $9::numeric, 'Approved', $10::jsonb, $11::text, $12::text, now(), now())
+                         $8::numeric, $9::numeric, $10::text, $11::jsonb, $12::text, $13::text, now(), now())
                     ON CONFLICT (invoice_id) DO UPDATE SET
                         appointment_id = COALESCE(public.billing_hmo_claims.appointment_id, EXCLUDED.appointment_id),
                         patient_id = COALESCE(public.billing_hmo_claims.patient_id, EXCLUDED.patient_id),
@@ -2400,12 +2417,13 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                         hmo_loa_number = EXCLUDED.hmo_loa_number,
                         hmo_card_number = EXCLUDED.hmo_card_number,
                         philhealth_deduction = EXCLUDED.philhealth_deduction,
-                        loa_approved_amount = CASE WHEN public.billing_hmo_claims.loa_approved_amount = 0 THEN EXCLUDED.loa_approved_amount ELSE public.billing_hmo_claims.loa_approved_amount END,
+                        loa_approved_amount = EXCLUDED.loa_approved_amount,
+                        status = EXCLUDED.status,
                         coverage_json = COALESCE(public.billing_hmo_claims.coverage_json, EXCLUDED.coverage_json),
                         notes = EXCLUDED.notes,
                         updated_at = now()
                 `, linkedInvoiceId, apptIdForClaim, String(patient.id), patientName, hmoProv, loaNum, hmoCard,
-                    phAmt, autoApproveAmount, coverageJson, hmoNts,
+                    phAmt, autoApproveAmount, desiredHmoStatus, coverageJson, hmoNts,
                     getRequesterEmail(req) || requesterName || null
                 ).catch((err) => {
                     console.error('[HMO Intake] Failed to record claim:', err);
@@ -2413,7 +2431,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
 
                 // AUTO-UPDATE invoice status once HMO claim is Approved:
                 // If HMO + Philhealth fully cover invoice → status = 'Paid'; else → status = 'Ready' (cashier collects balance)
-                if (linkedInvoiceId) {
+                if (linkedInvoiceId && desiredHmoStatus === 'Approved') {
                     try {
                         await ensureBillingTablesExist(tx).catch(() => null);
                         const invIdP1 = BigInt(linkedInvoiceId);

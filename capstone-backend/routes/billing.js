@@ -2692,30 +2692,6 @@ router.get('/hmo-queue', async (req, res) => {
         return { ...row, has_hmo_evidence: claimHasHmo };
       })
       .filter((row) => row.has_hmo_evidence === true)
-      .map((row) => {
-        const claim = row.hmo_claim || {};
-        const requestedBy = String(claim.requested_by || '').toLowerCase();
-        const isLegacyCatchAll = requestedBy.includes('gate-no-crash')
-          || requestedBy.includes('pass0-no-crash')
-          || requestedBy === 'system:auto-recover'
-          || requestedBy === 'system:auto-recover-fallback';
-        const hasAuthorization = Boolean(
-          String(claim.provider || claim.hmo_provider || '').trim()
-          && (
-            String(claim.loa_number || claim.hmo_loa_number || '').trim()
-            || String(claim.hmo_card_number || '').trim()
-            || Number(claim.loa_approved_amount || 0) > 0
-          )
-        );
-        if (isLegacyCatchAll && !hasAuthorization && String(row.claim_status || '').toLowerCase() === 'approved') {
-          return {
-            ...row,
-            claim_status: 'Awaiting LOA',
-            hmo_claim: { ...claim, status: 'Awaiting LOA', applied_hmo_amount: 0 }
-          };
-        }
-        return row;
-      })
       .filter((row) => {
         if (filterMode !== 'approved') return true;
         const status = String(row.claim_status || row.hmo_claim?.status || '').toLowerCase();

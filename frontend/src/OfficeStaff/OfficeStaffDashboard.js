@@ -406,7 +406,7 @@ export default function OfficeStaffDashboard({ mode }) {
   const [savingHmoClaim, setSavingHmoClaim] = useState(false);
 
   const [hmoQueue, setHmoQueue] = useState({
-    filter: 'all',
+    filter: 'approved',
     page: 1,
     perPage: 8,
     totalCount: 0,
@@ -416,7 +416,7 @@ export default function OfficeStaffDashboard({ mode }) {
   });
   const [hmoQueueLoading, setHmoQueueLoading] = useState(false);
   const [hmoQueueError, setHmoQueueError] = useState('');
-  const [hmoQueueFilter, setHmoQueueFilter] = useState('all');
+  const [hmoQueueFilter, setHmoQueueFilter] = useState('approved');
   const [hmoQueuePage, setHmoQueuePage] = useState(1);
   const [hmoQueueQuery, setHmoQueueQuery] = useState('');
   const [hmoQuickEdit, setHmoQuickEdit] = useState(null);

@@ -1273,6 +1273,22 @@ function NurseDashboard() {
       }
     }
 
+    if (addPatientData.hasHmo) {
+      const approvalStatus = String(options?.hmoApprovalStatus || '').trim().toLowerCase();
+      if (!approvalStatus) {
+        setAddPatientError('Select the HMO result before completing the intake.');
+        return;
+      }
+      if (approvalStatus !== 'rejected' && (!String(addPatientData.hmoProvider || '').trim() || !String(addPatientData.hmoCardNumber || '').trim())) {
+        setAddPatientError('HMO provider and card number are required.');
+        return;
+      }
+      if (approvalStatus === 'approved' && (!String(addPatientData.hmoLoaNumber || '').trim() || Number(addPatientData.hmoLoaApprovedAmount || 0) <= 0)) {
+        setAddPatientError('Enter the LOA number and approved amount before sending this claim to Cashier.');
+        return;
+      }
+    }
+
     setAddPatientSaving(true);
     try {
       const response = await fetchJson(`/api/patients/walk-in-intake`, {
