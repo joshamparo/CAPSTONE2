@@ -2165,6 +2165,20 @@ router.get('/hmo-queue', async (req, res) => {
         };
       })
       .filter((row) => {
+        const requestedBy = String(row.hmo_claim?.requested_by || '').toLowerCase();
+        const isSyntheticCatchAll = requestedBy.includes('gate-no-crash');
+        const hasRealHmoData = Boolean(
+          row.hmo_claim?.patient_id
+          || row.hmo_claim?.provider
+          || row.hmo_claim?.loa_number
+          || row.hmo_claim?.hmo_card_number
+          || Number(row.hmo_claim?.philhealth_deduction || 0) > 0
+          || Number(row.hmo_claim?.loa_approved_amount || 0) > 0
+        );
+        // Old walk-in safety code accidentally created Approved HMO claims for every
+        // unmatched invoice, including ordinary cash lab orders. Never show those
+        // fabricated empty claims in HMO Monitoring.
+        if (isSyntheticCatchAll && !hasRealHmoData) return false;
         if (filterMode === 'approved') {
           const norm = String(row.claim_status || '').toLowerCase();
           return norm === 'approved' || norm === 'partially approved';
@@ -2267,7 +2281,7 @@ router.get('/hmo-queue', async (req, res) => {
         }
         if (invIdsExtra.length) {
           const invPats = await prisma.$queryRawUnsafe(
-            `SELECT id::text AS iid, patient_id::text AS pid FROM public.billing_invoices WHERE id::text IN (${invIdsExtra.map((_, i) => `$${i + 1}`).join(',')})`,
+            `SELECT id::text AS iid, patient_id::text AS pid FROM public.billing_invoices WHERE id IN (${invIdsExtra.map((_, i) => `$${i + 1}::bigint`).join(',')})`,
             ...invIdsExtra.map((x) => BigInt(x))
           ).catch(() => []);
           if (Array.isArray(invPats)) {
@@ -2288,7 +2302,7 @@ router.get('/hmo-queue', async (req, res) => {
         }
         if (allInvIdsForPat.length) {
           const allI2p = await prisma.$queryRawUnsafe(
-            `SELECT id::text AS iid, patient_id::text AS pid FROM public.billing_invoices WHERE id::text IN (${allInvIdsForPat.map((_, i) => `$${i + 1}`).join(',')})`,
+            `SELECT id::text AS iid, patient_id::text AS pid FROM public.billing_invoices WHERE id IN (${allInvIdsForPat.map((_, i) => `$${i + 1}::bigint`).join(',')})`,
             ...allInvIdsForPat.map((x) => BigInt(x))
           ).catch(() => []);
           if (Array.isArray(allI2p)) {
@@ -2330,11 +2344,10 @@ router.get('/hmo-queue', async (req, res) => {
         }
         if (labOrderIdsToLookup.size > 0) {
           const labArr = Array.from(labOrderIdsToLookup);
-          const labPh = labArr.map((_, i) => `$${i + 1}`).join(',');
           const labParams = labArr.map((x) => BigInt(x));
           const coRows = await prisma.$queryRawUnsafe(
             `SELECT id::text AS coid, patient_id::text AS pid, patient_name AS pname
-             FROM public.clinical_orders WHERE id::text IN (${labPh})`,
+             FROM public.clinical_orders WHERE id IN (${labArr.map((_, i) => `$${i + 1}::bigint`).join(',')})`,
             ...labParams
           ).catch(() => []);
           if (Array.isArray(coRows)) {

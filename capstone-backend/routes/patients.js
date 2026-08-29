@@ -2390,7 +2390,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                         (invoice_id, appointment_id, patient_id, patient_name, hmo_provider, hmo_loa_number, hmo_card_number, 
                          philhealth_deduction, loa_approved_amount, status, coverage_json, notes, requested_by, created_at, updated_at)
                     VALUES
-                        ($1::bigint, $2::bigint, $3::bigint, $4::text, $5::text, $6::text, $7::text, 
+                        ($1::bigint, $2::bigint, $3::uuid, $4::text, $5::text, $6::text, $7::text,
                          $8::numeric, $9::numeric, 'Approved', $10::jsonb, $11::text, $12::text, now(), now())
                     ON CONFLICT (invoice_id) DO UPDATE SET
                         appointment_id = COALESCE(public.billing_hmo_claims.appointment_id, EXCLUDED.appointment_id),
@@ -2596,15 +2596,16 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         // Guarantees that EVERY new billing_invoice created by THIS walk-in intake request
         // gets its matching billing_hmo_claims row WITHIN THE SAME HTTP REQUEST (zero delay!).
         // This eliminates the old "patient is created but HMO table empty for 30 seconds" bug.
-        try {
+        if ((Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth)) && desiredHmoStatus && result?.patient?.id) try {
             for (let attempt = 0; attempt < 2; attempt++) {
                 try {
                     const countRows = await prisma.$queryRawUnsafe(`
                         SELECT COUNT(*)::int AS unmatched_count
                         FROM public.billing_invoices bi
                         WHERE bi.created_at >= (now() - interval '120 days')
+                          AND bi.patient_id::text = $1::text
                           AND NOT EXISTS (SELECT 1 FROM public.billing_hmo_claims cl WHERE cl.invoice_id = bi.id)
-                    `).catch(() => []);
+                    `, String(result.patient.id)).catch(() => []);
                     const unmatched = Number((countRows && countRows[0] && countRows[0].unmatched_count) || 0);
                     if (unmatched <= 0) break;
                     try {
@@ -2617,10 +2618,11 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                 bi.created_at AS inv_created_at
                             FROM public.billing_invoices bi
                             WHERE bi.created_at >= (now() - interval '120 days')
+                              AND bi.patient_id::text = $1::text
                               AND NOT EXISTS (SELECT 1 FROM public.billing_hmo_claims cl WHERE cl.invoice_id = bi.id)
                             ORDER BY bi.created_at DESC
                             LIMIT 9999
-                        `).catch(() => []);
+                        `, String(result.patient.id)).catch(() => []);
                         if (Array.isArray(minInvCandidates) && minInvCandidates.length) {
                             for (let idx = 0; idx < minInvCandidates.length; idx++) {
                                 try {
