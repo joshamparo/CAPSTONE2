@@ -785,7 +785,11 @@ export default function OfficeStaffDashboard({ mode }) {
       params.set('page', String(Math.max(1, hmoQueuePage || 1)));
       params.set('perPage', '8');
       if (hmoQueueQuery.trim()) params.set('q', hmoQueueQuery.trim());
-      const data = await fetchJson(`/api/billing/hmo-queue?${params.toString()}`, { apiBase: API_BASE, headers: buildHeaders(user) });
+      const data = await fetchJson(`/api/billing/hmo-queue?${params.toString()}`, {
+        apiBase: API_BASE,
+        headers: buildHeaders(user),
+        timeoutMs: 120000
+      });
       const safe = data && typeof data === 'object' && !Array.isArray(data)
         ? {
             filter: String(data.filter || 'approved'),
@@ -802,7 +806,10 @@ export default function OfficeStaffDashboard({ mode }) {
         setHmoQueuePage(safe.totalPages);
       }
     } catch (e) {
-      setHmoQueue({ filter: hmoQueueFilter === 'all' ? 'all' : 'approved', page: 1, perPage: 8, totalCount: 0, totalPages: 1, rows: [] });
+      setHmoQueue((current) => ({
+        ...current,
+        filter: hmoQueueFilter === 'all' ? 'all' : 'approved'
+      }));
       setHmoQueueError(String(e.message || 'Failed to load HMO queue'));
     } finally {
       setHmoQueueLoading(false);
