@@ -338,6 +338,9 @@ function summarizeHmoClaim(row, totalAmount) {
   return {
     id: row.id != null ? String(row.id) : null,
     invoice_id: row.invoice_id != null ? String(row.invoice_id) : null,
+    appointment_id: row.appointment_id != null ? String(row.appointment_id) : null,
+    patient_id: row.patient_id != null ? String(row.patient_id).trim() || null : null,
+    patient_name: String(row.patient_name || '').trim(),
     provider: String(row.hmo_provider || row.provider || '').trim(),
     hmo_provider: String(row.hmo_provider || row.provider || '').trim(),
     loa_number: String(row.hmo_loa_number || row.loa_number || '').trim(),
@@ -2001,7 +2004,7 @@ router.get('/hmo-queue', async (req, res) => {
                     LIMIT 20) AS workups_list
             FROM public.billing_invoices bi
           ) i ON i.id = ${hInvoiceId}
-          LEFT JOIN public.patients p ON p.id = i.patient_id
+          LEFT JOIN public.patients p ON p.id = COALESCE(i.patient_id, ${hPatientId})
 
           UNION ALL
 
@@ -2147,7 +2150,9 @@ router.get('/hmo-queue', async (req, res) => {
           id: claim.id,
           invoice_id: claim.invoice_id,
           invoice_status: row.invoice_status || null,
-          patient_name: `${String(row.first_name || '').trim()} ${String(row.last_name || '').trim()}`.trim() || 'Patient',
+          patient_name: `${String(row.first_name || '').trim()} ${String(row.last_name || '').trim()}`.trim()
+            || String(claim.patient_name || '').trim()
+            || 'Patient',
           email: row.email || null,
           contact_number: row.contact_number || null,
           total_amount: toMoney(total),
@@ -2311,7 +2316,7 @@ router.get('/hmo-queue', async (req, res) => {
             if (cand) pid = String(cand).trim();
           }
           if (!pid || pid === 'null' || pid === '') {
-            const haystack = `${String(r.patient_name || '')} ${String(r.workups_list || '')} ${String(r.invoice_notes || '')} ${String(r.notes || '')}`.toLowerCase();
+            const haystack = `${String(r.patient_name || '')} ${String(r.hmo_claim?.patient_name || '')} ${String(r.workups_list || '')} ${String(r.invoice_notes || '')} ${String(r.notes || '')} ${String(r.hmo_claim?.notes || '')}`.toLowerCase();
             const m = haystack.match(/lab order #?\s*(\d+)/i);
             if (m && m[1]) {
               const loId = String(m[1]).trim();
