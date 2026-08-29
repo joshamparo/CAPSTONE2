@@ -205,14 +205,43 @@ async function fetchDoctorList({ specialization, department, status }) {
     status: d.status || null
   }));
 
+  // Physical therapists are clinical providers but their accounts are stored
+  // in `staff`, not `doctors`. Include them in the same provider/slot pipeline
+  // so PayMongo completion creates a normal video appointment just like every
+  // other online-consultation specialty.
+  const specKey = String(spec || '').trim().toLowerCase();
+  if (specKey.includes('physical therapy') || specKey === 'pt' || specKey.includes('physiotherapy')) {
+    const staffWhere = { account_type: 'physical_therapist' };
+    if (st) staffWhere.status = st;
+    const therapists = await prisma.staff.findMany({
+      where: staffWhere,
+      select: { id: true, first_name: true, last_name: true, email: true, status: true }
+    }).catch(() => []);
+    for (const therapist of therapists || []) {
+      const firstName = String(therapist.first_name || '').trim();
+      const lastName = String(therapist.last_name || '').trim();
+      list.push({
+        id: therapist.id,
+        name: `${firstName} ${lastName}`.trim() || therapist.email || 'Physical Therapist',
+        email: therapist.email || null,
+        specialization: 'Physical Therapy',
+        department: 'Physical Therapy',
+        status: therapist.status || null,
+        providerType: 'physical_therapist'
+      });
+    }
+  }
+
+  const unique = Array.from(new Map(list.map((provider) => [String(provider.id), provider])).values());
+
   const score = (s) => (String(s || '').trim().toLowerCase() === 'online' ? 1 : 0);
-  list.sort((a, b) => {
+  unique.sort((a, b) => {
     const sa = score(a.status);
     const sb = score(b.status);
     if (sa !== sb) return sb - sa;
     return String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
   });
-  return list;
+  return unique;
 }
 
 async function getBookedTimesForDoctor(doctorName, dateStr) {
