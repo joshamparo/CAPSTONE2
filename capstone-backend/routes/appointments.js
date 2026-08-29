@@ -1352,16 +1352,17 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
         }
 
         if (role === 'physical_therapist') {
-            const email = inferEmail(req);
-            const therapist = email
-                ? await prisma.doctors.findFirst({
-                    where: { email: { equals: email, mode: 'insensitive' } },
-                    select: { id: true }
-                }).catch(() => null)
-                : null;
-            if (!therapist?.id) return res.json([]);
-            where.doctor_uuid = therapist.id;
             where.consultation_mode = 'video';
+            where.AND = [
+                ...(Array.isArray(where.AND) ? where.AND : []),
+                {
+                    OR: [
+                        { reason: { contains: 'Physical Therapy', mode: 'insensitive' } },
+                        { reason: { contains: 'Physiotherapy', mode: 'insensitive' } },
+                        { reason: { contains: 'Video Consultation - PT', mode: 'insensitive' } }
+                    ]
+                }
+            ];
         }
 
         const query = String(q || '').trim();
@@ -2448,6 +2449,7 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         const id = BigInt(idRaw);
 
         const requestedDoctorName = inferName(req);
+        const requesterRole = inferRole(req);
         const requestedDoctorUuid = String(req.headers['x-doctor-uuid'] || '').trim();
         const requesterEmail = inferEmail(req);
         const doctorByEmail = requesterEmail
@@ -2458,7 +2460,7 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             : null;
         const reqDoctorUuid = String(doctorByEmail?.id || requestedDoctorUuid || '').trim();
         const resolvedDoctorName = `${String(doctorByEmail?.first_name || '').trim()} ${String(doctorByEmail?.last_name || '').trim()}`.trim();
-        const doctorName = requestedDoctorName || resolvedDoctorName;
+        const doctorName = requestedDoctorName || resolvedDoctorName || (requesterRole === 'physical_therapist' ? 'Physical Therapist' : '');
         if (!doctorName && !reqDoctorUuid) {
             return res.status(401).json({ message: 'Unable to resolve the logged-in doctor account. Sign in again or ask admin to verify the doctor email link.' });
         }
@@ -2508,10 +2510,18 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
 
         let isAssigned = false;
 
-        // 1. Check UUID match (most reliable)
-        if (apt.doctor_uuid && reqDoctorUuid && apt.doctor_uuid === reqDoctorUuid) {
+        // PT accounts live in the staff table while mobile video bookings are
+        // represented as appointment/provider records. Treat PT video bookings
+        // as a protected department queue, but never allow PT staff to start a
+        // consultation belonging to another specialty.
+        if (requesterRole === 'physical_therapist' && inferSpecializationFromVideoReason(apt.reason) === 'Physical Therapy') {
             isAssigned = true;
-        } else {
+        }
+
+        // 1. Check UUID match (most reliable)
+        if (!isAssigned && apt.doctor_uuid && reqDoctorUuid && apt.doctor_uuid === reqDoctorUuid) {
+            isAssigned = true;
+        } else if (!isAssigned) {
             // 2. Fallback to name string matching
             const assigned = normalizeAssignee(apt.doctor_id);
             const actor = normalizeAssignee(doctorName);
