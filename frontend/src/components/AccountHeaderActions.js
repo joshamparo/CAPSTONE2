@@ -618,6 +618,7 @@ export default function AccountHeaderActions({
         {(showNotificationsButton || showSettingsButton) ? (
           <div className="aha-actions">
             {showNotificationsButton ? (
+              <div className="aha-action-slot">
               <button
                 type="button"
                 className="aha-icon-btn"
@@ -630,6 +631,7 @@ export default function AccountHeaderActions({
               >
                 <Bell size={20} className="aha-icon" />
                 {notifUnreadCount > 0 ? <span className="aha-badge">{notifUnreadCount > 9 ? '9+' : notifUnreadCount}</span> : null}
+              </button>
                 {showNotifications ? (
                   <div className="aha-dropdown" onClick={(e) => e.stopPropagation()}>
                     <div className="aha-dropdown-head">
@@ -687,10 +689,11 @@ export default function AccountHeaderActions({
                     </div>
                   </div>
                 ) : null}
-              </button>
+              </div>
             ) : null}
 
             {showSettingsButton ? (
+              <div className="aha-action-slot">
               <button
                 type="button"
                 className="aha-icon-btn"
@@ -702,6 +705,7 @@ export default function AccountHeaderActions({
                 aria-label="Settings"
               >
                 <Settings size={20} className="aha-icon" />
+              </button>
                 {showSettings ? (
                   <div className="aha-dropdown" onClick={(e) => e.stopPropagation()}>
                     <div className="aha-dropdown-head">
@@ -764,7 +768,7 @@ export default function AccountHeaderActions({
                     </div>
                   </div>
                 ) : null}
-              </button>
+              </div>
             ) : null}
           </div>
         ) : null}

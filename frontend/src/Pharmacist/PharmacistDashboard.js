@@ -199,6 +199,7 @@ function PharmacistDashboard() {
   const [posCategories, setPosCategories] = useState([]);
   const [posProducts, setPosProducts] = useState([]);
   const [loadingPos, setLoadingPos] = useState(false);
+  const [refreshingPos, setRefreshingPos] = useState(false);
   const [posError, setPosError] = useState('');
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showAddProductModal, setShowAddProductModal] = useState(false);
@@ -663,6 +664,41 @@ function PharmacistDashboard() {
     } finally {
       setLoadingPos(false);
     }
+  };
+
+  const refreshPosWorkspace = async () => {
+    if (refreshingPos) return;
+    setRefreshingPos(true);
+    try {
+      await Promise.all([
+        fetchPosProducts(),
+        fetchPosCategories(),
+        fetchMedicines(),
+        fetchSupplies(),
+        fetchPrescriptions(),
+        fetchRestocks(true)
+      ]);
+      setToast({ type: 'success', text: 'POS products and stock refreshed.' });
+    } catch (e) {
+      setToast({ type: 'error', text: String(e?.message || 'Unable to refresh POS data.') });
+    } finally {
+      setRefreshingPos(false);
+    }
+  };
+
+  const printCurrentReceipt = () => {
+    if (!showReceipt) {
+      setToast({ type: 'error', text: 'No receipt is available to print.' });
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      try {
+        window.focus();
+        window.print();
+      } catch (e) {
+        setToast({ type: 'error', text: String(e?.message || 'Unable to open the print dialog.') });
+      }
+    });
   };
 
   const fetchRequests = async () => {
@@ -2213,7 +2249,9 @@ function PharmacistDashboard() {
 
   const posResults = useMemo(() => {
     const q = String(posSearch || '').toLowerCase().trim();
-    const cid = String(posCategoryId || 'all');
+    // A text query searches the complete catalog. This prevents a previously
+    // selected category chip from silently hiding valid name/category matches.
+    const cid = q ? 'all' : String(posCategoryId || 'all');
     return enrichedPosProducts
       .filter((p) => {
         if (cid !== 'all' && String(p.categoryId || '') !== cid) return false;
@@ -2752,6 +2790,32 @@ function PharmacistDashboard() {
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                     <button
                       className="pharm-btn sm"
+                      type="button"
+                      onClick={refreshPosWorkspace}
+                      disabled={refreshingPos || loadingPos}
+                      aria-label="Refresh POS products and stock"
+                    >
+                      <RefreshCw size={16} className={refreshingPos ? 'pharm-spin' : ''} />
+                      {refreshingPos ? 'Refreshing…' : 'Refresh'}
+                    </button>
+                    <button
+                      className="pharm-btn sm"
+                      type="button"
+                      onClick={() => {
+                        setInventoryScan('');
+                        setScanCenterMatch(null);
+                        setScanMode('dispense');
+                        setQueueMode(false);
+                        setScanCenterKind('auto');
+                        setScanCenterOpen(true);
+                        setScanBanner({ type: 'info', text: 'Dispense mode: scan an item to subtract stock.' });
+                      }}
+                    >
+                      <QrCode size={16} />
+                      Dispense Stock
+                    </button>
+                    <button
+                      className="pharm-btn sm"
                       style={{ padding: '6px 12px', fontSize: '0.8rem' }}
                       type="button"
                       onClick={() => setShowCategoryManager(true)}
@@ -2884,6 +2948,16 @@ function PharmacistDashboard() {
                       });
                     }}
                   />
+                  {posSearch ? (
+                    <button
+                      type="button"
+                      className="pharm-btn sm"
+                      onClick={() => setPosSearch('')}
+                      aria-label="Clear product search"
+                    >
+                      <X size={16} /> Clear
+                    </button>
+                  ) : null}
                 </div>
 
                 <div className="pharm-pos-categories">
@@ -5336,7 +5410,7 @@ function PharmacistDashboard() {
               </div>
             </div>
             <div className="pharm-modal-actions no-print">
-              <button type="button" className="pharm-btn" onClick={() => window.print()}>
+              <button type="button" className="pharm-btn" onClick={printCurrentReceipt}>
                 <Printer size={18} /> Print
               </button>
               {showReceipt.saleId ? (

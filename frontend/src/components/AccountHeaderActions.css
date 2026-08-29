@@ -1,6 +1,7 @@
 .aha-root{display:flex; align-items:center;}
 .aha-actions-group{display:flex; align-items:center; gap:12px;}
 .aha-actions{display:flex; align-items:center; gap:10px;}
+.aha-action-slot{position:relative; display:flex; align-items:center;}
 .aha-icon-btn{position:relative; width:40px; height:40px; display:flex; align-items:center; justify-content:center; border:1px solid #e2e8f0; background:#fff; border-radius:12px; cursor:pointer;}
 .aha-icon-btn:hover{background:#f8fafc;}
 .aha-icon{color:#64748b;}

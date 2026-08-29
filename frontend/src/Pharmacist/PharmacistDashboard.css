@@ -1906,3 +1906,5 @@
     display: none !important;
   }
 }
+@keyframes pharm-spin-keyframes{to{transform:rotate(360deg)}}
+.pharm-spin{animation:pharm-spin-keyframes .8s linear infinite;}
