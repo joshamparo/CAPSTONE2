@@ -980,6 +980,14 @@ function buildDoctorSpecializationWhere(spec) {
             ]
         };
     }
+    if (low.includes('ortho')) {
+        return {
+            OR: [
+                { specialization: { contains: 'Ortho', mode: 'insensitive' } },
+                { department: { contains: 'Ortho', mode: 'insensitive' } }
+            ]
+        };
+    }
     return { specialization: { contains: raw, mode: 'insensitive' } };
 }
 
