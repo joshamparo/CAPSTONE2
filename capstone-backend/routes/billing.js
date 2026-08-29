@@ -2281,6 +2281,7 @@ router.get('/hmo-queue', async (req, res) => {
         const patNameArr = Array.from(patNameIds).filter(Boolean);
       // Precompute invoice → patient ID map for rows whose hmo_claim has no patient_id
       const invToPat = new Map();
+      const invoiceMeta = new Map();
       try {
         const allInvIdsForPat = [];
         for (const r of builtList) {
@@ -2288,7 +2289,18 @@ router.get('/hmo-queue', async (req, res) => {
         }
         if (allInvIdsForPat.length) {
           const allI2p = await prisma.$queryRawUnsafe(
-            `SELECT id::text AS iid, patient_id::text AS pid FROM public.billing_invoices WHERE id IN (${allInvIdsForPat.map((_, i) => `$${i + 1}::bigint`).join(',')})`,
+            `SELECT bi.id::text AS iid,
+                    bi.patient_id::text AS pid,
+                    bi.appointment_id::text AS appointment_id,
+                    bi.status AS invoice_status,
+                    bi.total_amount,
+                    bi.created_at AS invoice_created_at,
+                    bi.notes AS invoice_notes,
+                    (SELECT STRING_AGG(ii.description, ', ' ORDER BY ii.id)
+                     FROM public.billing_invoice_items ii
+                     WHERE ii.invoice_id = bi.id) AS invoice_workups
+             FROM public.billing_invoices bi
+             WHERE bi.id IN (${allInvIdsForPat.map((_, i) => `$${i + 1}::bigint`).join(',')})`,
             ...allInvIdsForPat.map((x) => BigInt(x))
           ).catch(() => []);
           if (Array.isArray(allI2p)) {
@@ -2296,11 +2308,41 @@ router.get('/hmo-queue', async (req, res) => {
               const p = String(x.pid || '').trim();
               const i = String(x.iid || '').trim();
               if (i && p && p !== 'null') invToPat.set(i, p);
+              if (i) invoiceMeta.set(i, x);
               if (p && p !== '' && p !== 'null') patNameIds.add(p);
             }
           }
         }
       } catch (_) { /* ignore */ }
+
+      for (let i = 0; i < builtList.length; i++) {
+        const row = builtList[i];
+        const meta = invoiceMeta.get(String(row.invoice_id || ''));
+        if (!meta) continue;
+        const gross = Math.max(0, Number(meta.total_amount || 0));
+        const claim = row.hmo_claim ? { ...row.hmo_claim } : {};
+        const philhealth = Math.min(gross, Math.max(0, Number(claim.philhealth_deduction || 0)));
+        const afterPhilhealth = Math.max(0, gross - philhealth);
+        const appliedHmo = isHmoCoverageApplied(claim.status)
+          ? Math.min(afterPhilhealth, Math.max(0, Number(claim.loa_approved_amount || 0)))
+          : 0;
+        if (!String(claim.patient_id || '').trim() && String(meta.pid || '').trim()) claim.patient_id = String(meta.pid).trim();
+        if (!String(claim.appointment_id || '').trim() && String(meta.appointment_id || '').trim()) claim.appointment_id = String(meta.appointment_id).trim();
+        claim.applied_hmo_amount = appliedHmo;
+        claim.patient_payable = Math.max(0, gross - philhealth - appliedHmo);
+        builtList[i] = {
+          ...row,
+          invoice_status: meta.invoice_status || row.invoice_status || null,
+          invoice_created_at: meta.invoice_created_at || null,
+          invoice_notes: meta.invoice_notes || null,
+          total_amount: toMoney(gross),
+          philhealth_amount: toMoney(philhealth),
+          hmo_covered_amount: toMoney(appliedHmo),
+          patient_pays: toMoney(claim.patient_payable),
+          workups_list: String(meta.invoice_workups || row.workups_list || '').trim() || null,
+          hmo_claim: claim
+        };
+      }
 
       // ✅ NEW: LAB ORDER CROSS-REFERENCE PATIENT LOOKUP (for auto-created Walk-in Lab Order invoices)
       // If billing_invoices has no patient_id AND hmo_claim has no patient_id, BUT patient_name/workups contains "Lab Order #N"
@@ -2594,7 +2636,7 @@ router.get('/hmo-queue', async (req, res) => {
       const patientNameKey = String(row.patient_name || claim.patient_name || 'unknown').trim().toLowerCase();
       const appointmentId = String(claim.appointment_id || '').trim();
       const loaNumber = String(claim.loa_number || '').trim().toLowerCase();
-      const timestamp = claim.created_at || claim.updated_at || null;
+      const timestamp = row.invoice_created_at || claim.created_at || claim.updated_at || null;
       const dateKey = timestamp && !Number.isNaN(new Date(timestamp).getTime())
         ? new Date(new Date(timestamp).getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10)
         : 'undated';
@@ -2611,7 +2653,7 @@ router.get('/hmo-queue', async (req, res) => {
         status: row.invoice_status || null,
         total_amount: row.total_amount,
         workups_list: row.workups_list || null,
-        created_at: claim.created_at || null
+        created_at: row.invoice_created_at || claim.created_at || null
       };
       if (!existing) {
         encounterMap.set(encounterKey, {
