@@ -249,6 +249,7 @@ function PharmacistDashboard() {
   const barcodeInputRef = useRef(null);
   const [imageUploading, setImageUploading] = useState(false);
   const [showReceipt, setShowReceipt] = useState(null);
+  const autoPrintedReceiptRef = useRef('');
   const [showRxImport, setShowRxImport] = useState(false);
 
   const [salesTab, setSalesTab] = useState('summary'); // summary | transactions | items
@@ -700,6 +701,22 @@ function PharmacistDashboard() {
       }
     });
   };
+
+  useEffect(() => {
+    if (!showReceipt) return;
+    let autoPrint = false;
+    try {
+      const saved = JSON.parse(localStorage.getItem('systemPreferences') || '{}');
+      autoPrint = Boolean(saved?.autoPrint);
+    } catch (_) {}
+    if (!autoPrint) return;
+
+    const receiptKey = String(showReceipt.transactionNo || showReceipt.saleId || `${showReceipt.date || ''}:${showReceipt.totalDue || ''}`);
+    if (!receiptKey || autoPrintedReceiptRef.current === receiptKey) return;
+    autoPrintedReceiptRef.current = receiptKey;
+    const timer = setTimeout(() => printCurrentReceipt(), 350);
+    return () => clearTimeout(timer);
+  }, [showReceipt]);
 
   const fetchRequests = async () => {
     setLoadingRequests(true);

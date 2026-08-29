@@ -107,7 +107,9 @@ export default function AccountHeaderActions({
   }, [settingsPrefs]);
 
   const togglePreference = (key) => {
-    setSettingsPrefs(prev => ({ ...prev, [key]: !prev[key] }));
+    if (settingsSaving) return;
+    const nextValue = !Boolean(settingsPrefs?.[key]);
+    saveSettings({ [key]: nextValue });
   };
   const [settingsError, setSettingsError] = useState('');
   const announcementHideRef = useRef(null);
@@ -243,6 +245,16 @@ export default function AccountHeaderActions({
       if (greetToast?.id?.startsWith?.('greet-')) dismissGreetToast();
     }
   }, [settingsPrefs?.quietHours, greetToast]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.dataset.privacyMode = settingsPrefs?.privacyMode ? 'on' : 'off';
+    return () => {
+      if (document.documentElement.dataset.privacyMode === 'on') {
+        document.documentElement.dataset.privacyMode = 'off';
+      }
+    };
+  }, [settingsPrefs?.privacyMode]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -741,6 +753,8 @@ export default function AccountHeaderActions({
                                 type="button"
                                 className={`aha-toggle ${settingsPrefs.quietHours ? 'on' : ''}`}
                                 onClick={() => togglePreference('quietHours')}
+                                disabled={settingsSaving}
+                                aria-pressed={Boolean(settingsPrefs.quietHours)}
                               >
                                 <div className="aha-toggle-thumb" />
                               </button>
@@ -755,6 +769,8 @@ export default function AccountHeaderActions({
                                 type="button"
                                 className={`aha-toggle ${settingsPrefs.privacyMode ? 'on' : ''}`}
                                 onClick={() => togglePreference('privacyMode')}
+                                disabled={settingsSaving}
+                                aria-pressed={Boolean(settingsPrefs.privacyMode)}
                               >
                                 <div className="aha-toggle-thumb" />
                               </button>
@@ -769,6 +785,8 @@ export default function AccountHeaderActions({
                                 type="button"
                                 className={`aha-toggle ${settingsPrefs.autoPrint ? 'on' : ''}`}
                                 onClick={() => togglePreference('autoPrint')}
+                                disabled={settingsSaving}
+                                aria-pressed={Boolean(settingsPrefs.autoPrint)}
                               >
                                 <div className="aha-toggle-thumb" />
                               </button>

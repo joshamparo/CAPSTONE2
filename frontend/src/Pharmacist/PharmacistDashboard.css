@@ -1908,3 +1908,33 @@
 }
 @keyframes pharm-spin-keyframes{to{transform:rotate(360deg)}}
 .pharm-spin{animation:pharm-spin-keyframes .8s linear infinite;}
+
+/* Privacy Mode hides patient and financial details while keeping controls usable.
+   Hovering/focusing a value temporarily reveals it for intentional review. */
+html[data-privacy-mode='on'] .pharm-shell .pharm-product-price,
+html[data-privacy-mode='on'] .pharm-shell .pharm-cart-item-price,
+html[data-privacy-mode='on'] .pharm-shell .pharm-cart-item-total,
+html[data-privacy-mode='on'] .pharm-shell .pharm-summary-row span:last-child,
+html[data-privacy-mode='on'] .pharm-shell .receipt-summary span:last-child,
+html[data-privacy-mode='on'] .pharm-shell .receipt-patient,
+html[data-privacy-mode='on'] .pharm-shell .pharm-urgent-title {
+  filter: blur(7px);
+  transition: filter .18s ease;
+  user-select: none;
+}
+html[data-privacy-mode='on'] .pharm-shell .pharm-product-price:hover,
+html[data-privacy-mode='on'] .pharm-shell .pharm-cart-item-price:hover,
+html[data-privacy-mode='on'] .pharm-shell .pharm-cart-item-total:hover,
+html[data-privacy-mode='on'] .pharm-shell .pharm-summary-row span:last-child:hover,
+html[data-privacy-mode='on'] .pharm-shell .receipt-summary span:last-child:hover,
+html[data-privacy-mode='on'] .pharm-shell .receipt-patient:hover,
+html[data-privacy-mode='on'] .pharm-shell .pharm-urgent-title:hover {
+  filter: none;
+  user-select: text;
+}
+
+@media print {
+  html[data-privacy-mode='on'] .pharm-shell * {
+    filter: none !important;
+  }
+}
