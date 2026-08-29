@@ -265,7 +265,9 @@ router.post('/:id/fulfill', async (req, res) => {
 
         const statusNow = String(current.status || '').trim().toLowerCase();
         if (statusNow === 'completed') return res.status(400).json({ message: 'Request is already completed' });
-        if (statusNow !== 'processing') return res.status(409).json({ message: 'Process this request before fulfilling it.' });
+        if (!['processing', 'in progress', 'approved'].includes(statusNow)) {
+          return res.status(409).json({ message: 'Process this request before fulfilling it.' });
+        }
 
         const patientId = current.patient_id != null ? String(current.patient_id) : '';
         if (!patientId) return res.status(400).json({ message: 'Request has no patientId' });
@@ -440,20 +442,42 @@ router.put('/:id', async (req, res) => {
         }
 
         const currentStatus = String(current.status || 'Pending').trim().toLowerCase();
-        const nextStatus = requestedStatus.toLowerCase() === 'processing' ? 'Processing' : '';
-        if (!nextStatus) return res.status(400).json({ message: 'Unsupported request status.' });
+        const wantsProcessing = requestedStatus.toLowerCase() === 'processing';
+        if (!wantsProcessing) return res.status(400).json({ message: 'Unsupported request status.' });
         if (currentStatus !== 'pending') {
-            return res.status(409).json({ message: currentStatus === 'processing' ? 'Request is already being processed.' : 'Only pending requests can be processed.' });
+            return res.status(409).json({ message: ['processing', 'in progress', 'approved'].includes(currentStatus) ? 'Request is already being processed.' : 'Only pending requests can be processed.' });
         }
 
-        const updatedRows = await prisma.$queryRaw`
-            UPDATE public.requests
-            SET status = ${nextStatus}
-            WHERE id = ${requestId}
-              AND lower(coalesce(status, 'pending')) = 'pending'
-            RETURNING id, patient_id, patient_name, requested_by, message, status, created_at
-        `;
-        const updatedRequest = Array.isArray(updatedRows) ? updatedRows[0] : null;
+        // Production databases created by older migrations reject `Processing`
+        // through requests_status_check. Prefer the supported workflow labels
+        // and keep a fallback for installations using the older allowed set.
+        let updatedRequest = null;
+        let constraintError = null;
+        for (const nextStatus of ['In Progress', 'Approved']) {
+            try {
+                const updatedRows = await prisma.$queryRaw`
+                    UPDATE public.requests
+                    SET status = ${nextStatus}
+                    WHERE id = ${requestId}
+                      AND lower(coalesce(status, 'pending')) = 'pending'
+                    RETURNING id, patient_id, patient_name, requested_by, message, status, created_at
+                `;
+                updatedRequest = Array.isArray(updatedRows) ? updatedRows[0] : null;
+                constraintError = null;
+                break;
+            } catch (error) {
+                const errorText = [error?.message, error?.meta?.message, error?.meta?.cause].filter(Boolean).join(' ');
+                const isStatusConstraint = String(error?.meta?.code || '') === '23514'
+                    || /23514|requests_status_check/i.test(errorText);
+                if (!isStatusConstraint) throw error;
+                constraintError = error;
+            }
+        }
+        if (constraintError && !updatedRequest) {
+            const error = new Error('The database request-status rules need to be updated before this request can be processed.');
+            error.statusCode = 409;
+            throw error;
+        }
         if (!updatedRequest) return res.status(409).json({ message: 'Request status changed. Refresh and try again.' });
 
         prisma.activity_logs.create({

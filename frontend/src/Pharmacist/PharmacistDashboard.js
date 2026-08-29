@@ -1573,14 +1573,14 @@ function PharmacistDashboard() {
 
   const updateRequestStatus = async (id, status) => {
     try {
-      await fetchJson(`/api/requests/${id}`, {
+      const updated = await fetchJson(`/api/requests/${id}`, {
         apiBase: API_BASE,
         method: 'PUT',
         headers: buildJsonHeaders(),
         body: JSON.stringify({ status })
       });
       await fetchRequests();
-      setToast({ type: 'success', text: `Request marked ${status}.` });
+      setToast({ type: 'success', text: `Request marked ${String(updated?.status || status)}.` });
     } catch (e) {
       setToast({ type: 'error', text: String(e?.message || 'Request update failed.') });
     }
@@ -3921,7 +3921,7 @@ function PharmacistDashboard() {
                             {String(r.status || '').toLowerCase() === 'pending' && (
                               <button type="button" className="pharm-btn" onClick={() => updateRequestStatus(r.id, 'Processing')}>Process</button>
                             )}
-                            {String(r.status || '').toLowerCase() === 'processing' && (
+                            {['processing', 'in progress', 'approved'].includes(String(r.status || '').toLowerCase()) && (
                               <button type="button" className="pharm-btn primary" onClick={() => fulfillRequest(r)}>Fulfill</button>
                             )}
                             {String(r.status || '').toLowerCase() === 'completed' && (
