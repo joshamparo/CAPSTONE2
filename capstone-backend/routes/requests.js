@@ -29,6 +29,19 @@ function ensureRequestsSchema() {
       await prisma.$executeRawUnsafe(`ALTER TABLE public.requests ADD COLUMN IF NOT EXISTS message TEXT NULL;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE public.requests ADD COLUMN IF NOT EXISTS status TEXT NULL;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE public.requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();`);
+      // Older databases only allowed Pending/Completed and rejected the
+      // Pharmacy module's Process transition with PostgreSQL error 23514.
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.requests DROP CONSTRAINT IF EXISTS requests_status_check;`);
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE public.requests
+        ADD CONSTRAINT requests_status_check
+        CHECK (
+          status IS NULL OR lower(status) IN (
+            'pending', 'processing', 'in progress', 'approved',
+            'completed', 'rejected', 'cancelled'
+          )
+        ) NOT VALID;
+      `);
       await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS requests_status_created_idx ON public.requests(status, created_at DESC);`);
     })().catch((err) => {
       requestsSchemaPromise = null;
@@ -448,12 +461,12 @@ router.put('/:id', async (req, res) => {
             return res.status(409).json({ message: ['processing', 'in progress', 'approved'].includes(currentStatus) ? 'Request is already being processed.' : 'Only pending requests can be processed.' });
         }
 
-        // Production databases created by older migrations reject `Processing`
-        // through requests_status_check. Prefer the supported workflow labels
-        // and keep a fallback for installations using the older allowed set.
+        // Processing is the canonical Pharmacy workflow status. The fallback
+        // labels keep deployments safe while an older instance restarts and
+        // applies the expanded requests_status_check above.
         let updatedRequest = null;
         let constraintError = null;
-        for (const nextStatus of ['In Progress', 'Approved']) {
+        for (const nextStatus of ['Processing', 'In Progress', 'Approved']) {
             try {
                 const updatedRows = await prisma.$queryRaw`
                     UPDATE public.requests
