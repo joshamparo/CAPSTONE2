@@ -1051,9 +1051,6 @@ function DoctorDashboard() {
 
   const startVideoCall = async (apt) => {
     if (!apt?.id) return;
-    // Reserve a direct tab while the click still has browser user activation.
-    // Privacy extensions commonly block Jitsi only when it is embedded.
-    const meetingWindow = window.open('about:blank', '_blank');
     try {
       // #region debug-point D:web-start-click
       reportVideoRoomDebug({
@@ -1091,13 +1088,8 @@ function DoctorDashboard() {
       });
       // #endregion
 
-      if (meetingWindow) {
-        meetingWindow.location.replace(meetingUrl);
-      } else {
-        openVideoMeeting(meetingUrl, `Video Consultation • ${apt.firstName || ''} ${apt.lastName || ''}`.trim());
-      }
+      openVideoMeeting(meetingUrl, `Video Consultation • ${apt.firstName || ''} ${apt.lastName || ''}`.trim());
     } catch (e) {
-      if (meetingWindow && !meetingWindow.closed) meetingWindow.close();
       // #region debug-point C:web-start-error
       reportVideoRoomDebug({
         hypothesisId: 'C',
