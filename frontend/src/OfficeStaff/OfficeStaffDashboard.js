@@ -3364,7 +3364,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   const hmoNow = Number(row.hmo_covered_amount === '₱ 0.00' ? 0 : (row.hmo_covered_amount ? String(row.hmo_covered_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.applied_hmo_amount || claim.loa_approved_amount || 0);
                   const totalNow = Number(row.total_amount === '₱ 0.00' ? 0 : (row.total_amount ? String(row.total_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.total_amount || claim.gross_amount || 0);
                   const invoiceIdTxt = String(row.invoice_id || claim.invoice_id || '').trim();
-                  const rawPatientName = String(claim.patient_name || row.patient_name || '').trim();
+                  const rawPatientName = String(row.patient_name || claim.patient_name || '').trim();
                   const isBadShort = rawPatientName.length > 0 && rawPatientName.length <= 9;
                   const isFallbackName = !rawPatientName
                     || isBadShort

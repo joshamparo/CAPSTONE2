@@ -2343,14 +2343,26 @@ router.get('/hmo-queue', async (req, res) => {
               const newPid = String(x.pid || '').trim();
               const pnameFromCo = String(x.pname || '').trim();
               const indices = labOrderRowIndexMap.get(coid) || [];
+              if (pnameFromCo && pnameFromCo.toLowerCase() !== 'patient') {
+                for (const i of indices) {
+                  const r = builtList[i];
+                  if (!r) continue;
+                  const currentName = String(r.patient_name || '').trim().toLowerCase();
+                  const shouldReplace = !currentName || currentName === 'patient' || currentName.startsWith('patient of') || currentName.startsWith('walk-in') || currentName.includes('lab order');
+                  if (shouldReplace) {
+                    builtList[i] = {
+                      ...r,
+                      patient_name: pnameFromCo,
+                      hmo_claim: r.hmo_claim ? { ...r.hmo_claim, patient_name: pnameFromCo } : r.hmo_claim
+                    };
+                  }
+                }
+              }
               if (newPid && newPid !== '' && newPid !== 'null') {
                 patNameIds.add(newPid);
                 for (const i of indices) {
                   const r = builtList[i];
                   if (r && r.invoice_id) invToPat.set(String(r.invoice_id), newPid);
-                  if (r && pnameFromCo && (!String(r.patient_name || '').trim() || String(r.patient_name).length <= 12 || String(r.patient_name).toLowerCase().includes('lab order'))) {
-                    builtList[i] = { ...r, patient_name: pnameFromCo };
-                  }
                 }
               }
             }
