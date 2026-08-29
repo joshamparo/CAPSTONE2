@@ -108,11 +108,12 @@ function PharmacistDashboard() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordCriteria, setPasswordCriteria] = useState({ length: false, hasNumber: false, hasSpecial: false });
   const [updateNotice, setUpdateNotice] = useState('');
+  const [profileErrors, setProfileErrors] = useState({});
 
   useEffect(() => {
     const val = profileForm.newPassword || '';
     setPasswordCriteria({
-      length: val.length >= 8,
+      length: val.length >= 11,
       hasNumber: /\d/.test(val),
       hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(val)
     });
@@ -137,8 +138,9 @@ function PharmacistDashboard() {
   const [profilePreview, setProfilePreview] = useState(null);
   const pharmacistName = useMemo(() => {
     const u = currentUser || {};
-    if (u.firstName) return u.firstName;
-    if (u.first_name) return u.first_name;
+    const first = String(u.firstName || u.first_name || '').trim();
+    const last = String(u.lastName || u.last_name || '').trim();
+    if (first || last) return `${first} ${last}`.trim();
     if (u.name) return u.name;
     if (u.email) return String(u.email).split('@')[0];
     return 'Pharmacist';
@@ -1734,39 +1736,73 @@ function PharmacistDashboard() {
   };
 
   const saveMyProfile = async () => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id) {
+      setUpdateNotice('Unable to identify the current pharmacist account. Please sign in again.');
+      return;
+    }
     setUpdateNotice('');
+
+    const firstName = String(profileForm.firstName || '').trim();
+    const lastName = String(profileForm.lastName || '').trim();
+    const email = String(profileForm.email || '').trim().toLowerCase();
+    const currentPassword = String(profileForm.currentPassword || '');
+    const namePattern = /^[A-Za-zÑñ][A-Za-zÑñ' .-]*$/;
+    const nextErrors = {};
+
+    if (!firstName) nextErrors.firstName = 'First name is required.';
+    else if (firstName.length < 2) nextErrors.firstName = 'First name must be at least 2 characters.';
+    else if (!namePattern.test(firstName)) nextErrors.firstName = 'Use letters, spaces, apostrophes, or hyphens only.';
+    if (!lastName) nextErrors.lastName = 'Last name is required.';
+    else if (lastName.length < 2) nextErrors.lastName = 'Last name must be at least 2 characters.';
+    else if (!namePattern.test(lastName)) nextErrors.lastName = 'Use letters, spaces, apostrophes, or hyphens only.';
+    if (!email) nextErrors.email = 'Email is required.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) nextErrors.email = 'Enter a valid email address.';
+    if (!currentPassword.trim()) nextErrors.currentPassword = 'Current password is required to save profile changes.';
 
     const wantsPasswordChange = Boolean(String(profileForm.newPassword || '').trim()) || Boolean(String(profileForm.confirmPassword || '').trim());
 
     if (wantsPasswordChange) {
-      if (!String(profileForm.currentPassword || '').trim()) {
-        setUpdateNotice('Current Password is required to set a new password.');
-        setToast({ type: 'error', text: 'Current Password is required.' });
-        return;
-      }
-      if (profileForm.newPassword !== profileForm.confirmPassword) {
-        setUpdateNotice('New and Confirm passwords do not match.');
-        setToast({ type: 'error', text: 'Passwords do not match.' });
-        return;
-      }
       const pw = String(profileForm.newPassword || '');
-      if (pw.length < 8) {
-        setUpdateNotice('New password must be at least 8 characters.');
-        setToast({ type: 'error', text: 'Password must be at least 8 characters.' });
-        return;
-      }
-      if (!/\d/.test(pw) || !/[!@#$%^&*(),.?":{}|<>]/.test(pw)) {
-        setUpdateNotice('New password must contain at least one number and one special character.');
-        setToast({ type: 'error', text: 'Password missing required number or special character.' });
-        return;
-      }
+      if (!pw) nextErrors.newPassword = 'Enter a new password.';
+      else if (pw.length < 11) nextErrors.newPassword = 'New password must be at least 11 characters.';
+      else if (!/\d/.test(pw) || !/[^A-Za-z0-9]/.test(pw)) nextErrors.newPassword = 'Include at least one number and one special character.';
+      if (!String(profileForm.confirmPassword || '')) nextErrors.confirmPassword = 'Confirm the new password.';
+      else if (profileForm.newPassword !== profileForm.confirmPassword) nextErrors.confirmPassword = 'Passwords do not match.';
     }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setProfileErrors(nextErrors);
+      setUpdateNotice('Please correct the highlighted fields before saving.');
+      setToast({ type: 'error', text: 'Please complete all required profile fields.' });
+      return;
+    }
+
+    setProfileErrors({});
 
     setSavingProfile(true);
     try {
       let avatarUrl = profileForm.profilePicture || '';
+      const payload = {
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        currentPassword
+      };
 
+      if (wantsPasswordChange) {
+        payload.password = String(profileForm.newPassword || '').trim();
+        payload.requiresPasswordAuth = true;
+      }
+
+      const data = await fetchJson(`/api/staff/${currentUser.id}`, {
+        apiBase: API_BASE,
+        method: 'PUT',
+        headers: buildJsonHeaders(),
+        body: JSON.stringify(payload)
+      });
+
+      // Authenticate and save text/password changes before uploading a file.
+      // This prevents an invalid current password from changing the avatar.
       if (profileImage) {
         const formData = new FormData();
         formData.append('avatar', profileImage);
@@ -1783,36 +1819,24 @@ function PharmacistDashboard() {
         if (!avatarUrl) throw new Error(uploadData?.message || 'Failed to upload image');
       }
 
-      const payload = {
-        first_name: profileForm.firstName,
-        last_name: profileForm.lastName,
-        email: profileForm.email,
-        avatar_url: avatarUrl
-      };
-
-      if (wantsPasswordChange) {
-        payload.currentPassword = String(profileForm.currentPassword || '');
-        payload.password = String(profileForm.newPassword || '').trim();
-        payload.requiresPasswordAuth = true;
-      }
-
-      const data = await fetchJson(`/api/staff/${currentUser.id}`, {
-        apiBase: API_BASE,
-        method: 'PUT',
-        headers: buildJsonHeaders(),
-        body: JSON.stringify(payload)
-      });
-
       const updatedUser = {
         ...currentUser,
         ...data,
-        firstName: profileForm.firstName,
-        lastName: profileForm.lastName,
-        profilePicture: avatarUrl
+        firstName,
+        first_name: firstName,
+        lastName,
+        last_name: lastName,
+        name: `${firstName} ${lastName}`.trim(),
+        email,
+        profilePicture: avatarUrl,
+        profile_picture: avatarUrl,
+        avatarUrl,
+        avatar_url: avatarUrl
       };
 
       setCurrentUser(updatedUser);
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      window.dispatchEvent(new Event('storage'));
       setProfileImage(null);
       setProfilePreview(avatarUrl || null);
       setShowCurrentPassword(false);
@@ -1827,6 +1851,7 @@ function PharmacistDashboard() {
         confirmPassword: ''
       }));
       setUpdateNotice('');
+      setProfileErrors({});
     } catch (e) {
       const msg = String(e?.message || 'Update failed');
       setUpdateNotice(msg);
@@ -2615,7 +2640,8 @@ function PharmacistDashboard() {
                     Photo
                   </button>
                   <button type="button" className="pharm-btn primary sm" onClick={saveMyProfile} disabled={savingProfile}>
-                    {savingProfile ? 'Saving…' : 'Save'}
+                    <Save size={16} />
+                    {savingProfile ? 'Saving…' : 'Save Changes'}
                   </button>
                 </div>
               </div>
@@ -2658,6 +2684,17 @@ function PharmacistDashboard() {
                           style={{ display: 'none' }}
                           onChange={(e) => {
                             const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+                            if (file && !/^image\/(jpeg|png|webp|gif)$/i.test(file.type || '')) {
+                              setProfileErrors((prev) => ({ ...prev, avatar: 'Choose a JPG, PNG, WEBP, or GIF image.' }));
+                              e.target.value = '';
+                              return;
+                            }
+                            if (file && file.size > 5 * 1024 * 1024) {
+                              setProfileErrors((prev) => ({ ...prev, avatar: 'Profile photo must be 5 MB or smaller.' }));
+                              e.target.value = '';
+                              return;
+                            }
+                            setProfileErrors((prev) => ({ ...prev, avatar: undefined }));
                             setProfileImage(file);
                             if (file) {
                               const url = URL.createObjectURL(file);
@@ -2665,35 +2702,39 @@ function PharmacistDashboard() {
                             }
                           }}
                         />
+                        {profileErrors.avatar ? <div className="pharm-field-error">{profileErrors.avatar}</div> : null}
                       </div>
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                         <div>
                           <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>First Name</div>
                           <input
-                            className="pharm-input"
+                            className={`pharm-input ${profileErrors.firstName ? 'pharm-input-error' : ''}`}
                             value={profileForm.firstName}
-                            onChange={(e) => setProfileForm((p) => ({ ...p, firstName: e.target.value }))}
+                            onChange={(e) => { setProfileForm((p) => ({ ...p, firstName: e.target.value })); setProfileErrors((p) => ({ ...p, firstName: undefined })); }}
                             placeholder="First name"
                           />
+                          {profileErrors.firstName ? <div className="pharm-field-error">{profileErrors.firstName}</div> : null}
                         </div>
                         <div>
                           <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>Last Name</div>
                           <input
-                            className="pharm-input"
+                            className={`pharm-input ${profileErrors.lastName ? 'pharm-input-error' : ''}`}
                             value={profileForm.lastName}
-                            onChange={(e) => setProfileForm((p) => ({ ...p, lastName: e.target.value }))}
+                            onChange={(e) => { setProfileForm((p) => ({ ...p, lastName: e.target.value })); setProfileErrors((p) => ({ ...p, lastName: undefined })); }}
                             placeholder="Last name"
                           />
+                          {profileErrors.lastName ? <div className="pharm-field-error">{profileErrors.lastName}</div> : null}
                         </div>
                         <div style={{ gridColumn: '1 / -1' }}>
                           <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>Email</div>
                           <input
-                            className="pharm-input"
+                            className={`pharm-input ${profileErrors.email ? 'pharm-input-error' : ''}`}
                             value={profileForm.email}
-                            onChange={(e) => setProfileForm((p) => ({ ...p, email: e.target.value }))}
+                            onChange={(e) => { setProfileForm((p) => ({ ...p, email: e.target.value })); setProfileErrors((p) => ({ ...p, email: undefined })); }}
                             placeholder="Email"
                           />
+                          {profileErrors.email ? <div className="pharm-field-error">{profileErrors.email}</div> : null}
                         </div>
                       </div>
                     </div>
@@ -2714,8 +2755,8 @@ function PharmacistDashboard() {
                         <input
                           type={showCurrentPassword ? 'text' : 'password'}
                           value={profileForm.currentPassword}
-                          onChange={(e) => setProfileForm((p) => ({ ...p, currentPassword: e.target.value }))}
-                          className="profile-input input-with-icon-padding"
+                          onChange={(e) => { setProfileForm((p) => ({ ...p, currentPassword: e.target.value })); setProfileErrors((p) => ({ ...p, currentPassword: undefined })); }}
+                          className={`profile-input input-with-icon-padding ${profileErrors.currentPassword ? 'pharm-input-error' : ''}`}
                           placeholder="Enter current password"
                         />
                         <button
@@ -2726,6 +2767,7 @@ function PharmacistDashboard() {
                           {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                         </button>
                       </div>
+                      {profileErrors.currentPassword ? <div className="pharm-field-error">{profileErrors.currentPassword}</div> : null}
                     </div>
 
                     <div className="profile-input-group">
@@ -2735,8 +2777,8 @@ function PharmacistDashboard() {
                         <input
                           type={showNewPassword ? 'text' : 'password'}
                           value={profileForm.newPassword}
-                          onChange={(e) => setProfileForm((p) => ({ ...p, newPassword: e.target.value }))}
-                          className="profile-input input-with-icon-padding"
+                          onChange={(e) => { setProfileForm((p) => ({ ...p, newPassword: e.target.value })); setProfileErrors((p) => ({ ...p, newPassword: undefined })); }}
+                          className={`profile-input input-with-icon-padding ${profileErrors.newPassword ? 'pharm-input-error' : ''}`}
                           placeholder="Enter new password"
                         />
                         <button
@@ -2747,11 +2789,12 @@ function PharmacistDashboard() {
                           {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                         </button>
                       </div>
+                      {profileErrors.newPassword ? <div className="pharm-field-error">{profileErrors.newPassword}</div> : null}
 
                       <div className="password-checklist">
                         <div className={`checklist-item ${passwordCriteria.length ? 'valid' : ''}`}>
                           {passwordCriteria.length ? <Check size={14} /> : <X size={14} />}
-                          <span>At least 8 characters</span>
+                          <span>At least 11 characters</span>
                         </div>
                         <div className={`checklist-item ${passwordCriteria.hasSpecial ? 'valid' : ''}`}>
                           {passwordCriteria.hasSpecial ? <Check size={14} /> : <X size={14} />}
@@ -2771,8 +2814,8 @@ function PharmacistDashboard() {
                         <input
                           type={showConfirmPassword ? 'text' : 'password'}
                           value={profileForm.confirmPassword}
-                          onChange={(e) => setProfileForm((p) => ({ ...p, confirmPassword: e.target.value }))}
-                          className="profile-input input-with-icon-padding"
+                          onChange={(e) => { setProfileForm((p) => ({ ...p, confirmPassword: e.target.value })); setProfileErrors((p) => ({ ...p, confirmPassword: undefined })); }}
+                          className={`profile-input input-with-icon-padding ${profileErrors.confirmPassword ? 'pharm-input-error' : ''}`}
                           placeholder="Confirm new password"
                         />
                         <button
@@ -2783,6 +2826,7 @@ function PharmacistDashboard() {
                           {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                         </button>
                       </div>
+                      {profileErrors.confirmPassword ? <div className="pharm-field-error">{profileErrors.confirmPassword}</div> : null}
                       {profileForm.confirmPassword && (
                         <p className={`match-indicator ${profileForm.newPassword === profileForm.confirmPassword ? 'match-success' : 'match-error'}`}>
                           {profileForm.newPassword === profileForm.confirmPassword ? 'Passwords match' : 'Passwords do not match'}

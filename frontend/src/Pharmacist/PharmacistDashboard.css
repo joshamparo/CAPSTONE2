@@ -1908,6 +1908,8 @@
 }
 @keyframes pharm-spin-keyframes{to{transform:rotate(360deg)}}
 .pharm-spin{animation:pharm-spin-keyframes .8s linear infinite;}
+.pharm-input-error{border-color:#ef4444 !important; box-shadow:0 0 0 3px rgba(239,68,68,.1) !important;}
+.pharm-field-error{margin-top:5px; color:#dc2626; font-size:.78rem; font-weight:750; line-height:1.35;}
 
 /* Privacy Mode hides patient and financial details while keeping controls usable.
    Hovering/focusing a value temporarily reveals it for intentional review. */
