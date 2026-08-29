@@ -2315,16 +2315,14 @@ router.get('/hmo-queue', async (req, res) => {
             const cand = invToPat.get(String(r.invoice_id));
             if (cand) pid = String(cand).trim();
           }
-          if (!pid || pid === 'null' || pid === '') {
-            const haystack = `${String(r.patient_name || '')} ${String(r.hmo_claim?.patient_name || '')} ${String(r.workups_list || '')} ${String(r.invoice_notes || '')} ${String(r.notes || '')} ${String(r.hmo_claim?.notes || '')}`.toLowerCase();
-            const m = haystack.match(/lab order #?\s*(\d+)/i);
-            if (m && m[1]) {
-              const loId = String(m[1]).trim();
-              if (loId && !isNaN(Number(loId))) {
-                labOrderIdsToLookup.add(loId);
-                if (!labOrderRowIndexMap.has(loId)) labOrderRowIndexMap.set(loId, []);
-                labOrderRowIndexMap.get(loId).push(i);
-              }
+          const haystack = `${String(r.patient_name || '')} ${String(r.hmo_claim?.patient_name || '')} ${String(r.workups_list || '')} ${String(r.invoice_notes || '')} ${String(r.notes || '')} ${String(r.hmo_claim?.notes || '')}`.toLowerCase();
+          const m = haystack.match(/lab order #?\s*(\d+)/i);
+          if (m && m[1]) {
+            const loId = String(m[1]).trim();
+            if (loId && !isNaN(Number(loId))) {
+              labOrderIdsToLookup.add(loId);
+              if (!labOrderRowIndexMap.has(loId)) labOrderRowIndexMap.set(loId, []);
+              labOrderRowIndexMap.get(loId).push(i);
             }
           }
         }
@@ -2332,7 +2330,7 @@ router.get('/hmo-queue', async (req, res) => {
           const labArr = Array.from(labOrderIdsToLookup);
           const labParams = labArr.map((x) => BigInt(x));
           const coRows = await prisma.$queryRawUnsafe(
-            `SELECT id::text AS coid, patient_id::text AS pid, patient_name AS pname
+            `SELECT id::text AS coid, patient_id::text AS pid, patient_name AS pname, kind, service
              FROM public.clinical_orders WHERE id IN (${labArr.map((_, i) => `$${i + 1}::bigint`).join(',')})`,
             ...labParams
           ).catch(() => []);
@@ -2341,16 +2339,20 @@ router.get('/hmo-queue', async (req, res) => {
               const coid = String(x.coid || '').trim();
               const newPid = String(x.pid || '').trim();
               const pnameFromCo = String(x.pname || '').trim();
+              const workupFromCo = [String(x.kind || '').trim(), String(x.service || '').trim()].filter(Boolean).join(': ');
               const indices = labOrderRowIndexMap.get(coid) || [];
               if (pnameFromCo && pnameFromCo.toLowerCase() !== 'patient') {
                 for (const i of indices) {
                   const r = builtList[i];
                   if (!r) continue;
+                  if (workupFromCo) {
+                    builtList[i] = { ...r, workups_list: workupFromCo };
+                  }
                   const currentName = String(r.patient_name || '').trim().toLowerCase();
                   const shouldReplace = !currentName || currentName === 'patient' || currentName.startsWith('patient of') || currentName.startsWith('walk-in') || currentName.includes('lab order');
                   if (shouldReplace) {
                     builtList[i] = {
-                      ...r,
+                      ...builtList[i],
                       patient_name: pnameFromCo,
                       hmo_claim: r.hmo_claim ? { ...r.hmo_claim, patient_name: pnameFromCo } : r.hmo_claim
                     };
@@ -2362,6 +2364,9 @@ router.get('/hmo-queue', async (req, res) => {
                 for (const i of indices) {
                   const r = builtList[i];
                   if (r && r.invoice_id) invToPat.set(String(r.invoice_id), newPid);
+                  if (r?.hmo_claim && !String(r.hmo_claim.patient_id || '').trim()) {
+                    builtList[i] = { ...r, hmo_claim: { ...r.hmo_claim, patient_id: newPid } };
+                  }
                 }
               }
             }
@@ -2530,6 +2535,9 @@ router.get('/hmo-queue', async (req, res) => {
             if (candidate) pid = String(candidate).trim();
           }
           if (!pid || pid === 'null') continue;
+          if (!String(r.hmo_claim?.patient_id || '').trim()) {
+            builtList[i] = { ...r, hmo_claim: r.hmo_claim ? { ...r.hmo_claim, patient_id: pid } : r.hmo_claim };
+          }
           const full2 = pMap.get(`pid:${pid}`);
           if (full2) {
             const curr = String(r.patient_name || '').trim();
@@ -2541,7 +2549,7 @@ router.get('/hmo-queue', async (req, res) => {
               const em = pMap.get(`pemail:${pid}`);
               if (em && (!String(r.email || '').trim())) patched.email = em;
               if (patched.hmo_claim) {
-                patched.hmo_claim = { ...patched.hmo_claim, patient_name: full2 };
+                patched.hmo_claim = { ...patched.hmo_claim, patient_id: pid, patient_name: full2 };
                 const hmc = patched.hmo_claim;
                 if (cc && !String(hmc.patient_contact || '').trim()) hmc.patient_contact = cc;
                 const co = pMap.get(`pcompany:${pid}`);
@@ -2574,6 +2582,74 @@ router.get('/hmo-queue', async (req, res) => {
       return haystack.includes(qLower);
     });
 
+    const invoiceCount = builtList.filter((row) => row.invoice_id).length;
+    const encounterMap = new Map();
+    const numericMoney = (value) => {
+      const parsed = Number(String(value == null ? '' : value).replace(/[^\d.-]/g, ''));
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    for (const row of builtList) {
+      const claim = row.hmo_claim || {};
+      const patientId = String(claim.patient_id || '').trim();
+      const patientNameKey = String(row.patient_name || claim.patient_name || 'unknown').trim().toLowerCase();
+      const appointmentId = String(claim.appointment_id || '').trim();
+      const loaNumber = String(claim.loa_number || '').trim().toLowerCase();
+      const timestamp = claim.created_at || claim.updated_at || null;
+      const dateKey = timestamp && !Number.isNaN(new Date(timestamp).getTime())
+        ? new Date(new Date(timestamp).getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10)
+        : 'undated';
+      const identity = patientId ? `patient:${patientId}` : `name:${patientNameKey}`;
+      const encounterKey = appointmentId
+        ? `appointment:${appointmentId}`
+        : loaNumber
+          ? `${identity}:loa:${loaNumber}`
+          : `${identity}:date:${dateKey}`;
+      const existing = encounterMap.get(encounterKey);
+      const workups = String(row.workups_list || '').split(',').map((item) => item.trim()).filter(Boolean);
+      const invoiceEntry = {
+        invoice_id: row.invoice_id || null,
+        status: row.invoice_status || null,
+        total_amount: row.total_amount,
+        workups_list: row.workups_list || null,
+        created_at: claim.created_at || null
+      };
+      if (!existing) {
+        encounterMap.set(encounterKey, {
+          ...row,
+          encounter_id: encounterKey,
+          invoice_count: row.invoice_id ? 1 : 0,
+          invoice_ids: row.invoice_id ? [String(row.invoice_id)] : [],
+          invoices: row.invoice_id ? [invoiceEntry] : [],
+          workups_list: workups.join(', ') || null
+        });
+        continue;
+      }
+      if (row.invoice_id && !existing.invoice_ids.includes(String(row.invoice_id))) {
+        existing.invoice_ids.push(String(row.invoice_id));
+        existing.invoices.push(invoiceEntry);
+        existing.invoice_count += 1;
+      }
+      existing.total_amount = toMoney(numericMoney(existing.total_amount) + numericMoney(row.total_amount));
+      existing.philhealth_amount = toMoney(numericMoney(existing.philhealth_amount) + numericMoney(row.philhealth_amount));
+      existing.hmo_covered_amount = toMoney(numericMoney(existing.hmo_covered_amount) + numericMoney(row.hmo_covered_amount));
+      existing.patient_pays = toMoney(numericMoney(existing.patient_pays) + numericMoney(row.patient_pays));
+      existing.workups_list = Array.from(new Set([
+        ...String(existing.workups_list || '').split(',').map((item) => item.trim()).filter(Boolean),
+        ...workups
+      ])).join(', ') || null;
+      existing.hmo_claim = {
+        ...existing.hmo_claim,
+        patient_id: existing.hmo_claim?.patient_id || claim.patient_id || null,
+        patient_name: existing.hmo_claim?.patient_name || claim.patient_name || row.patient_name || '',
+        provider: existing.hmo_claim?.provider || claim.provider || '',
+        hmo_provider: existing.hmo_claim?.hmo_provider || claim.hmo_provider || '',
+        loa_number: existing.hmo_claim?.loa_number || claim.loa_number || '',
+        hmo_loa_number: existing.hmo_claim?.hmo_loa_number || claim.hmo_loa_number || '',
+        hmo_card_number: existing.hmo_claim?.hmo_card_number || claim.hmo_card_number || ''
+      };
+    }
+    builtList = Array.from(encounterMap.values());
+
     const totalCount = builtList.length;
     const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
     const currentPage = Math.min(page, totalPages);
@@ -2585,6 +2661,7 @@ router.get('/hmo-queue', async (req, res) => {
       page: currentPage,
       perPage,
       totalCount,
+      invoiceCount,
       totalPages,
       rows: pagedRows
     }));

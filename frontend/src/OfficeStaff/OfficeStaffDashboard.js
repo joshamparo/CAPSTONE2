@@ -410,6 +410,7 @@ export default function OfficeStaffDashboard({ mode }) {
     page: 1,
     perPage: 8,
     totalCount: 0,
+    invoiceCount: 0,
     totalPages: 1,
     rows: []
   });
@@ -791,6 +792,7 @@ export default function OfficeStaffDashboard({ mode }) {
             page: Math.max(1, Number(data.page || 1)),
             perPage: Math.max(1, Math.min(50, Number(data.perPage || 8))),
             totalCount: Math.max(0, Number(data.totalCount || 0)),
+            invoiceCount: Math.max(0, Number(data.invoiceCount || 0)),
             totalPages: Math.max(1, Math.ceil(Math.max(0, Number(data.totalCount || 0)) / Math.max(1, Math.min(50, Number(data.perPage || 8))))),
             rows: Array.isArray(data.rows) ? data.rows : []
           }
@@ -855,6 +857,7 @@ export default function OfficeStaffDashboard({ mode }) {
             page: 1,
             perPage: Math.max(1, Math.min(50, Number(data.perPage || 8))),
             totalCount: Math.max(0, Number(data.totalCount || 0)),
+            invoiceCount: Math.max(0, Number(data.invoiceCount || 0)),
             totalPages: Math.max(1, Math.ceil(Math.max(0, Number(data.totalCount || 0)) / Math.max(1, Math.min(50, Number(data.perPage || 8))))),
             rows: Array.isArray(data.rows) ? data.rows : []
           }
@@ -3271,7 +3274,7 @@ export default function OfficeStaffDashboard({ mode }) {
               })}
               {Number(hmoQueue.totalCount) > 0 ? (
                 <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', fontSize: '0.8rem', fontWeight: 700 }}>
-                  Showing {(Number(hmoQueue.page) - 1) * Number(hmoQueue.perPage) + 1}–{Math.min(Number(hmoQueue.page) * Number(hmoQueue.perPage), Number(hmoQueue.totalCount))} of {Number(hmoQueue.totalCount)}
+                  Showing {(Number(hmoQueue.page) - 1) * Number(hmoQueue.perPage) + 1}–{Math.min(Number(hmoQueue.page) * Number(hmoQueue.perPage), Number(hmoQueue.totalCount))} of {Number(hmoQueue.totalCount)} encounters{Number(hmoQueue.invoiceCount || 0) ? ` · ${Number(hmoQueue.invoiceCount)} invoices` : ''}
                 </div>
               ) : null}
               {Number(hmoQueue.totalCount) > Number(hmoQueue.perPage) ? (
@@ -3364,6 +3367,8 @@ export default function OfficeStaffDashboard({ mode }) {
                   const hmoNow = Number(row.hmo_covered_amount === '₱ 0.00' ? 0 : (row.hmo_covered_amount ? String(row.hmo_covered_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.applied_hmo_amount || claim.loa_approved_amount || 0);
                   const totalNow = Number(row.total_amount === '₱ 0.00' ? 0 : (row.total_amount ? String(row.total_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.total_amount || claim.gross_amount || 0);
                   const invoiceIdTxt = String(row.invoice_id || claim.invoice_id || '').trim();
+                  const invoiceCount = Math.max(1, Number(row.invoice_count || 1));
+                  const invoiceIds = Array.isArray(row.invoice_ids) ? row.invoice_ids.map(String) : (invoiceIdTxt ? [invoiceIdTxt] : []);
                   const rawPatientName = String(row.patient_name || claim.patient_name || '').trim();
                   const isBadShort = rawPatientName.length > 0 && rawPatientName.length <= 9;
                   const isFallbackName = !rawPatientName
@@ -3381,7 +3386,8 @@ export default function OfficeStaffDashboard({ mode }) {
                   const displayPatientName = isFallbackName ? 'Patient (click Update to fill name)' : rawPatientName;
                   const subtitleText = (() => {
                     const parts = [];
-                    if (invoiceIdTxt) parts.push(`Invoice #${invoiceIdTxt}`);
+                    if (invoiceIds.length > 1) parts.push(`${invoiceIds.length} invoices: #${invoiceIds.join(', #')}`);
+                    else if (invoiceIdTxt) parts.push(`Invoice #${invoiceIdTxt}`);
                     if (!isFallbackName && String(row.workups_list || '').trim()) {
                       const w = String(row.workups_list).trim();
                       parts.push(w.length > 38 ? (w.slice(0, 36) + '…') : w);
@@ -3399,6 +3405,7 @@ export default function OfficeStaffDashboard({ mode }) {
                     >
                       <td className="text-sm font-medium text-slate-700">
                         <div style={{ fontWeight: 900, fontSize: '0.93rem', color: isFallbackName ? '#475569' : '#0f172a' }}>{displayPatientName}</div>
+                        {invoiceCount > 1 ? <div className="office-billing-subline" style={{ color: '#2563eb', fontWeight: 800, marginTop: 2 }}>{invoiceCount} invoices in this encounter</div> : null}
                         {String(row.contact_number || '').trim() ? <div className="office-billing-subline" style={{ color: '#64748b', marginTop: 2 }}>{String(row.contact_number).trim()}</div> : null}
                         {subtitleText ? <div className="office-billing-subline" style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: String(row.contact_number || '').trim() ? 1 : 3 }}>{subtitleText}</div> : null}
                       </td>
