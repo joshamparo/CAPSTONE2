@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronLeft, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff, Maximize2, Paperclip, Pin, MoreHorizontal, Download, Image as ImageIcon, File, Video as VideoIcon, ArrowDown, Bell, Copy, AtSign, Reply, Clock, Sparkles } from 'lucide-react';
 import './DoctorDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
+import EmbeddedJitsiMeeting from '../components/EmbeddedJitsiMeeting';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import StatusBadge from '../components/StatusBadge';
 import { checkBackendHealth, fetchJson } from '../utils/api';
@@ -6663,15 +6664,7 @@ function DoctorDashboard() {
                     );
                   }
                   return (
-                    <iframe
-                      title="Video Consultation"
-                      src={url}
-                      allowFullScreen
-                      style={{ width: '100%', height: '100%', border: 0 }}
-                      allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write; encrypted-media; speaker-selection; picture-in-picture; geolocation; midi; gyroscope; accelerometer; magnetometer"
-                      referrerPolicy="no-referrer-when-downgrade"
-                      loading="eager"
-                    />
+                    <EmbeddedJitsiMeeting meetingUrl={url} title="Video Consultation" />
                   );
                 })()}
               </div>

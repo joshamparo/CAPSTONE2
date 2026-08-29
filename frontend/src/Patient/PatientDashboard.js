@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AccountHeaderActions from '../components/AccountHeaderActions';
+import EmbeddedJitsiMeeting from '../components/EmbeddedJitsiMeeting';
 import { checkBackendHealth, fetchJson } from '../utils/api';
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
@@ -1436,15 +1437,7 @@ function PatientDashboard() {
                   );
                 }
                 return (
-                  <iframe
-                    title="Video Consultation"
-                    src={url}
-                    allowFullScreen
-                    style={{ width: '100%', height: '100%', border: 0 }}
-                    allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write; encrypted-media; speaker-selection; picture-in-picture; geolocation; midi; gyroscope; accelerometer; magnetometer"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    loading="eager"
-                  />
+                  <EmbeddedJitsiMeeting meetingUrl={url} title="Video Consultation" />
                 );
               })()}
             </div>
