@@ -144,6 +144,7 @@ function inferSpecializationFromServiceType(serviceType) {
   if (low.includes('derma')) return 'Dermatology';
   if (low.includes('cardio')) return 'Cardiology';
   if (low.includes('surg')) return 'Surgery';
+  if (low.includes('ortho')) return 'Orthopedics';
   if (low.includes('medicine') || low.includes('internal')) return 'Medicine';
 
   const tokens = head.split(/\s+/).filter(Boolean);
@@ -918,7 +919,21 @@ router.post('/paymongo/webhook', async (req, res) => {
         email: patientEmail,
         doctor_id: doctorName || null,
         ...(doctorUuid ? { doctor_uuid: doctorUuid } : {}),
-        reason: hold.service_type ? `Video Consultation - ${hold.service_type}` : 'Video Consultation',
+        // Keep the department in the appointment reason. Doctor dashboards use
+        // this value when showing department-wide video bookings, and a generic
+        // "Video Consultation - Video Consultation" reason cannot be routed to
+        // Orthopedics (or any other specialization).
+        reason: (() => {
+          const specialization = String(hold.specialization || '').trim();
+          const serviceType = String(hold.service_type || '').trim();
+          if (specialization) {
+            const detail = serviceType && !/^video consultation$/i.test(serviceType)
+              ? `: ${serviceType.replace(/^video consultation\s*-?\s*/i, '').trim()}`
+              : '';
+            return `Video Consultation - ${specialization}${detail}`;
+          }
+          return serviceType ? `Video Consultation - ${serviceType}` : 'Video Consultation';
+        })(),
         appointment_date: new Date(day),
         appointment_time: dummyDate,
         status: 'Confirmed',

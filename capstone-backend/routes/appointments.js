@@ -954,6 +954,7 @@ function inferSpecializationFromVideoReason(reason) {
     if (low.includes('cardio')) return 'Cardiology';
     if (low.includes('derma')) return 'Dermatology';
     if (low.includes('surg')) return 'Surgery';
+    if (low.includes('ortho')) return 'Orthopedics';
     if (low.includes('internal medicine') || low.includes('medicine')) return 'Medicine';
     return cleaned;
 }
