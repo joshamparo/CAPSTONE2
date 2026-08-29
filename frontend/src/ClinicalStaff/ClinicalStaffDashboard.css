@@ -222,10 +222,14 @@
 }
 
 .cs-main {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
   padding: 22px 22px 40px;
 }
 
 .cs-topbar {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -510,6 +514,7 @@
   }
 
   .cs-main {
+    width: auto;
     padding: 14px 14px 28px;
   }
 
@@ -524,4 +529,3 @@
     justify-content: flex-end;
   }
 }
-

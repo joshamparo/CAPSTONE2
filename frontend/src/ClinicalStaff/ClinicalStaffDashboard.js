@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, RefreshCw, ShieldAlert, Upload, UserRound, X, XCircle, Menu, User, Mail, Briefcase, Phone, Key, Save, Shield, Eye, EyeOff, Check } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, RefreshCw, ShieldAlert, Upload, UserRound, X, XCircle, Menu, User, Mail, Briefcase, Phone, Key, Save, Shield, Eye, EyeOff, Check, Video } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import './ClinicalStaffDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
+import EmbeddedJitsiMeeting from '../components/EmbeddedJitsiMeeting';
 import { checkBackendHealth, fetchJson } from '../utils/api';
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
@@ -89,6 +90,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const role = String(forcedRole || user.role || '').toLowerCase();
   const cfg = ROLE_CONFIG[role] || { label: 'Clinical Staff', kind: 'Procedure', resultType: 'Lab' };
   const isEcgOperator = role === 'ecg_operator';
+  const isPhysicalTherapist = role === 'physical_therapist';
   const [backendHealth, setBackendHealth] = useState({ checked: false, ok: true, error: '' });
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -124,6 +126,10 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const [schedule, setSchedule] = useState([]);
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [scheduleError, setScheduleError] = useState('');
+  const [videoAppointments, setVideoAppointments] = useState([]);
+  const [videoAppointmentsLoading, setVideoAppointmentsLoading] = useState(false);
+  const [videoAppointmentsError, setVideoAppointmentsError] = useState('');
+  const [videoMeeting, setVideoMeeting] = useState(null);
 
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [eventForm, setEventForm] = useState({ title: '', startAt: '', endAt: '', location: '', notes: '' });
@@ -250,18 +256,75 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     }
   };
 
+  const formatDateParam = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const refreshVideoAppointments = async () => {
+    if (!isPhysicalTherapist) return;
+    setVideoAppointmentsLoading(true);
+    setVideoAppointmentsError('');
+    try {
+      const start = new Date();
+      start.setDate(start.getDate() - 7);
+      const end = new Date();
+      end.setDate(end.getDate() + 365);
+      const params = new URLSearchParams({
+        start: formatDateParam(start),
+        end: formatDateParam(end),
+        consultationMode: 'video',
+        take: '200'
+      });
+      const data = await fetchJson(`/api/appointments?${params.toString()}`, {
+        apiBase: API_BASE,
+        headers: { ...buildAuthHeaders(user), 'x-user-role': role }
+      });
+      setVideoAppointments(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setVideoAppointments([]);
+      setVideoAppointmentsError(String(e?.message || 'Unable to load video consultations.'));
+    } finally {
+      setVideoAppointmentsLoading(false);
+    }
+  };
+
+  const startVideoConsultation = async (appointment) => {
+    if (!appointment?.id) return;
+    setVideoAppointmentsError('');
+    try {
+      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/start`, {
+        apiBase: API_BASE,
+        method: 'POST',
+        headers: { ...buildHeaders(user), 'x-user-role': role },
+        body: JSON.stringify({ action: 'start', sourceTable: 'appointments' })
+      });
+      const url = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();
+      if (!url) throw new Error(data?.message || 'Unable to retrieve the video room.');
+      const patientName = `${appointment.firstName || appointment.first_name || ''} ${appointment.lastName || appointment.last_name || ''}`.trim();
+      setVideoMeeting({ url, title: `Video Consultation • ${patientName || 'Patient'}` });
+      await refreshVideoAppointments();
+    } catch (e) {
+      setVideoAppointmentsError(String(e?.message || 'Unable to start the video consultation.'));
+    }
+  };
+
   useEffect(() => {
     refreshOrders();
     refreshSchedule();
     refreshApprovals();
+    if (isPhysicalTherapist) refreshVideoAppointments();
     if (!isEcgOperator) refreshPatients();
     const t = setInterval(() => {
       refreshOrders();
       refreshSchedule();
       refreshApprovals();
+      if (isPhysicalTherapist) refreshVideoAppointments();
     }, 20000);
     return () => clearInterval(t);
-  }, [role, orderStatusFilter, isEcgOperator]);
+  }, [role, orderStatusFilter, isEcgOperator, isPhysicalTherapist]);
 
   useEffect(() => {
     if (!isEcgOperator) return;
@@ -762,6 +825,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
           <TabButton id="dashboard" icon={<LayoutDashboard size={18} />} label="Dashboard" />
           <TabButton id="approvals" icon={<ClipboardList size={18} />} label="Approvals" />
           {!isEcgOperator ? <TabButton id="appointments" icon={<Calendar size={18} />} label="Appointments" /> : null}
+          {isPhysicalTherapist ? <TabButton id="video" icon={<Video size={18} />} label="Video Consultations" /> : null}
           {!isEcgOperator ? <TabButton id="patients" icon={<UserRound size={18} />} label="Patient Records" /> : null}
           <TabButton id="orders" icon={<ClipboardList size={18} />} label="Medical Orders" />
         </nav>
@@ -1123,6 +1187,48 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                       <td><span className={statusBadgeClass(ev.status)}>{ev.status || '—'}</span></td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'video' && isPhysicalTherapist && (
+          <div className="cs-card">
+            <div className="cs-toolbar" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
+              <div>
+                <div className="cs-card-title" style={{ marginBottom: 4 }}>Video Consultations</div>
+                <div className="cs-muted">Online PT bookings assigned from the patient app.</div>
+              </div>
+              <button type="button" className="cs-btn secondary" onClick={refreshVideoAppointments} disabled={videoAppointmentsLoading}>
+                <RefreshCw size={16} /> Refresh
+              </button>
+            </div>
+            {videoAppointmentsError ? <div className="cs-muted" style={{ color: '#b91c1c', marginBottom: 12 }}>{videoAppointmentsError}</div> : null}
+            {videoAppointmentsLoading ? (
+              <div className="cs-muted">Loading video consultations…</div>
+            ) : videoAppointments.length === 0 ? (
+              <div className="cs-muted">No assigned video consultations.</div>
+            ) : (
+              <table className="cs-table">
+                <thead><tr><th>Patient</th><th>Schedule</th><th>Concern</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>
+                  {videoAppointments.map((appointment) => {
+                    const patientName = `${appointment.firstName || appointment.first_name || ''} ${appointment.lastName || appointment.last_name || ''}`.trim();
+                    const dateValue = appointment.appointmentDate || appointment.appointment_date;
+                    const scheduleLabel = [dateValue ? new Date(dateValue).toLocaleDateString() : '', appointment.appointmentTime || appointment.appointment_time || ''].filter(Boolean).join(' • ');
+                    const status = String(appointment.status || 'Confirmed');
+                    const unavailable = /cancel|complete|done|no.?show/i.test(status);
+                    return (
+                      <tr key={String(appointment.id)}>
+                        <td><strong>{patientName || 'Patient'}</strong><div className="cs-muted">{appointment.email || ''}</div></td>
+                        <td>{scheduleLabel || '—'}</td>
+                        <td>{appointment.reason || appointment.mainConcern || 'Physical Therapy consultation'}</td>
+                        <td><span className={statusBadgeClass(status)}>{status}</span></td>
+                        <td><button type="button" className="cs-btn" disabled={unavailable} onClick={() => startVideoConsultation(appointment)}><Video size={16} /> Start Call</button></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -1680,6 +1786,20 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
           </div>
         </div>
       )}
+
+      {videoMeeting ? (
+        <div className="cs-modal-overlay" onClick={() => setVideoMeeting(null)}>
+          <div className="cs-modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(1500px, 96vw)', maxWidth: 'none', height: '92vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="cs-modal-head">
+              <div className="cs-modal-title">{videoMeeting.title}</div>
+              <button type="button" className="cs-btn secondary" onClick={() => setVideoMeeting(null)}><X size={16} /> Close</button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <EmbeddedJitsiMeeting meetingUrl={videoMeeting.url} title={videoMeeting.title} />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <PatientFullRecordModal
         open={centralRecordOpen}

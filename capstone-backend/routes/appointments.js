@@ -1322,7 +1322,7 @@ router.get('/debug/video-apts', async (req, res) => {
     }
 });
 
-router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'cashier', 'staff']), async (req, res) => {
+router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'cashier', 'staff', 'physical_therapist']), async (req, res) => {
     try {
         await ensureAppointmentsSchema();
         const { date, start, end, take, skip, q, status, consultationMode, doctorUuid } = req.query;
@@ -1349,6 +1349,19 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
             if (!linkedDoctorId) return res.status(400).json({ message: 'Missing x-linked-doctor-id header' });
             where.doctor_uuid = linkedDoctorId;
             if (!where.consultation_mode) where.consultation_mode = 'onsite';
+        }
+
+        if (role === 'physical_therapist') {
+            const email = inferEmail(req);
+            const therapist = email
+                ? await prisma.doctors.findFirst({
+                    where: { email: { equals: email, mode: 'insensitive' } },
+                    select: { id: true }
+                }).catch(() => null)
+                : null;
+            if (!therapist?.id) return res.json([]);
+            where.doctor_uuid = therapist.id;
+            where.consultation_mode = 'video';
         }
 
         const query = String(q || '').trim();
@@ -2427,7 +2440,7 @@ router.get('/:id/audit', requireRole(['admin', 'nurse', 'doctor', 'doctor_secret
     }
 });
 
-router.post('/:id/video/start', requireRole(['doctor']), async (req, res) => {
+router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), async (req, res) => {
     try {
         await ensureAppointmentsSchema();
         const idRaw = String(req.params.id || '').trim();
