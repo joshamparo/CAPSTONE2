@@ -406,7 +406,7 @@ export default function OfficeStaffDashboard({ mode }) {
   const [savingHmoClaim, setSavingHmoClaim] = useState(false);
 
   const [hmoQueue, setHmoQueue] = useState({
-    filter: 'approved',
+    filter: 'all',
     page: 1,
     perPage: 8,
     totalCount: 0,
@@ -416,7 +416,7 @@ export default function OfficeStaffDashboard({ mode }) {
   });
   const [hmoQueueLoading, setHmoQueueLoading] = useState(false);
   const [hmoQueueError, setHmoQueueError] = useState('');
-  const [hmoQueueFilter, setHmoQueueFilter] = useState('approved');
+  const [hmoQueueFilter, setHmoQueueFilter] = useState('all');
   const [hmoQueuePage, setHmoQueuePage] = useState(1);
   const [hmoQueueQuery, setHmoQueueQuery] = useState('');
   const [hmoQuickEdit, setHmoQuickEdit] = useState(null);
@@ -792,7 +792,7 @@ export default function OfficeStaffDashboard({ mode }) {
       });
       const safe = data && typeof data === 'object' && !Array.isArray(data)
         ? {
-            filter: String(data.filter || 'approved'),
+            filter: String(data.filter || hmoQueueFilter || 'all'),
             page: Math.max(1, Number(data.page || 1)),
             perPage: Math.max(1, Math.min(50, Number(data.perPage || 8))),
             totalCount: Math.max(0, Number(data.totalCount || 0)),
