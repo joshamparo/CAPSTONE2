@@ -420,12 +420,16 @@ router.post('/:id/fulfill', async (req, res) => {
 // PUT: Update request status
 router.put('/:id', async (req, res) => {
     try {
+        await ensureRequestsSchema();
         const role = headerRole(req);
         const hdrName = headerName(req);
         const requestedStatus = String(req.body?.status || '').trim();
+        const idRaw = String(req.params.id || '').trim();
+        if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid request id.' });
+        const requestId = BigInt(idRaw);
 
         const current = await prisma.requests.findUnique({
-            where: { id: BigInt(req.params.id) }
+            where: { id: requestId }
         });
         if (!current) return res.status(404).json({ message: 'Request not found' });
         if (role === 'nurse') {
@@ -442,13 +446,30 @@ router.put('/:id', async (req, res) => {
             return res.status(409).json({ message: currentStatus === 'processing' ? 'Request is already being processed.' : 'Only pending requests can be processed.' });
         }
 
-        const updatedRequest = await prisma.requests.update({
-            where: { id: BigInt(req.params.id) },
-            data: { status: nextStatus }
-        });
-        res.json({ ...updatedRequest, id: updatedRequest.id.toString() });
+        const updatedRows = await prisma.$queryRaw`
+            UPDATE public.requests
+            SET status = ${nextStatus}
+            WHERE id = ${requestId}
+              AND lower(coalesce(status, 'pending')) = 'pending'
+            RETURNING id, patient_id, patient_name, requested_by, message, status, created_at
+        `;
+        const updatedRequest = Array.isArray(updatedRows) ? updatedRows[0] : null;
+        if (!updatedRequest) return res.status(409).json({ message: 'Request status changed. Refresh and try again.' });
+
+        prisma.activity_logs.create({
+            data: {
+                actor_name: hdrName || 'Pharmacist',
+                role: role === 'admin' ? 'Admin' : 'Pharmacist',
+                action: 'Update',
+                target: `Request:${idRaw}`,
+                details: 'Started processing pharmacy request'
+            }
+        }).catch(() => {});
+
+        res.json(serialize(updatedRequest));
     } catch (err) {
-        res.status(500).json({ message: "Server Error", error: err.message });
+        console.error('Error processing pharmacy request:', err);
+        res.status(Number(err?.statusCode) || 400).json({ message: String(err?.message || 'Unable to process request.') });
     }
 });
 
