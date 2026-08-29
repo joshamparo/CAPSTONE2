@@ -265,6 +265,7 @@ router.post('/:id/fulfill', async (req, res) => {
 
         const statusNow = String(current.status || '').trim().toLowerCase();
         if (statusNow === 'completed') return res.status(400).json({ message: 'Request is already completed' });
+        if (statusNow !== 'processing') return res.status(409).json({ message: 'Process this request before fulfilling it.' });
 
         const patientId = current.patient_id != null ? String(current.patient_id) : '';
         if (!patientId) return res.status(400).json({ message: 'Request has no patientId' });
@@ -298,7 +299,12 @@ router.post('/:id/fulfill', async (req, res) => {
               const med = await tx.medicines.findUnique({ where: { id } }).catch(() => null);
               if (!med) throw new Error(`Medicine not found: ${it.name || it.itemId}`);
               const prev = Number(med.stock || 0);
-              const next = Math.max(0, prev - it.qty);
+              if (prev < it.qty) {
+                const err = new Error(`Insufficient stock for ${med.name || it.name || 'medicine'}: requested ${it.qty}, available ${prev}.`);
+                err.statusCode = 409;
+                throw err;
+              }
+              const next = prev - it.qty;
               await tx.medicines.update({ where: { id }, data: { stock: next } });
               await tx.$executeRawUnsafe(
                 `INSERT INTO public.stock_movements (item_type, item_id, delta, reason, patient_id, request_id, actor_name, actor_role, note)
@@ -318,7 +324,12 @@ router.post('/:id/fulfill', async (req, res) => {
               const sup = await tx.supplies.findUnique({ where: { id } }).catch(() => null);
               if (!sup) throw new Error(`Supply not found: ${it.name || it.itemId}`);
               const prev = Number(sup.stock || 0);
-              const next = Math.max(0, prev - it.qty);
+              if (prev < it.qty) {
+                const err = new Error(`Insufficient stock for ${sup.item_name || it.name || 'supply'}: requested ${it.qty}, available ${prev}.`);
+                err.statusCode = 409;
+                throw err;
+              }
+              const next = prev - it.qty;
               await tx.supplies.update({ where: { id }, data: { stock: next } });
               await tx.$executeRawUnsafe(
                 `INSERT INTO public.stock_movements (item_type, item_id, delta, reason, patient_id, request_id, actor_name, actor_role, note)
@@ -411,7 +422,7 @@ router.put('/:id', async (req, res) => {
     try {
         const role = headerRole(req);
         const hdrName = headerName(req);
-        const { status } = req.body;
+        const requestedStatus = String(req.body?.status || '').trim();
 
         const current = await prisma.requests.findUnique({
             where: { id: BigInt(req.params.id) }
@@ -424,9 +435,16 @@ router.put('/:id', async (req, res) => {
             return res.status(403).json({ message: 'Forbidden' });
         }
 
+        const currentStatus = String(current.status || 'Pending').trim().toLowerCase();
+        const nextStatus = requestedStatus.toLowerCase() === 'processing' ? 'Processing' : '';
+        if (!nextStatus) return res.status(400).json({ message: 'Unsupported request status.' });
+        if (currentStatus !== 'pending') {
+            return res.status(409).json({ message: currentStatus === 'processing' ? 'Request is already being processed.' : 'Only pending requests can be processed.' });
+        }
+
         const updatedRequest = await prisma.requests.update({
             where: { id: BigInt(req.params.id) },
-            data: { status }
+            data: { status: nextStatus }
         });
         res.json({ ...updatedRequest, id: updatedRequest.id.toString() });
     } catch (err) {

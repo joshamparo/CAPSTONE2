@@ -996,7 +996,7 @@ function PharmacistDashboard() {
     try {
       for (const it of selected) {
         const isPending = restockRequests.some(
-          (r) => String(r.itemId || r.item_id || '') === String(it.id) && String(r.status || '') === 'Pending'
+          (r) => String(r.itemId || r.item_id || '') === String(it.id) && ['pending', 'in progress', 'approved'].includes(String(r.status || '').toLowerCase())
         );
         if (isPending) continue;
         const stock = Number(it.stock ?? 0) || 0;
@@ -1566,8 +1566,8 @@ function PharmacistDashboard() {
       });
       await fetchRequests();
       setToast({ type: 'success', text: `Request marked ${status}.` });
-    } catch (_) {
-      setToast({ type: 'error', text: 'Request update failed.' });
+    } catch (e) {
+      setToast({ type: 'error', text: String(e?.message || 'Request update failed.') });
     }
   };
 
@@ -1581,8 +1581,8 @@ function PharmacistDashboard() {
       });
       await Promise.all([fetchRequests(), fetchMedicines(), fetchSupplies()]);
       setToast({ type: 'success', text: `Fulfilled. Added ₱${String(data.addedAmount || '').trim() || '0.00'} to billing.` });
-    } catch (_) {
-      setToast({ type: 'error', text: 'Fulfillment failed.' });
+    } catch (e) {
+      setToast({ type: 'error', text: String(e?.message || 'Fulfillment failed.') });
     }
   };
 
@@ -2187,7 +2187,7 @@ function PharmacistDashboard() {
   }, [restockRequests]);
 
   const approvedRestockCount = useMemo(() => {
-    return restockRequests.filter((r) => String(r.status || '').toLowerCase() === 'approved').length;
+    return restockRequests.filter((r) => ['approved', 'in progress'].includes(String(r.status || '').toLowerCase())).length;
   }, [restockRequests]);
 
   const urgentQueue = useMemo(() => {
@@ -2549,7 +2549,7 @@ function PharmacistDashboard() {
             {!isCollapsed && (
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 Stock Alerts
-                {(lowStockItems.length > 0 || restockRequests.filter(r => r.status === 'Approved').length > 0) && (
+                {(lowStockItems.length > 0 || approvedRestockCount > 0) && (
                   <span
                     style={{
                       display: 'inline-flex',
@@ -2565,7 +2565,7 @@ function PharmacistDashboard() {
                       border: '1px solid #fecaca'
                     }}
                   >
-                    {lowStockItems.length + restockRequests.filter(r => r.status === 'Approved').length}
+                    {lowStockItems.length + approvedRestockCount}
                   </span>
                 )}
               </span>
@@ -3626,7 +3626,7 @@ function PharmacistDashboard() {
                               (r) =>
                                 String(r.itemType || r.item_type || '').toLowerCase() === 'medicine' &&
                                 String(r.itemId || r.item_id || '') === String(m.id) &&
-                                String(r.status || '') === 'Pending'
+                                ['pending', 'in progress', 'approved'].includes(String(r.status || '').toLowerCase())
                             );
                             return (
                               <div className="pharm-actions">
@@ -3824,7 +3824,7 @@ function PharmacistDashboard() {
                               (r) =>
                                 String(r.itemType || r.item_type || '').toLowerCase() === 'supply' &&
                                 String(r.itemId || r.item_id || '') === String(s.id) &&
-                                String(r.status || '') === 'Pending'
+                                ['pending', 'in progress', 'approved'].includes(String(r.status || '').toLowerCase())
                             );
                             return (
                               <div className="pharm-actions">
@@ -3892,11 +3892,11 @@ function PharmacistDashboard() {
                         </td>
                         <td className="pharm-right">
                           <div className="pharm-actions">
-                            {String(r.status || '').toLowerCase() !== 'completed' && (
-                              <>
-                                <button type="button" className="pharm-btn" onClick={() => updateRequestStatus(r.id, 'Processing')}>Process</button>
-                                <button type="button" className="pharm-btn primary" onClick={() => fulfillRequest(r)}>Fulfill</button>
-                              </>
+                            {String(r.status || '').toLowerCase() === 'pending' && (
+                              <button type="button" className="pharm-btn" onClick={() => updateRequestStatus(r.id, 'Processing')}>Process</button>
+                            )}
+                            {String(r.status || '').toLowerCase() === 'processing' && (
+                              <button type="button" className="pharm-btn primary" onClick={() => fulfillRequest(r)}>Fulfill</button>
                             )}
                             {String(r.status || '').toLowerCase() === 'completed' && (
                               <span className="pharm-done"><CheckCircle2 size={16} /> Done</span>
@@ -3978,7 +3978,7 @@ function PharmacistDashboard() {
                     <tbody>
                       {lowStockItems.slice((lowStockPage - 1) * 5, lowStockPage * 5).map((item) => {
                         const isPending = restockRequests.some(
-                          (r) => String(r.itemId || r.item_id || '') === String(item.id) && String(r.status || '') === 'Pending'
+                          (r) => String(r.itemId || r.item_id || '') === String(item.id) && ['pending', 'in progress', 'approved'].includes(String(r.status || '').toLowerCase())
                         );
                         return (
                           <tr key={`${item.type}-${item.id}`}>
@@ -4026,7 +4026,7 @@ function PharmacistDashboard() {
             <div className="pharm-modal-text" style={{ marginBottom: '16px' }}>
               Admin has approved these requests. Click Fulfill once you receive the items.
             </div>
-            {restockRequests.filter(r => r.status === 'Approved').length === 0 ? (
+            {approvedRestockCount === 0 ? (
               <div className="pharm-empty">No approved restocks to fulfill.</div>
             ) : (
               <div className="pharm-table-wrap">
@@ -4040,7 +4040,7 @@ function PharmacistDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {restockRequests.filter(r => r.status === 'Approved').map(r => (
+                    {restockRequests.filter(r => ['approved', 'in progress'].includes(String(r.status || '').toLowerCase())).map(r => (
                       <tr key={r.id}>
                         <td className="pharm-strong">{r.item_name || r.itemName}</td>
                         <td>{r.requestedQty || r.requested_qty}</td>
