@@ -838,6 +838,12 @@ function PharmacistDashboard() {
   };
 
   const applySalesFilters = async () => {
+    const transactionSearch = String(salesQuery || '').trim();
+    if (transactionSearch && !/^TXN-\d{8}-\d{6}$/i.test(transactionSearch)) {
+      setSalesError('Enter a complete transaction number, e.g. TXN-20260829-000001.');
+      setSalesTab('transactions');
+      return;
+    }
     const minRaw = String(salesPayMin || '').trim();
     const maxRaw = String(salesPayMax || '').trim();
     const min = minRaw === '' ? null : Number(minRaw);
@@ -4359,34 +4365,14 @@ function PharmacistDashboard() {
                 )}
 
                 <div className="pharm-field">
-                  <div className="pharm-label">Search</div>
-                  <input className="pharm-input" placeholder="Transaction # or keyword" value={salesQuery} onChange={(e) => setSalesQuery(e.target.value)} />
-                </div>
-
-                <div className="pharm-field">
-                  <div className="pharm-label">Pharmacist</div>
-                  <input className="pharm-input" placeholder="Name" value={salesPharmacist} onChange={(e) => setSalesPharmacist(e.target.value)} />
-                </div>
-
-                <div className="pharm-field">
-                  <div className="pharm-label">Discount</div>
-                  <select className="pharm-select" value={salesDiscountType} onChange={(e) => setSalesDiscountType(e.target.value)}>
-                    <option value="all">All</option>
-                    <option value="none">None</option>
-                    <option value="pwd">PWD</option>
-                    <option value="senior">Senior</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                </div>
-
-                <div className="pharm-field">
-                  <div className="pharm-label">Payment Min</div>
-                  <input className="pharm-input" type="number" placeholder="0" value={salesPayMin} onChange={(e) => setSalesPayMin(e.target.value)} />
-                </div>
-
-                <div className="pharm-field">
-                  <div className="pharm-label">Payment Max</div>
-                  <input className="pharm-input" type="number" placeholder="0" value={salesPayMax} onChange={(e) => setSalesPayMax(e.target.value)} />
+                  <div className="pharm-label">Transaction Number</div>
+                  <input
+                    className="pharm-input"
+                    placeholder="TXN-YYYYMMDD-000001"
+                    value={salesQuery}
+                    onChange={(e) => setSalesQuery(e.target.value.toUpperCase())}
+                    aria-label="Search by transaction number"
+                  />
                 </div>
 
                 <div className="pharm-field">
