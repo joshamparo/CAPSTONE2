@@ -176,6 +176,7 @@ function PharmacistDashboard() {
   const [prescriptions, setPrescriptions] = useState([]);
   const [restockRequests, setRestockRequests] = useState([]);
   const [lowStockPage, setLowStockPage] = useState(1);
+  const [restockHistoryPage, setRestockHistoryPage] = useState(1);
 
   // POS State
   const [cart, setCart] = useState([]);
@@ -2204,6 +2205,17 @@ function PharmacistDashboard() {
     return restockRequests.filter((r) => ['approved', 'in progress'].includes(String(r.status || '').toLowerCase())).length;
   }, [restockRequests]);
 
+  const restockHistoryPageSize = 8;
+  const restockHistoryPageCount = Math.max(1, Math.ceil(restockRequests.length / restockHistoryPageSize));
+  const paginatedRestockHistory = restockRequests.slice(
+    (restockHistoryPage - 1) * restockHistoryPageSize,
+    restockHistoryPage * restockHistoryPageSize
+  );
+
+  useEffect(() => {
+    setRestockHistoryPage((page) => Math.min(page, restockHistoryPageCount));
+  }, [restockHistoryPageCount]);
+
   const urgentQueue = useMemo(() => {
     const queue = [];
     lowStockItems.slice(0, 3).forEach((item) => {
@@ -4073,7 +4085,36 @@ function PharmacistDashboard() {
 
             <div className="pharm-divider" style={{ margin: '32px 0' }} />
             
-            <div className="pharm-card-title">Recent Request History</div>
+            <div className="pharm-card-head" style={{ marginBottom: 12 }}>
+              <div>
+                <div className="pharm-card-title">Recent Request History</div>
+                <div className="pharm-modal-text">
+                  {restockRequests.length === 0
+                    ? 'No requests yet.'
+                    : `Page ${restockHistoryPage} of ${restockHistoryPageCount} · ${restockRequests.length} requests`}
+                </div>
+              </div>
+              <div className="patient-pagination" style={{ margin: 0 }}>
+                <button
+                  type="button"
+                  className="patient-page-btn"
+                  disabled={restockHistoryPage <= 1}
+                  onClick={() => setRestockHistoryPage((page) => Math.max(1, page - 1))}
+                  aria-label="Previous request history page"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="patient-page-btn"
+                  disabled={restockHistoryPage >= restockHistoryPageCount}
+                  onClick={() => setRestockHistoryPage((page) => Math.min(restockHistoryPageCount, page + 1))}
+                  aria-label="Next request history page"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            </div>
             <div className="pharm-table-wrap">
               <table className="pharm-table">
                 <thead>
@@ -4085,7 +4126,7 @@ function PharmacistDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {restockRequests.slice(0, 10).map(r => (
+                  {paginatedRestockHistory.map(r => (
                     <tr key={r.id}>
                       <td>{r.item_name || r.itemName}</td>
                       <td>{r.requestedQty || r.requested_qty}</td>

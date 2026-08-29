@@ -246,7 +246,7 @@ router.post('/', async (req, res) => {
           role: actorRole || 'Staff',
           action: 'Create',
           target: `Restock:${itemType}:${itemId.toString()}`,
-          details: `Requested restock for ${itemName || 'item'} (qty ${requestedQty})`
+          details: `Requested restock for ${created?.item_name || 'item'} (qty ${requestedQty})`
         }
       }).catch(() => {});
     }
