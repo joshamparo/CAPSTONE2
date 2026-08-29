@@ -25,12 +25,14 @@ async function recordLabOrderPayment(prisma, {
   service,
   kind,
   amount,
+  paymentAmount,
   method,
   reference,
   receivedBy
 }) {
   await ensureBillingTablesExist(prisma);
   const amountMoney = toMoney(amount);
+  const paymentMoney = toMoney(paymentAmount == null ? amount : paymentAmount);
   const marker = `Lab Order #${String(orderId)}`;
   const description = `${String(service || kind || 'Laboratory Service').trim() || 'Laboratory Service'} - Lab Payment`;
 
@@ -66,11 +68,11 @@ async function recordLabOrderPayment(prisma, {
       where: { invoice_id: invoice.id, reference: reference || null }
     }).catch(() => null);
 
-    if (!existingPayment) {
+    if (!existingPayment && Number(paymentMoney) > 0) {
       await tx.billing_payments.create({
         data: {
           invoice_id: invoice.id,
-          amount: amountMoney,
+          amount: paymentMoney,
           method: method || null,
           reference: reference || null,
           received_by: receivedBy || null

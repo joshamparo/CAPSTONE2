@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, CreditCard, FileText, LogOut, Plus, RefreshCw, Search, User, Upload, Save, KeyRound, Eye, EyeOff, ShieldAlert, Menu, Mail, Briefcase, Phone, Key, Shield, Check, X, Edit2, IdCard } from 'lucide-react';
 import '../Admin/AdminDashboard.css';
@@ -76,6 +76,7 @@ const formatDateTime = (value) => {
 
 const inferInvoiceSource = (invoice) => {
   const notes = String(invoice?.notes || '').toLowerCase();
+  if (notes.includes('pharmacy pos')) return 'Pharmacy POS';
   if (notes.includes('video consultation')) return 'Video Consultation';
   if (invoice?.appointment_id != null || notes.includes('onsite') || notes.includes('approvalrequest')) {
     return 'Onsite Consultation';
@@ -363,6 +364,8 @@ export default function OfficeStaffDashboard({ mode }) {
   const [invoiceRange, setInvoiceRange] = useState('All');
   const [invoiceQuery, setInvoiceQuery] = useState('');
   const [invoicePage, setInvoicePage] = useState(1);
+  const [invoiceTotalCount, setInvoiceTotalCount] = useState(0);
+  const [invoiceSummary, setInvoiceSummary] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [selectedInvoiceLoading, setSelectedInvoiceLoading] = useState(false);
 
@@ -382,6 +385,7 @@ export default function OfficeStaffDashboard({ mode }) {
   const [payAmount, setPayAmount] = useState('');
   const [cashReceived, setCashReceived] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const paymentIdempotencyKeyRef = useRef('');
   const [paymentError, setPaymentError] = useState('');
   const [adjustmentLoading, setAdjustmentLoading] = useState(false);
   const [adjustmentError, setAdjustmentError] = useState('');
@@ -438,6 +442,8 @@ export default function OfficeStaffDashboard({ mode }) {
   const [labPaymentLoading, setLabPaymentLoading] = useState(false);
   const [labPaymentError, setLabPaymentError] = useState('');
   const [paymentHistory, setPaymentHistory] = useState([]);
+  const [paymentHistoryTotal, setPaymentHistoryTotal] = useState(0);
+  const [paymentHistoryCollected, setPaymentHistoryCollected] = useState(0);
   const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(false);
   const [paymentHistoryError, setPaymentHistoryError] = useState('');
   const [paymentsQuery, setPaymentsQuery] = useState('');
@@ -483,21 +489,53 @@ export default function OfficeStaffDashboard({ mode }) {
     }
   };
 
-  const refreshInvoices = async () => {
+  const refreshInvoices = async (options = {}) => {
     if (!user) return;
+    const requestedPage = Math.max(1, Number(options.page || invoicePage || 1));
+    const requestedStatus = options.status ?? invoiceStatus;
+    const requestedRange = options.range ?? invoiceRange;
+    const requestedQuery = options.query ?? invoiceQuery;
     setInvoiceLoading(true);
     setInvoiceError('');
     try {
       const params = new URLSearchParams();
-      if (invoiceStatus && invoiceStatus !== 'All') params.set('status', invoiceStatus);
-      if (invoiceQuery.trim()) params.set('q', invoiceQuery.trim());
+      if (requestedStatus && requestedStatus !== 'All') params.set('status', requestedStatus);
+      if (String(requestedQuery).trim()) params.set('q', String(requestedQuery).trim());
+      if (requestedRange === 'Today' || requestedRange === 'Week') {
+        const end = new Date();
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        if (requestedRange === 'Week') start.setDate(start.getDate() - 6);
+        end.setDate(end.getDate() + 1);
+        end.setHours(0, 0, 0, 0);
+        params.set('from', start.toISOString());
+        params.set('to', end.toISOString());
+      }
+      params.set('take', '8');
+      params.set('skip', String((requestedPage - 1) * 8));
+      params.set('withTotal', '1');
       const data = await fetchJson(`/api/billing/invoices?${params.toString()}`, { apiBase: API_BASE, headers: buildHeaders(user) });
-      setInvoices(Array.isArray(data) ? data : []);
+      setInvoices(Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []));
+      setInvoiceTotalCount(Number(data?.totalCount ?? (Array.isArray(data) ? data.length : 0)) || 0);
+      setInvoicePage(requestedPage);
     } catch (e) {
       setInvoices([]);
       setInvoiceError(String(e.message || 'Failed to load invoices'));
     } finally {
       setInvoiceLoading(false);
+    }
+  };
+
+  const refreshDashboardKpis = async () => {
+    if (!user || role !== 'cashier') return;
+    try {
+      const data = await fetchJson(`/api/billing/invoices/summary?date=${encodeURIComponent(toLocalDateInputValue())}`, {
+        apiBase: API_BASE,
+        headers: buildHeaders(user)
+      });
+      setInvoiceSummary(data && typeof data === 'object' ? data : null);
+    } catch (e) {
+      setInvoiceError(String(e?.message || 'Failed to load invoice summary'));
     }
   };
 
@@ -541,25 +579,35 @@ export default function OfficeStaffDashboard({ mode }) {
     }
   }, [role, user]);
 
-  const refreshPaymentHistory = useCallback(async () => {
+  const refreshPaymentHistory = useCallback(async (options = {}) => {
     if (!user || role !== 'cashier') return;
+    const requestedPage = Math.max(1, Number(options.page || paymentsPage || 1));
+    const requestedSource = options.source ?? paymentsSource;
+    const requestedQuery = options.query ?? paymentsQuery;
     setPaymentHistoryLoading(true);
     setPaymentHistoryError('');
     try {
       const params = new URLSearchParams();
-      params.set('take', '200');
+      params.set('take', '8');
+      params.set('skip', String((requestedPage - 1) * 8));
+      params.set('withTotal', '1');
+      if (String(requestedQuery).trim()) params.set('q', String(requestedQuery).trim());
+      if (requestedSource && requestedSource !== 'All') params.set('source', requestedSource);
       const data = await fetchJson(`/api/billing/payments?${params.toString()}`, {
         apiBase: API_BASE,
         headers: buildHeaders(user)
       });
-      setPaymentHistory(Array.isArray(data) ? data : []);
+      setPaymentHistory(Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []));
+      setPaymentHistoryTotal(Number(data?.totalCount ?? (Array.isArray(data) ? data.length : 0)) || 0);
+      setPaymentHistoryCollected(Number(data?.totalCollected || 0) || 0);
+      setPaymentsPage(requestedPage);
     } catch (e) {
       setPaymentHistory([]);
       setPaymentHistoryError(String(e.message || 'Failed to load payment history'));
     } finally {
       setPaymentHistoryLoading(false);
     }
-  }, [role, user]);
+  }, [paymentsPage, paymentsQuery, paymentsSource, role, user]);
 
   const buildPaymentReceipt = useCallback((payment) => {
     if (!payment) return null;
@@ -634,8 +682,21 @@ export default function OfficeStaffDashboard({ mode }) {
 
   const printPaymentReceipt = useCallback((receipt) => {
     if (!receipt || typeof window === 'undefined') return;
-    const popup = window.open('', '_blank', 'width=420,height=720');
-    if (!popup) return;
+    const printFrame = document.createElement('iframe');
+    printFrame.setAttribute('title', 'Cashier receipt print');
+    printFrame.style.position = 'fixed';
+    printFrame.style.width = '1px';
+    printFrame.style.height = '1px';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.border = '0';
+    printFrame.style.opacity = '0';
+    document.body.appendChild(printFrame);
+    const popup = printFrame.contentWindow;
+    if (!popup) {
+      printFrame.remove();
+      return;
+    }
     const safe = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const sourceNote = receipt.note || (
       String(receipt.source || '').toLowerCase().includes('lab')
@@ -710,6 +771,7 @@ export default function OfficeStaffDashboard({ mode }) {
       </html>
     `);
     popup.document.close();
+    window.setTimeout(() => printFrame.remove(), 60000);
   }, []);
 
   const refreshHmoQueue = useCallback(async () => {
@@ -1020,7 +1082,8 @@ export default function OfficeStaffDashboard({ mode }) {
       });
       await openInvoice(invoiceId);
       await refreshInvoices();
-    } catch (_) {
+    } catch (e) {
+      setPaymentError(String(e?.message || `Failed to mark invoice ${status}.`));
     } finally {
       setSelectedInvoiceLoading(false);
     }
@@ -1049,6 +1112,12 @@ export default function OfficeStaffDashboard({ mode }) {
     if (!user || !selectedInvoice?.id) return;
     setPaymentLoading(true);
     setPaymentError('');
+    let priorPaymentIds = new Set(
+      (Array.isArray(selectedInvoice.payments) ? selectedInvoice.payments : [])
+        .map((p) => String(p?.id || '').trim())
+        .filter(Boolean)
+    );
+    let priorBalance = Number(selectedInvoice.balance_amount || 0);
     try {
       let workingInvoice = selectedInvoice;
       try {
@@ -1057,18 +1126,14 @@ export default function OfficeStaffDashboard({ mode }) {
           workingInvoice = updated;
         }
       } catch (hmoErr) {
-        // Don't block payment on HMO save error unless it's a validation error (message)
-        const msg = String(hmoErr?.message || '');
-        if (msg && /provider|deduction cannot exceed|HMO approved amount/i.test(msg)) {
-          throw new Error(`HMO: ${msg}`);
-        }
+        throw new Error(`HMO details were not saved. Payment was not posted: ${String(hmoErr?.message || 'Unknown HMO error')}`);
       }
-      const priorPaymentIds = new Set(
+      priorPaymentIds = new Set(
         (Array.isArray(workingInvoice.payments) ? workingInvoice.payments : [])
           .map((p) => String(p?.id || '').trim())
           .filter(Boolean)
       );
-      const priorBalance = Number(workingInvoice.balance_amount || 0);
+      priorBalance = Number(workingInvoice.balance_amount || 0);
       const due = Number(workingInvoice.balance_amount || 0);
       if (!Number.isFinite(due) || due <= 0) throw new Error('No outstanding balance.');
       const method = String(payMethod || 'Cash').trim();
@@ -1083,7 +1148,10 @@ export default function OfficeStaffDashboard({ mode }) {
       const createdPayment = await fetchJson(`/api/billing/payments`, {
         apiBase: API_BASE,
         method: 'POST',
-        headers: buildHeaders(user),
+        headers: {
+          ...buildHeaders(user),
+          'x-idempotency-key': paymentIdempotencyKeyRef.current || (paymentIdempotencyKeyRef.current = (globalThis.crypto?.randomUUID?.() || `cashier-${selectedInvoice.id}-${Date.now()}`))
+        },
         timeoutMs: 90000,
         body: JSON.stringify({
           invoiceId: workingInvoice.id,
@@ -1093,6 +1161,7 @@ export default function OfficeStaffDashboard({ mode }) {
         })
       });
       setPayReference('');
+      paymentIdempotencyKeyRef.current = '';
       const received = method === 'Cash' ? Number(String(cashReceived || payAmount || '').trim()) : due;
       setCashReceived('');
       setPayAmount('');
@@ -1166,6 +1235,9 @@ export default function OfficeStaffDashboard({ mode }) {
             return;
           }
         } catch (_) {}
+      }
+      if (!(String(e?.name || '') === 'AbortError' || /timed out/i.test(String(e?.message || '')))) {
+        paymentIdempotencyKeyRef.current = '';
       }
       setPaymentError(String(e.message || 'Failed to record payment'));
     } finally {
@@ -1317,6 +1389,7 @@ export default function OfficeStaffDashboard({ mode }) {
   useEffect(() => {
     if (!user) return;
     refreshInvoices();
+    if (role === 'cashier') refreshDashboardKpis();
   }, [user]);
 
   useEffect(() => {
@@ -1377,6 +1450,13 @@ export default function OfficeStaffDashboard({ mode }) {
   }, [role]);
 
   const dashboardKpis = useMemo(() => {
+    if (role === 'cashier' && invoiceSummary) {
+      return {
+        todaysInvoices: Number(invoiceSummary.todayCount || 0),
+        unpaidCount: Number(invoiceSummary.openCount || 0),
+        readyCount: Number(invoiceSummary.readyCount || 0)
+      };
+    }
     const today = new Date();
     const todayStr = today.toDateString();
     const todaysInvoices = invoices.filter((i) => new Date(i.created_at || i.createdAt || 0).toDateString() === todayStr);
@@ -1387,7 +1467,7 @@ export default function OfficeStaffDashboard({ mode }) {
       unpaidCount: unpaid.length,
       readyCount: ready.length
     };
-  }, [invoices]);
+  }, [invoiceSummary, invoices, role]);
 
   const billingSummary = useMemo(() => {
     const list = Array.isArray(invoices) ? invoices : [];
@@ -1404,27 +1484,8 @@ export default function OfficeStaffDashboard({ mode }) {
   }, [closeout, invoices]);
 
   const filteredPaymentHistory = useMemo(() => {
-    const query = String(paymentsQuery || '').trim().toLowerCase();
-    return (Array.isArray(paymentHistory) ? paymentHistory : []).filter((payment) => {
-      const source = String(payment.source || inferInvoiceSource(payment.invoice || {}) || '').trim();
-      if (paymentsSource !== 'All' && source !== paymentsSource) return false;
-      if (!query) return true;
-      const haystack = [
-        payment.patientName,
-        payment.serviceLabel,
-        payment.method,
-        payment.reference,
-        payment.cashierName,
-        payment.receiptNumber,
-        payment.id,
-        payment.invoice_id,
-        source
-      ]
-        .map((v) => String(v || '').toLowerCase())
-        .join(' ');
-      return haystack.includes(query);
-    });
-  }, [paymentHistory, paymentsQuery, paymentsSource]);
+    return Array.isArray(paymentHistory) ? paymentHistory : [];
+  }, [paymentHistory]);
 
   useEffect(() => {
     setPaymentsPage(1);
@@ -1433,7 +1494,7 @@ export default function OfficeStaffDashboard({ mode }) {
   const pagedPaymentHistory = useMemo(() => {
     const perPage = 8;
     const list = filteredPaymentHistory;
-    const totalPages = Math.max(1, Math.ceil(list.length / perPage));
+    const totalPages = Math.max(1, Math.ceil(paymentHistoryTotal / perPage));
     const currentPage = Math.min(Math.max(1, paymentsPage), totalPages);
     const startIndex = (currentPage - 1) * perPage;
     return {
@@ -1442,23 +1503,23 @@ export default function OfficeStaffDashboard({ mode }) {
       currentPage,
       startIndex,
       endIndex: startIndex + perPage,
-      totalCount: list.length,
-      items: list.slice(startIndex, startIndex + perPage)
+      totalCount: paymentHistoryTotal,
+      items: list
     };
-  }, [filteredPaymentHistory, paymentsPage]);
+  }, [filteredPaymentHistory, paymentHistoryTotal, paymentsPage]);
 
   const paymentHistorySummary = useMemo(() => {
     const list = filteredPaymentHistory;
     const sourceCount = (label) => list.filter((payment) => String(payment.source || '') === label).length;
-    const totalCollected = list.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const totalCollected = paymentHistoryCollected;
     return {
       totalCollected,
-      transactionCount: list.length,
+      transactionCount: paymentHistoryTotal,
       consultationCount: sourceCount('Onsite Consultation'),
       videoCount: sourceCount('Video Consultation'),
       labCount: sourceCount('Lab')
     };
-  }, [filteredPaymentHistory]);
+  }, [filteredPaymentHistory, paymentHistoryCollected, paymentHistoryTotal]);
 
   const displayedInvoices = useMemo(() => {
     const list = Array.isArray(invoices) ? invoices : [];
@@ -1481,7 +1542,7 @@ export default function OfficeStaffDashboard({ mode }) {
 
   useEffect(() => {
     setInvoicePage(1);
-  }, [invoiceStatus, invoiceRange, invoices.length]);
+  }, [invoiceStatus, invoiceRange]);
 
   useEffect(() => {
     setLabPage(1);
@@ -1490,7 +1551,7 @@ export default function OfficeStaffDashboard({ mode }) {
   const pagedDisplayedInvoices = useMemo(() => {
     const perPage = 8;
     const list = displayedInvoices;
-    const totalPages = Math.max(1, Math.ceil(list.length / perPage));
+    const totalPages = Math.max(1, Math.ceil(invoiceTotalCount / perPage));
     const currentPage = Math.min(Math.max(1, invoicePage), totalPages);
     const startIndex = (currentPage - 1) * perPage;
     return {
@@ -1499,10 +1560,10 @@ export default function OfficeStaffDashboard({ mode }) {
       currentPage,
       startIndex,
       endIndex: startIndex + perPage,
-      totalCount: list.length,
-      items: list.slice(startIndex, startIndex + perPage)
+      totalCount: invoiceTotalCount,
+      items: list
     };
-  }, [displayedInvoices, invoicePage]);
+  }, [displayedInvoices, invoicePage, invoiceTotalCount]);
 
   const displayedLabOrders = useMemo(() => {
     const list = Array.isArray(labOrders) ? labOrders : [];
@@ -2125,12 +2186,12 @@ export default function OfficeStaffDashboard({ mode }) {
                     value={invoiceQuery}
                     onChange={(e) => setInvoiceQuery(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') refreshInvoices();
+                      if (e.key === 'Enter') refreshInvoices({ page: 1 });
                     }}
                     placeholder="Search patient, invoice ID, appointment ID, doctor, or service"
                   />
                 </div>
-                <button type="button" className="office-btn primary" onClick={refreshInvoices} disabled={invoiceLoading || !user}>
+                <button type="button" className="office-btn primary" onClick={() => refreshInvoices({ page: 1 })} disabled={invoiceLoading || !user}>
                   <Search size={16} />
                   Search
                 </button>
@@ -2264,7 +2325,7 @@ export default function OfficeStaffDashboard({ mode }) {
                       placeholder="Search patient, invoice ID, appointment ID, doctor, or service"
                     />
                   </div>
-                  <button type="button" className="office-btn primary" onClick={refreshInvoices} disabled={invoiceLoading || !user}>
+                  <button type="button" className="office-btn primary" onClick={() => refreshInvoices({ page: 1 })} disabled={invoiceLoading || !user}>
                     Search
                   </button>
                 </div>
@@ -2319,19 +2380,19 @@ export default function OfficeStaffDashboard({ mode }) {
                   <div className="office-subtitle">Select to view details</div>
                 </div>
                 <div className="office-row">
-                  <select className="office-select" value={invoiceStatus} onChange={(e) => setInvoiceStatus(e.target.value)}>
+                  <select className="office-select" value={invoiceStatus} onChange={(e) => { const value = e.target.value; setInvoiceStatus(value); refreshInvoices({ page: 1, status: value }); }}>
                     <option value="All">All</option>
                     <option value="Draft">Draft</option>
                     <option value="Ready">Ready</option>
                     <option value="Paid">Paid</option>
                     <option value="Cancelled">Cancelled</option>
                   </select>
-                  <select className="office-select" value={invoiceRange} onChange={(e) => setInvoiceRange(e.target.value)}>
+                  <select className="office-select" value={invoiceRange} onChange={(e) => { const value = e.target.value; setInvoiceRange(value); refreshInvoices({ page: 1, range: value }); }}>
                     <option value="All">All Dates</option>
                     <option value="Today">Today</option>
                     <option value="Week">This Week</option>
                   </select>
-                  <button type="button" className="office-btn" onClick={refreshInvoices} disabled={invoiceLoading || !user}>
+                  <button type="button" className="office-btn" onClick={() => refreshInvoices({ page: invoicePage })} disabled={invoiceLoading || !user}>
                     <RefreshCw size={16} />
                     Refresh
                   </button>
@@ -2453,7 +2514,7 @@ export default function OfficeStaffDashboard({ mode }) {
                       type="button"
                       aria-label="Previous page"
                       disabled={pagedDisplayedInvoices.currentPage <= 1 || invoiceLoading}
-                      onClick={() => setInvoicePage(p => Math.max(1, p - 1))}
+                      onClick={() => { const next = Math.max(1, pagedDisplayedInvoices.currentPage - 1); setInvoicePage(next); refreshInvoices({ page: next }); }}
                       style={{
                         width: 34, height: 34,
                         borderRadius: 9,
@@ -2474,7 +2535,7 @@ export default function OfficeStaffDashboard({ mode }) {
                       type="button"
                       aria-label="Next page"
                       disabled={pagedDisplayedInvoices.currentPage >= pagedDisplayedInvoices.totalPages || invoiceLoading}
-                      onClick={() => setInvoicePage(p => Math.min(pagedDisplayedInvoices.totalPages, p + 1))}
+                      onClick={() => { const next = Math.min(pagedDisplayedInvoices.totalPages, pagedDisplayedInvoices.currentPage + 1); setInvoicePage(next); refreshInvoices({ page: next }); }}
                       style={{
                         width: 34, height: 34,
                         borderRadius: 9,
@@ -2726,17 +2787,17 @@ export default function OfficeStaffDashboard({ mode }) {
               <div className="office-kpi">
                 <div className="office-kpi-k">Consultation Payments</div>
                 <div className="office-kpi-v">{paymentHistorySummary.consultationCount}</div>
-                <div className="office-kpi-meta">Onsite consultation receipts</div>
+                <div className="office-kpi-meta">Onsite receipts on this page</div>
               </div>
               <div className="office-kpi">
                 <div className="office-kpi-k">Video Consultation</div>
                 <div className="office-kpi-v">{paymentHistorySummary.videoCount}</div>
-                <div className="office-kpi-meta">Online consult collections</div>
+                <div className="office-kpi-meta">Online receipts on this page</div>
               </div>
               <div className="office-kpi">
                 <div className="office-kpi-k">Lab Payments</div>
                 <div className="office-kpi-v">{paymentHistorySummary.labCount}</div>
-                <div className="office-kpi-meta">Pre-exam cashier payments</div>
+                <div className="office-kpi-meta">Lab receipts on this page</div>
               </div>
             </div>
 
@@ -2754,9 +2815,10 @@ export default function OfficeStaffDashboard({ mode }) {
                       placeholder="Search patient, receipt, reference, cashier, or source"
                       value={paymentsQuery}
                       onChange={(e) => setPaymentsQuery(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') refreshPaymentHistory({ page: 1 }); }}
                     />
                   </div>
-                  <select className="office-select" value={paymentsSource} onChange={(e) => setPaymentsSource(e.target.value)}>
+                  <select className="office-select" value={paymentsSource} onChange={(e) => { const value = e.target.value; setPaymentsSource(value); refreshPaymentHistory({ page: 1, source: value }); }}>
                     <option value="All">All Sources</option>
                     <option value="Onsite Consultation">Onsite Consultation</option>
                     <option value="Video Consultation">Video Consultation</option>
@@ -2764,7 +2826,7 @@ export default function OfficeStaffDashboard({ mode }) {
                     <option value="Radiology">Radiology</option>
                     <option value="Manual Invoice">Manual Invoice</option>
                   </select>
-                  <button type="button" className="office-btn ghost" onClick={refreshPaymentHistory} disabled={paymentHistoryLoading}>
+                  <button type="button" className="office-btn ghost" onClick={() => refreshPaymentHistory({ page: 1 })} disabled={paymentHistoryLoading}>
                     <RefreshCw size={16} />
                     Refresh
                   </button>
@@ -2782,7 +2844,7 @@ export default function OfficeStaffDashboard({ mode }) {
                     type="button"
                     aria-label="Previous page"
                     className="office-btn ghost"
-                    onClick={() => setPaymentsPage((p) => Math.max(1, p - 1))}
+                    onClick={() => { const next = Math.max(1, pagedPaymentHistory.currentPage - 1); setPaymentsPage(next); refreshPaymentHistory({ page: next }); }}
                     disabled={paymentHistoryLoading || pagedPaymentHistory.currentPage <= 1}
                     style={{ width: 34, height: 34, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
                     title="Previous page"
@@ -2796,7 +2858,7 @@ export default function OfficeStaffDashboard({ mode }) {
                     type="button"
                     aria-label="Next page"
                     className="office-btn ghost"
-                    onClick={() => setPaymentsPage((p) => Math.min(pagedPaymentHistory.totalPages, p + 1))}
+                    onClick={() => { const next = Math.min(pagedPaymentHistory.totalPages, pagedPaymentHistory.currentPage + 1); setPaymentsPage(next); refreshPaymentHistory({ page: next }); }}
                     disabled={paymentHistoryLoading || pagedPaymentHistory.currentPage >= pagedPaymentHistory.totalPages}
                     style={{ width: 34, height: 34, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
                     title="Next page"
@@ -4478,7 +4540,6 @@ export default function OfficeStaffDashboard({ mode }) {
                                 <div style={{ position: 'relative' }}>
                                   <select className="office-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} style={{ paddingLeft: '40px', width: '100%' }}>
                                     <option value="Cash">Cash</option>
-                                    <option value="GCash" disabled>GCash (Unavailable)</option>
                                     <option value="Card">Card</option>
                                   </select>
                                   <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>

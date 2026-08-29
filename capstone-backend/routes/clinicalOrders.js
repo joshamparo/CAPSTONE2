@@ -831,6 +831,7 @@ router.patch('/:id', async (req, res) => {
         service: current.service || null,
         kind: current.kind || null,
         amount: Number(resolveClinicalServicePricing({ kind: current.kind, service: current.service }).unitPrice || 0),
+        paymentAmount: Number(req.body?.paymentAmount ?? req.body?.amountReceived ?? 0),
         method: paymentMethod || null,
         reference: String(paymentReference || '').trim() || null,
         receivedBy: actorFromHeaders.actorEmail || null

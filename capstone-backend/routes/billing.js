@@ -594,6 +594,29 @@ router.get('/consultation-fee-preview', async (req, res) => {
 
 router.use(requireRole([...STAFF_ROLE_SET]));
 
+router.get('/invoices/summary', async (req, res) => {
+  try {
+    await ensureBillingTablesExist();
+    const dateRaw = String(req.query.date || '').trim();
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateRaw);
+    const now = new Date();
+    const manilaNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+    const year = match ? Number(match[1]) : manilaNow.getUTCFullYear();
+    const month = match ? Number(match[2]) : manilaNow.getUTCMonth() + 1;
+    const day = match ? Number(match[3]) : manilaNow.getUTCDate();
+    const start = new Date(Date.UTC(year, month - 1, day) - 8 * 60 * 60 * 1000);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    const [todayCount, readyCount, openCount] = await Promise.all([
+      prisma.billing_invoices.count({ where: { created_at: { gte: start, lt: end } } }),
+      prisma.billing_invoices.count({ where: { status: 'Ready' } }),
+      prisma.billing_invoices.count({ where: { status: { notIn: ['Paid', 'Cancelled', 'Voided'] } } })
+    ]);
+    res.json({ todayCount, readyCount, openCount });
+  } catch (err) {
+    res.status(500).json({ message: String(err?.message || 'Failed to load invoice summary') });
+  }
+});
+
 async function resolveDoctorUuidForFees(req, fallbackDoctorUuid) {
   const role = String(req.headers['x-user-role'] || '').trim().toLowerCase();
   const linked = String(req.headers['x-linked-doctor-id'] || '').trim();
@@ -608,7 +631,7 @@ router.get('/invoices', async (req, res) => {
     await ensureBillingAdjustmentsTableExist().catch(() => {});
     await ensureBillingHmoClaimsTableExist().catch(() => {});
 
-    const { status, patientId, q, take, skip } = req.query;
+    const { status, patientId, q, take, skip, from, to } = req.query;
     const limit = parseLimit(take, { min: 1, max: 200, fallback: 50 });
     const offset = parseOffset(skip, { min: 0, max: 5000, fallback: 0 });
 
@@ -616,6 +639,10 @@ router.get('/invoices', async (req, res) => {
     const st = String(status || '').trim();
     if (st) andFilters.push({ status: st });
     if (patientId) andFilters.push({ patient_id: String(patientId) });
+    const fromDate = from ? new Date(String(from)) : null;
+    const toDate = to ? new Date(String(to)) : null;
+    if (fromDate && !Number.isNaN(fromDate.getTime())) andFilters.push({ created_at: { gte: fromDate } });
+    if (toDate && !Number.isNaN(toDate.getTime())) andFilters.push({ created_at: { lt: toDate } });
 
     if (q) {
       const query = String(q).trim();
@@ -646,11 +673,36 @@ router.get('/invoices', async (req, res) => {
           select: { id: true },
           take: 50
         }).catch(() => []);
-        const appointmentIds = appointmentHits.map((h) => h.id);
+        const doctorHits = await prisma.doctors.findMany({
+          where: {
+            OR: [
+              { first_name: { contains: query, mode: 'insensitive' } },
+              { last_name: { contains: query, mode: 'insensitive' } },
+              { email: { contains: query, mode: 'insensitive' } },
+              { specialization: { contains: query, mode: 'insensitive' } }
+            ]
+          },
+          select: { id: true },
+          take: 50
+        }).catch(() => []);
+        const doctorAppointmentHits = doctorHits.length
+          ? await prisma.appointments.findMany({
+              where: { doctor_uuid: { in: doctorHits.map((doctor) => doctor.id) } },
+              select: { id: true },
+              take: 100
+            }).catch(() => [])
+          : [];
+        const itemHits = await prisma.billing_invoice_items.findMany({
+          where: { description: { contains: query, mode: 'insensitive' } },
+          select: { invoice_id: true },
+          take: 100
+        }).catch(() => []);
+        const appointmentIds = [...appointmentHits, ...doctorAppointmentHits].map((h) => h.id);
 
         const searchOr = [];
         if (patientIds.length) searchOr.push({ patient_id: { in: patientIds } });
         if (appointmentIds.length) searchOr.push({ appointment_id: { in: appointmentIds } });
+        if (itemHits.length) searchOr.push({ id: { in: itemHits.map((hit) => hit.invoice_id) } });
         if (/^\d+$/.test(query)) {
           const rawId = BigInt(query);
           searchOr.push({ id: rawId });
@@ -664,7 +716,9 @@ router.get('/invoices', async (req, res) => {
 
     const where = andFilters.length === 0 ? undefined : andFilters.length === 1 ? andFilters[0] : { AND: andFilters };
 
-    const invoices = await prisma.billing_invoices.findMany({
+    const [totalCount, invoices] = await Promise.all([
+      prisma.billing_invoices.count({ where }),
+      prisma.billing_invoices.findMany({
       where,
       include: {
         items: true,
@@ -676,7 +730,8 @@ router.get('/invoices', async (req, res) => {
       orderBy: { created_at: 'desc' },
       take: limit,
       skip: offset
-    });
+      })
+    ]);
 
     const appointmentIds = invoices
       .map((inv) => (inv.appointment_id != null ? String(inv.appointment_id) : ''))
@@ -756,6 +811,9 @@ router.get('/invoices', async (req, res) => {
       };
     });
 
+    if (String(req.query.withTotal || '') === '1') {
+      return res.json(serialize({ items: normalized, totalCount, take: limit, skip: offset }));
+    }
     res.json(serialize(normalized));
   } catch (err) {
     const code = Number(err && err.statusCode) || 500;
@@ -843,7 +901,8 @@ router.get('/invoices/:id', async (req, res) => {
       })
     );
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    const message = String(err?.message || 'Failed to load invoice');
+    res.status(Number(err?.statusCode) || 500).json({ message });
   }
 });
 
@@ -943,7 +1002,7 @@ router.patch('/invoices/:id', async (req, res) => {
   try {
     await ensureBillingTablesExist();
     const role = String(req.headers['x-user-role'] || '').toLowerCase();
-    if (role !== 'doctor_secretary' && role !== 'admin' && role !== 'doctor') return res.status(401).json({ message: 'Unauthorized' });
+    if (role !== 'doctor_secretary' && role !== 'admin' && role !== 'doctor' && role !== 'cashier') return res.status(401).json({ message: 'Unauthorized' });
 
     const idRaw = String(req.params.id || '').trim();
     if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid id' });
@@ -970,7 +1029,8 @@ router.patch('/invoices/:id', async (req, res) => {
 
     res.json(serialize(updated));
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    const message = String(err?.message || 'Failed to update invoice status');
+    res.status(Number(err?.statusCode) || 500).json({ message });
   }
 });
 
@@ -3734,16 +3794,60 @@ router.get('/payments', async (req, res) => {
     const { invoiceId, take, skip } = req.query;
     const limit = parseLimit(take, { min: 1, max: 200, fallback: 50 });
     const offset = parseOffset(skip, { min: 0, max: 5000, fallback: 0 });
+    const query = String(req.query.q || '').trim();
+    const source = String(req.query.source || '').trim();
 
-    const where = {};
+    const filters = [];
     if (invoiceId) {
       const raw = String(invoiceId).trim();
       if (!/^\d+$/.test(raw)) return res.status(400).json({ message: 'Invalid invoiceId' });
-      where.invoice_id = BigInt(raw);
+      filters.push({ invoice_id: BigInt(raw) });
     }
+    if (query) {
+      const or = [
+        { reference: { contains: query, mode: 'insensitive' } },
+        { received_by: { contains: query, mode: 'insensitive' } },
+        { method: { contains: query, mode: 'insensitive' } },
+        { invoices: { is: { notes: { contains: query, mode: 'insensitive' } } } },
+        { invoices: { is: { items: { some: { description: { contains: query, mode: 'insensitive' } } } } } },
+        { invoices: { is: { patients: { is: { OR: [
+          { first_name: { contains: query, mode: 'insensitive' } },
+          { last_name: { contains: query, mode: 'insensitive' } },
+          { email: { contains: query, mode: 'insensitive' } }
+        ] } } } } }
+      ];
+      if (/^\d+$/.test(query)) {
+        or.push({ id: BigInt(query) }, { invoice_id: BigInt(query) });
+      }
+      filters.push({ OR: or });
+    }
+    const sourceLower = source.toLowerCase();
+    if (sourceLower && sourceLower !== 'all') {
+      if (sourceLower === 'video consultation') filters.push({ invoices: { is: { notes: { contains: 'video consultation', mode: 'insensitive' } } } });
+      else if (sourceLower === 'lab') filters.push({ invoices: { is: { notes: { contains: 'lab', mode: 'insensitive' } } } });
+      else if (sourceLower === 'radiology') filters.push({ invoices: { is: { notes: { contains: 'radiology', mode: 'insensitive' } } } });
+      else if (sourceLower === 'onsite consultation') filters.push({ invoices: { is: { AND: [
+        { OR: [
+          { appointment_id: { not: null } },
+          { notes: { contains: 'onsite', mode: 'insensitive' } },
+          { notes: { contains: 'approvalrequest', mode: 'insensitive' } }
+        ] },
+        { NOT: { notes: { contains: 'video consultation', mode: 'insensitive' } } }
+      ] } } });
+      else if (sourceLower === 'manual invoice') filters.push({ invoices: { is: { AND: [
+        { appointment_id: null },
+        { NOT: { notes: { contains: 'lab', mode: 'insensitive' } } },
+        { NOT: { notes: { contains: 'radiology', mode: 'insensitive' } } },
+        { NOT: { notes: { contains: 'video consultation', mode: 'insensitive' } } }
+      ] } } });
+    }
+    const where = filters.length === 0 ? undefined : filters.length === 1 ? filters[0] : { AND: filters };
 
-    const payments = await prisma.billing_payments.findMany({
-      where: Object.keys(where).length ? where : undefined,
+    const [totalCount, totalAggregate, payments] = await Promise.all([
+      prisma.billing_payments.count({ where }),
+      prisma.billing_payments.aggregate({ where, _sum: { amount: true } }),
+      prisma.billing_payments.findMany({
+      where,
       include: {
         invoices: {
           include: {
@@ -3757,7 +3861,8 @@ router.get('/payments', async (req, res) => {
       orderBy: { created_at: 'desc' },
       take: limit,
       skip: offset
-    });
+      })
+    ]);
 
     const normalized = (Array.isArray(payments) ? payments : []).map((payment) => {
       const invoice = payment.invoices || null;
@@ -3784,6 +3889,15 @@ router.get('/payments', async (req, res) => {
       };
     });
 
+    if (String(req.query.withTotal || '') === '1') {
+      return res.json(serialize({
+        items: normalized,
+        totalCount,
+        totalCollected: toMoney(totalAggregate?._sum?.amount || 0),
+        take: limit,
+        skip: offset
+      }));
+    }
     res.json(serialize(normalized));
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
