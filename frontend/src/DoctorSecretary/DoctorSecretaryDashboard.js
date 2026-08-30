@@ -362,6 +362,7 @@ export default function DoctorSecretaryDashboard() {
   const [assignForm, setAssignForm] = useState({ doctorId: '', time: '', status: 'Confirmed' });
   const [assignSaving, setAssignSaving] = useState(false);
   const [assignError, setAssignError] = useState('');
+  const [assignSlotNotice, setAssignSlotNotice] = useState('');
   const [assignSlots, setAssignSlots] = useState([]);
   const [assignSlotsLoading, setAssignSlotsLoading] = useState(false);
 
@@ -909,7 +910,11 @@ export default function DoctorSecretaryDashboard() {
       }
 
       const doctors = Array.isArray(list) ? list : [];
-      setOnsiteDoctors(doctors.filter((doctor) => String(doctor.id || doctor.uuid || '') === String(linkedDoctorId)));
+      const linkedOnly = doctors.filter((doctor) => String(doctor.id || doctor.uuid || '') === String(linkedDoctorId));
+      if (!linkedOnly.length && linkedDoctorId && linkedDoctor) {
+        linkedOnly.push({ id: linkedDoctorId, name: linkedDoctor.name, status: linkedDoctor.status, specialization: linkedDoctor.specialization });
+      }
+      setOnsiteDoctors(linkedOnly);
     } catch (e) {
       setOnsiteDoctors([]);
       setOnsiteDoctorsError(String(e.message || 'Failed to load doctors list'));
@@ -948,6 +953,7 @@ export default function DoctorSecretaryDashboard() {
       return;
     }
     setAssignSlotsLoading(true);
+    setAssignError('');
     try {
       const d = new Date(date);
       const y = d.getFullYear();
@@ -958,6 +964,7 @@ export default function DoctorSecretaryDashboard() {
       setAssignSlots(Array.isArray(data?.slots) ? data.slots : []);
     } catch (e) {
       setAssignSlots([]);
+      setAssignError(String(e?.message || 'Unable to load the linked doctor’s available slots.'));
     } finally {
       setAssignSlotsLoading(false);
     }
@@ -967,6 +974,7 @@ export default function DoctorSecretaryDashboard() {
     if (!apt?.id) return;
     setAssignTarget(apt);
     setAssignError('');
+    setAssignSlotNotice('');
     setAssignSlots([]);
 
     let initialTime = '';
@@ -995,7 +1003,7 @@ export default function DoctorSecretaryDashboard() {
     }
 
     setAssignForm({
-      doctorId: '',
+      doctorId: linkedDoctorId || '',
       time: initialTime,
       status: 'Confirmed'
     });
@@ -1007,6 +1015,7 @@ export default function DoctorSecretaryDashboard() {
     setAssignTarget(null);
     setAssignSaving(false);
     setAssignError('');
+    setAssignSlotNotice('');
   };
 
   const submitAssign = async () => {
@@ -1024,6 +1033,8 @@ export default function DoctorSecretaryDashboard() {
       const time = String(assignForm.time || '').trim();
       if (!time) throw new Error('Select a time.');
       if (!/^\d{2}:\d{2}$/.test(time)) throw new Error('Enter a valid time (HH:MM).');
+      const availableTimes = (Array.isArray(assignSlots) ? assignSlots : []).map((slot) => String(slot?.time || '').slice(0, 5));
+      if (!availableTimes.includes(time)) throw new Error('Select one of the linked doctor’s currently available time slots.');
 
       await fetchJson(`/api/appointments/${encodeURIComponent(String(assignTarget.id))}`, {
         apiBase: API_BASE,
@@ -1189,6 +1200,23 @@ export default function DoctorSecretaryDashboard() {
       refreshAssignSlots(assignForm.doctorId, assignTarget.appointmentDate).catch(() => {});
     }
   }, [assignModalOpen, assignForm.doctorId, assignTarget?.appointmentDate]);
+
+  useEffect(() => {
+    if (!assignModalOpen || assignSlotsLoading || !assignForm.doctorId) return;
+    const availableTimes = (Array.isArray(assignSlots) ? assignSlots : []).map((slot) => String(slot?.time || '').slice(0, 5)).filter(Boolean);
+    if (!availableTimes.length) {
+      setAssignSlotNotice('The linked doctor has no available slots on this date. Update Doctor Availability or choose another booking date.');
+      setAssignForm((current) => ({ ...current, time: '' }));
+      return;
+    }
+    const requestedTime = String(assignForm.time || '').slice(0, 5);
+    if (!availableTimes.includes(requestedTime)) {
+      setAssignSlotNotice('The patient’s requested time is unavailable for the linked doctor. Select a replacement time below.');
+      setAssignForm((current) => ({ ...current, time: availableTimes[0] }));
+    } else {
+      setAssignSlotNotice('The requested time is available for the linked doctor.');
+    }
+  }, [assignModalOpen, assignSlots, assignSlotsLoading, assignForm.doctorId]);
 
   useEffect(() => {
     if (user) {
@@ -2681,6 +2709,7 @@ export default function DoctorSecretaryDashboard() {
                 </div>
 
                 {assignError && <div style={{ color: '#ef4444', background: '#fef2f2', padding: '12px', borderRadius: '12px', fontSize: '14px', fontWeight: '600', marginBottom: 20, border: '1px solid #fee2e2' }}>{assignError}</div>}
+                {assignSlotNotice && <div style={{ color: assignSlots.length ? '#0369a1' : '#b45309', background: assignSlots.length ? '#f0f9ff' : '#fffbeb', padding: '12px', borderRadius: '12px', fontSize: '14px', fontWeight: '600', marginBottom: 20, border: `1px solid ${assignSlots.length ? '#bae6fd' : '#fde68a'}` }}>{assignSlotNotice}</div>}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -2704,10 +2733,8 @@ export default function DoctorSecretaryDashboard() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <label style={{ color: '#475569', fontSize: '14px', fontWeight: '700' }}>Time</label>
-                      {assignTarget.appointmentTime || assignTarget.appointment_time ? (
-                        <div style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', fontWeight: '700', color: '#0f172a', background: '#f8fafc' }}>
-                          {fmtTime(assignTarget.appointmentTime || assignTarget.appointment_time)}
-                        </div>
+                      {assignSlotsLoading ? (
+                        <div style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', color: '#64748b', background: '#f8fafc' }}>Loading available times…</div>
                       ) : assignSlots && assignSlots.length > 0 ? (
                         <select
                           style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', fontWeight: '600', color: '#1e293b', background: '#ffffff' }}
@@ -2716,18 +2743,13 @@ export default function DoctorSecretaryDashboard() {
                         >
                           <option value="">Select time slot</option>
                           {assignSlots.map((s) => (
-                            <option key={s.time} value={s.time} disabled={!s.available}>
-                              {s.time} {!s.available ? '(Full/Blocked)' : ''}
+                            <option key={s.time} value={String(s.time).slice(0, 5)}>
+                              {fmtTime(String(s.time).slice(0, 5))}{Number(s.remainingCapacity) > 0 ? ` (${s.remainingCapacity} slot${Number(s.remainingCapacity) === 1 ? '' : 's'} left)` : ''}
                             </option>
                           ))}
                         </select>
                       ) : (
-                        <input 
-                          type="time" 
-                          style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', fontWeight: '600', color: '#1e293b' }}
-                          value={assignForm.time} 
-                          onChange={(e) => setAssignForm((v) => ({ ...v, time: e.target.value }))} 
-                        />
+                        <div style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #fecaca', color: '#b91c1c', background: '#fef2f2' }}>No available times</div>
                       )}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -2763,8 +2785,8 @@ export default function DoctorSecretaryDashboard() {
                   <button 
                     type="button"
                     onClick={submitAssign} 
-                    disabled={assignSaving}
-                    style={{ flex: 1, padding: '14px', borderRadius: '12px', border: 'none', background: 'var(--brand-primary-gradient)', color: '#ffffff', fontSize: '15px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(249, 115, 22, 0.2)' }}
+                    disabled={assignSaving || assignSlotsLoading || !assignForm.doctorId || !assignForm.time || assignSlots.length === 0}
+                    style={{ flex: 1, padding: '14px', borderRadius: '12px', border: 'none', background: 'var(--brand-primary-gradient)', color: '#ffffff', fontSize: '15px', fontWeight: '700', cursor: assignSaving || assignSlotsLoading || !assignForm.time || assignSlots.length === 0 ? 'not-allowed' : 'pointer', opacity: assignSaving || assignSlotsLoading || !assignForm.time || assignSlots.length === 0 ? 0.6 : 1, boxShadow: '0 4px 6px -1px rgba(249, 115, 22, 0.2)' }}
                   >
                     {assignSaving ? 'Assigning...' : 'Confirm & Assign'}
                   </button>
