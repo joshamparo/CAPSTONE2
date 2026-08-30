@@ -8421,28 +8421,28 @@ function NurseDashboard() {
 
                         <div className="recent-orders-section">
                             <div className="order-card">
-                                <div className="order-card-header">
+                                <div className="order-card-header med-admin-log-header">
                                     <h3>Administration Log</h3>
-                                    <span className="badge-count">{medAdminLogs.length}</span>
+                                    <span className="badge-count" aria-label={`${medAdminLogs.length} administration log entries`}>{medAdminLogs.length}</span>
                                 </div>
-                                <div className="recent-orders-list">
+                                <div className="med-admin-log-list">
                                     {medAdminLogs.length === 0 ? (
                                         <div className="empty-state-small">No medication administration entries yet.</div>
                                     ) : (
                                         medAdminLogs.map((log) => (
-                                            <div key={log.id} className="recent-order-item">
-                                                <div className="recent-order-main">
-                                                    <div className="recent-order-info">
-                                                        <div className="recent-order-type">{log.medication_name || log.medicationName}</div>
-                                                        <div className="recent-order-item-text">{log.patient_name || log.patientName || 'Unknown patient'}</div>
+                                            <div key={log.id} className="med-admin-log-item">
+                                                <div className="med-admin-log-main">
+                                                    <div className="med-admin-log-info">
+                                                        <div className="med-admin-log-medication">{log.medication_name || log.medicationName || 'Unknown medication'}</div>
+                                                        <div className="med-admin-log-patient">{log.patient_name || log.patientName || 'Unknown patient'}</div>
                                                     </div>
-                                                    <span className={`status-pill ${String(log.status || '').toLowerCase() === 'administered' ? 'resolved' : 'submitted'}`}>
-                                                        {log.status}
+                                                    <span className={`med-admin-log-status ${String(log.status || 'unknown').toLowerCase()}`}>
+                                                        {log.status || 'Unknown'}
                                                     </span>
                                                 </div>
-                                                <div className="recent-order-meta">
-                                                    <span>{log.administered_by_name || 'Nurse'}</span>
-                                                    <span>{log.created_at ? new Date(log.created_at).toLocaleString() : ''}</span>
+                                                <div className="med-admin-log-meta">
+                                                    <span>Recorded by {log.administered_by_name || 'Nurse'}</span>
+                                                    {log.created_at ? <time dateTime={log.created_at}>{new Date(log.created_at).toLocaleString()}</time> : null}
                                                 </div>
                                             </div>
                                         ))
