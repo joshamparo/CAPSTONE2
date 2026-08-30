@@ -2612,6 +2612,94 @@ function NurseDashboard() {
     });
   };
 
+  const handlePrintPatientRecords = () => {
+    const printWindow = window.open('', '_blank', 'width=1200,height=800');
+    if (!printWindow) {
+      setSuccessMessage('The print window was blocked. Please allow pop-ups for this site and try again.');
+      setModalType('error');
+      setShowSuccessModal(true);
+      return;
+    }
+
+    const escapePrintText = (value) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+    const displayDate = (value, fallback = 'Not recorded') => {
+      if (!value) return fallback;
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? fallback : parsed.toLocaleDateString();
+    };
+    const displayName = (patient) => (
+      `${patient.firstName || ''} ${patient.middleName || ''} ${patient.lastName || ''}`
+        .replace(/\s+/g, ' ')
+        .trim() || 'Unknown patient'
+    );
+    const preparedBy = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Nursing Department';
+    const logoUrl = `${window.location.origin}/images/pgh%20logo.png`;
+    const rows = patientsList.length > 0
+      ? patientsList.map((patient) => `
+          <tr>
+            <td>${escapePrintText(patient._id || 'Not assigned')}</td>
+            <td>
+              <strong>${escapePrintText(displayName(patient))}</strong>
+              <span>DOB: ${escapePrintText(displayDate(patient.dateOfBirth))}</span>
+              <span>Sex: ${escapePrintText(patient.sex || 'Not recorded')} | Blood: ${escapePrintText(patient.bloodType || 'Not recorded')}</span>
+            </td>
+            <td>
+              <span>${escapePrintText(patient.contactNumber || 'No contact number')}</span>
+              <span>${escapePrintText(patient.email || 'No email address')}</span>
+              <span>${escapePrintText(patient.address || 'No address recorded')}</span>
+            </td>
+            <td>
+              <strong>${escapePrintText(patient.diagnosis || 'No diagnosis recorded')}</strong>
+              <span>Allergies: ${escapePrintText(patient.allergies || 'None recorded')}</span>
+              <span>Status: ${escapePrintText(patient.admissionStatus || 'Not recorded')}</span>
+            </td>
+            <td>
+              <strong>${escapePrintText(patient.wardNumber || 'Outpatient / Unassigned')}</strong>
+              <span>Attending: ${escapePrintText(patient.attendingDoctor || 'Not assigned')}</span>
+              <span>Admitted: ${escapePrintText(displayDate(patient.admissionDate, 'N/A'))}</span>
+            </td>
+          </tr>`).join('')
+      : '<tr><td colspan="5" class="empty">No patient records are currently available.</td></tr>';
+
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html><head><meta charset="utf-8"><title>Patient Records Master List</title>
+      <style>
+        @page { size: A4 landscape; margin: 12mm; }
+        * { box-sizing: border-box; }
+        body { margin: 0; color: #0f172a; font-family: Arial, Helvetica, sans-serif; }
+        header { display: flex; align-items: center; gap: 14px; padding-bottom: 12px; border-bottom: 3px solid #ea580c; }
+        header img { width: 58px; height: 58px; object-fit: contain; }
+        .hospital { color: #c2410c; font-size: 18pt; font-weight: 800; }
+        .system { margin-top: 2px; color: #64748b; font-size: 8pt; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+        h1 { margin: 7px 0 0; font-size: 13pt; }
+        .meta { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; color: #475569; font-size: 8pt; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 7.5pt; }
+        thead { display: table-header-group; }
+        tr { break-inside: avoid; }
+        th, td { padding: 7px; border: 1px solid #cbd5e1; vertical-align: top; overflow-wrap: anywhere; }
+        th { background: #f1f5f9; color: #334155; text-align: left; text-transform: uppercase; print-color-adjust: exact; }
+        th:first-child { width: 13%; } th:nth-child(2) { width: 21%; } th:nth-child(3) { width: 23%; } th:nth-child(4) { width: 23%; } th:nth-child(5) { width: 20%; }
+        td strong, td span { display: block; line-height: 1.35; }
+        td span { margin-top: 2px; color: #475569; }
+        .empty { padding: 28px; color: #64748b; text-align: center; }
+        footer { margin-top: 10px; padding-top: 7px; border-top: 1px solid #cbd5e1; color: #64748b; font-size: 7pt; text-align: center; }
+      </style></head><body>
+        <header><img src="${escapePrintText(logoUrl)}" alt=""><div><div class="hospital">Pascual General Hospital</div><div class="system">Pascualinga Medical Link</div><h1>Patient Records Master List</h1></div></header>
+        <div class="meta"><span><strong>Generated:</strong> ${escapePrintText(new Date().toLocaleString())}</span><span><strong>Prepared by:</strong> ${escapePrintText(preparedBy)}</span><span><strong>Total records:</strong> ${patientsList.length}</span></div>
+        <table><thead><tr><th>Patient ID</th><th>Patient / Demographics</th><th>Contact Information</th><th>Clinical Information</th><th>Location / Attending</th></tr></thead><tbody>${rows}</tbody></table>
+        <footer>Confidential medical information — for authorized hospital use only.</footer>
+        <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 250); });<\/script>
+      </body></html>`);
+    printWindow.document.close();
+    printWindow.focus();
+  };
+
   const [patientSearch, setPatientSearch] = useState("");
   const [patientGenderFilter, setPatientGenderFilter] = useState("All");
   const [patientPage, setPatientPage] = useState(1);
@@ -7381,7 +7469,7 @@ function NurseDashboard() {
                                 }}>
                                     <Plus size={18} /> Add Patient
                                 </button>
-                                <button className="btn-primary-action" onClick={() => handlePrint('patient-records')}>
+                                <button className="btn-primary-action" onClick={handlePrintPatientRecords}>
                                     <Printer size={18} /> Print Records
                                 </button>
                                 <button className="btn-primary-action" onClick={() => refreshPatientsList()}>
