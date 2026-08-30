@@ -523,16 +523,18 @@ function AdminDashboard() {
     setDoctorAvailSuccess('');
     try {
       const effectiveTimeoutMs = Number(timeoutMs) > 0 ? Number(timeoutMs) : 15000;
-      const exceptions = await fetchJson(
-        `/api/doctors/${encodeURIComponent(targetDoctorId)}/availability/exceptions?mode=${encodeURIComponent(mode)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-        { apiBase: API_BASE, timeoutMs: effectiveTimeoutMs, headers: { ...getAuthHeaders(), 'x-user-role': 'admin' } }
-      );
+      const requestOptions = { apiBase: API_BASE, timeoutMs: effectiveTimeoutMs, headers: { ...getAuthHeaders(), 'x-user-role': 'admin' } };
+      const [rules, exceptions, dayOffData] = await Promise.all([
+        fetchJson(`/api/doctors/${encodeURIComponent(targetDoctorId)}/availability/rules?mode=${encodeURIComponent(mode)}`, requestOptions),
+        fetchJson(`/api/doctors/${encodeURIComponent(targetDoctorId)}/availability/exceptions?mode=${encodeURIComponent(mode)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, requestOptions),
+        fetchJson(`/api/doctors/${encodeURIComponent(targetDoctorId)}/availability/day-offs?mode=${encodeURIComponent(mode)}`, requestOptions)
+      ]);
       if (seq !== doctorAvailReqSeqRef.current) return;
 
       const next = {
-        rules: [],
+        rules: Array.isArray(rules) ? rules : [],
         exceptions: Array.isArray(exceptions) ? exceptions : [],
-        dayOffs: [],
+        dayOffs: Array.isArray(dayOffData?.days) ? dayOffData.days : [],
         loadedAt: Date.now()
       };
 

@@ -1973,7 +1973,16 @@ router.post('/:id/triage/ai', requireRole(['admin', 'nurse', 'doctor']), async (
 // Secretary inbox: unassigned onsite appointments by specialization/department keyword.
 router.get('/unassigned', requireRole(['admin', 'doctor_secretary', 'staff']), async (req, res) => {
     try {
-        const specialization = String(req.query.specialization || '').trim();
+        let specialization = String(req.query.specialization || '').trim();
+        const requesterRole = String(req.headers['x-user-role'] || '').trim().toLowerCase();
+        if (requesterRole === 'doctor_secretary') {
+            const linkedDoctorId = String(req.headers['x-linked-doctor-id'] || '').trim();
+            if (!linkedDoctorId) return res.status(400).json({ message: 'Missing x-linked-doctor-id header' });
+            const linkedDoctor = await prisma.doctors.findUnique({ where: { id: linkedDoctorId }, select: { specialization: true } }).catch(() => null);
+            if (!linkedDoctor) return res.status(404).json({ message: 'Linked doctor not found' });
+            specialization = String(linkedDoctor.specialization || '').trim();
+            if (!specialization) return res.status(400).json({ message: 'Linked doctor has no specialization configured' });
+        }
         const date = String(req.query.date || '').trim(); // optional YYYY-MM-DD
         const take = Math.max(1, Math.min(300, parseInt(String(req.query.take || '120'), 10) || 120));
 

@@ -398,11 +398,14 @@ export default function DoctorSecretaryDashboard() {
       const now = new Date();
       const from = toDateInput(now);
       const to = toDateInput(new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000));
-      const exc = await fetchJson(
-        `/api/doctors/${encodeURIComponent(linkedDoctorId)}/availability/exceptions?mode=onsite&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-        { apiBase: API_BASE, headers }
-      );
-      setAvailabilityRules([]);
+      const [rules, exc] = await Promise.all([
+        fetchJson(`/api/doctors/${encodeURIComponent(linkedDoctorId)}/availability/rules?mode=onsite`, { apiBase: API_BASE, headers }),
+        fetchJson(
+          `/api/doctors/${encodeURIComponent(linkedDoctorId)}/availability/exceptions?mode=onsite&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+          { apiBase: API_BASE, headers }
+        )
+      ]);
+      setAvailabilityRules(Array.isArray(rules) ? rules : []);
       setAvailabilityExceptions(Array.isArray(exc) ? exc : []);
     } catch (e) {
       setAvailabilityRules([]);
@@ -2088,6 +2091,34 @@ export default function DoctorSecretaryDashboard() {
               </div>
 
               {availabilityError ? <div className="sec-error">{availabilityError}</div> : null}
+
+              <div className="sec-sales-panel" style={{ marginBottom: 16 }}>
+                <div className="sec-sales-head">
+                  <div><div className="sec-sales-title">Weekly Clinic Hours</div><div className="sec-sales-sub">Recurring onsite hours, slot length, and patient capacity for your linked doctor.</div></div>
+                  <button type="button" className="sec-btn primary" onClick={saveAvailabilityRules} disabled={availabilitySaving || !linkedDoctorId}><Save size={16} /> Save Schedule</button>
+                </div>
+                <div className="sec-form-grid" style={{ marginTop: 12 }}>
+                  <div className="sec-field"><label>Day</label><select className="sec-input" value={availabilityAddRule.dayOfWeek} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, dayOfWeek: Number(e.target.value) }))}>{['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, index) => <option key={day} value={index}>{day}</option>)}</select></div>
+                  <div className="sec-field"><label>Start</label><input className="sec-input" type="time" value={availabilityAddRule.startTime} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, startTime: e.target.value }))} /></div>
+                  <div className="sec-field"><label>End</label><input className="sec-input" type="time" value={availabilityAddRule.endTime} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, endTime: e.target.value }))} /></div>
+                  <div className="sec-field"><label>Slot Minutes</label><input className="sec-input" type="number" min="5" max="180" value={availabilityAddRule.slotMinutes} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, slotMinutes: e.target.value }))} /></div>
+                  <div className="sec-field"><label>Max Patients / Slot</label><input className="sec-input" type="number" min="1" max="20" value={availabilityAddRule.maxPerSlot} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, maxPerSlot: e.target.value }))} /></div>
+                  <div className="sec-field" style={{ justifyContent: 'flex-end' }}><button type="button" className="sec-btn ghost" onClick={addAvailabilityRule} disabled={availabilitySaving || !linkedDoctorId}>Add Weekly Rule</button></div>
+                </div>
+                <div className="sec-table-wrap" style={{ marginTop: 12 }}><table className="sec-table">
+                  <thead><tr><th>Day</th><th>Start</th><th>End</th><th>Slot</th><th>Capacity</th><th>Action</th></tr></thead>
+                  <tbody>{availabilityLoading ? <tr><td colSpan="6" className="sec-empty">Loading schedule…</td></tr> : availabilityRules.length === 0 ? <tr><td colSpan="6" className="sec-empty">No weekly clinic hours yet.</td></tr> : availabilityRules.map((rule) => (
+                    <tr key={String(rule.id)}>
+                      <td>{['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][Number(rule.dayOfWeek)] || '—'}</td>
+                      <td><input className="sec-input" type="time" value={String(rule.startTime || '').slice(0, 5)} onChange={(e) => setAvailabilityRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, startTime: e.target.value } : row))} /></td>
+                      <td><input className="sec-input" type="time" value={String(rule.endTime || '').slice(0, 5)} onChange={(e) => setAvailabilityRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, endTime: e.target.value } : row))} /></td>
+                      <td><input className="sec-input" type="number" min="5" max="180" value={rule.slotMinutes} onChange={(e) => setAvailabilityRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, slotMinutes: e.target.value } : row))} /></td>
+                      <td><input className="sec-input" type="number" min="1" max="20" value={rule.maxPerSlot} onChange={(e) => setAvailabilityRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, maxPerSlot: e.target.value } : row))} /></td>
+                      <td><button type="button" className="sec-btn ghost" onClick={() => removeAvailabilityRule(rule.id)} disabled={availabilitySaving}>Remove</button></td>
+                    </tr>
+                  ))}</tbody>
+                </table></div>
+              </div>
 
               <div className="sec-sales-panel">
                 <div className="sec-sales-head">

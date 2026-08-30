@@ -593,7 +593,7 @@ function buildSlotListForDate({ date, rules, dateWindows, dayOffs, exceptions, b
       if (bookedCount >= maxPer) continue;
       if (seen.has(time)) continue;
       seen.add(time);
-      slots.push({ time });
+      slots.push({ time, remainingCapacity: Math.max(0, maxPer - bookedCount) });
     }
   }
 
@@ -655,7 +655,8 @@ async function computeDoctorAvailabilityDays({ doctorId, mode, fromKey, toKey })
       if (k.startsWith(`${dKey}T`)) bookedByTime.set(k.slice(11), c);
     }
     const daySlots = buildSlotListForDate({ date: d, rules, dateWindows, dayOffs, exceptions: combinedExceptions, bookedByTime });
-    days.push({ date: dKey, isAvailable: daySlots.length > 0, availableSlots: daySlots.length });
+    const availableSlots = daySlots.reduce((sum, slot) => sum + Math.max(0, Number(slot?.remainingCapacity || 1)), 0);
+    days.push({ date: dKey, isAvailable: availableSlots > 0, availableSlots });
   }
 
   return days;
@@ -765,7 +766,6 @@ router.put('/doctors/:doctorId/availability/day-offs', requireRole(['doctor_secr
   try {
     const doctorId = String(req.params.doctorId || '').trim();
     if (!isUuid(doctorId)) return res.status(400).json({ message: 'Invalid doctorId' });
-    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only view your linked doctor.' });
     if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only manage your linked doctor.' });
     const mode = String(req.body?.mode || req.query.mode || 'onsite').trim().toLowerCase() || 'onsite';
     const days = Array.isArray(req.body?.days) ? req.body.days : [];
@@ -942,6 +942,29 @@ router.get(
         .catch(() => []);
       const doctorIds = (Array.isArray(doctors) ? doctors : []).map((d) => String(d.id)).filter(Boolean);
 
+      // Nurse bookings remain unassigned until a linked secretary accepts
+      // them, but they must still reserve specialization-level capacity.
+      const pendingRows = await prisma.appointments.findMany({
+        where: {
+          consultation_mode: 'onsite',
+          appointment_date: dt,
+          doctor_uuid: null,
+          assignment_status: 'PENDING_ASSIGNMENT',
+          reason: { contains: specialization, mode: 'insensitive' }
+        },
+        select: { appointment_time: true, status: true }
+      }).catch(() => []);
+      const pendingByTime = new Map();
+      for (const appointment of Array.isArray(pendingRows) ? pendingRows : []) {
+        const status = String(appointment?.status || '').toLowerCase();
+        if (status.includes('cancel') || status.includes('reject') || status.includes('no-show') || status.includes('no show')) continue;
+        const value = appointment?.appointment_time ? new Date(appointment.appointment_time) : null;
+        const time = value && !Number.isNaN(value.getTime())
+          ? `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`
+          : '';
+        if (time) pendingByTime.set(time, (pendingByTime.get(time) || 0) + 1);
+      }
+
       const byTime = new Map();
       if (doctorIds.length) {
         // Parallelize slot computation for all doctors in the specialization to avoid timeouts
@@ -955,13 +978,17 @@ router.get(
           for (const s of Array.isArray(slots) ? slots : []) {
             const t = String(s?.time || '').trim();
             if (!t) continue;
-            byTime.set(t, (byTime.get(t) || 0) + 1);
+            byTime.set(t, (byTime.get(t) || 0) + Math.max(1, Number(s?.remainingCapacity || 1)));
           }
         }
       }
 
       const slots = Array.from(byTime.entries())
-        .map(([time, availableDoctors]) => ({ time, availableDoctors }))
+        .map(([time, capacity]) => {
+          const availableCapacity = Math.max(0, capacity - (pendingByTime.get(time) || 0));
+          return { time, availableDoctors: availableCapacity, availableCapacity };
+        })
+        .filter((slot) => slot.availableCapacity > 0)
         .sort((a, b) => a.time.localeCompare(b.time));
 
       res.json({ specialization, mode, date: dKey, slots });
@@ -1125,7 +1152,6 @@ router.post('/doctors/:doctorId/availability/date-windows', requireRole(['doctor
   try {
     const doctorId = String(req.params.doctorId || '').trim();
     if (!isUuid(doctorId)) return res.status(400).json({ message: 'Invalid doctorId' });
-    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only view your linked doctor.' });
     if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only manage your linked doctor.' });
     const mode = String(req.body?.mode || 'onsite').trim().toLowerCase() || 'onsite';
     const dateRaw = String(req.body?.date || '').trim();
@@ -1226,7 +1252,6 @@ router.put('/doctors/:doctorId/availability/rules', requireRole(['doctor_secreta
   try {
     const doctorId = String(req.params.doctorId || '').trim();
     if (!isUuid(doctorId)) return res.status(400).json({ message: 'Invalid doctorId' });
-    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only view your linked doctor.' });
     if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only manage your linked doctor.' });
     const mode = String(req.body?.mode || req.query.mode || 'onsite').trim().toLowerCase() || 'onsite';
     const rules = Array.isArray(req.body?.rules) ? req.body.rules : [];
@@ -1369,7 +1394,6 @@ router.post('/doctors/:doctorId/availability/exceptions', requireRole(['doctor_s
   try {
     const doctorId = String(req.params.doctorId || '').trim();
     if (!isUuid(doctorId)) return res.status(400).json({ message: 'Invalid doctorId' });
-    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only view your linked doctor.' });
     if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only manage your linked doctor.' });
     const mode = String(req.body?.mode || 'onsite').trim().toLowerCase() || 'onsite';
     if (mode !== 'onsite' && mode !== 'teleconsult') return res.status(400).json({ message: 'mode must be onsite or teleconsult.' });

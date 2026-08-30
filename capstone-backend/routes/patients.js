@@ -1675,7 +1675,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             const key = String(a.doctor_uuid || doctorSelection?.doctorUuid || '');
                             byDoctor.set(key, (byDoctor.get(key) || 0) + 1);
                         }
-                        let anySlotFree = false;
+                        let totalRemainingCapacity = 0;
                         for (const dId of doctorsToCheck) {
                             const enforceRes = await enforceDoctorAvailability({
                                 doctorId: dId,
@@ -1687,9 +1687,22 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             const maxPerSlot = (enforceRes?.rule?.maxPerSlot && Number.isFinite(Number(enforceRes.rule.maxPerSlot)))
                                 ? Math.max(1, Math.min(20, Math.trunc(Number(enforceRes.rule.maxPerSlot))))
                                 : 1;
-                            if ((byDoctor.get(dId) || 0) < maxPerSlot) { anySlotFree = true; break; }
+                            totalRemainingCapacity += Math.max(0, maxPerSlot - (byDoctor.get(dId) || 0));
                         }
-                        if (!anySlotFree) {
+                        const pendingUnassigned = specDoctorIds.length
+                            ? await tx.appointments.count({
+                                where: {
+                                    doctor_uuid: null,
+                                    assignment_status: 'PENDING_ASSIGNMENT',
+                                    consultation_mode: 'onsite',
+                                    appointment_date: appointmentDateValue,
+                                    appointment_time: timeValue,
+                                    reason: { contains: selectedSpec, mode: 'insensitive' },
+                                    status: { notIn: ['Cancelled', 'Rejected', 'No-show'] }
+                                }
+                              }).catch(() => 0)
+                            : 0;
+                        if (totalRemainingCapacity <= Number(pendingUnassigned || 0)) {
                             const err = new Error('Selected slot is already full.');
                             err.statusCode = 409;
                             throw err;
