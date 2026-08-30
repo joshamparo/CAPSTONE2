@@ -5355,7 +5355,7 @@ function DoctorDashboard() {
         )}
 
         {activeNav === 'approval-inbox' && (
-          <div className="doctor-grid doctor-grid-2 doc-section">
+          <div className="doctor-grid doc-section">
             <div className="doc-card">
               <div className="doc-card-header">
                 <div>
@@ -5404,16 +5404,17 @@ function DoctorDashboard() {
               )}
             </div>
 
-            <div className="doc-card">
-              <div className="doc-card-header">
-                <div className="doc-card-title">
-                  <ClipboardCheck size={18} />
-                  Conversation
-                </div>
-              </div>
-              {!selectedApprovalId ? (
-                <div className="doc-empty">Select an approval request to view messages.</div>
-              ) : approvalThreadLoading ? (
+            {selectedApprovalId && (
+              <div className="doc-modal-overlay" onClick={() => setSelectedApprovalId(null)}>
+                <div className="doc-modal-card doc-approval-modal" role="dialog" aria-modal="true" aria-label="Approval request details" onClick={(event) => event.stopPropagation()}>
+                  <div className="doc-approval-modal-header">
+                    <div>
+                      <div className="doc-modal-title"><ClipboardCheck size={19} /> Approval request</div>
+                      <div className="doc-muted">Review the booking, take action, or message the patient.</div>
+                    </div>
+                    <button className="doc-icon-btn" type="button" aria-label="Close approval details" onClick={() => setSelectedApprovalId(null)}><X size={18} /></button>
+                  </div>
+              {approvalThreadLoading ? (
                 <div className="doc-muted">Loading…</div>
               ) : (
                 <>
@@ -5525,7 +5526,9 @@ function DoctorDashboard() {
                   </div>
                 </>
               )}
-            </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

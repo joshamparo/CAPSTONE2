@@ -5,6 +5,10 @@ const requireRole = require('../middleware/requireRole');
 const { createClient } = require('@supabase/supabase-js');
 
 let supabaseAdmin = null;
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+}
+
 function getSupabaseAdmin() {
   const url = String(process.env.SUPABASE_URL || '').trim();
   const key = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
