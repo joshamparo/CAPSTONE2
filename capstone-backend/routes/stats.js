@@ -604,6 +604,168 @@ router.get('/cashier-closeout', requireRole(['admin', 'cashier', 'doctor_secreta
 router.get('/symptom-insights', requireRole(['admin']), async (req, res) => {
     try {
         await ensureSymptomInsightsSchema();
+        const currentMonthKey = todayManilaKey().slice(0, 7);
+        const parsed = parseMonthKey(req.query.month) || parseMonthKey(currentMonthKey);
+        if (parsed.key > currentMonthKey) return res.status(400).json({ message: 'Future months cannot be analyzed.' });
+
+        const refresh = String(req.query.refresh || '').trim().toLowerCase() === 'true';
+        if (!refresh && parsed.key !== currentMonthKey) {
+            const cached = await prisma.$queryRaw(
+                Prisma.sql`SELECT payload, generated_at FROM admin_symptom_insights WHERE month_key = ${parsed.key}::text AND algorithm_version = 'v3.0' LIMIT 1`
+            ).catch(() => []);
+            const cachedRow = Array.isArray(cached) ? cached[0] : null;
+            if (cachedRow?.payload) return res.json({ ...cachedRow.payload, generatedAt: cachedRow.generated_at });
+        }
+
+        const startKey = `${parsed.key}-01`;
+        const nextYear = parsed.month === 12 ? parsed.year + 1 : parsed.year;
+        const nextMonth = parsed.month === 12 ? 1 : parsed.month + 1;
+        const nextKey = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+        const todayKey = todayManilaKey();
+        const tomorrow = new Date(`${todayKey}T00:00:00.000Z`);
+        tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+        const analysisNextKey = parsed.key === currentMonthKey ? tomorrow.toISOString().slice(0, 10) : nextKey;
+        const previous = parsed.month === 1
+            ? { year: parsed.year - 1, month: 12, key: `${parsed.year - 1}-12` }
+            : { year: parsed.year, month: parsed.month - 1, key: `${parsed.year}-${String(parsed.month - 1).padStart(2, '0')}` };
+        const previousStartKey = `${previous.key}-01`;
+        let previousNextKey = startKey;
+        let comparisonLabel = 'full previous month';
+
+        if (parsed.key === currentMonthKey) {
+            const currentDay = Number(todayManilaKey().slice(8, 10));
+            const daysInPreviousMonth = new Date(Date.UTC(previous.year, previous.month, 0)).getUTCDate();
+            const exclusiveDay = Math.min(currentDay + 1, daysInPreviousMonth + 1);
+            previousNextKey = exclusiveDay > daysInPreviousMonth
+                ? startKey
+                : `${previous.key}-${String(exclusiveDay).padStart(2, '0')}`;
+            comparisonLabel = `same period through day ${currentDay}`;
+        }
+
+        const loadAppointments = (from, to) => prisma.$queryRaw(
+            Prisma.sql`
+                SELECT id::text AS id, symptoms, reason, main_concern, description
+                FROM public.appointments
+                WHERE appointment_date >= ${from}::date
+                  AND appointment_date < ${to}::date
+            `
+        ).catch(() => []);
+        const [currentRows, previousRows] = await Promise.all([
+            loadAppointments(startKey, analysisNextKey),
+            loadAppointments(previousStartKey, previousNextKey)
+        ]);
+
+        const inferenceRules = [
+            { keys: ['shortness of breath', 'difficulty breathing', 'hirap huminga'], label: 'Shortness of breath' },
+            { keys: ['chest pain', 'pananakit ng dibdib'], label: 'Chest pain' },
+            { keys: ['cough', 'ubo'], label: 'Cough' },
+            { keys: ['cold', 'colds', 'sipon', 'runny nose'], label: 'Colds' },
+            { keys: ['fever', 'lagnat'], label: 'Fever' },
+            { keys: ['headache', 'sakit ng ulo'], label: 'Headache' },
+            { keys: ['body ache', 'body aches', 'sakit ng katawan'], label: 'Body ache' },
+            { keys: ['dizzy', 'dizziness', 'nahihilo'], label: 'Dizziness' },
+            { keys: ['diarrhea', 'pagtatae'], label: 'Diarrhea' },
+            { keys: ['vomit', 'vomiting', 'nausea', 'suka'], label: 'Nausea/Vomiting' },
+            { keys: ['abdominal pain', 'stomach ache', 'sakit ng tiyan'], label: 'Abdominal pain' },
+            { keys: ['rash', 'pantal'], label: 'Rash' }
+        ];
+        const infer = (text) => {
+            const normalized = normalizeSymptomToken(text);
+            if (!normalized) return [];
+            return inferenceRules.filter((rule) => rule.keys.some((key) => normalized.includes(key))).map((rule) => rule.label);
+        };
+        const analyze = (sourceRows) => {
+            const rows = Array.isArray(sourceRows) ? sourceRows : [];
+            const counts = new Map();
+            let recordedAppointments = 0;
+            let inferredAppointments = 0;
+            rows.forEach((row) => {
+                const raw = Array.isArray(row?.symptoms) ? row.symptoms.filter((item) => normalizeSymptomToken(item)) : [];
+                const perAppointment = new Map();
+                if (raw.length) recordedAppointments += 1;
+                raw.forEach((item) => {
+                    const mapped = mapSymptom(item);
+                    if (mapped) perAppointment.set(mapped.key, { symptom: mapped.label, source: 'recorded' });
+                });
+                if (!perAppointment.size) {
+                    const inferred = [...new Set([...infer(row?.reason), ...infer(row?.main_concern), ...infer(row?.description)])];
+                    if (inferred.length) inferredAppointments += 1;
+                    inferred.forEach((label) => perAppointment.set(label.toLowerCase(), { symptom: label, source: 'inferred' }));
+                }
+                perAppointment.forEach((entry, key) => {
+                    if (!counts.has(key)) counts.set(key, { symptom: entry.symptom, count: 0, recordedCount: 0, inferredCount: 0 });
+                    const aggregate = counts.get(key);
+                    aggregate.count += 1;
+                    if (entry.source === 'recorded') aggregate.recordedCount += 1;
+                    else aggregate.inferredCount += 1;
+                });
+            });
+            return { total: rows.length, recordedAppointments, inferredAppointments, counts };
+        };
+
+        const current = analyze(currentRows);
+        const prior = analyze(previousRows);
+        const completenessPct = current.total ? Math.round((current.recordedAppointments / current.total) * 100) : 0;
+        const topSymptoms = Array.from(current.counts.entries())
+            .map(([key, item]) => ({ key, ...item }))
+            .sort((a, b) => b.count - a.count || a.symptom.localeCompare(b.symptom))
+            .slice(0, 5)
+            .map((item) => {
+                const previousCount = prior.counts.get(item.key)?.count || 0;
+                const prevalencePct = current.total ? Math.round((item.count / current.total) * 1000) / 10 : 0;
+                const previousPrevalencePct = prior.total ? Math.round((previousCount / prior.total) * 1000) / 10 : 0;
+                const deltaPct = Math.round((prevalencePct - previousPrevalencePct) * 10) / 10;
+                return { ...item, previousCount, prevalencePct, previousPrevalencePct, deltaPct, trend: deltaPct > 0 ? 'up' : deltaPct < 0 ? 'down' : 'flat' };
+            });
+
+        const confidenceLevel = current.total === 0 ? 'Insufficient' : current.total < 10 || completenessPct < 40 ? 'Low' : completenessPct < 80 ? 'Moderate' : 'High';
+        const symptomNames = topSymptoms.slice(0, 3).map((item) => item.symptom).join(', ') || 'no dominant symptom';
+        const aiSummary = `For ${parsed.key}, ${current.total} appointments were analyzed. The most prevalent symptoms were ${symptomNames}. Trends compare prevalence against the ${comparisonLabel}, reducing bias from different appointment volumes.`;
+        const hasAny = (names) => topSymptoms.some((item) => names.includes(item.symptom));
+        const aiRecommendations = [];
+        if (hasAny(['Chest pain', 'Shortness of breath'])) aiRecommendations.push({ title: 'Review urgent-care readiness', priority: 'high', action: 'Validate triage escalation coverage, emergency equipment readiness, and rapid referral capacity for respiratory or chest-related presentations.' });
+        if (hasAny(['Cough', 'Colds', 'Sore throat', 'Fever'])) aiRecommendations.push({ title: 'Prepare respiratory clinic capacity', priority: 'medium', action: 'Review OPD staffing, masks, ventilation, isolation workflow, and commonly used respiratory supplies for the next scheduling period.' });
+        if (hasAny(['Diarrhea', 'Nausea/Vomiting', 'Abdominal pain'])) aiRecommendations.push({ title: 'Check hydration and sanitation resources', priority: 'medium', action: 'Confirm oral rehydration and infection-control supplies, then review food- and water-safety advisories with the clinical team.' });
+        if (topSymptoms.some((item) => item.deltaPct >= 5)) aiRecommendations.push({ title: 'Validate the rising pattern', priority: 'medium', action: 'Ask the clinical lead to review underlying encounters and confirm whether the increase reflects a real cluster, documentation changes, or seasonal variation.' });
+        if (!aiRecommendations.length && current.total) aiRecommendations.push({ title: 'Continue routine surveillance', priority: 'low', action: 'No strong operational escalation is indicated. Continue structured symptom recording and review the trend after more encounters are available.' });
+
+        const payload = {
+            month: parsed.key,
+            analysisWindow: { start: startKey, endExclusive: analysisNextKey },
+            totalAppointments: current.total,
+            appointmentsWithSymptoms: current.recordedAppointments,
+            inferredAppointments: current.inferredAppointments,
+            completenessPct,
+            confidenceLevel,
+            comparisonLabel,
+            topSymptoms,
+            aiSummary,
+            aiRecommendations,
+            fallbackUsed: current.inferredAppointments > 0,
+            highlights: topSymptoms.slice(0, 3).map((item) => `${item.symptom}: ${item.deltaPct > 0 ? '+' : ''}${item.deltaPct} percentage points vs ${comparisonLabel}`),
+            dataQualityNote: current.inferredAppointments
+                ? `${current.inferredAppointments} appointment(s) used explainable keyword inference because no structured symptoms were recorded. Recorded and inferred counts are shown separately.`
+                : 'All displayed symptoms came from structured symptom records. Each symptom is counted at most once per appointment.'
+        };
+        const jsonb = JSON.stringify(payload);
+        await prisma.$queryRaw(
+            Prisma.sql`
+                INSERT INTO admin_symptom_insights (month_key, payload, algorithm_version, generated_at)
+                VALUES (${parsed.key}::text, ${jsonb}::jsonb, 'v3.0', now())
+                ON CONFLICT (month_key) DO UPDATE
+                SET payload = EXCLUDED.payload, algorithm_version = EXCLUDED.algorithm_version, generated_at = now()
+            `
+        ).catch(() => {});
+        return res.json({ ...payload, generatedAt: new Date().toISOString() });
+    } catch (err) {
+        console.error('[stats /symptom-insights v3] error:', err);
+        return res.status(500).json({ message: err.message || 'Server Error' });
+    }
+});
+
+router.get('/symptom-insights-legacy', requireRole(['admin']), async (req, res) => {
+    try {
+        await ensureSymptomInsightsSchema();
         const now = new Date();
         const monthKeyInput = parseMonthKey(req.query.month) || { year: now.getFullYear(), month: now.getMonth() + 1, key: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` };
         const refresh = String(req.query.refresh || '').trim().toLowerCase() === 'true';

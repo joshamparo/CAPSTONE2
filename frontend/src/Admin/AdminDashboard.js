@@ -4750,13 +4750,14 @@ function AdminDashboard() {
                 <div className="dashboard-section-card analytics-card admin-ai-card" style={{ height: 'auto' }}>
                   <div className="dashboard-section-header">
                     <h3 className="dashboard-section-title">
-                      <Stethoscope size={20} className="text-orange-600" /> Symptom Insights
+                      <Stethoscope size={20} className="text-orange-600" /> AI-Assisted Symptom Insights
                     </h3>
                     <div className="admin-ai-controls">
                       <input
                         type="month"
                         className="settings-select"
                         value={symptomMonth}
+                        max={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`}
                         onChange={(e) => setSymptomMonth(e.target.value)}
                       />
                       <button
@@ -4789,13 +4790,19 @@ function AdminDashboard() {
                             <span className="admin-ai-meta-v">{Number(symptomInsights.totalAppointments || 0)}</span>
                           </div>
                           <div className="admin-ai-meta-item">
-                            <span className="admin-ai-meta-k">With symptoms</span>
+                            <span className="admin-ai-meta-k">Recorded symptoms</span>
                             <span className="admin-ai-meta-v">{Number(symptomInsights.appointmentsWithSymptoms || 0)}</span>
                           </div>
                           <div className="admin-ai-meta-item">
-                            <span className="admin-ai-meta-k">Signal</span>
-                            <span className={`admin-ai-meta-v ${symptomInsights.fallbackUsed ? 'warn' : 'ok'}`}>
-                              {symptomInsights.fallbackUsed ? 'Mixed' : 'High'}
+                            <span className="admin-ai-meta-k">Inferred symptoms</span>
+                            <span className={`admin-ai-meta-v ${Number(symptomInsights.inferredAppointments || 0) > 0 ? 'warn' : 'ok'}`}>
+                              {Number(symptomInsights.inferredAppointments || 0)}
+                            </span>
+                          </div>
+                          <div className="admin-ai-meta-item">
+                            <span className="admin-ai-meta-k">Confidence</span>
+                            <span className={`admin-ai-meta-v ${['High'].includes(symptomInsights.confidenceLevel) ? 'ok' : 'warn'}`}>
+                              {symptomInsights.confidenceLevel || 'Insufficient'}
                             </span>
                           </div>
                         </div>
@@ -4817,23 +4824,24 @@ function AdminDashboard() {
                             {Array.isArray(symptomInsights.topSymptoms) && symptomInsights.topSymptoms.length ? (
                               <div className="admin-ai-toplist">
                                 {(() => {
-                                  const max = Math.max(...symptomInsights.topSymptoms.map((x) => Number(x.count || 0) || 0), 1);
                                   return symptomInsights.topSymptoms.map((s) => {
                                   const count = Number(s.count || 0) || 0;
-                                  const pct = Math.round((count / max) * 100);
+                                  const pct = Math.max(0, Math.min(100, Number(s.prevalencePct || 0) || 0));
                                   const trend = String(s.trend || '').toLowerCase();
                                   return (
                                     <div key={String(s.symptom)} className="admin-ai-toprow">
                                       <div className="admin-ai-toprow-head">
                                         <div className="admin-ai-symptom">{s.symptom}</div>
                                         <div className={`admin-ai-delta ${trend}`}>
-                                          {trend === 'up' ? `+${s.delta}` : trend === 'down' ? `${s.delta}` : '0'}
+                                          {Number(s.deltaPct || 0) > 0 ? '+' : ''}{Number(s.deltaPct || 0)} pp
                                         </div>
                                       </div>
                                       <div className="admin-ai-bar">
                                         <div className="admin-ai-bar-fill" style={{ width: `${pct}%` }} />
                                       </div>
-                                      <div className="admin-ai-count">{count}</div>
+                                      <div className="admin-ai-count">
+                                        {count} appointment{count === 1 ? '' : 's'} ({pct}%) â€¢ {Number(s.recordedCount || 0)} recorded / {Number(s.inferredCount || 0)} inferred
+                                      </div>
                                     </div>
                                   );
                                   });
@@ -4909,7 +4917,7 @@ function AdminDashboard() {
                               </span>
                             </div>
                             <div className="admin-ai-disclaimer">
-                              This is an analytics feature based on recorded symptoms. It does not provide medical diagnosis.
+                              Hybrid AI-assisted operational analytics using normalized recorded symptoms and explainable keyword inference. It supports administrative planning and does not diagnose patients.
                             </div>
                           </div>
                         </div>
