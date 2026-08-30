@@ -7388,6 +7388,62 @@ function NurseDashboard() {
                         </div>
                         
                         <div className="patient-list-container patient-records-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                            <section className="patient-print-report" aria-hidden="true">
+                                <header className="patient-print-header">
+                                    <img src="/images/pgh%20logo.png" alt="" className="patient-print-logo" />
+                                    <div>
+                                        <div className="patient-print-hospital">Pascual General Hospital</div>
+                                        <div className="patient-print-system">Pascualinga Medical Link</div>
+                                        <h1>Patient Records Master List</h1>
+                                    </div>
+                                </header>
+                                <div className="patient-print-meta">
+                                    <span><strong>Generated:</strong> {new Date().toLocaleString()}</span>
+                                    <span><strong>Prepared by:</strong> {user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Nursing Department'}</span>
+                                    <span><strong>Total records:</strong> {patientsList.length}</span>
+                                </div>
+                                <table className="patient-print-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Patient ID</th>
+                                            <th>Patient / Demographics</th>
+                                            <th>Contact Information</th>
+                                            <th>Clinical Information</th>
+                                            <th>Location / Attending</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {patientsList.map((patient) => (
+                                            <tr key={`print-${patient._id}`}>
+                                                <td>{String(patient._id || 'Not assigned')}</td>
+                                                <td>
+                                                    <strong>{`${patient.firstName || ''} ${patient.middleName || ''} ${patient.lastName || ''}`.replace(/\s+/g, ' ').trim() || 'Unknown patient'}</strong>
+                                                    <span>DOB: {patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString() : 'Not recorded'}</span>
+                                                    <span>Sex: {patient.sex || 'Not recorded'} | Blood: {patient.bloodType || 'Not recorded'}</span>
+                                                </td>
+                                                <td>
+                                                    <span>{patient.contactNumber || 'No contact number'}</span>
+                                                    <span>{patient.email || 'No email address'}</span>
+                                                    <span>{patient.address || 'No address recorded'}</span>
+                                                </td>
+                                                <td>
+                                                    <strong>{patient.diagnosis || 'No diagnosis recorded'}</strong>
+                                                    <span>Allergies: {patient.allergies || 'None recorded'}</span>
+                                                    <span>Status: {patient.admissionStatus || 'Not recorded'}</span>
+                                                </td>
+                                                <td>
+                                                    <strong>{patient.wardNumber || 'Outpatient / Unassigned'}</strong>
+                                                    <span>Attending: {patient.attendingDoctor || 'Not assigned'}</span>
+                                                    <span>Admitted: {patient.admissionDate ? new Date(patient.admissionDate).toLocaleDateString() : 'N/A'}</span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                <footer className="patient-print-footer">
+                                    Confidential medical information — for authorized hospital use only.
+                                </footer>
+                            </section>
                             <div className="list-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
                                 <div className="search-input-modern" style={{ width: '350px' }}>
                                     <Search size={18} className="text-slate-400" />

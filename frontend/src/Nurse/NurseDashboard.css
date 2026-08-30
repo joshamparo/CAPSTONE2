@@ -4475,7 +4475,16 @@ body.compact-mode .workspace-queue-item {
   }
 }
 
+.patient-print-report {
+  display: none;
+}
+
 @media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+
   body.print-incidents *,
   body.print-patient-records * {
     visibility: hidden;
@@ -4538,18 +4547,136 @@ body.compact-mode .workspace-queue-item {
   }
 
   body.print-patient-records .patient-records-container {
-    position: absolute;
+    position: static;
     top: 0;
     left: 0;
     width: 100%;
     margin: 0;
-    padding: 20px;
+    padding: 0;
     background: white;
     z-index: 9999;
+    overflow: visible !important;
+    height: auto !important;
   }
 
-  body.print-patient-records .patient-view-header .btn-primary-action {
+  body.print-patient-records .patient-view-header,
+  body.print-patient-records .patient-records-container > .list-controls,
+  body.print-patient-records .patient-records-container > .modern-table-wrapper {
     display: none !important;
+  }
+
+  body.print-patient-records .patient-print-report,
+  body.print-patient-records .patient-print-report * {
+    visibility: visible;
+  }
+
+  body.print-patient-records .patient-print-report {
+    display: block !important;
+    color: #0f172a;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  .patient-print-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-bottom: 12px;
+    border-bottom: 3px solid #ea580c;
+  }
+
+  .patient-print-logo {
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+  }
+
+  .patient-print-hospital {
+    color: #c2410c;
+    font-size: 18pt;
+    font-weight: 800;
+  }
+
+  .patient-print-system {
+    margin-top: 2px;
+    color: #64748b;
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .patient-print-header h1 {
+    margin: 7px 0 0;
+    color: #0f172a;
+    font-size: 13pt;
+  }
+
+  .patient-print-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 9px 0;
+    color: #475569;
+    font-size: 8pt;
+  }
+
+  .patient-print-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 7.5pt;
+  }
+
+  .patient-print-table thead {
+    display: table-header-group;
+  }
+
+  .patient-print-table tr {
+    break-inside: avoid;
+  }
+
+  .patient-print-table th {
+    padding: 7px;
+    border: 1px solid #cbd5e1;
+    background: #f1f5f9 !important;
+    color: #334155;
+    text-align: left;
+    text-transform: uppercase;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .patient-print-table td {
+    padding: 7px;
+    border: 1px solid #cbd5e1;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+
+  .patient-print-table th:first-child { width: 13%; }
+  .patient-print-table th:nth-child(2) { width: 21%; }
+  .patient-print-table th:nth-child(3) { width: 23%; }
+  .patient-print-table th:nth-child(4) { width: 23%; }
+  .patient-print-table th:nth-child(5) { width: 20%; }
+
+  .patient-print-table td strong,
+  .patient-print-table td span {
+    display: block;
+    line-height: 1.35;
+  }
+
+  .patient-print-table td span {
+    margin-top: 2px;
+    color: #475569;
+  }
+
+  .patient-print-footer {
+    margin-top: 10px;
+    padding-top: 7px;
+    border-top: 1px solid #cbd5e1;
+    color: #64748b;
+    font-size: 7pt;
+    text-align: center;
   }
 }
 
