@@ -425,6 +425,12 @@ export default function DoctorSecretaryDashboard() {
       return;
     }
     const rules = (Array.isArray(availabilityRules) ? availabilityRules : []);
+    if (!rules.length) {
+      const msg = 'Add at least one weekly clinic-hours rule before saving.';
+      setAvailabilityError(msg);
+      pushToast({ type: 'error', message: msg });
+      return;
+    }
     for (let i = 0; i < rules.length; i++) {
       const r = rules[i];
       const d = Number(r.dayOfWeek);
@@ -500,8 +506,12 @@ export default function DoctorSecretaryDashboard() {
         body: JSON.stringify(payload)
       });
       await refreshAvailability({ silent: true });
+      setAvailabilityError('');
+      pushToast({ type: 'success', message: 'Weekly clinic schedule saved successfully.' });
     } catch (e) {
-      setAvailabilityError(String(e.message || 'Failed to save availability rules.'));
+      const msg = String(e.message || 'Failed to save availability rules.');
+      setAvailabilityError(msg);
+      pushToast({ type: 'error', message: msg });
     } finally {
       setAvailabilitySaving(false);
     }
@@ -2123,7 +2133,7 @@ export default function DoctorSecretaryDashboard() {
               <div className="sec-sales-panel" style={{ marginBottom: 16 }}>
                 <div className="sec-sales-head">
                   <div><div className="sec-sales-title">Weekly Clinic Hours</div><div className="sec-sales-sub">Recurring onsite hours, slot length, and patient capacity for your linked doctor.</div></div>
-                  <button type="button" className="sec-btn primary" onClick={saveAvailabilityRules} disabled={availabilitySaving || !linkedDoctorId}><Save size={16} /> Save Schedule</button>
+                  <button type="button" className="sec-btn primary" onClick={saveAvailabilityRules} disabled={availabilitySaving || !linkedDoctorId}><Save size={16} /> {availabilitySaving ? 'Saving Schedule…' : 'Save Schedule'}</button>
                 </div>
                 <div className="sec-form-grid" style={{ marginTop: 12 }}>
                   <div className="sec-field"><label>Day</label><select className="sec-input" value={availabilityAddRule.dayOfWeek} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, dayOfWeek: Number(e.target.value) }))}>{['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, index) => <option key={day} value={index}>{day}</option>)}</select></div>
