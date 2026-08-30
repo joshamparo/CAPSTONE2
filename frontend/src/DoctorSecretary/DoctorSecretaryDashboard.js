@@ -897,6 +897,7 @@ export default function DoctorSecretaryDashboard() {
       closeConfirm();
       await refreshRecords({ silent: true });
       await refreshSales({ silent: true });
+      pushToast({ type: 'success', message: 'Patient schedule confirmed successfully.' });
     } catch (e) {
       setConfirmError(String(e.message || 'Unable to confirm schedule.'));
     } finally {
@@ -1059,9 +1060,14 @@ export default function DoctorSecretaryDashboard() {
         })
       });
 
+      const assignedPatientName = `${norm(assignTarget.firstName || assignTarget.first_name)} ${norm(assignTarget.lastName || assignTarget.last_name)}`.trim();
       closeAssign();
       await refreshOnsiteInbox({ silent: true });
       await refreshRecords({ silent: true });
+      pushToast({
+        type: 'success',
+        message: `${assignedPatientName || 'Patient'} was assigned to the doctor successfully.`
+      });
     } catch (e) {
       setAssignError(String(e.message || 'Unable to assign appointment'));
     } finally {
@@ -1895,7 +1901,7 @@ export default function DoctorSecretaryDashboard() {
               {onsiteDoctorsError ? <div className="sec-error">{onsiteDoctorsError}</div> : null}
 
               <div className="sec-table-wrap">
-                <table className="sec-table">
+                <table className="sec-table sec-patient-records-table">
                   <thead>
                     <tr>
                       <th>Patient</th>
@@ -1976,14 +1982,14 @@ export default function DoctorSecretaryDashboard() {
                 <table className="sec-table">
                   <thead>
                     <tr>
-                      <th style={{ width: '120px' }}>Date</th>
-                      <th style={{ width: '90px' }}>Time</th>
+                      <th className="sec-record-date">Date</th>
+                      <th className="sec-record-time">Time</th>
                       <th>Patient</th>
                       <th>Service / Reason</th>
-                      <th style={{ width: '130px' }}>Suggested Fee</th>
-                      <th style={{ width: '120px' }}>Status</th>
-                      <th style={{ width: '130px' }}>Payment</th>
-                      <th style={{ width: '150px', textAlign: 'right' }}>Action</th>
+                      <th className="sec-record-fee">Fee</th>
+                      <th className="sec-record-status">Status</th>
+                      <th className="sec-record-payment">Payment</th>
+                      <th className="sec-record-actions-heading">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2028,7 +2034,8 @@ export default function DoctorSecretaryDashboard() {
                             <td>
                               <span className={`sec-badge ${paid ? 'paid' : 'unpaid'}`}>{payLabel}</span>
                             </td>
-                            <td style={{ textAlign: 'right' }}>
+                            <td className="sec-record-actions-cell">
+                              <div className="sec-record-actions">
                               <button
                                 type="button"
                                 className="sec-btn ghost"
@@ -2041,7 +2048,6 @@ export default function DoctorSecretaryDashboard() {
                                 }}
                                 disabled={!String(r.patientId || r.patient_id || '').trim()}
                                 title={!String(r.patientId || r.patient_id || '').trim() ? 'Missing patient id' : 'View central patient record'}
-                                style={{ marginRight: 8 }}
                               >
                                 Record
                               </button>
@@ -2051,7 +2057,6 @@ export default function DoctorSecretaryDashboard() {
                                   className="sec-btn ghost"
                                   onClick={() => openConfirm(r)}
                                   disabled={!linkedDoctorId}
-                                  style={{ marginRight: 8 }}
                                 >
                                   <Calendar size={16} />
                                   Confirm
@@ -2065,7 +2070,6 @@ export default function DoctorSecretaryDashboard() {
                                     onClick={() => callPatientNow(r)}
                                     disabled={called || isCompleted || busy}
                                     title={called ? 'Patient already called' : 'Call patient now'}
-                                    style={{ marginRight: 8 }}
                                   >
                                     Call
                                   </button>
@@ -2075,7 +2079,6 @@ export default function DoctorSecretaryDashboard() {
                                     onClick={() => updateAppointmentStatus({ apt: r, status: 'In Consultation' })}
                                     disabled={isConsulting || isCompleted || busy}
                                     title={isConsulting ? 'Consultation already started' : 'Start consultation'}
-                                    style={{ marginRight: 8 }}
                                   >
                                     Start
                                   </button>
@@ -2089,7 +2092,6 @@ export default function DoctorSecretaryDashboard() {
                                     }}
                                     disabled={isCompleted || busy}
                                     title={isCompleted ? 'Already completed' : 'Complete visit'}
-                                    style={{ marginRight: 8 }}
                                   >
                                     Done
                                   </button>
@@ -2105,6 +2107,7 @@ export default function DoctorSecretaryDashboard() {
                                 <CreditCard size={16} />
                                 {paid ? 'Paid' : billed ? 'Update Charge' : 'Charge'}
                               </button>
+                              </div>
                             </td>
                           </tr>
                         );
