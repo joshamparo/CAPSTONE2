@@ -2078,6 +2078,24 @@ router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary'
             where: { id: BigInt(req.params.id) }
         });
         if (!existing) return res.status(404).json({ message: 'Appointment not found' });
+
+        // A secretary may only operate the queue of the doctor linked to that
+        // account. Unassigned records may only be assigned to that same doctor.
+        if (role === 'doctor_secretary') {
+            const linkedDoctorId = String(req.headers['x-linked-doctor-id'] || '').trim();
+            if (!linkedDoctorId) return res.status(400).json({ message: 'Missing x-linked-doctor-id header' });
+            const existingDoctorId = String(existing.doctor_uuid || '').trim();
+            const requestedDoctorId = String(doctorId || '').trim();
+            if (existingDoctorId && existingDoctorId !== linkedDoctorId) {
+                return res.status(403).json({ message: 'This appointment belongs to another doctor.' });
+            }
+            if (!existingDoctorId && requestedDoctorId && requestedDoctorId !== linkedDoctorId) {
+                return res.status(403).json({ message: 'You can only assign appointments to your linked doctor.' });
+            }
+            if (!existingDoctorId && !requestedDoctorId) {
+                return res.status(403).json({ message: 'Assign this appointment to your linked doctor before updating it.' });
+            }
+        }
         
         const dataToUpdate = {};
         if (status !== undefined) {

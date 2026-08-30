@@ -765,6 +765,8 @@ router.put('/doctors/:doctorId/availability/day-offs', requireRole(['doctor_secr
   try {
     const doctorId = String(req.params.doctorId || '').trim();
     if (!isUuid(doctorId)) return res.status(400).json({ message: 'Invalid doctorId' });
+    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only view your linked doctor.' });
+    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only manage your linked doctor.' });
     const mode = String(req.body?.mode || req.query.mode || 'onsite').trim().toLowerCase() || 'onsite';
     const days = Array.isArray(req.body?.days) ? req.body.days : [];
     const normalized = days
@@ -1123,6 +1125,8 @@ router.post('/doctors/:doctorId/availability/date-windows', requireRole(['doctor
   try {
     const doctorId = String(req.params.doctorId || '').trim();
     if (!isUuid(doctorId)) return res.status(400).json({ message: 'Invalid doctorId' });
+    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only view your linked doctor.' });
+    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only manage your linked doctor.' });
     const mode = String(req.body?.mode || 'onsite').trim().toLowerCase() || 'onsite';
     const dateRaw = String(req.body?.date || '').trim();
     const dt = new Date(dateRaw);
@@ -1169,6 +1173,7 @@ router.delete('/doctors/:doctorId/availability/date-windows/:id', requireRole(['
   try {
     const doctorId = String(req.params.doctorId || '').trim();
     if (!isUuid(doctorId)) return res.status(400).json({ message: 'Invalid doctorId' });
+    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only manage your linked doctor.' });
     const idRaw = String(req.params.id || '').trim();
     if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid id' });
     await ensureAvailabilityTablesOnce();
@@ -1221,6 +1226,8 @@ router.put('/doctors/:doctorId/availability/rules', requireRole(['doctor_secreta
   try {
     const doctorId = String(req.params.doctorId || '').trim();
     if (!isUuid(doctorId)) return res.status(400).json({ message: 'Invalid doctorId' });
+    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only view your linked doctor.' });
+    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only manage your linked doctor.' });
     const mode = String(req.body?.mode || req.query.mode || 'onsite').trim().toLowerCase() || 'onsite';
     const rules = Array.isArray(req.body?.rules) ? req.body.rules : [];
     if (mode !== 'onsite' && mode !== 'teleconsult') return res.status(400).json({ message: 'mode must be onsite or teleconsult.' });
@@ -1362,6 +1369,8 @@ router.post('/doctors/:doctorId/availability/exceptions', requireRole(['doctor_s
   try {
     const doctorId = String(req.params.doctorId || '').trim();
     if (!isUuid(doctorId)) return res.status(400).json({ message: 'Invalid doctorId' });
+    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only view your linked doctor.' });
+    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only manage your linked doctor.' });
     const mode = String(req.body?.mode || 'onsite').trim().toLowerCase() || 'onsite';
     if (mode !== 'onsite' && mode !== 'teleconsult') return res.status(400).json({ message: 'mode must be onsite or teleconsult.' });
     const dateRaw = String(req.body?.date || '').trim();
@@ -1558,6 +1567,7 @@ router.delete('/doctors/:doctorId/availability/exceptions/:id', requireRole(['do
   try {
     const doctorId = String(req.params.doctorId || '').trim();
     if (!isUuid(doctorId)) return res.status(400).json({ message: 'Invalid doctorId' });
+    if (String(req.headers['x-user-role'] || '').toLowerCase() === 'doctor_secretary' && String(req.headers['x-linked-doctor-id'] || '') !== doctorId) return res.status(403).json({ message: 'You can only manage your linked doctor.' });
     const idRaw = String(req.params.id || '').trim();
     if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid id' });
     try {

@@ -529,8 +529,8 @@ router.post('/avatar', requireRole(STAFF_ACCOUNT_TYPES), upload.single('avatar')
         const role = normalizeRole(req.body.accountType || req.body.role || '');
 
         if (!file) return res.status(400).json({ message: 'avatar file is required' });
-        if (!file.mimetype || !file.mimetype.startsWith('image/')) {
-            return res.status(400).json({ message: 'avatar must be an image' });
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(String(file.mimetype || '').toLowerCase())) {
+            return res.status(400).json({ message: 'Avatar must be a JPG, PNG, or WebP image.' });
         }
 
         await ensurePresenceSchema().catch(() => {});
@@ -577,6 +577,12 @@ router.post('/avatar', requireRole(STAFF_ACCOUNT_TYPES), upload.single('avatar')
         }
 
         if (!target || !modelType) return res.status(404).json({ message: 'User not found' });
+
+        const requesterRole = normalizeRole(req.headers['x-user-role'] || '');
+        const requesterEmail = normalizeEmail(req.headers['x-user-email'] || '');
+        if (requesterRole !== 'admin' && (!requesterEmail || requesterEmail !== normalizeEmail(target.email || ''))) {
+            return res.status(403).json({ message: 'You can only update your own profile photo.' });
+        }
 
         const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'avatars';
         const mime = String(file.mimetype || '').toLowerCase();
@@ -2269,6 +2275,12 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         if (!result) return res.status(404).json({ message: "User not found" });
         
         const { user, model } = result;
+
+        const profileRequesterRole = normalizeRole(req.headers['x-user-role'] || '');
+        const profileRequesterEmail = normalizeEmail(req.headers['x-user-email'] || '');
+        if (profileRequesterRole !== 'admin' && (!profileRequesterEmail || profileRequesterEmail !== normalizeEmail(user.email || ''))) {
+            return res.status(403).json({ message: 'You can only update your own profile.' });
+        }
 
         // ---- Backend update validation (required fields + email/phone format) ----
         const bodyErrors = [];

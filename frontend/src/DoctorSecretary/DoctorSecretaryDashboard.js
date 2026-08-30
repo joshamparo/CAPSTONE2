@@ -245,6 +245,7 @@ export default function DoctorSecretaryDashboard() {
     firstName: '',
     lastName: '',
     email: '',
+    currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
@@ -253,6 +254,7 @@ export default function DoctorSecretaryDashboard() {
   const [profileAvatarUrl, setProfileAvatarUrl] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [profileMessage, setProfileMessage] = useState({ text: '', type: '' });
+  const [profileBaseline, setProfileBaseline] = useState({ firstName: '', lastName: '' });
   const [backendHealth, setBackendHealth] = useState({ checked: false, ok: true, error: '' });
 
   useEffect(() => {
@@ -680,7 +682,7 @@ export default function DoctorSecretaryDashboard() {
       const msg = 'Service key is missing. Refresh the page and try again.';
       setServiceFeesError(msg);
       pushToast({ type: 'error', message: msg });
-      return;
+      return false;
     }
     setFeesSavingKey(key);
     setServiceFeesError('');
@@ -695,8 +697,12 @@ export default function DoctorSecretaryDashboard() {
       if (!Number.isFinite(Number(body.defaultFee)) || Number(body.defaultFee) < 0) throw new Error('Default fee must be >= 0.');
       await fetchJson(`/api/billing/service-fees`, { apiBase: API_BASE, method: 'PUT', headers, body: JSON.stringify(body) });
       await refreshServiceFees({ silent: true });
+      pushToast({ type: 'success', message: 'Service fee saved.' });
+      return true;
     } catch (e) {
       setServiceFeesError(String(e.message || 'Save failed'));
+      pushToast({ type: 'error', message: String(e.message || 'Save failed') });
+      return false;
     } finally {
       setFeesSavingKey(null);
     }
@@ -888,7 +894,8 @@ export default function DoctorSecretaryDashboard() {
         list = await fetchJson(`/api/video-consults/doctors`, { apiBase: API_BASE, headers });
       }
 
-      setOnsiteDoctors(Array.isArray(list) ? list : []);
+      const doctors = Array.isArray(list) ? list : [];
+      setOnsiteDoctors(doctors.filter((doctor) => String(doctor.id || doctor.uuid || '') === String(linkedDoctorId)));
     } catch (e) {
       setOnsiteDoctors([]);
       setOnsiteDoctorsError(String(e.message || 'Failed to load doctors list'));
@@ -1175,8 +1182,13 @@ export default function DoctorSecretaryDashboard() {
         firstName: user.firstName || user.first_name || '',
         lastName: user.lastName || user.last_name || '',
         email: user.email || '',
+        currentPassword: '',
         newPassword: '',
         confirmPassword: ''
+      });
+      setProfileBaseline({
+        firstName: String(user.firstName || user.first_name || '').trim(),
+        lastName: String(user.lastName || user.last_name || '').trim()
       });
       setProfileAvatarUrl(user.avatarUrl || user.profilePicture || user.avatar_url || null);
     }
@@ -1211,6 +1223,18 @@ export default function DoctorSecretaryDashboard() {
   const handleAvatarUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    if (!allowedTypes.has(String(file.type || '').toLowerCase())) {
+      setProfileMessage({ text: 'Choose a JPG, PNG, or WebP image.', type: 'error' });
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setProfileMessage({ text: 'Profile image must be 5 MB or smaller.', type: 'error' });
+      e.target.value = '';
+      return;
+    }
 
     const formData = new FormData();
     formData.append('avatar', file);
@@ -1247,11 +1271,21 @@ export default function DoctorSecretaryDashboard() {
     const errors = [];
     if (!fn) errors.push('First name is required.');
     else if (fn.length < 2) errors.push('First name is too short (min 2 characters).');
+    else if (!/^[A-Za-zÑñ][A-Za-zÑñ' .-]*$/.test(fn)) errors.push('First name contains invalid characters.');
     if (!ln) errors.push('Last name is required.');
     else if (ln.length < 2) errors.push('Last name is too short (min 2 characters).');
+    else if (!/^[A-Za-zÑñ][A-Za-zÑñ' .-]*$/.test(ln)) errors.push('Last name contains invalid characters.');
+    const nameChanged = fn !== profileBaseline.firstName || ln !== profileBaseline.lastName;
+    const passwordChanged = Boolean(profileForm.newPassword);
+    if (!nameChanged && !passwordChanged) errors.push('No changes to save.');
+    if ((nameChanged || passwordChanged) && !String(profileForm.currentPassword || '').trim()) {
+      errors.push('Current password is required to save changes.');
+    }
     if (profileForm.newPassword) {
       const np = String(profileForm.newPassword);
-      if (np.length < 6) errors.push('New password is too short (min 6 characters).');
+      if (np.length < 11) errors.push('New password must be at least 11 characters.');
+      if (!/[0-9]/.test(np)) errors.push('New password must include a number.');
+      if (!/[^A-Za-z0-9]/.test(np)) errors.push('New password must include a special character.');
       if (np !== profileForm.confirmPassword) errors.push('Passwords do not match.');
     }
     if (errors.length) {
@@ -1264,6 +1298,7 @@ export default function DoctorSecretaryDashboard() {
       const payload = {
         firstName: fn,
         lastName: ln,
+        currentPassword: profileForm.currentPassword,
       };
 
       if (profileForm.newPassword) {
@@ -1279,8 +1314,9 @@ export default function DoctorSecretaryDashboard() {
 
       const updatedUser = { ...user, ...data.user };
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      setProfileBaseline({ firstName: fn, lastName: ln });
       setProfileMessage({ text: 'Profile updated successfully!', type: 'success' });
-      setProfileForm(prev => ({ ...prev, newPassword: '', confirmPassword: '' }));
+      setProfileForm(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
     } catch (e) {
       setProfileMessage({ text: String(e.message), type: 'error' });
     } finally {
@@ -1737,8 +1773,8 @@ export default function DoctorSecretaryDashboard() {
                           defaultFee: Number(newFee.defaultFee || 0),
                           active: Boolean(newFee.active)
                         };
-                        await upsertServiceFee(payload);
-                        setNewFee({ serviceKey: '', serviceName: '', defaultFee: '', active: true });
+                        const saved = await upsertServiceFee(payload);
+                        if (saved) setNewFee({ serviceKey: '', serviceName: '', defaultFee: '', active: true });
                       }}
                       disabled={feesSavingKey != null || !linkedDoctorId}
                     >
@@ -2277,6 +2313,17 @@ export default function DoctorSecretaryDashboard() {
 
                     <div className="sec-form-section">
                       <h4>Security</h4>
+                      <div className="sec-field">
+                        <label>Current Password</label>
+                        <input
+                          type={showPasswords ? 'text' : 'password'}
+                          className="sec-input"
+                          placeholder="Required to save any profile change"
+                          value={profileForm.currentPassword}
+                          onChange={(e) => setProfileForm(v => ({ ...v, currentPassword: e.target.value }))}
+                          autoComplete="current-password"
+                        />
+                      </div>
                       <div className="sec-form-row-2">
                         <div className="sec-field">
                           <label>New Password</label>
