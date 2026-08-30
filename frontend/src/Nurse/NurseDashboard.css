@@ -4547,7 +4547,7 @@ body.compact-mode .workspace-queue-item {
   }
 
   body.print-patient-records .patient-records-container {
-    position: static;
+    position: absolute;
     top: 0;
     left: 0;
     width: 100%;
@@ -4557,6 +4557,20 @@ body.compact-mode .workspace-queue-item {
     z-index: 9999;
     overflow: visible !important;
     height: auto !important;
+  }
+
+  body.print-patient-records .nurse-dashboard-container,
+  body.print-patient-records .nurse-main-content,
+  body.print-patient-records .nurse-content-body,
+  body.print-patient-records .patient-management-container,
+  body.print-patient-records .patient-list-container {
+    width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    transform: none !important;
   }
 
   body.print-patient-records .patient-view-header,

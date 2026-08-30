@@ -2606,7 +2606,10 @@ function NurseDashboard() {
     document.body.classList.remove('print-patient-records');
     if (mode === 'incidents') document.body.classList.add('print-incidents');
     if (mode === 'patient-records') document.body.classList.add('print-patient-records');
-    setTimeout(() => window.print(), 0);
+    // Allow the browser to apply the print-only layout before opening its preview.
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.print());
+    });
   };
 
   const [patientSearch, setPatientSearch] = useState("");
