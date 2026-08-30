@@ -245,7 +245,7 @@ async function enforceDoctorAvailabilityAll({ doctorId, dateKey, mode = 'onsite'
     };
 
     const requestedDate = new Date(`${dateKey}T00:00:00.000Z`);
-    const dow = Number.isNaN(requestedDate.getUTCDay()) ? new Date().getDay() : requestedDate.getDay();
+    const dow = Number.isNaN(requestedDate.getUTCDay()) ? new Date().getUTCDay() : requestedDate.getUTCDay();
     const modeLower = String(mode || 'onsite').trim().toLowerCase() || 'onsite';
 
     // Day offs
@@ -330,7 +330,7 @@ async function enforceDoctorAvailabilityAll({ doctorId, dateKey, mode = 'onsite'
             ORDER BY start_time ASC
         `, doctorId, modeLower, dow);
         const rules = Array.isArray(ruleRows) ? ruleRows : [];
-        if (!rules.length) return { blocked: true, reason: 'Doctor is not available on this day.' };
+        if (!rules.length) return { blocked: true, reason: 'Doctor has no availability schedule configured for this day.' };
 
         const hit = rules.find((r) => {
             const s = toMin(r?.startTime);
@@ -1758,7 +1758,7 @@ router.post('/', async (req, res) => {
                         AND active = true
                     `;
                     const offs = (Array.isArray(offRows) ? offRows : []).map((r) => Number(r?.dayOfWeek)).filter((v) => Number.isFinite(v));
-                    if (offs.includes(requestedDate.getDay())) {
+                    if (offs.includes(requestedDate.getUTCDay())) {
                         return res.status(409).json({ message: 'Doctor is not available on this day.' });
                     }
                 } catch (_) {}
@@ -1787,7 +1787,7 @@ router.post('/', async (req, res) => {
                 } catch (_) {}
 
                 // Date windows + Rules (fallback)
-                const dow = requestedDate.getDay();
+                const dow = requestedDate.getUTCDay();
                 let dateWindows = [];
                 try {
                     dateWindows = await prisma.$queryRaw`
@@ -1822,7 +1822,7 @@ router.post('/', async (req, res) => {
 
                 const sourceList = Array.isArray(dateWindows) && dateWindows.length ? dateWindows : (Array.isArray(rules) ? rules : []);
                 if (!sourceList.length) {
-                    return res.status(409).json({ message: 'Doctor is not available on this day.' });
+                    return res.status(409).json({ message: 'Doctor has no availability schedule configured for this day.' });
                 }
 
                 let matchingRule = null;

@@ -127,7 +127,7 @@ async function enforceDoctorAvailability({ doctorId, dateKey, mode = 'onsite', r
     };
     const modeLower = String(mode || 'onsite').trim().toLowerCase() || 'onsite';
     const requestedDate = new Date(`${dateKey}T00:00:00.000Z`);
-    const dow = Number.isNaN(requestedDate.getUTCDay()) ? new Date().getDay() : requestedDate.getDay();
+    const dow = Number.isNaN(requestedDate.getUTCDay()) ? new Date().getUTCDay() : requestedDate.getUTCDay();
 
     // Day offs
     try {
@@ -210,7 +210,7 @@ async function enforceDoctorAvailability({ doctorId, dateKey, mode = 'onsite', r
             ORDER BY start_time ASC
         `, doctorId, modeLower, dow);
         const rulesArr = Array.isArray(ruleRows) ? ruleRows : [];
-        if (!rulesArr.length) return { blocked: false };
+        if (!rulesArr.length) return { blocked: true, reason: 'Doctor has no availability schedule configured for this day.' };
         const hit = rulesArr.find((r) => {
             const s = toMin(r?.startTime);
             const en = toMin(r?.endTime);
@@ -223,7 +223,7 @@ async function enforceDoctorAvailability({ doctorId, dateKey, mode = 'onsite', r
         if (!hit) return { blocked: true, reason: 'Selected time is not available.' };
         return { blocked: false, rule: hit };
     } catch (_) {
-        return { blocked: false };
+        return { blocked: true, reason: 'Unable to verify doctor availability.' };
     }
 }
 

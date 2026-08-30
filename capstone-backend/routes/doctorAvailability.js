@@ -535,7 +535,7 @@ async function loadDayOffs({ doctorId, mode }) {
 function buildSlotListForDate({ date, rules, dateWindows, dayOffs, exceptions, bookedByTime }) {
   const day = new Date(date);
   if (Number.isNaN(day.getTime())) return [];
-  const dow = day.getDay();
+  const dow = day.getUTCDay();
   const dKey = dateKey(day);
 
   if (Array.isArray(dayOffs) && dayOffs.includes(dow)) return [];
@@ -560,14 +560,9 @@ function buildSlotListForDate({ date, rules, dateWindows, dayOffs, exceptions, b
           slotMinutes: r.slotMinutes,
           maxPerSlot: r.maxPerSlot
         }));
-  if (!sources.length) {
-    sources.push({
-      startTime: '09:00',
-      endTime: '17:00',
-      slotMinutes: 30,
-      maxPerSlot: 1
-    });
-  }
+  // No saved schedule means unavailable. Never advertise synthetic slots that
+  // the final appointment validator will reject.
+  if (!sources.length) return [];
 
   const slots = [];
   const seen = new Set();
