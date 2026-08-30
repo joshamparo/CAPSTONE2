@@ -275,6 +275,17 @@ export default function DoctorSecretaryDashboard() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [approvalsPage, setApprovalsPage] = useState(1);
+  const approvalsPerPage = 5;
+  const approvalsPageCount = Math.max(1, Math.ceil(requests.length / approvalsPerPage));
+  const paginatedRequests = useMemo(() => {
+    const start = (approvalsPage - 1) * approvalsPerPage;
+    return requests.slice(start, start + approvalsPerPage);
+  }, [requests, approvalsPage]);
+
+  useEffect(() => {
+    setApprovalsPage((page) => Math.min(Math.max(1, page), approvalsPageCount));
+  }, [approvalsPageCount]);
 
   const [recordsDate, setRecordsDate] = useState(() => toDateInput(new Date()));
   const [recordsQuery, setRecordsQuery] = useState('');
@@ -2373,11 +2384,39 @@ export default function DoctorSecretaryDashboard() {
           ) : (
             <div className="sec-approvals">
               <div className="sec-approvals-header">
-                <div className="sec-approvals-title">Inbox</div>
-                <button className="sec-refresh-btn" onClick={refreshInbox} type="button" disabled={loading}>
-                  <RefreshCw size={16} />
-                  Refresh
-                </button>
+                <div>
+                  <div className="sec-approvals-title">Inbox</div>
+                  <div className="sec-approvals-count">
+                    {requests.length === 0
+                      ? 'No approvals'
+                      : `Showing ${(approvalsPage - 1) * approvalsPerPage + 1}–${Math.min(approvalsPage * approvalsPerPage, requests.length)} of ${requests.length}`}
+                  </div>
+                </div>
+                <div className="sec-approvals-actions">
+                  <div className="sec-pagination" aria-label="Approval pages">
+                    <button
+                      type="button"
+                      onClick={() => setApprovalsPage((page) => Math.max(1, page - 1))}
+                      disabled={loading || approvalsPage <= 1}
+                      aria-label="Previous approvals page"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                    <span>{approvalsPage} / {approvalsPageCount}</span>
+                    <button
+                      type="button"
+                      onClick={() => setApprovalsPage((page) => Math.min(approvalsPageCount, page + 1))}
+                      disabled={loading || approvalsPage >= approvalsPageCount}
+                      aria-label="Next approvals page"
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </div>
+                  <button className="sec-refresh-btn" onClick={refreshInbox} type="button" disabled={loading}>
+                    <RefreshCw size={16} />
+                    Refresh
+                  </button>
+                </div>
               </div>
 
               {error ? (
@@ -2391,7 +2430,7 @@ export default function DoctorSecretaryDashboard() {
                 <div className="sec-list">
                   {loading ? <div className="sec-muted">Loading…</div> : null}
                   {!loading && requests.length === 0 ? <div className="sec-muted">No requests.</div> : null}
-                  {(requests || []).map((r) => (
+                  {paginatedRequests.map((r) => (
                     <button
                       key={r.id}
                       type="button"
