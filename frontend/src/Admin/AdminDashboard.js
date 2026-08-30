@@ -4840,7 +4840,7 @@ function AdminDashboard() {
                                         <div className="admin-ai-bar-fill" style={{ width: `${pct}%` }} />
                                       </div>
                                       <div className="admin-ai-count">
-                                        {count} appointment{count === 1 ? '' : 's'} ({pct}%) â€¢ {Number(s.recordedCount || 0)} recorded / {Number(s.inferredCount || 0)} inferred
+                                        {count} appointment{count === 1 ? '' : 's'} ({pct}%) {'\u2022'} {Number(s.recordedCount || 0)} recorded {'\u2022'} {Number(s.inferredCount || 0)} inferred
                                       </div>
                                     </div>
                                   );
