@@ -727,6 +727,18 @@
   flex-wrap: wrap;
 }
 
+.doc-approval-table-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.doc-approval-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; }
+.doc-approval-table { width: 100%; min-width: 680px; border-collapse: collapse; font-size: 0.82rem; }
+.doc-approval-table th { padding: 10px 12px; text-align: left; color: #475569; background: #f8fafc; border-bottom: 1px solid var(--border); font-size: 0.72rem; letter-spacing: 0.035em; text-transform: uppercase; }
+.doc-approval-table td { padding: 11px 12px; color: #334155; border-bottom: 1px solid #eef2f7; vertical-align: middle; }
+.doc-approval-table tbody tr { cursor: pointer; transition: background 0.15s ease; }
+.doc-approval-table tbody tr:hover, .doc-approval-table tbody tr.active { background: #fff7ed; }
+.doc-approval-table tbody tr:last-child td { border-bottom: 0; }
+.doc-approval-patient-btn { display: block; padding: 0; border: 0; background: transparent; color: #0f172a; font: inherit; font-weight: 900; text-align: left; cursor: pointer; }
+.doc-approval-patient-btn:hover { color: var(--primary); text-decoration: underline; }
+.doc-approval-unread { display: inline-flex; margin-top: 4px; padding: 2px 7px; border-radius: 999px; background: #ffedd5; color: #c2410c; font-size: 0.68rem; font-weight: 900; }
+
 .doc-approval-inputs {
   margin-top: 10px;
   display: flex;

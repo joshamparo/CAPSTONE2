@@ -181,6 +181,8 @@ function DoctorDashboard() {
   const [approvalActionLoading, setApprovalActionLoading] = useState(false);
   const [approvalRejectNote, setApprovalRejectNote] = useState('');
   const [approvalSuggest, setApprovalSuggest] = useState({ date: '', time: '', note: '' });
+  const [approvalPage, setApprovalPage] = useState(1);
+  const approvalPageSize = 8;
 
   const [staffSettings, setStaffSettings] = useState({ prefs: {}, updatedAt: null });
   const [loadingStaffSettings, setLoadingStaffSettings] = useState(false);
@@ -1878,7 +1880,7 @@ function DoctorDashboard() {
     }
   };
 
-  const fetchApprovalInbox = async () => {
+  const fetchApprovalInbox = async ({ resetPage = false } = {}) => {
     if (!doctorInboxName) return;
     setApprovalInboxLoading(true);
     setApprovalInboxError('');
@@ -1889,7 +1891,14 @@ function DoctorDashboard() {
         apiBase: API_BASE,
         headers: { ...authHeaders }
       });
-      setApprovalInbox(Array.isArray(json) ? json : []);
+      const rows = Array.isArray(json) ? json : [];
+      rows.sort((a, b) => {
+        const aTime = new Date(a?.createdAt || a?.created_at || 0).getTime() || 0;
+        const bTime = new Date(b?.createdAt || b?.created_at || 0).getTime() || 0;
+        return bTime - aTime;
+      });
+      setApprovalInbox(rows);
+      if (resetPage) setApprovalPage(1);
     } catch (e) {
       setApprovalInbox([]);
       setApprovalInboxError(String(e?.message || 'Failed to load approval inbox'));
@@ -1901,6 +1910,8 @@ function DoctorDashboard() {
   const openApprovalThread = async (requestId) => {
     if (!doctorInboxName || !requestId) return;
     setSelectedApprovalId(String(requestId));
+    setApprovalRejectNote('');
+    setApprovalSuggest({ date: '', time: '', note: '' });
     setApprovalThreadLoading(true);
     try {
       const name = encodeURIComponent(doctorInboxName);
@@ -1935,6 +1946,7 @@ function DoctorDashboard() {
         body: JSON.stringify({ senderRole: 'doctor', senderName: doctorInboxName, body })
       });
       await openApprovalThread(id);
+      setToast({ type: 'success', message: 'Reply sent.' });
     } catch (e) {
       setToast({ type: 'error', message: String(e?.message || 'Failed to send message.') });
     } finally {
@@ -1957,6 +1969,13 @@ function DoctorDashboard() {
     if (status === 'Suggested' && (!suggestedDate || !suggestedTime)) {
       setToast({ type: 'error', message: 'Provide suggested date and time.' });
       return;
+    }
+    if (status === 'Suggested') {
+      const suggestedAt = new Date(`${suggestedDate}T${suggestedTime}:00`);
+      if (Number.isNaN(suggestedAt.getTime()) || suggestedAt.getTime() <= Date.now()) {
+        setToast({ type: 'error', message: 'Suggested schedule must be a future date and time.' });
+        return;
+      }
     }
 
     setApprovalActionLoading(true);
@@ -1986,8 +2005,13 @@ function DoctorDashboard() {
   };
 
   useEffect(() => {
-    if (activeNav === 'approval-inbox') fetchApprovalInbox();
+    if (activeNav === 'approval-inbox') fetchApprovalInbox({ resetPage: true });
   }, [activeNav, doctorInboxName]);
+
+  useEffect(() => {
+    const lastPage = Math.max(1, Math.ceil(approvalInbox.length / approvalPageSize));
+    setApprovalPage((page) => Math.min(Math.max(1, page), lastPage));
+  }, [approvalInbox.length]);
 
   useEffect(() => {
     if (activeNav !== 'doctor-chat') return;
@@ -5332,14 +5356,21 @@ function DoctorDashboard() {
           <div className="doctor-grid doctor-grid-2 doc-section">
             <div className="doc-card">
               <div className="doc-card-header">
-                <div className="doc-card-title">
-                  <MessageSquare size={18} />
-                  Approvals Inbox
+                <div>
+                  <div className="doc-card-title">
+                    <MessageSquare size={18} />
+                    Approvals Inbox
+                  </div>
+                  <div className="doc-muted" style={{ marginTop: 4 }}>Newest booking requests appear first.</div>
                 </div>
-                <button className="doc-btn" type="button" onClick={fetchApprovalInbox} disabled={approvalInboxLoading}>
-                  <RotateCw size={16} />
-                  Refresh
-                </button>
+                <div className="doc-approval-table-tools">
+                  <div className="doc-pagination">
+                    <button className="doc-pagination-btn" type="button" aria-label="Previous approvals page" onClick={() => setApprovalPage((page) => Math.max(1, page - 1))} disabled={approvalPage <= 1 || approvalInboxLoading}><ChevronLeft size={16} /></button>
+                    <span className="doc-pagination-info">{approvalPage} / {Math.max(1, Math.ceil(approvalInbox.length / approvalPageSize))}</span>
+                    <button className="doc-pagination-btn" type="button" aria-label="Next approvals page" onClick={() => setApprovalPage((page) => Math.min(Math.max(1, Math.ceil(approvalInbox.length / approvalPageSize)), page + 1))} disabled={approvalPage >= Math.max(1, Math.ceil(approvalInbox.length / approvalPageSize)) || approvalInboxLoading}><ChevronRight size={16} /></button>
+                  </div>
+                  <button className="doc-btn" type="button" onClick={() => fetchApprovalInbox({ resetPage: true })} disabled={approvalInboxLoading}><RotateCw size={16} /> Refresh</button>
+                </div>
               </div>
               {approvalInboxLoading ? (
                 <div className="doc-muted">Loading…</div>
@@ -5348,24 +5379,25 @@ function DoctorDashboard() {
               ) : approvalInbox.length === 0 ? (
                 <div className="doc-empty">No approval requests.</div>
               ) : (
-                <div className="doc-history">
-                  {approvalInbox.map((r) => (
-                    <button
-                      key={r.id}
-                      type="button"
-                      className={`doc-history-item ${String(r.id) === String(selectedApprovalId) ? 'active' : ''}`}
-                      onClick={() => openApprovalThread(r.id)}
-                      style={{ width: '100%', textAlign: 'left' }}
-                    >
-                      <div className="doc-history-top">
-                        <span className="doc-history-doctor">{r.patientName || 'Patient'}</span>
-                        <span className="doc-muted">
-                          {Number(r.unreadCount || 0) > 0 ? `Unread: ${r.unreadCount}` : r.status || '—'}
-                        </span>
-                      </div>
-                      <div className="doc-history-sub">{r.lastMessage || r.reason || '—'}</div>
-                    </button>
-                  ))}
+                <div className="doc-approval-table-wrap">
+                  <table className="doc-approval-table">
+                    <thead><tr><th>Patient</th><th>Service</th><th>Requested schedule</th><th>Status</th><th>Booked</th></tr></thead>
+                    <tbody>
+                      {approvalInbox.slice((approvalPage - 1) * approvalPageSize, approvalPage * approvalPageSize).map((r) => {
+                        const created = r.createdAt || r.created_at;
+                        const requested = r.requestedDate || r.requested_date;
+                        return (
+                          <tr key={r.id} className={String(r.id) === String(selectedApprovalId) ? 'active' : ''} onClick={() => openApprovalThread(r.id)}>
+                            <td><button type="button" className="doc-approval-patient-btn" onClick={(event) => { event.stopPropagation(); openApprovalThread(r.id); }}>{r.patientName || 'Patient'}</button>{Number(r.unreadCount || 0) > 0 ? <span className="doc-approval-unread">{r.unreadCount} new</span> : null}</td>
+                            <td>{r.serviceName || r.serviceType || r.reason || 'Consultation'}</td>
+                            <td>{requested ? new Date(requested).toLocaleDateString() : 'No date'}{r.requestedTime ? `, ${new Date(r.requestedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}</td>
+                            <td><span className="doc-badge">{r.status || 'Pending'}</span></td>
+                            <td>{created ? new Date(created).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -5404,7 +5436,7 @@ function DoctorDashboard() {
                         className="doc-primary"
                         type="button"
                         onClick={() => applyApprovalAction('Approved')}
-                        disabled={approvalActionLoading || approvalThread?.status === 'Approved' || approvalThread?.status === 'Rejected'}
+                        disabled={approvalActionLoading || approvalThreadLoading || !approvalThread || approvalThread?.status === 'Approved' || approvalThread?.status === 'Rejected'}
                       >
                         <Check size={16} />
                         Approve
@@ -5413,7 +5445,7 @@ function DoctorDashboard() {
                         className="doc-btn"
                         type="button"
                         onClick={() => applyApprovalAction('Rejected')}
-                        disabled={approvalActionLoading || approvalThread?.status === 'Approved' || approvalThread?.status === 'Rejected'}
+                        disabled={approvalActionLoading || approvalThreadLoading || !approvalThread || approvalThread?.status === 'Approved' || approvalThread?.status === 'Rejected'}
                       >
                         <Ban size={16} />
                         Reject
@@ -5422,7 +5454,7 @@ function DoctorDashboard() {
                         className="doc-btn"
                         type="button"
                         onClick={() => applyApprovalAction('Suggested')}
-                        disabled={approvalActionLoading || approvalThread?.status === 'Approved' || approvalThread?.status === 'Rejected'}
+                        disabled={approvalActionLoading || approvalThreadLoading || !approvalThread || approvalThread?.status === 'Approved' || approvalThread?.status === 'Rejected'}
                       >
                         <CornerUpRight size={16} />
                         Suggest schedule
@@ -5441,6 +5473,7 @@ function DoctorDashboard() {
                           <input
                             className="doc-input"
                             type="date"
+                            min={new Date().toISOString().slice(0, 10)}
                             value={approvalSuggest.date}
                             onChange={(e) => setApprovalSuggest((v) => ({ ...v, date: e.target.value }))}
                           />
