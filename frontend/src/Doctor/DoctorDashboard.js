@@ -5283,7 +5283,7 @@ function DoctorDashboard() {
         )}
 
         {activeNav === 'patient-summary' && (
-          <div className="doctor-grid doc-section">
+          <div className="doctor-grid doctor-grid-2 doc-section">
             {patientCard}
             <div className="doc-card">
               <div className="doc-card-header">
