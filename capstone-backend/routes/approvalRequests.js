@@ -258,7 +258,9 @@ function inferConsultationMode(reqRow) {
   const dept = String(reqRow?.department_key || '').trim().toLowerCase();
   if (dept === 'video') return 'video';
   const reason = String(reqRow?.reason || '').trim().toLowerCase();
-  if (reason.includes('(online)') || reason.startsWith('video:') || reason.includes('video consultation')) return 'video';
+  // Older mobile video bookings did not persist consultation_mode. Their paid
+  // booking reference is embedded in the request reason as PAYREF:PGH-... .
+  if (reason.includes('(online)') || reason.startsWith('video:') || reason.includes('video consultation') || reason.includes('payref:')) return 'video';
   return 'onsite';
 }
 
