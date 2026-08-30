@@ -1987,6 +1987,7 @@ function DoctorDashboard() {
         body: JSON.stringify({
           role: 'doctor',
           actor: doctorInboxName,
+          doctorId: currentDoctorUuid || null,
           status,
           note: note || null,
           suggestedDate: status === 'Suggested' ? suggestedDate : null,
@@ -1996,6 +1997,7 @@ function DoctorDashboard() {
       setApprovalRejectNote('');
       setApprovalSuggest({ date: '', time: '', note: '' });
       await openApprovalThread(id);
+      if (status === 'Approved') await fetchAppointments();
       setToast({ type: 'success', message: `Request ${status.toLowerCase()}.` });
     } catch (e) {
       setToast({ type: 'error', message: e.message || 'Failed to update request.' });
@@ -5436,10 +5438,10 @@ function DoctorDashboard() {
                         className="doc-primary"
                         type="button"
                         onClick={() => applyApprovalAction('Approved')}
-                        disabled={approvalActionLoading || approvalThreadLoading || !approvalThread || approvalThread?.status === 'Approved' || approvalThread?.status === 'Rejected'}
+                        disabled={approvalActionLoading || approvalThreadLoading || !approvalThread || (approvalThread?.status === 'Approved' && approvalThread?.appointmentId) || approvalThread?.status === 'Rejected'}
                       >
                         <Check size={16} />
-                        Approve
+                        {approvalThread?.status === 'Approved' && !approvalThread?.appointmentId ? 'Add to Video Queue' : 'Approve'}
                       </button>
                       <button
                         className="doc-btn"

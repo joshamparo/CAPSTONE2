@@ -356,7 +356,7 @@ async function resolveSecretaryLinkedDoctor(hdr) {
   };
 }
 
-async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, secretaryName, department, overriddenDoctorId }) {
+async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, secretaryName, department, overriddenDoctorId, actorRole = 'Doctor Secretary' }) {
   if (department) {
     const reqService = inferServiceKey(requestRow);
     const deptKey = normalizeServiceKey(department);
@@ -458,13 +458,20 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   `;
   const updated = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
 
-  const msgBody = `Approved and forwarded to doctor by ${secretaryName || 'Doctor Secretary'}`;
+  const isDoctorApproval = actorRole === 'Doctor';
+  const actorName = secretaryName || (isDoctorApproval ? doctorName : 'Doctor Secretary');
+  const senderRole = isDoctorApproval ? 'doctor' : 'doctor_secretary';
+  const msgBody = isDoctorApproval
+    ? `Approved by ${actorName || 'Doctor'}`
+    : `Approved and forwarded to doctor by ${actorName}`;
   await prisma.$queryRaw`
     INSERT INTO appointment_messages (request_id, sender_role, sender_name, body, created_at)
-    VALUES (${id}, 'doctor_secretary', ${secretaryName}, ${msgBody}, now())
+    VALUES (${id}, ${senderRole}, ${actorName}, ${msgBody}, now())
   `;
 
-  const patientMsg = `Your appointment request is confirmed. Please proceed to the hospital on your scheduled date/time.`;
+  const patientMsg = modeKey === 'video'
+    ? `Your video consultation is confirmed. Open My Schedule at the scheduled time to join the consultation.`
+    : `Your appointment request is confirmed. Please proceed to the hospital on your scheduled date/time.`;
   await prisma.$queryRaw`
     INSERT INTO appointment_messages (request_id, sender_role, sender_name, body, created_at)
     VALUES (${id}, 'system', 'Hospital Services', ${patientMsg}, now())
@@ -473,7 +480,7 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   prisma.activity_logs.create({
     data: {
       actor_name: secretaryName,
-      role: 'Doctor Secretary',
+      role: actorRole,
       action: 'Create',
       target: `Appointment:${appt.id.toString()}`,
       details: `Finalized appointment for ${patient.firstName || ''} ${patient.lastName || ''}`.trim()
@@ -1108,7 +1115,12 @@ router.patch('/:id', async (req, res) => {
     }
 
     const currentStatus = String(requestRow.status || '');
-    if (currentStatus === 'Approved' || currentStatus === 'Rejected') {
+    const canRepairApprovedVideo = currentStatus === 'Approved'
+      && status === 'Approved'
+      && role === 'doctor'
+      && !requestRow.appointment_id
+      && inferConsultationMode(requestRow) === 'video';
+    if ((currentStatus === 'Approved' || currentStatus === 'Rejected') && !canRepairApprovedVideo) {
       return res.status(409).json({ message: 'Request already closed.' });
     }
 
@@ -1132,6 +1144,31 @@ router.patch('/:id', async (req, res) => {
         requestRow,
         secretaryName,
         department
+      });
+      return res.json(serializeRequestRow(updated));
+    }
+
+    // A doctor-approved video request must also become an appointment immediately.
+    // The patient schedule can display the approval request itself, but the doctor's
+    // Video Consultations queue is populated from the appointments table.
+    if (role === 'doctor' && status === 'Approved' && inferConsultationMode(requestRow) === 'video') {
+      const suppliedDoctorId = String(req.body.doctorId || '').trim();
+      const requestDoctorId = requestRow?.doctor_id ? String(requestRow.doctor_id) : '';
+      const doctorId = requestDoctorId || suppliedDoctorId;
+      if (!isUuid(doctorId)) {
+        return res.status(400).json({ message: 'Doctor account is not linked to a valid doctor record.' });
+      }
+      if (requestDoctorId && suppliedDoctorId && requestDoctorId !== suppliedDoctorId) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+      const updated = await createAppointmentFromSecretaryApproval({
+        id,
+        hdr,
+        requestRow,
+        secretaryName: actor || hdr.name || requestRow.doctor_name || null,
+        department,
+        overriddenDoctorId: doctorId,
+        actorRole: 'Doctor'
       });
       return res.json(serializeRequestRow(updated));
     }
