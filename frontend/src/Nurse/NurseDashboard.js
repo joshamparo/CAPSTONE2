@@ -7615,7 +7615,7 @@ function NurseDashboard() {
                 </div>
             )}
             {view === 'vitals' && (() => {
-                  const vitalsPageSize = 45;
+                  const vitalsPageSize = 8;
                   const filteredVitalsPatients = patientsList.filter(p => p.admission_status === 'Emergency' || p.admission_status === 'Inpatient' || p.admission_status === 'Admission Requested' || p.admission_status === 'Waiting');
                   const vitalsPageCount = Math.max(1, Math.ceil(filteredVitalsPatients.length / vitalsPageSize));
                   const currentVitalsPage = Math.min(vitalsPage, vitalsPageCount);
@@ -7649,28 +7649,34 @@ function NurseDashboard() {
                               </div>
                           ) : (
                               <>
-                                {filteredVitalsPatients.length > vitalsPageSize && (
-                                  <div className="patient-pagination" style={{ alignSelf: 'flex-end', marginBottom: '12px', marginLeft: 'auto' }}>
+                                <div className="vitals-pagination-toolbar">
+                                  <span className="vitals-pagination-summary">
+                                    Showing {vitalsStartIndex + 1}-{Math.min(vitalsStartIndex + vitalsPageSize, filteredVitalsPatients.length)} of {filteredVitalsPatients.length} patients
+                                  </span>
+                                  {filteredVitalsPatients.length > vitalsPageSize && (
+                                  <div className="patient-pagination vitals-pagination-controls">
                                     <button
                                         type="button"
                                         className="patient-page-btn"
-                                        onClick={() => setVitalsPage((page) => Math.max(1, page - 1))}
+                                        onClick={() => setVitalsPage(Math.max(1, currentVitalsPage - 1))}
                                         disabled={currentVitalsPage <= 1}
                                         aria-label="Previous page"
                                     >
                                         <ChevronLeft size={18} />
                                     </button>
+                                    <span className="vitals-page-indicator">Page {currentVitalsPage} of {vitalsPageCount}</span>
                                     <button
                                         type="button"
                                         className="patient-page-btn"
-                                        onClick={() => setVitalsPage((page) => Math.min(vitalsPageCount, page + 1))}
+                                        onClick={() => setVitalsPage(Math.min(vitalsPageCount, currentVitalsPage + 1))}
                                         disabled={currentVitalsPage >= vitalsPageCount}
                                         aria-label="Next page"
                                     >
                                         <ChevronRight size={18} />
                                     </button>
                                   </div>
-                                )}
+                                  )}
+                                </div>
                                 <table className="vitals-table">
                                   <thead>
                                       <tr>

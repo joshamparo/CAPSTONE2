@@ -4793,6 +4793,40 @@ body.compact-mode .workspace-queue-item {
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
+.vitals-pagination-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 58px;
+    padding: 10px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #fff;
+}
+
+.vitals-pagination-summary,
+.vitals-page-indicator {
+    color: #64748b;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.vitals-pagination-controls {
+    margin: 0;
+}
+
+.vitals-page-indicator {
+    min-width: 82px;
+    text-align: center;
+}
+
+@media (max-width: 560px) {
+    .vitals-pagination-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
 .vitals-table {
     width: 100%;
     border-collapse: collapse;
