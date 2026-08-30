@@ -1501,24 +1501,6 @@ export default function DoctorSecretaryDashboard() {
         </div>
 
         <div className="sec-sidebar-body">
-          <div className="sec-user-card">
-            <div className="sec-user-avatar">
-              {(norm(user.profilePicture || user.profile_picture || user.avatar_url || '') || !secretaryName) ? (
-                norm(user.profilePicture || user.profile_picture || user.avatar_url || '') ? (
-                  <img src={norm(user.profilePicture || user.profile_picture || user.avatar_url)} alt="" style={{ width: '100%', height: '100%', borderRadius: 12, objectFit: 'cover' }} />
-                ) : (
-                  <span>{secretaryName ? secretaryName.charAt(0).toUpperCase() : 'U'}</span>
-                )
-              ) : (
-                <span>{secretaryName.charAt(0).toUpperCase()}</span>
-              )}
-            </div>
-            <div className="sec-user-texts">
-              <div className="sec-user-title">{secretaryName}</div>
-              <div className="sec-user-sub">{norm(user.email) || '—'}</div>
-            </div>
-          </div>
-
           <nav className="sec-nav">
             <div className="sidebar-section-label">MAIN</div>
             <button className={`sec-nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')} type="button">
