@@ -2672,7 +2672,11 @@ function NurseDashboard() {
       <style>
         @page { size: A4 landscape; margin: 12mm; }
         * { box-sizing: border-box; }
-        body { margin: 0; color: #0f172a; font-family: Arial, Helvetica, sans-serif; }
+        body { margin: 0; padding: 24px; color: #0f172a; background: #f1f5f9; font-family: Arial, Helvetica, sans-serif; }
+        .report { max-width: 1400px; margin: 0 auto; padding: 28px; background: #fff; box-shadow: 0 12px 32px rgba(15,23,42,.12); }
+        .print-actions { display: flex; justify-content: flex-end; gap: 10px; max-width: 1400px; margin: 0 auto 14px; }
+        .print-actions button { padding: 10px 18px; border: 0; border-radius: 9px; color: #fff; background: #ea580c; cursor: pointer; font-size: 14px; font-weight: 700; }
+        .print-actions .close { color: #334155; background: #e2e8f0; }
         header { display: flex; align-items: center; gap: 14px; padding-bottom: 12px; border-bottom: 3px solid #ea580c; }
         header img { width: 58px; height: 58px; object-fit: contain; }
         .hospital { color: #c2410c; font-size: 18pt; font-weight: 800; }
@@ -2689,12 +2693,23 @@ function NurseDashboard() {
         td span { margin-top: 2px; color: #475569; }
         .empty { padding: 28px; color: #64748b; text-align: center; }
         footer { margin-top: 10px; padding-top: 7px; border-top: 1px solid #cbd5e1; color: #64748b; font-size: 7pt; text-align: center; }
+        @media print {
+          body { padding: 0; background: #fff; }
+          .print-actions { display: none !important; }
+          .report { max-width: none; padding: 0; box-shadow: none; }
+        }
       </style></head><body>
-        <header><img src="${escapePrintText(logoUrl)}" alt=""><div><div class="hospital">Pascual General Hospital</div><div class="system">Pascualinga Medical Link</div><h1>Patient Records Master List</h1></div></header>
-        <div class="meta"><span><strong>Generated:</strong> ${escapePrintText(new Date().toLocaleString())}</span><span><strong>Prepared by:</strong> ${escapePrintText(preparedBy)}</span><span><strong>Total records:</strong> ${patientsList.length}</span></div>
-        <table><thead><tr><th>Patient ID</th><th>Patient / Demographics</th><th>Contact Information</th><th>Clinical Information</th><th>Location / Attending</th></tr></thead><tbody>${rows}</tbody></table>
-        <footer>Confidential medical information — for authorized hospital use only.</footer>
-        <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 250); });<\/script>
+        <div class="print-actions"><button class="close" type="button" id="close-report">Close</button><button type="button" id="print-report">Print Report</button></div>
+        <main class="report">
+          <header><img src="${escapePrintText(logoUrl)}" alt=""><div><div class="hospital">Pascual General Hospital</div><div class="system">Pascualinga Medical Link</div><h1>Patient Records Master List</h1></div></header>
+          <div class="meta"><span><strong>Generated:</strong> ${escapePrintText(new Date().toLocaleString())}</span><span><strong>Prepared by:</strong> ${escapePrintText(preparedBy)}</span><span><strong>Total records:</strong> ${patientsList.length}</span></div>
+          <table><thead><tr><th>Patient ID</th><th>Patient / Demographics</th><th>Contact Information</th><th>Clinical Information</th><th>Location / Attending</th></tr></thead><tbody>${rows}</tbody></table>
+          <footer>Confidential medical information — for authorized hospital use only.</footer>
+        </main>
+        <script>
+          document.getElementById('print-report').addEventListener('click', function () { window.print(); });
+          document.getElementById('close-report').addEventListener('click', function () { window.close(); });
+        <\/script>
       </body></html>`);
     printWindow.document.close();
     printWindow.focus();
