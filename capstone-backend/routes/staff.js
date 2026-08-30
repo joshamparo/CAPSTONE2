@@ -1249,8 +1249,10 @@ router.get('/notifications', async (req, res) => {
 
             (Array.isArray(rows) ? rows : []).forEach((r) => {
                 const requestId = r.id?.toString?.() ? r.id.toString() : String(r.id);
-                const unreadCount = Number(r.unread_count || 0) || 0;
                 const createdAt = r.last_at || r.updated_at || r.created_at || null;
+                const createdMs = createdAt ? new Date(createdAt).getTime() : 0;
+                // These staff roles persist read state in user_settings instead of the nurse read column.
+                const unreadCount = Number.isFinite(createdMs) && createdMs > lastReadMs ? 1 : 0;
                 const patientName = String(r.patient_name || 'Patient');
                 const status = String(r.status || 'Pending');
                 const lastBody = String(r.last_body || '').trim();

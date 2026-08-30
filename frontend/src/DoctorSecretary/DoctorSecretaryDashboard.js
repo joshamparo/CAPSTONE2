@@ -1629,9 +1629,7 @@ export default function DoctorSecretaryDashboard() {
             } else {
               setActiveTab('dashboard');
             }
-            if (typeof showToast === 'function') {
-              showToast({ type: 'success', message: `Opened: ${n?.title || 'Notification'}` });
-            }
+            pushToast({ type: 'success', message: `Opened: ${n?.title || 'Notification'}` });
           }} />
         </header>
 

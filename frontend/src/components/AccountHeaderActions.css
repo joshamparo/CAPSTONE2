@@ -13,6 +13,7 @@
 .aha-dropdown-title{font-weight:900; color:#0f172a; font-size: 0.95rem;}
 .aha-dropdown-body{padding:10px;}
 .aha-muted{color:#64748b; font-weight:700; font-size:0.9rem;}
+.aha-settings-saved{margin-bottom:10px; color:#15803d; font-weight:800; font-size:0.82rem;}
 .aha-badge{position:absolute; top:8px; right:8px; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#ea580c; color:#fff; font-size:0.72rem; font-weight:900; display:flex; align-items:center; justify-content:center; border:2px solid #fff; line-height:1;}
 .aha-link-btn{border:0; background:transparent; color:#ea580c; font-weight:900; cursor:pointer; padding:0; font-size:0.82rem; display:inline-flex; align-items:center; gap:4px;}
 .aha-link-btn:disabled{opacity:.55; cursor:not-allowed;}

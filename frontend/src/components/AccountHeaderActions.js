@@ -90,6 +90,7 @@ export default function AccountHeaderActions({
   const [notifError, setNotifError] = useState('');
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
   const [settingsPrefs, setSettingsPrefs] = useState(() => {
     try {
       const saved = localStorage.getItem('systemPreferences');
@@ -272,7 +273,13 @@ export default function AccountHeaderActions({
       const res = await fetch(`${API_BASE}/api/staff/settings`, { headers: authHeaders });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.message || 'Failed to load settings');
-      setSettingsPrefs(json?.prefs && typeof json.prefs === 'object' ? json.prefs : {});
+      setSettingsPrefs((prev) => ({
+        quietHours: false,
+        privacyMode: false,
+        autoPrint: false,
+        ...(prev && typeof prev === 'object' ? prev : {}),
+        ...(json?.prefs && typeof json.prefs === 'object' ? json.prefs : {})
+      }));
     } catch (e) {
       setSettingsError(e.message || 'Failed to load settings');
     } finally {
@@ -286,6 +293,7 @@ export default function AccountHeaderActions({
     const optimistic = { ...settingsPrefs, ...safePatch };
     setSettingsPrefs(optimistic);
     setSettingsSaving(true);
+    setSettingsSaved(false);
     setSettingsError('');
     try {
       const res = await fetch(`${API_BASE}/api/staff/settings`, {
@@ -296,6 +304,7 @@ export default function AccountHeaderActions({
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.message || 'Failed to save settings');
       setSettingsPrefs(json?.prefs && typeof json.prefs === 'object' ? json.prefs : optimistic);
+      setSettingsSaved(true);
     } catch (e) {
       setSettingsPrefs(settingsPrefs);
       setSettingsError(e.message || 'Failed to save settings');
@@ -635,7 +644,9 @@ export default function AccountHeaderActions({
                 type="button"
                 className="aha-icon-btn"
                 onClick={() => {
-                  setShowNotifications((v) => !v);
+                  const willOpen = !showNotifications;
+                  setShowNotifications(willOpen);
+                  if (willOpen) fetchNotifications();
                   setShowSettings(false);
                   setShowProfileMenu(false);
                 }}
@@ -721,7 +732,12 @@ export default function AccountHeaderActions({
                 type="button"
                 className="aha-icon-btn"
                 onClick={() => {
-                  setShowSettings((v) => !v);
+                  const willOpen = !showSettings;
+                  setShowSettings(willOpen);
+                  if (willOpen) {
+                    setSettingsSaved(false);
+                    fetchSettings();
+                  }
                   setShowNotifications(false);
                   setShowProfileMenu(false);
                 }}
@@ -743,6 +759,7 @@ export default function AccountHeaderActions({
                       ) : (
                         <>
                           {settingsError ? <div className="aha-muted">{settingsError}</div> : null}
+                          {settingsSaved ? <div className="aha-settings-saved" role="status">Settings saved.</div> : null}
                           <div className="aha-settings-list">
                             <div className="aha-setting-row">
                               <div className="aha-setting-info">
