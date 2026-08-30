@@ -2712,8 +2712,15 @@ router.get('/hmo-queue', async (req, res) => {
       .filter((row) => row.has_hmo_evidence === true)
       .filter((row) => {
         if (filterMode !== 'approved') return true;
-        const status = String(row.claim_status || row.hmo_claim?.status || '').toLowerCase();
-        return status === 'approved' || status === 'partially approved';
+        const claim = row.hmo_claim || {};
+        const status = String(row.claim_status || claim.status || '').toLowerCase();
+        const approved = status === 'approved' || status === 'partially approved';
+        const provider = String(claim.provider || claim.hmo_provider || '').trim();
+        const loa = String(claim.loa_number || claim.hmo_loa_number || '').trim();
+        const covered = Number(claim.applied_hmo_amount || claim.loa_approved_amount || 0);
+        const patientName = String(row.patient_name || claim.patient_name || '').trim();
+        const usablePatientName = Boolean(patientName) && !/^(?:patient(?: name unavailable| of|$)|invoice-|lab order|walk-in|nurse walk|onsite consultation|online consultation|video consultation)/i.test(patientName);
+        return approved && Boolean(provider) && Boolean(loa) && covered > 0 && usablePatientName;
       });
 
     builtList = builtList.filter((row) => {

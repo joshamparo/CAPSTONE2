@@ -3267,7 +3267,7 @@ export default function OfficeStaffDashboard({ mode }) {
             <div className="office-row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               {[
                 { key: 'approved', label: 'Approved Only' },
-                { key: 'all', label: 'All Claims · Audit' }
+                { key: 'all', label: 'All Claims' }
               ].map((tab) => {
                 const active = hmoQueueFilter === tab.key;
                 return (
@@ -3379,7 +3379,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </tr>
                 ) : hmoQueue.rows.map((row) => {
                   const claim = row?.hmo_claim || {};
-                  const status = String(row.claim_status || claim.status || 'Pending');
+                  const storedStatus = String(row.claim_status || claim.status || 'Pending');
                   const patientDue = Number(row.patient_pays === '₱ 0.00' ? 0 : (row.patient_pays ? String(row.patient_pays).replace(/[^\d.]/g, '') : 0)) || Number(claim.patient_payable || 0);
                   const phNow = Number(row.philhealth_amount === '₱ 0.00' ? 0 : (row.philhealth_amount ? String(row.philhealth_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.philhealth_deduction || 0);
                   const hmoNow = Number(row.hmo_covered_amount === '₱ 0.00' ? 0 : (row.hmo_covered_amount ? String(row.hmo_covered_amount).replace(/[^\d.]/g, '') : 0)) || Number(claim.applied_hmo_amount || claim.loa_approved_amount || 0);
@@ -3388,9 +3388,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   const invoiceCount = Math.max(1, Number(row.invoice_count || 1));
                   const invoiceIds = Array.isArray(row.invoice_ids) ? row.invoice_ids.map(String) : (invoiceIdTxt ? [invoiceIdTxt] : []);
                   const rawPatientName = String(row.patient_name || claim.patient_name || '').trim();
-                  const isBadShort = rawPatientName.length > 0 && rawPatientName.length <= 9;
                   const isFallbackName = !rawPatientName
-                    || isBadShort
                     || rawPatientName.toLowerCase() === 'patient'
                     || rawPatientName.toLowerCase().startsWith('patient (click')
                     || rawPatientName.toLowerCase().startsWith('patient of')
@@ -3407,6 +3405,16 @@ export default function OfficeStaffDashboard({ mode }) {
                     || rawPatientName.toLowerCase().includes('[appointment]')
                     || rawPatientName.toLowerCase().includes('[triage ');
                   const displayPatientName = isFallbackName ? 'Patient name unavailable' : rawPatientName;
+                  const hasProvider = Boolean(String(claim.provider || claim.hmo_provider || '').trim());
+                  const hasLoa = Boolean(String(claim.loa_number || claim.hmo_loa_number || '').trim());
+                  const storedApproved = storedStatus === 'Approved' || storedStatus === 'Partially Approved';
+                  const isClaimVerified = storedApproved && hasProvider && hasLoa && hmoNow > 0.0001 && !isFallbackName;
+                  const status = storedApproved && !isClaimVerified ? 'Needs Verification' : storedStatus;
+                  const rawClaimNotes = String(claim.notes || '').trim();
+                  const isInternalNote = /(?:\[?auto[- ]?pass|walk-in-intake[- ]gate|system:|gate-no-crash|pass\d-auto)/i.test(rawClaimNotes);
+                  const visibleClaimNotes = isInternalNote ? '' : rawClaimNotes;
+                  const rawUpdatedBy = String(claim.updated_by || claim.requested_by || '').trim();
+                  const visibleUpdatedBy = /^(?:system:|system$)/i.test(rawUpdatedBy) ? '' : rawUpdatedBy;
                   const subtitleText = (() => {
                     const parts = [];
                     if (invoiceIds.length > 1) parts.push(`${invoiceIds.length} invoices: #${invoiceIds.join(', #')}`);
@@ -3451,6 +3459,7 @@ export default function OfficeStaffDashboard({ mode }) {
                           <span className={`status-badge-table ${
                             status === 'Approved' ? 'status-duty' :
                             status === 'Partially Approved' ? 'status-scheduled' :
+                            status === 'Needs Verification' ? 'status-upcoming' :
                             status === 'Awaiting LOA' || status === 'Pending' ? 'status-off' :
                             status === 'Rejected' ? 'status-off' :
                             'status-upcoming'
@@ -3481,12 +3490,12 @@ export default function OfficeStaffDashboard({ mode }) {
                             {invoiceCount > 1 ? `${invoiceCount} invoices: #${invoiceIds.join(', #')}` : `Invoice #${invoiceIds[0]}`}
                           </div>
                         ) : null}
-                        {String(claim.notes || '').trim() ? (
-                          <div className="office-billing-subline" style={{ marginTop: 4 }} title={String(claim.notes)}>Notes: {String(claim.notes)}</div>
+                        {visibleClaimNotes ? (
+                          <div className="office-billing-subline" style={{ marginTop: 4 }} title={visibleClaimNotes}>Notes: {visibleClaimNotes}</div>
                         ) : null}
                         {(claim.updated_at || claim.created_at) ? (
                           <div className="office-billing-subline" style={{ marginTop: 4 }}>
-                            Updated: {formatDateTime(claim.updated_at || claim.created_at)}{claim.updated_by || claim.requested_by ? ` by ${String(claim.updated_by || claim.requested_by)}` : ''}
+                            Updated: {formatDateTime(claim.updated_at || claim.created_at)}{visibleUpdatedBy ? ` by ${visibleUpdatedBy}` : ''}
                           </div>
                         ) : null}
                       </td>
@@ -3523,6 +3532,8 @@ export default function OfficeStaffDashboard({ mode }) {
                           <button
                             type="button"
                             className="office-btn"
+                            disabled={!isClaimVerified}
+                            title={isClaimVerified ? 'View verified HMO receipt slip' : 'Complete and verify the patient, provider, LOA, and covered amount first'}
                             onClick={() => {
                               try {
                                 const invoiceIdStr = String(row.invoice_id || claim.invoice_id || '').trim();
@@ -3595,7 +3606,7 @@ export default function OfficeStaffDashboard({ mode }) {
                               }
                             }}
                           >
-                            View Receipt Slip
+                            {isClaimVerified ? 'View Receipt Slip' : 'Receipt Unavailable'}
                           </button>
                           <button
                             type="button"
@@ -3680,7 +3691,7 @@ export default function OfficeStaffDashboard({ mode }) {
                               }
                             }}
                           >
-                            Print SOA
+                            {isClaimVerified ? 'Print SOA' : 'Print Draft SOA'}
                           </button>
                         </div>
                       </td>
