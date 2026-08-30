@@ -2654,14 +2654,13 @@ router.get('/hmo-queue', async (req, res) => {
             String(currentClaim.provider || currentClaim.hmo_provider || '').trim()
             || String(currentClaim.loa_number || currentClaim.hmo_loa_number || '').trim()
             || String(currentClaim.hmo_card_number || '').trim()
-            || Number(currentClaim.philhealth_deduction || 0) > 0
             || Number(currentClaim.loa_approved_amount || 0) > 0
           );
           builtList[i] = { ...builtList[i], has_hmo_evidence: patientHasHmo || claimHasHmo };
           if (full2) {
             const curr = String(r.patient_name || '').trim();
             const currLower = curr.toLowerCase();
-            const isBadNow = (!curr) || curr.length <= 9
+            const isBadNow = (!curr)
               || currLower === 'patient'
               || currLower.startsWith('patient of')
               || currLower.startsWith('invoice')
@@ -2697,14 +2696,10 @@ router.get('/hmo-queue', async (req, res) => {
       .map((row) => {
         if (row.has_hmo_evidence === true) return row;
         const claim = row.hmo_claim || {};
-        const isNurseHmoIntake = String(claim.requested_by || '').toLowerCase() === 'system:walk-in-intake-gate-no-crash';
         const claimHasHmo = Boolean(
-          isNurseHmoIntake
-          ||
           String(claim.provider || claim.hmo_provider || '').trim()
           || String(claim.loa_number || claim.hmo_loa_number || '').trim()
           || String(claim.hmo_card_number || '').trim()
-          || Number(claim.philhealth_deduction || 0) > 0
           || Number(claim.loa_approved_amount || 0) > 0
         );
         return { ...row, has_hmo_evidence: claimHasHmo };
