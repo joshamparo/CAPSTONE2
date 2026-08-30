@@ -109,16 +109,18 @@ const buildConsultationReceipt = ({ invoice, payment, user, amountReceivedOverri
     ? `${String(invoice.patients.first_name || '').trim()} ${String(invoice.patients.last_name || '').trim()}`.trim()
     : 'Patient';
   
-  const originalBalance = Number(invoice.balance_amount || invoice.total_amount || 0);
+  const grossAmount = Number(invoice.total_amount || 0);
+  const outstandingBeforePayment = Number(invoice.balance_amount ?? grossAmount);
   const ph = Number(philhealthDeduction || 0);
   const hmo = Number(hmoCoverage || 0);
-  const amountDueAfterDeductions = Math.max(0, originalBalance - ph - hmo);
+  const benefitAdjustedTotal = Math.max(0, grossAmount - ph - hmo);
+  const amountDueAfterDeductions = Math.max(0, Math.min(outstandingBeforePayment, benefitAdjustedTotal));
 
   const amountReceived = Number.isFinite(Number(amountReceivedOverride))
     ? Number(amountReceivedOverride)
     : Number(payment.amount || 0);
-  
-  const remainingBalance = Math.max(0, amountDueAfterDeductions - amountReceived);
+  const amountPosted = Number(payment.amount || 0);
+  const remainingBalance = Math.max(0, amountDueAfterDeductions - amountPosted);
   const fullyPaid = remainingBalance <= 0.0001;
   return {
     receiptNumber: `PGH-${receiptPrefixForSource(source)}-${String(payment.id || invoice.id || 'PAY')}`,
@@ -130,14 +132,16 @@ const buildConsultationReceipt = ({ invoice, payment, user, amountReceivedOverri
     reference: payment.reference || '—',
     patientName,
     serviceLabel: (invoice.items || []).map((item) => item?.description).filter(Boolean).join(', ') || source,
-    amountDue: originalBalance,
+    amountDue: grossAmount,
     philhealthDeduction: ph,
     hmoCoverage: hmo,
     hmoProvider: hmoProvider || '',
     loaNumber: loaNumber || '',
     netAmountDue: amountDueAfterDeductions,
+    remainingBalance,
+    status: fullyPaid ? 'Paid' : 'Partially Paid',
     amountReceived,
-    change: Math.max(0, amountReceived - amountDueAfterDeductions),
+    change: Math.max(0, amountReceived - amountPosted),
     source,
     note: fullyPaid
       ? 'Payment confirmed. Consultation billing is fully settled.'
@@ -416,7 +420,7 @@ export default function OfficeStaffDashboard({ mode }) {
   });
   const [hmoQueueLoading, setHmoQueueLoading] = useState(false);
   const [hmoQueueError, setHmoQueueError] = useState('');
-  const [hmoQueueFilter, setHmoQueueFilter] = useState('approved');
+  const [hmoQueueFilter, setHmoQueueFilter] = useState('all');
   const [hmoQueuePage, setHmoQueuePage] = useState(1);
   const [hmoQueueQuery, setHmoQueueQuery] = useState('');
   const [hmoQuickEdit, setHmoQuickEdit] = useState(null);
@@ -633,8 +637,10 @@ export default function OfficeStaffDashboard({ mode }) {
         || 'Patient',
       serviceLabel,
       amountDue,
+      netAmountDue: amountDue,
       amountReceived,
       change: Math.max(0, amountReceived - amountDue),
+      status: String(payment.invoice?.status || '').toLowerCase() === 'paid' ? 'Paid' : 'Payment Posted',
       source
     };
   }, []);
@@ -1150,10 +1156,15 @@ export default function OfficeStaffDashboard({ mode }) {
       if (method === 'GCash') throw new Error('GCash is currently unavailable.');
       const ref = String(payReference || '').trim();
       if (method !== 'Cash' && !ref) throw new Error('Receipt/reference is required.');
+      let amountToPost = due;
       if (method === 'Cash') {
         const received = Number(String(cashReceived || payAmount || '').trim());
         if (!Number.isFinite(received) || received <= 0) throw new Error('Enter cash received.');
         if (received + 0.0001 < due) throw new Error(`Cash received is below the amount due of PHP ${toMoney(due)}.`);
+      } else {
+        amountToPost = Number(String(payAmount || '').trim());
+        if (!Number.isFinite(amountToPost) || amountToPost <= 0) throw new Error('Enter the amount to post.');
+        if (amountToPost - due > 0.0001) throw new Error(`Payment cannot exceed the balance of PHP ${toMoney(due)}.`);
       }
       const createdPayment = await fetchJson(`/api/billing/payments`, {
         apiBase: API_BASE,
@@ -1165,14 +1176,14 @@ export default function OfficeStaffDashboard({ mode }) {
         timeoutMs: 90000,
         body: JSON.stringify({
           invoiceId: workingInvoice.id,
-          amount: due,
+          amount: amountToPost,
           method,
           reference: ref || null
         })
       });
       setPayReference('');
       paymentIdempotencyKeyRef.current = '';
-      const received = method === 'Cash' ? Number(String(cashReceived || payAmount || '').trim()) : due;
+      const received = method === 'Cash' ? Number(String(cashReceived || payAmount || '').trim()) : amountToPost;
       setCashReceived('');
       setPayAmount('');
       const receipt = buildConsultationReceipt({ 
@@ -3417,10 +3428,18 @@ export default function OfficeStaffDashboard({ mode }) {
                     >
                       <td className="text-sm font-medium text-slate-700">
                         <div style={{ fontWeight: 900, fontSize: '0.93rem', color: isFallbackName ? '#475569' : '#0f172a' }}>{displayPatientName}</div>
+                        {subtitleText ? <div className="office-billing-subline">{subtitleText}</div> : null}
+                        {String(row.patient_reference || claim.patient_reference || '').trim() ? (
+                          <div className="office-billing-subline">Patient Ref: {String(row.patient_reference || claim.patient_reference)}</div>
+                        ) : null}
+                        {String(row.contact_number || claim.patient_contact || '').trim() ? (
+                          <div className="office-billing-subline">Contact: {String(row.contact_number || claim.patient_contact)}</div>
+                        ) : null}
                       </td>
                       <td className="text-sm text-slate-600">
                         <div style={{ fontWeight: 700, color: '#0f172a' }}>{claim.provider || String(row.hmo_claim?.provider) || '—'}</div>
                         {claim.hmo_card_number ? <div className="office-billing-subline" style={{ color: '#64748b' }}>Card: {String(claim.hmo_card_number)}</div> : null}
+                        {String(row.company || claim.company || '').trim() ? <div className="office-billing-subline">Company: {String(row.company || claim.company)}</div> : null}
                       </td>
                       <td className="text-sm text-slate-600">
                         {claim.loa_number ? (
@@ -3460,6 +3479,14 @@ export default function OfficeStaffDashboard({ mode }) {
                         {invoiceIds.length ? (
                           <div className="office-billing-subline" style={{ color: '#64748b', marginTop: 4 }}>
                             {invoiceCount > 1 ? `${invoiceCount} invoices: #${invoiceIds.join(', #')}` : `Invoice #${invoiceIds[0]}`}
+                          </div>
+                        ) : null}
+                        {String(claim.notes || '').trim() ? (
+                          <div className="office-billing-subline" style={{ marginTop: 4 }} title={String(claim.notes)}>Notes: {String(claim.notes)}</div>
+                        ) : null}
+                        {(claim.updated_at || claim.created_at) ? (
+                          <div className="office-billing-subline" style={{ marginTop: 4 }}>
+                            Updated: {formatDateTime(claim.updated_at || claim.created_at)}{claim.updated_by || claim.requested_by ? ` by ${String(claim.updated_by || claim.requested_by)}` : ''}
                           </div>
                         ) : null}
                       </td>
@@ -3538,6 +3565,9 @@ export default function OfficeStaffDashboard({ mode }) {
                                   patientName: dispName,
                                   serviceLabel: (String(serviceStr || 'Hospital Services').trim().length > 90 ? String(serviceStr).slice(0, 88) + '…' : String(serviceStr || 'Hospital Services')) || 'Hospital Services',
                                   amountDue: Number(totalNow || 0),
+                                  netAmountDue: Number(patientDue || 0),
+                                  remainingBalance: Number(patientDue || 0),
+                                  status: patientDue <= 0.0099 ? 'Fully Covered' : 'Balance Due',
                                   amountReceived: Math.max(0, Number(totalNow || 0) - Number(patientDue || 0)),
                                   change: 0,
                                   source,
@@ -3936,10 +3966,19 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div className="office-receipt-row"><span>Patient</span><strong>{paymentReceipt.patientName}</strong></div>
                 <div className="office-receipt-row"><span>Service</span><strong>{paymentReceipt.serviceLabel}</strong></div>
                 <div className="office-receipt-line" />
-                <div className="office-receipt-row"><span>Amount Due</span><strong>₱ {toMoney(paymentReceipt.amountDue)}</strong></div>
+                <div className="office-receipt-row"><span>Gross Amount</span><strong>₱ {toMoney(paymentReceipt.amountDue)}</strong></div>
+                {Number(paymentReceipt.philhealthDeduction || 0) > 0 ? (
+                  <div className="office-receipt-row"><span>Less PhilHealth</span><strong>−₱ {toMoney(paymentReceipt.philhealthDeduction)}</strong></div>
+                ) : null}
+                {Number(paymentReceipt.hmoCoverage || 0) > 0 ? (
+                  <div className="office-receipt-row"><span>Less HMO{paymentReceipt.hmoProvider ? ` (${paymentReceipt.hmoProvider})` : ''}</span><strong>−₱ {toMoney(paymentReceipt.hmoCoverage)}</strong></div>
+                ) : null}
+                {paymentReceipt.loaNumber ? <div className="office-receipt-row"><span>LOA Reference</span><strong>{paymentReceipt.loaNumber}</strong></div> : null}
+                <div className="office-receipt-row"><span>Net Amount Due</span><strong>₱ {toMoney(paymentReceipt.netAmountDue ?? paymentReceipt.amountDue)}</strong></div>
                 <div className="office-receipt-row"><span>Amount Received</span><strong>₱ {toMoney(paymentReceipt.amountReceived)}</strong></div>
                 <div className="office-receipt-row"><span>Change</span><strong>₱ {toMoney(paymentReceipt.change)}</strong></div>
-                <div className="office-receipt-row"><span>Status</span><strong>Paid</strong></div>
+                {Number(paymentReceipt.remainingBalance || 0) > 0 ? <div className="office-receipt-row"><span>Remaining Balance</span><strong>₱ {toMoney(paymentReceipt.remainingBalance)}</strong></div> : null}
+                <div className="office-receipt-row"><span>Status</span><strong>{paymentReceipt.status || (Number(paymentReceipt.remainingBalance || 0) > 0 ? 'Partially Paid' : 'Paid')}</strong></div>
                 <div className="office-receipt-note">
                   {paymentReceipt.note || (
                     String(paymentReceipt.source || '').toLowerCase().includes('lab')
@@ -4604,7 +4643,7 @@ export default function OfficeStaffDashboard({ mode }) {
                             <div className="office-payment-note">
                               {payMethod === 'Cash'
                                 ? 'Records the exact balance and shows change for the patient.'
-                                : 'Non-cash posting settles only the current invoice balance.'}
+                                : 'Enter a full or partial non-cash payment. The remaining balance stays open.'}
                             </div>
                             <button
                               type="button"

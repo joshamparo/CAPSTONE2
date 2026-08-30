@@ -1098,6 +1098,9 @@ router.put('/invoices/:id/hmo', async (req, res) => {
     if ((loaApprovedAmount > 0 || status === 'Approved' || status === 'Partially Approved' || status === 'Awaiting LOA') && !provider) {
       return res.status(400).json({ message: 'HMO provider is required when saving an HMO claim' });
     }
+    if ((status === 'Approved' || status === 'Partially Approved') && !loaNumber) {
+      return res.status(400).json({ message: 'LOA/reference number is required for an approved HMO claim' });
+    }
 
     if (!hasClaimPayload && !cardNumber) {
       await prisma.$queryRaw`DELETE FROM public.billing_hmo_claims WHERE invoice_id = ${invoiceId}`;
@@ -1371,6 +1374,10 @@ router.get('/hmo-debug', async (req, res) => {
 
 router.get('/hmo-queue', async (req, res) => {
   try {
+    const role = String(req.headers['x-user-role'] || '').toLowerCase();
+    if (!['cashier', 'admin', 'doctor_secretary', 'staff'].includes(role)) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
     // FIRST: run all schema warmups that the walk-in route would run: ensure tables + add missing columns
     try {
       await Promise.all([
@@ -1542,10 +1549,7 @@ router.get('/hmo-queue', async (req, res) => {
       } catch (_refBackfillErr) { /* never break the queue */ }
     } catch (_warmupIgnore) { /* never break */ }
 
-    const role = String(req.headers['x-user-role'] || '').toLowerCase();
-    if (!['cashier', 'admin', 'doctor_secretary', 'staff'].includes(role)) return res.status(401).json({ message: 'Unauthorized' });
-
-    const filterModeRaw = String(req.query.filter || 'approved').trim().toLowerCase();
+    const filterModeRaw = String(req.query.filter || 'all').trim().toLowerCase();
     const filterMode = filterModeRaw === 'all' ? 'all' : 'approved';
     const query = String(req.query.q || '').trim().toLowerCase();
     const page = Math.max(1, Math.trunc(Number(req.query.page || 1)));
@@ -2724,6 +2728,11 @@ router.get('/hmo-queue', async (req, res) => {
         row.hmo_claim?.provider,
         row.hmo_claim?.loa_number,
         row.hmo_claim?.hmo_card_number,
+        row.hmo_claim?.notes,
+        row.hmo_claim?.requested_by,
+        row.hmo_claim?.updated_by,
+        row.hmo_claim?.company,
+        row.company,
         row.claim_status,
         row.workups_list
       ]
@@ -3302,7 +3311,7 @@ router.post('/payments', async (req, res) => {
               role: 'Cashier',
               action: 'Create',
               target: `Invoice:${invoiceId.toString()}` ,
-              details: `Payment recorded � invoice ${invoiceId.toString()} � ${method} � ${reference} � amount ${String(amountMoney)}`
+              details: `Payment recorded • invoice ${invoiceId.toString()} • ${method} • ${reference || 'no reference'} • amount ${String(amountMoney)}`
             }
           }).catch(() => {});
         }
@@ -4034,6 +4043,8 @@ router.get('/summary/doctor', async (req, res) => {
 router.get('/payments', async (req, res) => {
   try {
     await ensureBillingTablesExist();
+    const role = String(req.headers['x-user-role'] || '').toLowerCase();
+    if (!['cashier', 'admin'].includes(role)) return res.status(401).json({ message: 'Unauthorized' });
     const { invoiceId, take, skip } = req.query;
     const limit = parseLimit(take, { min: 1, max: 200, fallback: 50 });
     const offset = parseOffset(skip, { min: 0, max: 5000, fallback: 0 });
