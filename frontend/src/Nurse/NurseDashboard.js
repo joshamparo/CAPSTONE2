@@ -1294,6 +1294,9 @@ function NurseDashboard() {
       const response = await fetchJson(`/api/patients/walk-in-intake`, {
         apiBase: API_BASE,
         method: 'POST',
+        // Walk-in intake can include patient creation, availability checks,
+        // billing/HMO synchronization, and email delivery in one request.
+        timeoutMs: 180000,
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders()

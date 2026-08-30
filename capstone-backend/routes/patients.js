@@ -2711,7 +2711,14 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     footer_note: 'You will receive another email once your appointment has been approved and assigned to a doctor. Thank you for choosing Pascual General Hospital.'
                 };
                 
-                const sent = await sendAppointmentSummaryEmail({ to, subject, templateParams }).catch(() => ({ ok: false }));
+                // Email must never keep an otherwise successful registration
+                // request open indefinitely. The delivery may still complete
+                // after this guard, while the saved intake is returned to UI.
+                const emailTask = sendAppointmentSummaryEmail({ to, subject, templateParams }).catch(() => ({ ok: false }));
+                const sent = await Promise.race([
+                    emailTask,
+                    new Promise((resolve) => setTimeout(() => resolve({ ok: false, queued: true }), 12000))
+                ]);
                 emailSent = Boolean(sent?.ok);
             }
         }
