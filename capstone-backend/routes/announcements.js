@@ -115,9 +115,20 @@ function decodeXmlEntities(value) {
 }
 
 function stripHtml(value) {
-    return decodeXmlEntities(String(value || '').replace(/<[^>]+>/g, ' '))
+    // Some RSS feeds encode the whole HTML fragment, so decode before and
+    // after removing tags to avoid leaking <p> or entity text to the UI.
+    return decodeXmlEntities(decodeXmlEntities(String(value || ''))
+        .replace(/<[^>]+>/g, ' '))
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+function compactSummary(value, max = 360) {
+    const clean = stripHtml(value);
+    if (clean.length <= max) return clean;
+    const clipped = clean.slice(0, max + 1);
+    const boundary = clipped.lastIndexOf(' ');
+    return `${clipped.slice(0, boundary > max * 0.7 ? boundary : max).trim()}…`;
 }
 
 function slugify(value) {
@@ -170,7 +181,7 @@ function parseRssItems(xml, source) {
             const title = stripHtml(extractTag(block, 'title'));
             const description = extractTag(block, 'description');
             const contentEncoded = extractTag(block, 'content:encoded');
-            const summary = stripHtml(description || contentEncoded);
+            const summary = compactSummary(description || contentEncoded);
             const link = decodeXmlEntities(extractTag(block, 'link')).trim();
             const url = safeUrl(link);
             if (!title || !url) return null;
@@ -281,15 +292,16 @@ async function getLiveNews(limit) {
     }
 
     deduped.sort((a, b) => {
-        if (b.relevanceScore !== a.relevanceScore) return b.relevanceScore - a.relevanceScore;
         const aTime = a.publishedAt ? Date.parse(a.publishedAt) : 0;
         const bTime = b.publishedAt ? Date.parse(b.publishedAt) : 0;
         if (bTime !== aTime) return bTime - aTime;
+        if (b.relevanceScore !== a.relevanceScore) return b.relevanceScore - a.relevanceScore;
         return String(a.title || '').localeCompare(String(b.title || ''));
     });
 
     const trustedFallback = fallbackLiveNews();
-    const merged = [...deduped, ...trustedFallback].filter((item, index, items) => {
+    const liveLimit = Math.min(3, target);
+    const merged = [...deduped.slice(0, liveLimit), ...trustedFallback].filter((item, index, items) => {
         const key = String(item.url || '').toLowerCase();
         return key && items.findIndex((candidate) => String(candidate.url || '').toLowerCase() === key) === index;
     });
@@ -653,5 +665,5 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
 });
 
 module.exports = router;
-module.exports._newsTest = { decodeXmlEntities, fallbackLiveNews };
+module.exports._newsTest = { decodeXmlEntities, stripHtml, compactSummary, fallbackLiveNews };
 
