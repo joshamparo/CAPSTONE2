@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import "./HomePage.css";
 import "../components/AccountHeaderActions.css";
 import SignOutConfirmModal from "../components/SignOutConfirmModal";
-import { Phone, Bone, Stethoscope, MapPin, Mail, Clock, Facebook, MessageCircle, Scissors, Syringe, Baby, Ear, Microscope, Smile, Eye, Scan, Droplet, Sparkles, ShieldCheck, Users, HeartPulse, Building2, BadgeCheck } from "lucide-react";
+import { Phone, Bone, Stethoscope, MapPin, Mail, Clock, Facebook, MessageCircle, Scissors, Syringe, Baby, Ear, Microscope, Smile, Eye, Scan, Droplet, Sparkles, ShieldCheck, Users, HeartPulse, Building2, BadgeCheck, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const HOSPITAL_LOCATION = {
@@ -131,6 +131,12 @@ const NEWS_FALLBACK_IMAGES = [
   'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=900&q=80'
 ];
 
+const OFFICIAL_NEWS_FALLBACK = [
+  { id: 'philhealth-latest', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'Latest official PhilHealth news and advisories', summary: 'Browse verified benefit, primary-care, medicine-access, and member-service updates directly from PhilHealth.', url: 'https://www.philhealth.gov.ph/news/', imageUrl: '', publishedAt: null },
+  { id: 'who-philippines-latest', category: 'Philippine Health', label: 'WHO Philippines', source: 'World Health Organization', title: 'Latest official health releases from WHO Philippines', summary: 'Read verified public-health releases, statements, and joint updates from the WHO country office in the Philippines.', url: 'https://www.who.int/philippines/news/releases', imageUrl: '', publishedAt: null },
+  { id: 'who-global-latest', category: 'Global Health', label: 'WHO', source: 'World Health Organization', title: 'Latest global public-health news from WHO', summary: 'Read current health guidance, emergency updates, research announcements, and official statements from WHO.', url: 'https://www.who.int/news-room/', imageUrl: '', publishedAt: null }
+];
+
 function pickNewsImage(item, index) {
   const directImage = String(item?.imageUrl || '').trim();
   if (/^https:\/\//i.test(directImage)) return directImage;
@@ -140,77 +146,23 @@ function pickNewsImage(item, index) {
   return NEWS_FALLBACK_IMAGES[hash % NEWS_FALLBACK_IMAGES.length];
 }
 
+function formatNewsDate(value) {
+  const date = new Date(String(value || ''));
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [user, setUser] = useState(null);
   const [activeServiceGroup, setActiveServiceGroup] = useState('all');
   const [showAllServices, setShowAllServices] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [newsItems, setNewsItems] = useState([
-    {
-      id: 'news-1',
-      category: 'Health & Lifestyle',
-      label: 'PhilHealth',
-      source: 'PhilHealth',
-      title: 'PhilHealth, CHR Unite to Champion Healthcare as a Fundamental Human Right',
-      summary: 'PhilHealth and the Commission on Human Rights (CHR) joined forces for a learning forum titled "Health as a Human Right: Bridging the Healthcare Divide" to reinforce access to quality healthcare as a fundamental human right.',
-      url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a3b405bdfbb6.php',
-      imageUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=900&q=80'
-    },
-    {
-      id: 'news-2',
-      category: 'Health & Lifestyle',
-      label: 'PhilHealth',
-      source: 'PhilHealth',
-      title: 'PhilHealth Launches GAMOT in Zamboanga Sibugay, Offering ₱20,000 in Annual Free Medicines',
-      summary: 'PhilHealth officially launched the Guaranteed and Accessible Medications for Outpatient Treatment (GAMOT) program, establishing a provincial system where eligible members can access up to ₱20,000 worth of free essential medicines annually.',
-      url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a2634094e2bd.php',
-      imageUrl: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=900&q=80'
-    },
-    {
-      id: 'news-3',
-      category: 'Philippine News',
-      label: 'DOH Philippines',
-      source: 'Inquirer.net',
-      title: 'Health workers to new DOH chief: Tackle unresolved healthcare woes',
-      summary: 'Health care workers in both public and private sectors welcomed the appointment of Dr. Brix Pujalte Jr. as the new DOH secretary, calling for him to address unresolved problems and improve public healthcare.',
-      url: 'https://newsinfo.inquirer.net/2263694/health-workers-to-new-doh-chief-tackle-unresolved-healthcare-woes',
-      imageUrl: 'https://images.unsplash.com/photo-1530497610245-94d3c16cda28?auto=format&fit=crop&w=900&q=80'
-    },
-    {
-      id: 'news-4',
-      category: 'Global Health',
-      label: 'WHO Updates',
-      source: 'World Health Organization',
-      title: 'WHO adds first diagnostic test for Ebola Bundibugyo virus to its Emergency Use Listing',
-      summary: 'The WHO has added the first molecular diagnostic test for Bundibugyo virus to its Emergency Use Listing, helping confirm infection rapidly and accurately to contain outbreaks.',
-      url: 'https://www.who.int/news/item/02-07-2026-who-adds-first-diagnostic-test-for-ebola-bundibugyo-virus-to-its-emergency-use-listing',
-      imageUrl: 'https://images.unsplash.com/photo-1584515933487-779824d29309?auto=format&fit=crop&w=900&q=80'
-    },
-    {
-      id: 'news-5',
-      category: 'Health Research',
-      label: 'Vaccines',
-      source: 'Health Pulse Online',
-      title: 'WHO: Next-Gen Flu Shots To Slash Deaths by Millions',
-      summary: 'A new WHO assessment estimates that next-generation influenza vaccines could prevent up to 18 billion cases of the flu and save more than 6 million lives globally over the next 25 years.',
-      url: 'https://healthpulseonline.com/who-next-gen-flu-shots-to-slash-deaths-by-millions/',
-      imageUrl: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=900&q=80'
-    },
-    {
-      id: 'news-6',
-      category: 'Global Health',
-      label: 'Epidemic Response',
-      source: 'New Kerala',
-      title: 'India Can Boost Ebola Vaccine and Antibody Development via WHO Lab Network: Ex-WHO Chief',
-      summary: 'Former WHO Chief Scientist Soumya Swaminathan emphasized that India can play a key role in accelerating Ebola-related research and developing vaccines through international collaboration.',
-      url: 'https://www.newkerala.com/news/a/india-can-boost-ebola-vaccine-antibody-development-through-805.htm',
-      imageUrl: 'https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?auto=format&fit=crop&w=900&q=80'
-    }
-  ]);
-  const [newsLoading, setNewsLoading] = useState(false);
+  const [newsItems, setNewsItems] = useState(OFFICIAL_NEWS_FALLBACK);
+  const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState('');
   const [newsCursor, setNewsCursor] = useState(0);
+  const [newsPaused, setNewsPaused] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -234,19 +186,50 @@ function HomePage() {
   }, []);
 
   useEffect(() => {
-    // We use hardcoded high-quality static news for better UI consistency
-    setNewsLoading(false);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 12000) : null;
+    const loadOfficialNews = async () => {
+      setNewsLoading(true);
+      setNewsError('');
+      try {
+        const response = await fetch(`${API_BASE}/api/announcements/news?limit=6`, controller ? { signal: controller.signal } : undefined);
+        const data = await response.json().catch(() => []);
+        if (!response.ok || !Array.isArray(data) || data.length === 0) throw new Error('Official news feed is unavailable.');
+        const trusted = data.filter((item) => {
+          try {
+            const host = new URL(String(item?.url || '')).hostname.toLowerCase();
+            return ['who.int', 'www.who.int', 'philhealth.gov.ph', 'www.philhealth.gov.ph'].includes(host);
+          } catch (_) {
+            return false;
+          }
+        });
+        if (!trusted.length) throw new Error('Official news feed returned no trusted links.');
+        setNewsItems(trusted);
+      } catch (error) {
+        setNewsError(error?.name === 'AbortError'
+          ? 'Showing verified official links because the live feed timed out.'
+          : 'Showing verified official links while the live feed refreshes.');
+        setNewsItems(OFFICIAL_NEWS_FALLBACK);
+      } finally {
+        setNewsLoading(false);
+      }
+    };
+    loadOfficialNews();
+    return () => {
+      if (timer) clearTimeout(timer);
+      if (controller) controller.abort();
+    };
   }, []);
 
   useEffect(() => {
-    if (newsLoading) return;
+    if (newsLoading || newsPaused) return;
     const len = Array.isArray(newsItems) ? newsItems.length : 0;
     if (len <= 3) return;
     const t = setInterval(() => {
       setNewsCursor((prev) => (prev + 1) % len);
     }, 8000);
     return () => clearInterval(t);
-  }, [newsItems, newsLoading]);
+  }, [newsItems, newsLoading, newsPaused]);
 
   useEffect(() => {
         if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return undefined;
@@ -1689,7 +1672,7 @@ function HomePage() {
       </section>
 
       {/* News & Updates Section */}
-      <section className="news-section page-section" id="news">
+      <section className="news-section page-section" id="news" onMouseEnter={() => setNewsPaused(true)} onMouseLeave={() => setNewsPaused(false)}>
         <div className="page-shell">
           <div className="news-head reveal-on-scroll">
             <div className="eyebrow">Current Updates</div>
@@ -1701,8 +1684,15 @@ function HomePage() {
           
           <div className="news-grid">
             {newsError ? (
-              <div className="news-error-msg">
-                Unable to refresh the live feed right now.
+              <div className="news-error-msg" role="status">{newsError}</div>
+            ) : null}
+
+            {!newsLoading && newsItems.length > 3 ? (
+              <div className="news-controls" aria-label="News carousel controls">
+                <button type="button" onClick={() => setNewsCursor((current) => (current - 1 + newsItems.length) % newsItems.length)} aria-label="Previous news articles"><ChevronLeft size={18} /></button>
+                <span>{newsCursor + 1} / {newsItems.length}</span>
+                <button type="button" onClick={() => setNewsPaused((paused) => !paused)} aria-label={newsPaused ? 'Resume news rotation' : 'Pause news rotation'}>{newsPaused ? <Play size={16} /> : <Pause size={16} />}</button>
+                <button type="button" onClick={() => setNewsCursor((current) => (current + 1) % newsItems.length)} aria-label="Next news articles"><ChevronRight size={18} /></button>
               </div>
             ) : null}
 
@@ -1720,6 +1710,7 @@ function HomePage() {
               const summary = String(n?.summary || '');
               const url = String(n?.url || '').trim();
               const img = pickNewsImage(n, idx);
+              const publishedDate = formatNewsDate(n?.publishedAt);
 
               const badgeStyleByCategory = {
                 'Philippine News': { bg: '#ffedd5', fg: '#c2410c' },
@@ -1730,12 +1721,13 @@ function HomePage() {
               return (
                 <div key={n?.id || idx} className={`news-card reveal-on-scroll reveal-delay-${(idx % 3) + 1}`}>
                   <div className="news-card-image">
-                    <img src={img} alt={`${cat || 'PH'} News`} />
+                    <img src={img} alt={`${title || cat || 'Official health'} news`} loading="lazy" width="900" height="480" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = '/images/hero_bg.jpg'; }} />
                   </div>
                   <div className="news-card-body">
                     <div className="news-card-meta">
                       <span className="news-label" style={{ background: badge.bg, color: badge.fg }}>{label}</span>
                       <span className="news-source">{source || cat || 'Philippines'}</span>
+                      {publishedDate ? <time className="news-date" dateTime={String(n.publishedAt)}>{publishedDate}</time> : null}
                     </div>
 
                     {newsLoading ? (

@@ -65,25 +65,11 @@ function safeUrl(raw) {
 
 const LIVE_NEWS_RSS_SOURCES = [
     {
-        id: 'philstar-headlines',
-        category: 'Philippines',
-        label: 'Philstar (Filtered)',
-        sourceName: 'Philstar.com',
-        url: 'https://www.philstar.com/rss/headlines'
-    },
-    {
-        id: 'philstar-nation',
-        category: 'Philippines',
-        label: 'Philstar Nation (Filtered)',
-        sourceName: 'Philstar.com',
-        url: 'https://www.philstar.com/rss/nation'
-    },
-    {
-        id: 'philstar-lifestyle',
-        category: 'Health',
-        label: 'Philstar Lifestyle (Health)',
-        sourceName: 'Philstar.com',
-        url: 'https://www.philstar.com/rss/lifestyle'
+        id: 'who-news',
+        category: 'Global Health',
+        label: 'WHO',
+        sourceName: 'World Health Organization',
+        url: 'https://www.who.int/rss-feeds/news-english.xml'
     }
 ];
 
@@ -120,6 +106,7 @@ function decodeXmlEntities(value) {
         .replace(/<!\[CDATA\[(.*?)\]\]>/gs, '$1')
         .replace(/&amp;/g, '&')
         .replace(/&quot;/g, '"')
+        .replace(/&nbsp;/g, ' ')
         .replace(/&#39;|&apos;/g, "'")
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
@@ -234,37 +221,40 @@ async function fetchRssSource(source) {
 function fallbackLiveNews() {
     return [
         {
-            id: 'fallback-philstar-headlines',
-            category: 'Philippine News',
-            label: 'Philstar Headlines',
-            source: 'Philstar.com',
-            title: 'Browse the latest Philippine headlines',
-            summary: 'Open the Philstar headlines page directly when the live article feed is temporarily unavailable.',
-            url: 'https://www.philstar.com/headlines',
-            imageUrl: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=900&q=80',
-            publishedAt: null
+            id: 'official-philhealth-partnership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth',
+            title: 'PhilHealth and St. Luke’s formalize landmark health-care partnership',
+            summary: 'Official PhilHealth update on expanding access to quality health care through a new institutional partnership.',
+            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8e8005e1b93.php', imageUrl: '', publishedAt: '2026-08-25T00:00:00.000Z'
         },
         {
-            id: 'fallback-philstar-nation',
-            category: 'Philippine News',
-            label: 'Philstar Nation',
-            source: 'Philstar.com',
-            title: 'Open the Philstar Nation section',
-            summary: 'Visit the Philstar Nation page for current public-interest and national reporting.',
-            url: 'https://www.philstar.com/nation',
-            imageUrl: 'https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=900&q=80',
-            publishedAt: null
+            id: 'official-philhealth-leadership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth',
+            title: 'PhilHealth’s new President and CEO vows to accelerate national health gains',
+            summary: 'Official leadership update outlining continuity and acceleration of PhilHealth programs under the national health agenda.',
+            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8bd5523ff79.php', imageUrl: '', publishedAt: '2026-08-20T00:00:00.000Z'
         },
         {
-            id: 'fallback-philstar-lifestyle',
-            category: 'Health & Lifestyle',
-            label: 'Philstar Lifestyle',
-            source: 'Philstar.com',
-            title: 'Open the Philstar Lifestyle section',
-            summary: 'Visit the Philstar Lifestyle page for wellness and community-interest coverage.',
-            url: 'https://www.philstar.com/lifestyle',
-            imageUrl: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=900&q=80',
-            publishedAt: null
+            id: 'official-philhealth-human-right-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth',
+            title: 'PhilHealth and CHR champion health care as a fundamental human right',
+            summary: 'PhilHealth and the Commission on Human Rights reinforce equitable access to quality health care for Filipinos.',
+            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a3b405bdfbb6.php', imageUrl: '', publishedAt: '2026-06-23T00:00:00.000Z'
+        },
+        {
+            id: 'official-philhealth-gamot-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth',
+            title: 'PhilHealth launches GAMOT in Zamboanga Sibugay',
+            summary: 'The official GAMOT program update explains expanded access to essential outpatient medicines for eligible members.',
+            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a2634094e2bd.php', imageUrl: '', publishedAt: '2026-06-04T00:00:00.000Z'
+        },
+        {
+            id: 'official-who-philippines-releases', category: 'Philippine Health', label: 'WHO Philippines', source: 'World Health Organization',
+            title: 'Latest official health releases from WHO Philippines',
+            summary: 'Read verified public-health releases, statements, and joint updates from the WHO country office in the Philippines.',
+            url: 'https://www.who.int/philippines/news/releases', imageUrl: '', publishedAt: null
+        },
+        {
+            id: 'official-philhealth-news', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth',
+            title: 'Latest official PhilHealth news and advisories',
+            summary: 'Browse current benefit, primary-care, medicine-access, and member-service updates directly from PhilHealth.',
+            url: 'https://www.philhealth.gov.ph/news/', imageUrl: '', publishedAt: null
         }
     ];
 }
@@ -298,8 +288,12 @@ async function getLiveNews(limit) {
         return String(a.title || '').localeCompare(String(b.title || ''));
     });
 
-    const finalItems = (deduped.length ? deduped : fallbackLiveNews())
-        .slice(0, target)
+    const trustedFallback = fallbackLiveNews();
+    const merged = [...deduped, ...trustedFallback].filter((item, index, items) => {
+        const key = String(item.url || '').toLowerCase();
+        return key && items.findIndex((candidate) => String(candidate.url || '').toLowerCase() === key) === index;
+    });
+    const finalItems = merged.slice(0, target)
         .map(({ relevanceScore, ...item }) => item);
 
     liveNewsCache = {
@@ -659,4 +653,5 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
 });
 
 module.exports = router;
+module.exports._newsTest = { decodeXmlEntities, fallbackLiveNews };
 
