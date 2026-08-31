@@ -9,27 +9,9 @@ import StatusBadge from '../components/StatusBadge';
 import { checkBackendHealth, fetchJson } from '../utils/api';
 import { supabase } from '../lib/supabaseClient';
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
-const VIDEO_ROOM_DEBUG_URL = 'http://192.168.1.74:7777/event';
-
-// #region debug-point A:web-reporter
-const reportVideoRoomDebug = ({ runId = 'pre-fix', hypothesisId = 'A', location = 'DoctorDashboard.js', msg = '[DEBUG] web trace', data = {} }) => {
-  try {
-    fetch(VIDEO_ROOM_DEBUG_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: 'video-room-mismatch',
-        runId,
-        hypothesisId,
-        location,
-        msg,
-        data,
-        ts: Date.now()
-      })
-    }).catch(() => {});
-  } catch (_) {}
-};
-// #endregion
+// Older trace call sites intentionally do nothing. Patient/room data must not
+// be sent to a developer workstation from a production browser.
+const reportVideoRoomDebug = () => {};
 
 function DoctorDashboard() {
   const navigate = useNavigate();
@@ -186,12 +168,6 @@ function DoctorDashboard() {
 
   const [staffSettings, setStaffSettings] = useState({ prefs: {}, updatedAt: null });
   const [loadingStaffSettings, setLoadingStaffSettings] = useState(false);
-
-  const [worklistRange, setWorklistRange] = useState('today'); // today | week
-  const [worklistLoading, setWorklistLoading] = useState(false);
-  const [worklistError, setWorklistError] = useState('');
-  const [worklistAppointments, setWorklistAppointments] = useState([]);
-  const [worklistApprovals, setWorklistApprovals] = useState([]);
 
   const [selectedLabResultId, setSelectedLabResultId] = useState(null);
   const [labInterpretation, setLabInterpretation] = useState({ note: '', updatedAt: null });
@@ -354,8 +330,8 @@ function DoctorDashboard() {
   }, [doctorSpecialization]);
 
   const allowedDoctorNav = useMemo(() => {
-    const base = ['dashboard', 'worklist', 'patient-records', 'certificates', 'doctor-chat', 'profile'];
-    const withCare = ['approval-inbox', 'patient-summary'];
+    const base = ['dashboard', 'approval-inbox', 'patient-records', 'certificates', 'doctor-chat', 'profile'];
+    const withCare = ['patient-summary'];
     const withLabs = ['labs'];
 
     const spec = doctorSpecKey;
@@ -369,7 +345,7 @@ function DoctorDashboard() {
   }, [doctorSpecKey, isERDoctor]);
 
   const defaultDoctorNav = useMemo(() => {
-    const preferred = ['dashboard', 'worklist', 'patient-records', 'certificates', 'doctor-chat', 'patient-summary', 'labs', 'approval-inbox'];
+    const preferred = ['dashboard', 'patient-records', 'certificates', 'doctor-chat', 'patient-summary', 'labs', 'approval-inbox'];
     for (const k of preferred) {
       if (allowedDoctorNav.has(k)) return k;
     }
@@ -387,7 +363,6 @@ function DoctorDashboard() {
     
     let items = [
       { key: 'dashboard', label: 'Patients Queue', icon: <User size={20} /> },
-      { key: 'worklist', label: 'Worklist', icon: <Calendar size={20} /> },
       { key: 'doctor-chat', label: 'Doctor Chat', icon: <MessageSquare size={20} /> },
       { key: 'approval-inbox', label: 'Approvals Inbox', icon: <MessageSquare size={20} /> },
       { key: 'patient-summary', label: 'Patient Summary', icon: <ChevronRight size={20} /> },
@@ -1041,8 +1016,7 @@ function DoctorDashboard() {
     const now = new Date();
     const diffMin = (now.getTime() - startAt.getTime()) / 60000;
     if (diffMin < -10) return { allowed: false, reason: 'You can start/join 10 mins before schedule' };
-    // Increased window to 12 hours for testing purposes
-    if (diffMin > 720) return { allowed: false, reason: 'Call window ended' };
+    if (diffMin > 120) return { allowed: false, reason: 'Call window ended' };
     return { allowed: true, reason: '' };
   };
 
@@ -1425,75 +1399,6 @@ function DoctorDashboard() {
     }
   };
 
-  const computeWorklistDates = () => {
-    const now = new Date();
-    const start = new Date(now);
-    const end = new Date(now);
-
-    if (worklistRange === 'week') {
-      const day = (now.getDay() + 6) % 7;
-      start.setDate(now.getDate() - day);
-      end.setDate(start.getDate() + 6);
-    }
-
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
-  };
-
-  const fetchWorklist = async () => {
-    if (!doctorInboxName) return;
-    setWorklistLoading(true);
-    setWorklistError('');
-    try {
-      const { start, end } = computeWorklistDates();
-      const startStr = formatDateParam(start);
-      const endStr = formatDateParam(end);
-      const doctorUuid = currentDoctorUuid;
-
-      const [apptJson, approvalsJson] = await Promise.all([
-        fetchJson(`/api/appointments?start=${startStr}&end=${endStr}`, { apiBase: API_BASE, headers: { ...authHeaders } }),
-        fetchJson(`/api/approval-requests/inbox?role=doctor&doctorId=${encodeURIComponent(doctorUuid)}&name=${encodeURIComponent(doctorInboxName)}&take=50`, { apiBase: API_BASE, headers: { ...authHeaders } })
-      ]);
-
-      const target = normalizeAssignee(doctorInboxName || doctorName);
-      const allAppts = Array.isArray(apptJson) ? apptJson : [];
-      const mineAppts = allAppts.filter((apt) => {
-        const st = String(apt.status || '').trim().toLowerCase();
-        if (st.includes('cancel') || st.includes('no-show') || st.includes('no show') || st.includes('completed') || st.includes('done')) {
-          return false;
-        }
-        const aptUuid = String(apt.doctorUuid || apt.doctor_uuid || '').trim();
-        if (doctorUuid && aptUuid && aptUuid === doctorUuid) return true;
-
-        // Special rule for Medicine/ER doctors: show triage walk-ins
-        const reason = String(apt.reason || '').toLowerCase();
-        if (isERDoctor && reason.includes('[triage]')) {
-          return true;
-        }
-
-        return normalizeAssignee(apt.doctor || apt.preferredDoctor) === target;
-      }).sort((a, b) => {
-        // Sort by triage level (1 is highest priority)
-        const lvA = a.triageLevel || a.triage_level || 99;
-        const lvB = b.triageLevel || b.triage_level || 99;
-        if (lvA !== lvB) return lvA - lvB;
-        // Then by time
-        return new Date(a.appointment_date || a.appointmentDate || 0) - new Date(b.appointment_date || b.appointmentDate || 0);
-      });
-      setWorklistAppointments(mineAppts);
-
-      const approvals = Array.isArray(approvalsJson) ? approvalsJson : [];
-      setWorklistApprovals(approvals);
-    } catch (e) {
-      setWorklistAppointments([]);
-      setWorklistApprovals([]);
-      setWorklistError(String(e?.message || 'Failed to load worklist.'));
-    } finally {
-      setWorklistLoading(false);
-    }
-  };
-
   const fetchPatients = async () => {
     setLoadingPatients(true);
     setPatientsError('');
@@ -1723,13 +1628,15 @@ function DoctorDashboard() {
     try {
       // 1. Save Note if there's content
       if (noteForm.assessment || noteForm.subjective || noteForm.plan) {
-        await saveNote();
+        const noteSaved = await saveNote();
+        if (!noteSaved) throw new Error('Complete the required SOAP fields before finalizing.');
       }
       
       // 2. Save Prescription if there are items
       const hasPrescription = prescriptionItems.some(it => it.medication.trim() !== '');
       if (hasPrescription) {
-        await savePrescription();
+        const prescriptionSaved = await savePrescription();
+        if (!prescriptionSaved) throw new Error('Correct the prescription fields before finalizing.');
       }
 
       // 3. Update Patient Status based on Disposition
@@ -2118,10 +2025,6 @@ function DoctorDashboard() {
   }, []);
 
   useEffect(() => {
-    if (activeNav === 'worklist') fetchWorklist();
-  }, [activeNav, worklistRange, doctorInboxName]);
-
-  useEffect(() => {
     let parsed = null;
     try {
       parsed = JSON.parse(localStorage.getItem('currentUser'));
@@ -2432,10 +2335,11 @@ function DoctorDashboard() {
   };
 
   const saveNote = async (e) => {
-    if (!selectedPatient?._id) return;
+    if (e) e.preventDefault();
+    if (!selectedPatient?._id) return false;
     if (!userRole) {
       setToast({ type: 'error', message: 'Session missing. Please login again.' });
-      return;
+      return false;
     }
     const requiredNoteFields = [
       ['subjective', 'Subjective'],
@@ -2448,7 +2352,21 @@ function DoctorDashboard() {
       .map(([, label]) => label);
     if (missingFields.length > 0) {
       setToast({ type: 'error', message: `Complete the required consultation fields: ${missingFields.join(', ')}.` });
-      return;
+      return false;
+    }
+    const tooShortFields = requiredNoteFields
+      .filter(([field]) => String(noteForm?.[field] || '').trim().length < 3)
+      .map(([, label]) => label);
+    if (tooShortFields.length > 0) {
+      setToast({ type: 'error', message: `Enter at least 3 characters for: ${tooShortFields.join(', ')}.` });
+      return false;
+    }
+    const tooLongFields = requiredNoteFields
+      .filter(([field]) => String(noteForm?.[field] || '').trim().length > 5000)
+      .map(([, label]) => label);
+    if (tooLongFields.length > 0) {
+      setToast({ type: 'error', message: `Maximum 5,000 characters exceeded for: ${tooLongFields.join(', ')}.` });
+      return false;
     }
     setSavingNote(true);
     const payload = {
@@ -2487,8 +2405,10 @@ function DoctorDashboard() {
       });
       await fetchNotes(selectedPatient._id);
       setToast({ type: 'success', message: 'Note saved.' });
+      return true;
     } catch (e) {
       setToast({ type: 'error', message: String(e?.message || 'Failed to save note.') });
+      return false;
     } finally {
       setSavingNote(false);
     }
@@ -2575,28 +2495,56 @@ function DoctorDashboard() {
   };
 
   const savePrescription = async () => {
-    if (!selectedPatient?._id) return;
+    if (!selectedPatient?._id) return false;
     if (!userRole) {
       setToast({ type: 'error', message: 'Session missing. Please login again.' });
-      return;
+      return false;
     }
-    const cleanItems = prescriptionItems
+    const normalizedItems = prescriptionItems
       .map((it) => ({
         medication: String(it.medication || '').trim(),
         dosage: String(it.dosage || '').trim(),
         frequency: String(it.frequency || '').trim(),
         duration: String(it.duration || '').trim(),
         notes: String(it.notes || '').trim()
-      }))
-      .filter((it) => it.medication);
+      }));
+    const cleanItems = normalizedItems.filter((it) => Object.values(it).some(Boolean));
 
-    if (cleanItems.length === 0) return;
+    const diagnosis = String(prescriptionMeta.diagnosis || '').trim();
+    if (diagnosis.length < 2) {
+      setToast({ type: 'error', message: 'Diagnosis is required and must contain at least 2 characters.' });
+      return false;
+    }
+    if (diagnosis.length > 500) {
+      setToast({ type: 'error', message: 'Diagnosis cannot exceed 500 characters.' });
+      return false;
+    }
+    if (cleanItems.length === 0) {
+      setToast({ type: 'error', message: 'Add at least one medication.' });
+      return false;
+    }
+    const incompleteRows = cleanItems
+      .map((item, index) => ({ index: index + 1, missing: ['medication', 'dosage', 'frequency', 'duration'].filter((field) => !item[field]) }))
+      .filter((row) => row.missing.length > 0);
+    if (incompleteRows.length > 0) {
+      const first = incompleteRows[0];
+      setToast({ type: 'error', message: `Medication row ${first.index}: complete ${first.missing.join(', ')}.` });
+      return false;
+    }
+    if (cleanItems.some((item) => Object.values(item).some((value) => value.length > 500))) {
+      setToast({ type: 'error', message: 'Prescription fields cannot exceed 500 characters.' });
+      return false;
+    }
+    if (rxSafety.duplicateMeds.length > 0) {
+      setToast({ type: 'error', message: `Remove duplicate medication entries: ${rxSafety.duplicateMeds.join(', ')}.` });
+      return false;
+    }
 
     setSavingPrescription(true);
     const payload = {
       patientId: selectedPatient._id,
       doctorName,
-      diagnosis: String(prescriptionMeta.diagnosis || '').trim(),
+      diagnosis,
       instructions: String(prescriptionMeta.instructions || '').trim(),
       items: cleanItems,
       isSentToPharmacy,
@@ -2621,8 +2569,10 @@ function DoctorDashboard() {
       clearRxDraft();
       await fetchPrescriptions(selectedPatient._id);
       setToast({ type: 'success', message: wasSent ? 'Prescription saved and sent to Pharmacy.' : usedExternal ? 'Prescription saved for outside purchase.' : 'Prescription saved.' });
+      return true;
     } catch (e) {
       setToast({ type: 'error', message: String(e?.message || 'Failed to save prescription.') });
+      return false;
     } finally {
       setSavingPrescription(false);
     }
@@ -4250,8 +4200,7 @@ function DoctorDashboard() {
               )}
             </div>
           )}
-          {recordsTotal > recordTake && (
-            <div className="patient-pagination" style={{ margin: 0 }}>
+          <div className="patient-pagination" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }} aria-label="Patient record pages">
               <button 
                 type="button"
                 className="patient-page-btn"
@@ -4261,6 +4210,9 @@ function DoctorDashboard() {
               >
                 <ChevronLeft size={18} />
               </button>
+              <span className="doc-muted" aria-live="polite" style={{ minWidth: 92, textAlign: 'center', fontWeight: 700 }}>
+                Page {recordsTotal === 0 ? 0 : Math.floor(recordSkip / recordTake) + 1} of {Math.ceil(recordsTotal / recordTake)}
+              </span>
               <button 
                 type="button"
                 className="patient-page-btn"
@@ -4270,8 +4222,7 @@ function DoctorDashboard() {
               >
                 <ChevronRight size={18} />
               </button>
-            </div>
-          )}
+          </div>
         </div>
       </div>
 
@@ -4595,7 +4546,7 @@ function DoctorDashboard() {
                 } else if (String(n?.type || '').toLowerCase().includes('lab') || String(n?.type || '').toLowerCase().includes('result') || n?.type === 'lab_result') {
                   setActiveNav('labs');
                 } else if (String(n?.type || '').toLowerCase().includes('patient') || n?.type === 'patient_update') {
-                  setActiveNav('worklist');
+                  setActiveNav('patient-records');
                 } else {
                   setActiveNav(defaultDoctorNav);
                 }
@@ -4873,10 +4824,27 @@ function DoctorDashboard() {
                       </div>
                     </div>
 
-                    <textarea className="doc-textarea" required aria-label="Subjective" placeholder="Subjective *" value={noteForm.subjective} onChange={(e) => setNoteForm((v) => ({ ...v, subjective: e.target.value }))} />
-                    <textarea className="doc-textarea" required aria-label="Objective" placeholder="Objective *" value={noteForm.objective} onChange={(e) => setNoteForm((v) => ({ ...v, objective: e.target.value }))} />
-                    <textarea className="doc-textarea" required aria-label="Assessment" placeholder="Assessment *" value={noteForm.assessment} onChange={(e) => setNoteForm((v) => ({ ...v, assessment: e.target.value }))} />
-                    <textarea className="doc-textarea" required aria-label="Plan" placeholder="Plan *" value={noteForm.plan} onChange={(e) => setNoteForm((v) => ({ ...v, plan: e.target.value }))} />
+                    {[
+                      ['subjective', 'Subjective', 'Patient-reported symptoms, history, and concerns'],
+                      ['objective', 'Objective', 'Exam findings, observations, and measurable data'],
+                      ['assessment', 'Assessment', 'Clinical impression or diagnosis'],
+                      ['plan', 'Plan', 'Treatment, tests, referrals, and follow-up']
+                    ].map(([field, label, placeholder]) => (
+                      <label key={field} style={{ display: 'grid', gap: 6, fontWeight: 700, color: '#334155' }}>
+                        <span>{label} <span aria-hidden="true" style={{ color: '#dc2626' }}>*</span></span>
+                        <textarea
+                          className="doc-textarea"
+                          required
+                          minLength={3}
+                          maxLength={5000}
+                          aria-label={label}
+                          placeholder={placeholder}
+                          value={noteForm[field]}
+                          onChange={(e) => setNoteForm((v) => ({ ...v, [field]: e.target.value }))}
+                        />
+                        <span className="doc-muted" style={{ justifySelf: 'end', fontSize: '0.72rem' }}>{String(noteForm[field] || '').length}/5000</span>
+                      </label>
+                    ))}
 
                     <button className="doc-primary" type="button" onClick={saveNote} disabled={savingNote}>
                       Save Note
@@ -4991,6 +4959,10 @@ function DoctorDashboard() {
                         className="doc-input"
                         list="icd10-codes"
                         placeholder="Diagnosis (ICD-10 Code or free text) e.g., J01.9"
+                        required
+                        minLength={2}
+                        maxLength={500}
+                        aria-label="Diagnosis"
                         value={prescriptionMeta.diagnosis}
                         onChange={(e) => setPrescriptionMeta((v) => ({ ...v, diagnosis: e.target.value }))}
                       />
@@ -5049,6 +5021,8 @@ function DoctorDashboard() {
                     <input
                       className="doc-input"
                       placeholder="General instructions (optional)"
+                      maxLength={500}
+                      aria-label="General prescription instructions"
                       value={prescriptionMeta.instructions}
                       onChange={(e) => setPrescriptionMeta((v) => ({ ...v, instructions: e.target.value }))}
                     />
@@ -5076,11 +5050,11 @@ function DoctorDashboard() {
                     <div className="doc-rx-items">
                       {prescriptionItems.map((it, idx) => (
                         <div key={idx} className="doc-rx-row">
-                          <input className="doc-input" placeholder="Medication" value={it.medication} onChange={(e) => updatePrescriptionItem(idx, 'medication', e.target.value)} />
-                          <input className="doc-input" placeholder="Dosage" value={it.dosage} onChange={(e) => updatePrescriptionItem(idx, 'dosage', e.target.value)} />
-                          <input className="doc-input" placeholder="Frequency" value={it.frequency} onChange={(e) => updatePrescriptionItem(idx, 'frequency', e.target.value)} />
-                          <input className="doc-input" placeholder="Duration" value={it.duration} onChange={(e) => updatePrescriptionItem(idx, 'duration', e.target.value)} />
-                          <input className="doc-input" placeholder="Notes" value={it.notes} onChange={(e) => updatePrescriptionItem(idx, 'notes', e.target.value)} />
+                          <input className="doc-input" required maxLength={500} aria-label={`Medication ${idx + 1}`} placeholder="Medication *" value={it.medication} onChange={(e) => updatePrescriptionItem(idx, 'medication', e.target.value)} />
+                          <input className="doc-input" required maxLength={500} aria-label={`Dosage ${idx + 1}`} placeholder="Dosage *" value={it.dosage} onChange={(e) => updatePrescriptionItem(idx, 'dosage', e.target.value)} />
+                          <input className="doc-input" required maxLength={500} aria-label={`Frequency ${idx + 1}`} placeholder="Frequency *" value={it.frequency} onChange={(e) => updatePrescriptionItem(idx, 'frequency', e.target.value)} />
+                          <input className="doc-input" required maxLength={500} aria-label={`Duration ${idx + 1}`} placeholder="Duration *" value={it.duration} onChange={(e) => updatePrescriptionItem(idx, 'duration', e.target.value)} />
+                          <input className="doc-input" maxLength={500} aria-label={`Medication notes ${idx + 1}`} placeholder="Notes (optional)" value={it.notes} onChange={(e) => updatePrescriptionItem(idx, 'notes', e.target.value)} />
                           <button className="doc-icon-btn" type="button" onClick={() => removePrescriptionItem(idx)} disabled={prescriptionItems.length === 1}>
                             <Trash2 size={16} />
                           </button>
@@ -5157,127 +5131,6 @@ function DoctorDashboard() {
                 )}
               </div>
               )}
-            </div>
-          </>
-        )}
-
-        {activeNav === 'worklist' && (
-          <>
-            <div className="doc-welcome-banner">
-              <div className="doc-welcome-content">
-                <div className="doc-welcome-main">Worklist</div>
-                <div className="doc-welcome-sub">Appointments and approvals that need attention.</div>
-              </div>
-              <div className="doc-welcome-date-badge">{welcomeDateText}</div>
-            </div>
-
-            <div className="doctor-grid doctor-grid-2 doc-section">
-              <div className="doc-card">
-                <div className="doc-card-header">
-                  <div className="doc-card-title">
-                    <Calendar size={18} />
-                    Appointments
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <div className="doc-scope-chips">
-                      <button type="button" className={`doc-chip ${worklistRange === 'today' ? 'active' : ''}`} onClick={() => setWorklistRange('today')}>
-                        Today
-                      </button>
-                      <button type="button" className={`doc-chip ${worklistRange === 'week' ? 'active' : ''}`} onClick={() => setWorklistRange('week')}>
-                        This week
-                      </button>
-                    </div>
-                    <button className="doc-btn" type="button" onClick={fetchWorklist} disabled={worklistLoading}>
-                      <RotateCw size={16} />
-                      Refresh
-                    </button>
-                  </div>
-                </div>
-
-                {worklistLoading ? (
-                  <div className="doc-muted">Loading…</div>
-                ) : worklistError ? (
-                  <div className="doc-muted">{worklistError}</div>
-                ) : worklistAppointments.length === 0 ? (
-                  <div className="doc-empty">No appointments found.</div>
-                ) : (
-                  <div className="doc-history">
-                    {worklistAppointments.slice(0, 30).map((apt) => (
-                      <button
-                        key={apt.id}
-                        type="button"
-                        className="doc-history-item"
-                        onClick={() => {
-                          const aptPatientId = String(apt.patientId || apt.patient_id || '').trim();
-                          const aptEmail = String(apt.email || '').trim().toLowerCase();
-                          const matched =
-                            (aptPatientId ? patients.find((p) => String(p._id || p.id || '').trim() === aptPatientId) : null) ||
-                            (aptEmail ? patients.find((p) => String(p.email || '').trim().toLowerCase() === aptEmail) : null) ||
-                            null;
-                          if (matched) {
-                            setSelectedPatient(matched);
-                            setActiveNav('patient-summary');
-                          } else {
-                            setToast({ type: 'error', message: 'Patient record not found in system.' });
-                          }
-                        }}
-                        style={{ width: '100%', textAlign: 'left' }}
-                      >
-                        <div className="doc-history-top">
-                          <span className="doc-history-doctor">{apt.firstName} {apt.lastName}</span>
-                          <span className="doc-muted">{apt.status || '—'}</span>
-                        </div>
-                        <div className="doc-history-sub" style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-                          <span>{apt.reason || 'Appointment'}</span>
-                          <span>{apt.appointmentTime || '—'}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="doc-card">
-                <div className="doc-card-header">
-                  <div className="doc-card-title">
-                    <MessageSquare size={18} />
-                    Pending Approvals
-                  </div>
-                  <button className="doc-btn" type="button" onClick={() => { setActiveNav('approval-inbox'); fetchApprovalInbox(); }}>
-                    <ChevronRight size={16} />
-                    Open Inbox
-                  </button>
-                </div>
-
-                {worklistLoading ? (
-                  <div className="doc-muted">Loading…</div>
-                ) : worklistApprovals.length === 0 ? (
-                  <div className="doc-empty">No approval requests.</div>
-                ) : (
-                  <div className="doc-history">
-                    {worklistApprovals.slice(0, 30).map((r) => (
-                      <button
-                        key={r.id}
-                        type="button"
-                        className="doc-history-item"
-                        onClick={() => {
-                          setActiveNav('approval-inbox');
-                          openApprovalThread(r.id);
-                        }}
-                        style={{ width: '100%', textAlign: 'left' }}
-                      >
-                        <div className="doc-history-top">
-                          <span className="doc-history-doctor">{r.patientName || 'Patient'}</span>
-                          <span className="doc-muted">
-                            {Number(r.unreadCount || 0) > 0 ? `Unread: ${r.unreadCount}` : r.status || '—'}
-                          </span>
-                        </div>
-                        <div className="doc-history-sub">{r.lastMessage || r.reason || '—'}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           </>
         )}

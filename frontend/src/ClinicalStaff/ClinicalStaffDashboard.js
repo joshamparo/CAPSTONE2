@@ -277,6 +277,21 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     return `${y}-${m}-${d}`;
   };
 
+  const getVideoJoinWindowState = (appointment) => {
+    const dateValue = appointment?.appointmentDate || appointment?.appointment_date;
+    const timeValue = String(appointment?.appointmentTime || appointment?.appointment_time || '').trim();
+    const parsedDate = dateValue ? new Date(dateValue) : null;
+    const dateKey = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate.toISOString().slice(0, 10) : '';
+    const match = timeValue.match(/(\d{1,2}):(\d{2})/);
+    if (!dateKey || !match) return { allowed: false, reason: 'Missing schedule' };
+    const scheduledAt = new Date(`${dateKey}T${String(match[1]).padStart(2, '0')}:${match[2]}:00+08:00`);
+    if (Number.isNaN(scheduledAt.getTime())) return { allowed: false, reason: 'Invalid schedule' };
+    const diffMinutes = (Date.now() - scheduledAt.getTime()) / 60000;
+    if (diffMinutes < -10) return { allowed: false, reason: 'Available 10 minutes before schedule' };
+    if (diffMinutes > 120) return { allowed: false, reason: 'Call window ended' };
+    return { allowed: true, reason: '' };
+  };
+
   const refreshVideoAppointments = async () => {
     if (!isPhysicalTherapist) return;
     setVideoAppointmentsLoading(true);
@@ -1355,13 +1370,16 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     const scheduleLabel = [dateValue ? new Date(dateValue).toLocaleDateString() : '', appointment.appointmentTime || appointment.appointment_time || ''].filter(Boolean).join(' • ');
                     const status = String(appointment.status || 'Confirmed');
                     const unavailable = /cancel|complete|done|no.?show/i.test(status);
+                    const joinWindow = getVideoJoinWindowState(appointment);
+                    const actionUnavailable = unavailable || !joinWindow.allowed;
+                    const actionLabel = appointment.meetingActive ? 'Join Call' : 'Start Call';
                     return (
                       <tr key={String(appointment.id)}>
                         <td><strong>{patientName || 'Patient'}</strong><div className="cs-muted">{appointment.email || ''}</div></td>
                         <td>{scheduleLabel || '—'}</td>
                         <td>{appointment.reason || appointment.mainConcern || 'Physical Therapy consultation'}</td>
                         <td><span className={statusBadgeClass(status)}>{status}</span></td>
-                        <td><button type="button" className="cs-btn" disabled={unavailable} onClick={() => startVideoConsultation(appointment)}><Video size={16} /> Start Call</button></td>
+                        <td><button type="button" className="cs-btn" disabled={actionUnavailable} title={actionUnavailable ? joinWindow.reason : actionLabel} onClick={() => startVideoConsultation(appointment)}><Video size={16} /> {actionLabel}</button></td>
                       </tr>
                     );
                   })}

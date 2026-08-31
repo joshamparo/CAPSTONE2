@@ -1,12 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const fs = require('fs');
+const crypto = require('crypto');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { createClient } = require('@supabase/supabase-js');
 const { ensureBillingTablesExist, toMoney } = require('../utils/billingLedger');
 
 let supabaseAdmin = null;
+// Retained as a no-op while older trace call sites are phased out. Video
+// consultation data must never be posted to a developer workstation.
+const reportVideoRoomDebug = () => {};
+
 function getSupabaseAdmin() {
     const url = String(process.env.SUPABASE_URL || '').trim();
     const key = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -16,25 +20,6 @@ function getSupabaseAdmin() {
     }
     return supabaseAdmin;
 }
-
-// #region debug-point A:video-room-reporter
-function reportVideoRoomDebug({ runId = 'pre-fix', hypothesisId = 'A', location = 'appointments.js', msg = '[DEBUG] video room trace', data = {} }) {
-    try {
-        let url = 'http://127.0.0.1:7777/event';
-        let sessionId = 'video-room-mismatch';
-        try {
-            const env = fs.readFileSync('.dbg/video-room-mismatch.env', 'utf8');
-            url = env.match(/DEBUG_SERVER_URL=(.+)/)?.[1]?.trim() || url;
-            sessionId = env.match(/DEBUG_SESSION_ID=(.+)/)?.[1]?.trim() || sessionId;
-        } catch (_) {}
-        fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId, runId, hypothesisId, location, msg, data, ts: Date.now() })
-        }).catch(() => {});
-    } catch (_) {}
-}
-// #endregion
 
 function normalizeTimeToHHMM(value) {
     if (value == null) return '';
@@ -992,6 +977,36 @@ function buildDoctorSpecializationWhere(spec) {
     return { specialization: { contains: raw, mode: 'insensitive' } };
 }
 
+function isClosedAppointment(apt) {
+    return /cancel|reject|complete|done|no.?show/i.test(String(apt?.status || ''));
+}
+
+function isMeetingActive(apt, now = new Date()) {
+    if (!apt?.meeting_room_id || !apt?.meeting_started_at || apt?.meeting_ended_at) return false;
+    const expiresAt = apt?.meeting_expires_at ? new Date(apt.meeting_expires_at) : null;
+    return !expiresAt || Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() > now.getTime();
+}
+
+function getVideoScheduleWindow(apt, now = new Date()) {
+    if (!apt?.appointment_date || !apt?.appointment_time) return { allowed: false, message: 'Appointment schedule is incomplete.' };
+    const dateKey = apt.appointment_date instanceof Date
+        ? apt.appointment_date.toISOString().slice(0, 10)
+        : String(apt.appointment_date).slice(0, 10);
+    const timeKey = apt.appointment_time instanceof Date
+        ? apt.appointment_time.toISOString().slice(11, 16)
+        : normalizeTimeToHHMM(apt.appointment_time);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || !/^\d{2}:\d{2}$/.test(timeKey)) {
+        return { allowed: false, message: 'Appointment schedule is incomplete.' };
+    }
+    const timezoneOffset = String(process.env.VIDEO_TIMEZONE_OFFSET || '+08:00').trim() || '+08:00';
+    const scheduledAt = new Date(`${dateKey}T${timeKey}:00${timezoneOffset}`);
+    if (Number.isNaN(scheduledAt.getTime())) return { allowed: false, message: 'Appointment schedule is invalid.' };
+    const minutesAfterStart = (now.getTime() - scheduledAt.getTime()) / 60000;
+    if (minutesAfterStart < -10) return { allowed: false, message: 'The call can start 10 minutes before the scheduled time.' };
+    if (minutesAfterStart > 120) return { allowed: false, message: 'The video consultation window has ended.' };
+    return { allowed: true, scheduledAt };
+}
+
 async function autoAssignUnassignedVideoAppointmentsForDate(dateStr) {
     if (!dateStr) return;
     const startDate = new Date(dateStr);
@@ -1070,7 +1085,8 @@ async function autoAssignUnassignedVideoAppointmentsForDate(dateStr) {
 
 function makeRoomId(appointmentId) {
     const raw = String(appointmentId || '').trim();
-    return `pascualinga-${raw}`;
+    const nonce = crypto.randomBytes(16).toString('hex');
+    return `pascualinga-${raw}-${nonce}`;
 }
 
 function getJitsiBaseUrl() {
@@ -1463,7 +1479,7 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
             doctorUuid: apt.doctor_uuid || null,
             patientId: apt.patient_id || null,
             consultationMode: apt.consultation_mode || 'onsite',
-            meetingActive: !!apt.meeting_started_at && !!apt.meeting_room_id,
+            meetingActive: isMeetingActive(apt),
             walkinTicket: apt.walkin_ticket || null,
             walkinTicketSeq: apt.walkin_ticket_seq ?? null,
             walkinTicketDate: apt.walkin_ticket_date ?? null,
@@ -1533,7 +1549,7 @@ router.get('/mine', requireRole(['patient']), async (req, res) => {
             symptomsStart: apt.symptoms_start,
             doctor: apt.doctor_id,
             consultationMode: apt.consultation_mode || 'onsite',
-            meetingActive: !!apt.meeting_started_at && !!apt.meeting_room_id,
+            meetingActive: isMeetingActive(apt),
             triageLevel: apt.triage_level ?? null,
             triageStatus: apt.triage_status || 'Unassessed',
             triageReasons: apt.triage_reasons ?? null,
@@ -2536,13 +2552,23 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         
         if (!apt) {
             console.log(`[Video Start] 404 - Appointment ${idRaw} not found in DB`);
-            return res.status(404).json({ message: `DEBUG: Appointment ID ${idRaw} not found in database.` });
+            return res.status(404).json({ message: 'Appointment not found.' });
         }
 
         if (!isVideoAppointment(apt)) {
             console.log(`[Video Start] 400 - Appointment ${idRaw} is not a video consult. Mode: ${apt.consultation_mode}, Reason: ${apt.reason}`);
-            return res.status(400).json({ message: `DEBUG: Appointment ${idRaw} is not marked as a video consultation.` });
+            return res.status(400).json({ message: 'Appointment is not a video consultation.' });
         }
+        if (isClosedAppointment(apt)) {
+            return res.status(409).json({ message: 'This appointment is already closed and cannot start a video call.' });
+        }
+        const scheduleWindow = getVideoScheduleWindow(apt);
+        if (!scheduleWindow.allowed) return res.status(409).json({ message: scheduleWindow.message });
+
+        // A request may use a legacy booking-hold id. From this point onward,
+        // always update and identify the appointment that was actually resolved.
+        const resolvedAppointmentId = apt.id;
+        const resolvedAppointmentIdRaw = String(apt.id);
 
         let isAssigned = false;
 
@@ -2584,21 +2610,23 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             });
             // #endregion
             console.log(`[Video Start] 403 - Doctor mismatch. Assigned UUID: ${apt.doctor_uuid}, Req UUID: ${reqDoctorUuid}. Assigned Name: ${assigned}, Actor: ${actor}`);
-            return res.status(403).json({ message: `DEBUG: Doctor mismatch. Assigned to ${assigned || apt.doctor_uuid}, but you are logged in as ${actor || reqDoctorUuid}.` });
+            return res.status(403).json({ message: 'This video consultation is assigned to another provider.' });
         }
 
-        if (!apt.meeting_room_id) {
+        const existingRoomExpired = apt.meeting_expires_at && new Date(apt.meeting_expires_at).getTime() <= Date.now();
+        if (!apt.meeting_room_id || apt.meeting_ended_at || existingRoomExpired) {
             // Persist one appointment-owned room before returning it. Both doctor
             // and patient subsequently resolve this same room through this API.
-            const roomId = makeRoomId(idRaw);
+            const roomId = makeRoomId(resolvedAppointmentIdRaw);
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
             const updated = await prisma.appointments.update({
-                where: { id },
+                where: { id: resolvedAppointmentId },
                 data: {
                     meeting_room_id: roomId,
                     meeting_created_at: now,
                     meeting_started_at: now,
+                    meeting_ended_at: null,
                     meeting_expires_at: expiresAt
                 }
             });
@@ -2616,7 +2644,7 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
                 }
             });
             // #endregion
-            await logAppointmentActivity(req, idRaw, 'Video Call Started', 'Doctor started the video consultation.');
+            await logAppointmentActivity(req, resolvedAppointmentIdRaw, 'Video Call Started', 'Doctor started the video consultation.');
             return res.json({ roomId: updated.meeting_room_id, url, startedAt: updated.meeting_started_at });
         }
 
@@ -2624,7 +2652,7 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
             const updated = await prisma.appointments.update({
-                where: { id },
+                where: { id: resolvedAppointmentId },
                 data: { meeting_started_at: now, meeting_expires_at: expiresAt }
             });
             const url = buildJitsiUrl(updated.meeting_room_id, doctorName);
@@ -2641,7 +2669,7 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
                 }
             });
             // #endregion
-            await logAppointmentActivity(req, idRaw, 'Video Call Started', 'Doctor started the video consultation.');
+            await logAppointmentActivity(req, resolvedAppointmentIdRaw, 'Video Call Started', 'Doctor started the video consultation.');
             return res.json({ roomId: updated.meeting_room_id, url, startedAt: updated.meeting_started_at });
         }
 
@@ -2659,14 +2687,14 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             }
         });
         // #endregion
-        await logAppointmentActivity(req, idRaw, 'Video Call Started', 'Doctor started the video consultation.');
+        await logAppointmentActivity(req, resolvedAppointmentIdRaw, 'Video Call Started', 'Doctor started the video consultation.');
         res.json({ roomId: apt.meeting_room_id, url, startedAt: apt.meeting_started_at });
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
 });
 
-router.get('/:id/video/join', requireRole(['patient', 'doctor']), async (req, res) => {
+router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therapist']), async (req, res) => {
     try {
         await ensureAppointmentsSchema();
         const idRaw = String(req.params.id || '').trim();
@@ -2696,6 +2724,7 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor']), async (req, re
         if (!apt) return res.status(404).json({ message: 'Appointment not found.' });
 
         if (!isVideoAppointment(apt)) return res.status(400).json({ message: 'Appointment is not a video consultation.' });
+        if (isClosedAppointment(apt)) return res.status(409).json({ message: 'This appointment is already closed.' });
         const roomId = apt.meeting_room_id;
         const startedAt = apt.meeting_started_at || null;
         // #region debug-point B:join-appointment
@@ -2727,6 +2756,9 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor']), async (req, re
             });
             // #endregion
             return res.status(409).json({ message: 'Doctor has not started this video consultation yet.' });
+        }
+        if (!isMeetingActive(apt)) {
+            return res.status(410).json({ message: 'This video consultation room has ended or expired.' });
         }
 
         if (role === 'doctor') {
