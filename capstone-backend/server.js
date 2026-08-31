@@ -337,6 +337,10 @@ app.get('/api/health', (_req, res) => {
 
 app.post('/api/email/send-recovery', async (req, res) => {
   const { email, resetLink } = req.body;
+  let resetToken = '';
+  try {
+    resetToken = new URL(String(resetLink || '')).searchParams.get('token') || '';
+  } catch (_) {}
 
   const SERVICE_ID = process.env.EMAILJS_SERVICE_ID || "service_ur884qv";
   const PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || "45tRyW8WG36pIFeBo";
@@ -364,6 +368,11 @@ app.post('/api/email/send-recovery', async (req, res) => {
         template_params: {
           to_email: email,
           reset_link: resetLink,
+          resetLink,
+          recovery_link: resetLink,
+          link: resetLink,
+          token: resetToken,
+          email,
           subject: "Password Recovery - Pascualinga"
         }
       })

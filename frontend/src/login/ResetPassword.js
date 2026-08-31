@@ -46,7 +46,7 @@ const ResetPassword = () => {
     const resetEmail = queryParams.get('email') || localStorage.getItem('resetPasswordEmail');
     const resetToken = queryParams.get('token');
     
-    if (!resetEmail || !resetToken) {
+    if (!resetToken) {
       setMessage('This password reset link is incomplete. Please request a new one.');
       return;
     }

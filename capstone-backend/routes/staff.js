@@ -8,7 +8,7 @@ const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { normalizeEmail, normalizeRole } = require('../utils/normalize');
 const { createSessionToken } = require('../utils/sessionToken');
-const { createPasswordResetToken, resetTokenIsValid } = require('../utils/passwordReset');
+const { createPasswordResetToken, hashResetToken, resetTokenIsValid } = require('../utils/passwordReset');
 
 function isUuid(value) {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
@@ -2603,27 +2603,24 @@ router.post('/reset-password', async (req, res) => {
         const newPassword = String(req.body?.newPassword || '').trim();
         const token = String(req.body?.token || '').trim();
         
-        if (!email || !newPassword || !token) {
-            return res.status(400).json({ message: "Email, reset token, and new password are required" });
+        if (!newPassword || !token) {
+            return res.status(400).json({ message: "Reset token and new password are required" });
         }
         if (newPassword.length < 11 || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
             return res.status(400).json({ message: "Password must be at least 11 characters and include a number and special character." });
         }
 
-        let user = await prisma.staff.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
-        let modelType = 'staff';
-        
-        if (!user) {
-            user = await prisma.nurses.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
-            modelType = 'nurses';
-        }
-        if (!user) {
-            user = await prisma.doctors.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
-            modelType = 'doctors';
-        }
-        if (!user) {
-            user = await prisma.accounts.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
-            modelType = 'accounts';
+        const lookup = email
+            ? { email: { equals: email, mode: 'insensitive' } }
+            : { reset_password_token: hashResetToken(token) };
+        let user = null;
+        let modelType = null;
+        for (const candidate of ['staff', 'nurses', 'doctors', 'accounts']) {
+            user = await prisma[candidate].findFirst({ where: lookup });
+            if (user) {
+                modelType = candidate;
+                break;
+            }
         }
         
         if (!user) {
