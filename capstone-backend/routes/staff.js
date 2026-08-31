@@ -11,6 +11,7 @@ const { createSessionToken } = require('../utils/sessionToken');
 const { createPasswordResetToken, hashResetToken, resetTokenIsValid } = require('../utils/passwordReset');
 const { createRateLimiter } = require('../utils/rateLimit');
 const { sendRecoveryEmail } = require('../utils/recoveryMailer');
+const { selectCanonicalAccount } = require('../utils/accountMatch');
 
 function isUuid(value) {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
@@ -316,8 +317,9 @@ router.post('/login', loginRateLimit, async (req, res) => {
         // But assuming we stick to the custom implementation for now using the new tables.
         
         const matches = await findAllUsersByEmail(email);
-        if (matches.length > 1) console.error(`[Auth] Duplicate account email detected across ${matches.map((match) => match.model).join(', ')}`);
-        const selected = matches.length === 1 ? matches[0] : null;
+        const accountMatch = selectCanonicalAccount(matches);
+        if (accountMatch.conflicting) console.error(`[Auth] Conflicting account roles detected across ${matches.map((match) => match.model).join(', ')}`);
+        const selected = accountMatch.selected;
         const user = selected?.user || null;
         const modelType = selected?.model || null;
         
@@ -2582,11 +2584,12 @@ const requestPasswordReset = async (req, res) => {
         const matches = await findAllUsersByEmail(email);
         // Use one response for missing, disallowed, and duplicate accounts so
         // this endpoint cannot be used to enumerate hospital accounts.
-        if (matches.length !== 1) {
-            if (matches.length > 1) console.error(`[Recovery] Duplicate account email detected across ${matches.map((match) => match.model).join(', ')}`);
+        const accountMatch = selectCanonicalAccount(matches);
+        if (!accountMatch.selected) {
+            if (accountMatch.conflicting) console.error(`[Recovery] Conflicting account roles detected across ${matches.map((match) => match.model).join(', ')}`);
             return res.json({ ok: true, message: 'If the account is eligible, a password reset email will arrive shortly.' });
         }
-        const { user, model: modelType } = matches[0];
+        const { user, model: modelType } = accountMatch.selected;
         const accountType = normalizeRole(user.account_type || user.roles || 'staff');
         if (accountType === 'patient') return res.json({ ok: true, message: 'If the account is eligible, a password reset email will arrive shortly.' });
         const { token, tokenHash, expiresAt } = createPasswordResetToken();
@@ -2691,6 +2694,24 @@ router.post('/reset-password', passwordResetRateLimit, async (req, res) => {
         });
         if (consumed.count !== 1) {
             return res.status(400).json({ message: "This password reset link has already been used. Please request a new one." });
+        }
+
+        // Nurses and doctors have a legacy accounts-table mirror. Keep its
+        // password synchronized so an old credential cannot become valid if
+        // the clinical row is later archived or removed.
+        if (modelType !== 'accounts') {
+            const mirroredRole = normalizeRole(user.account_type || (modelType === 'nurses' ? 'nurse' : modelType === 'doctors' ? 'doctor' : 'staff'));
+            await prisma.accounts.updateMany({
+                where: {
+                    email: { equals: user.email, mode: 'insensitive' },
+                    roles: { equals: mirroredRole, mode: 'insensitive' }
+                },
+                data: {
+                    password: hashedPassword,
+                    reset_password_token: null,
+                    reset_password_expires: null
+                }
+            }).catch((mirrorError) => console.warn('[Recovery] Could not synchronize legacy account mirror:', mirrorError?.message));
         }
         
         res.json({ message: "Password updated successfully" });
