@@ -115,6 +115,29 @@ const getAuthenticatedDoctor = async (req) => {
   };
 };
 
+let chatColumnsCache = { at: 0, names: new Set() };
+const getChatColumns = async () => {
+  const now = Date.now();
+  if (chatColumnsCache.names.size && now - chatColumnsCache.at < 60_000) return chatColumnsCache.names;
+  const rows = await prisma.$queryRawUnsafe(`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'consultation_messages'
+  `);
+  const names = new Set((Array.isArray(rows) ? rows : []).map((row) => String(row?.column_name || '').trim()).filter(Boolean));
+  chatColumnsCache = { at: now, names };
+  return names;
+};
+
+const CHAT_READ_FIELDS = [
+  ['id', 'text'], ['body', 'text'], ['attachment_url', 'text'], ['attachment_kind', 'text'],
+  ['attachment_name', 'text'], ['attachment_size', 'bigint'], ['attachment_mime', 'text'],
+  ['specialty', 'text'], ['room', 'text'], ['sender_role', 'text'], ['sender_name', 'text'],
+  ['sender_dept', 'text'], ['sender_email', 'text'], ['sender_username', 'text'], ['sender_id', 'text'],
+  ['reply_to_id', 'text'], ['reply_to_body', 'text'], ['reply_to_sender', 'text'], ['reply_to_kind', 'text'],
+  ['deleted', 'boolean'], ['pinned', 'boolean'], ['created_at', 'timestamptz'], ['updated_at', 'timestamptz']
+];
+
 const cleanText = (v, max = 10000) => {
   if (v === null || v === undefined) return null;
   const s = String(v).replace(/\0/g, '');
@@ -248,22 +271,22 @@ router.post('/messages', async (req, res) => {
 
     // ============ TRY TIERS 1 → 4 IN ORDER ============
     try {
-      rowCount = await prisma.$executeRawUnsafe(tier1Sql, base22Values) || 0;
+      rowCount = await prisma.$executeRawUnsafe(tier1Sql, ...base22Values) || 0;
       rowInsertedOk = true;
       hitInsertTier = 'full';
     } catch (e1) {
       try {
-        rowCount = await prisma.$executeRawUnsafe(tier2Sql, base22Values) || 0;
+        rowCount = await prisma.$executeRawUnsafe(tier2Sql, ...base22Values) || 0;
         rowInsertedOk = true;
         hitInsertTier = 'created_at-only';
       } catch (e2) {
         try {
-          rowCount = await prisma.$executeRawUnsafe(tier3Sql, base22Values) || 0;
+          rowCount = await prisma.$executeRawUnsafe(tier3Sql, ...base22Values) || 0;
           rowInsertedOk = true;
           hitInsertTier = 'no-timestamps';
         } catch (e3) {
           try {
-            rowCount = await prisma.$executeRawUnsafe(tier4Sql, tier4Values) || 0;
+            rowCount = await prisma.$executeRawUnsafe(tier4Sql, ...tier4Values) || 0;
             rowInsertedOk = true;
             hitInsertTier = 'ultra-legacy-3-col';
           } catch (e4) {
@@ -288,7 +311,7 @@ router.post('/messages', async (req, res) => {
           AND ($6::text IS NULL OR COALESCE(room, '') = COALESCE($6::text, ''))
         ORDER BY id DESC
         LIMIT 1
-      `, [bodyRaw, attachmentUrl, specialty, senderRole, senderName, room]);
+      `, bodyRaw, attachmentUrl, specialty, senderRole, senderName, room);
       if (Array.isArray(rows) && rows[0]) {
         row = rows[0];
         if (row?.created_at) row.created_at = String(row.created_at);
@@ -317,18 +340,26 @@ router.post('/messages', async (req, res) => {
 router.get('/messages', async (req, res) => {
   try {
     const limit = Math.max(1, Math.min(500, Number(req.query?.limit || 200)));
+    const columns = await getChatColumns();
+    if (!columns.has('id') || !columns.has('body')) throw new Error('consultation_messages is missing required base columns');
+    const selectList = CHAT_READ_FIELDS.map(([name, type]) => (
+      columns.has(name)
+        ? (name === 'id' ? 'id::text AS id' : name)
+        : `NULL::${type} AS ${name}`
+    )).join(', ');
+    const where = columns.has('deleted') ? 'WHERE COALESCE(deleted, false) = false' : '';
+    const order = columns.has('created_at') ? 'created_at DESC NULLS LAST, id DESC' : 'id DESC';
     const rows = await prisma.$queryRawUnsafe(`
-      SELECT
-        id, body, attachment_url, attachment_kind, attachment_name, attachment_size, attachment_mime,
-        specialty, room, sender_role, sender_name, sender_dept, sender_email, sender_username, sender_id,
-        reply_to_id, reply_to_body, reply_to_sender, reply_to_kind,
-        deleted, pinned, created_at, updated_at
+      SELECT ${selectList}
       FROM public.consultation_messages
-      WHERE COALESCE(deleted, false) = false
-      ORDER BY created_at DESC, id DESC
-      LIMIT ${limit}
-    `);
-    const normalized = Array.isArray(rows) ? rows.slice().reverse() : [];
+      ${where}
+      ORDER BY ${order}
+      LIMIT $1
+    `, limit);
+    const normalized = JSON.parse(JSON.stringify(
+      Array.isArray(rows) ? rows.slice().reverse() : [],
+      (_key, value) => typeof value === 'bigint' ? value.toString() : value
+    ));
     return res.json({ ok: true, count: normalized.length, rows: normalized, source: 'prisma-direct' });
   } catch (err) {
     console.error('[doctorChat] GET /messages:', err);
@@ -341,14 +372,20 @@ router.patch('/messages/:id', async (req, res) => {
     const actor = await getAuthenticatedDoctor(req);
     if (!actor) return res.status(403).json({ ok: false, error: 'Authenticated doctor account was not found.' });
     const messageId = String(req.params.id || '').trim();
-    if (!/^\d+$/.test(messageId)) return res.status(400).json({ ok: false, error: 'Invalid message id.' });
+    if (!/^[a-zA-Z0-9-]{1,80}$/.test(messageId)) return res.status(400).json({ ok: false, error: 'Invalid message id.' });
     const action = String(req.body?.action || '').trim().toLowerCase();
+    const columns = await getChatColumns();
 
     if (action === 'delete') {
+      const required = ['deleted', 'deleted_at', 'deleted_by', 'sender_id', 'created_at'];
+      if (required.some((column) => !columns.has(column))) {
+        return res.status(409).json({ ok: false, error: 'Message deletion requires the latest doctor chat migration.' });
+      }
+      const updatedAt = columns.has('updated_at') ? ', updated_at = NOW()' : '';
       const changed = await prisma.$executeRawUnsafe(`
         UPDATE public.consultation_messages
-        SET deleted = true, deleted_at = NOW(), deleted_by = $1, updated_at = NOW()
-        WHERE id = $2::bigint
+        SET deleted = true, deleted_at = NOW(), deleted_by = $1${updatedAt}
+        WHERE id::text = $2
           AND COALESCE(sender_id, '') = $3
           AND COALESCE(deleted, false) = false
           AND created_at >= NOW() - INTERVAL '5 minutes'
@@ -358,6 +395,10 @@ router.patch('/messages/:id', async (req, res) => {
     }
 
     if (action === 'pin' || action === 'unpin') {
+      const required = ['pinned', 'pinned_at', 'pinned_by'];
+      if (required.some((column) => !columns.has(column))) {
+        return res.status(409).json({ ok: false, error: 'Message pinning requires the latest doctor chat migration.' });
+      }
       const pinned = action === 'pin';
       if (pinned) {
         const countRows = await prisma.$queryRawUnsafe(`
@@ -368,11 +409,12 @@ router.patch('/messages/:id', async (req, res) => {
           return res.status(409).json({ ok: false, error: 'Maximum 3 pinned messages. Unpin an older one first.' });
         }
       }
+      const updatedAt = columns.has('updated_at') ? ', updated_at = NOW()' : '';
       const changed = await prisma.$executeRawUnsafe(`
         UPDATE public.consultation_messages
         SET pinned = $1, pinned_at = CASE WHEN $1 THEN NOW() ELSE NULL END,
-            pinned_by = CASE WHEN $1 THEN $2 ELSE NULL END, updated_at = NOW()
-        WHERE id = $3::bigint AND COALESCE(deleted, false) = false
+            pinned_by = CASE WHEN $1 THEN $2 ELSE NULL END${updatedAt}
+        WHERE id::text = $3 ${columns.has('deleted') ? 'AND COALESCE(deleted, false) = false' : ''}
       `, pinned, actor.name, messageId);
       if (!Number(changed || 0)) return res.status(404).json({ ok: false, error: 'Message not found.' });
       return res.json({ ok: true, id: messageId, pinned, pinned_by: pinned ? actor.name : null });
@@ -558,22 +600,22 @@ router.post('/attachments', upload.single('file'), async (req, res) => {
 
     // ============ TIERS 1 → 4 IN ORDER (nested try/catch) ============
     try {
-      await prisma.$executeRawUnsafe(attachTier1, base18Values);
+      await prisma.$executeRawUnsafe(attachTier1, ...base18Values);
       insertOk = true;
       hitTier = 'full';
     } catch (e1) {
       try {
-        await prisma.$executeRawUnsafe(attachTier2, base18Values);
+        await prisma.$executeRawUnsafe(attachTier2, ...base18Values);
         insertOk = true;
         hitTier = 'created_at-only';
       } catch (e2) {
         try {
-          await prisma.$executeRawUnsafe(attachTier3, base18Values);
+          await prisma.$executeRawUnsafe(attachTier3, ...base18Values);
           insertOk = true;
           hitTier = 'no-timestamps';
         } catch (e3) {
           try {
-            await prisma.$executeRawUnsafe(attachTier4, attachTier4Values);
+            await prisma.$executeRawUnsafe(attachTier4, ...attachTier4Values);
             insertOk = true;
             hitTier = 'ultra-legacy-3-col';
           } catch (e4) {
@@ -595,7 +637,7 @@ router.post('/attachments', upload.single('file'), async (req, res) => {
           AND COALESCE(attachment_size, 0) = COALESCE($2::bigint, 0)
           AND COALESCE(sender_name, '') = COALESCE($3::text, '')
         ORDER BY id DESC LIMIT 1
-      `, [attachmentName, attachmentSize, senderName]);
+      `, attachmentName, attachmentSize, senderName);
       if (Array.isArray(rows) && rows[0]) {
         insertedRow = rows[0];
         if (insertedRow?.created_at) insertedRow.created_at = String(insertedRow.created_at);
