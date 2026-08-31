@@ -73,8 +73,18 @@ const Recovery = () => {
         return;
       }
 
+      const tokenResponse = await fetch(`${API_BASE}/api/staff/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail })
+      });
+      const tokenData = await readJson(tokenResponse);
+      if (!tokenResponse.ok || !tokenData?.token) {
+        throw new Error(String(tokenData?.message || 'Unable to create a password reset link.'));
+      }
+
       const webOrigin = String(process.env.REACT_APP_WEB_ORIGIN || window.location.origin).replace(/\/+$/, '');
-      const resetLink = `${webOrigin}/reset-password?email=${encodeURIComponent(normalizedEmail)}`;
+      const resetLink = `${webOrigin}/reset-password?email=${encodeURIComponent(normalizedEmail)}&token=${encodeURIComponent(tokenData.token)}`;
 
       // Send the recovery email using the backend
       const emailResponse = await fetch(`${API_BASE}/api/email/send-recovery`, {

@@ -8,6 +8,7 @@ const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { normalizeEmail, normalizeRole } = require('../utils/normalize');
 const { createSessionToken } = require('../utils/sessionToken');
+const { createPasswordResetToken, resetTokenIsValid } = require('../utils/passwordReset');
 
 function isUuid(value) {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
@@ -2572,15 +2573,22 @@ router.post('/forgot-password', async (req, res) => {
             return res.status(404).json({ message: "User with this email does not exist" });
         }
         
-        // Generate Token
-        const token = crypto.randomBytes(20).toString('hex');
-        
-        // Return token and user name for Frontend to send email
+        const { token, tokenHash, expiresAt } = createPasswordResetToken();
+        await prisma[modelType].update({
+            where: { id: user.id },
+            data: {
+                reset_password_token: tokenHash,
+                reset_password_expires: expiresAt
+            }
+        });
+
+        // Only the emailed link receives the one-time raw token. The database
+        // stores its hash so a database read cannot be used as a reset link.
         res.json({ 
             token, 
             email: user.email, 
             firstName: modelType === 'accounts' ? user.name : user.first_name,
-            message: "Token generated (Note: Not saved to DB due to missing schema fields)" 
+            message: "Password reset token generated"
         });
         
     } catch (err) {
@@ -2593,9 +2601,13 @@ router.post('/reset-password', async (req, res) => {
     try {
         const email = normalizeEmail(req.body?.email || '');
         const newPassword = String(req.body?.newPassword || '').trim();
+        const token = String(req.body?.token || '').trim();
         
-        if (!email || !newPassword) {
-            return res.status(400).json({ message: "Email and new password are required" });
+        if (!email || !newPassword || !token) {
+            return res.status(400).json({ message: "Email, reset token, and new password are required" });
+        }
+        if (newPassword.length < 11 || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+            return res.status(400).json({ message: "Password must be at least 11 characters and include a number and special character." });
         }
 
         let user = await prisma.staff.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
@@ -2617,27 +2629,27 @@ router.post('/reset-password', async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
+
+        if (!resetTokenIsValid({
+            providedToken: token,
+            storedTokenHash: user.reset_password_token,
+            expiresAt: user.reset_password_expires
+        })) {
+            return res.status(400).json({ message: "This password reset link is invalid or has expired. Please request a new one." });
+        }
         
         // Hash new password
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(newPassword, salt);
         
-        // Update password in DB
-        if (modelType === 'accounts') {
-            await prisma.accounts.update({
-                where: { id: user.id },
-                data: { password: hashedPassword }
-            });
-        } else {
-            await prisma[modelType].update({
-                where: { id: user.id },
-                data: { 
-                    password: hashedPassword,
-                    reset_password_token: null,
-                    reset_password_expires: null
-                }
-            });
-        }
+        await prisma[modelType].update({
+            where: { id: user.id },
+            data: {
+                password: hashedPassword,
+                reset_password_token: null,
+                reset_password_expires: null
+            }
+        });
         
         res.json({ message: "Password updated successfully" });
         

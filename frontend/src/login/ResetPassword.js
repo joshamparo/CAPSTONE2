@@ -44,53 +44,28 @@ const ResetPassword = () => {
     // Get email from URL parameters or fallback to local storage
     const queryParams = new URLSearchParams(location.search);
     const resetEmail = queryParams.get('email') || localStorage.getItem('resetPasswordEmail');
+    const resetToken = queryParams.get('token');
     
-    if (resetEmail) {
-      let backendSuccess = false;
-      let localSuccess = false;
+    if (!resetEmail || !resetToken) {
+      setMessage('This password reset link is incomplete. Please request a new one.');
+      return;
+    }
 
-      // 1. Try Backend Update
-      try {
-        const response = await fetch(`${API_BASE}/api/staff/reset-password`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: resetEmail, newPassword: newPassword })
-        });
-        
-        if (response.ok) {
-            backendSuccess = true;
-            console.log("Backend password reset successful");
-        }
-      } catch (err) {
-        console.error("Backend connection error during reset:", err);
+    try {
+      const response = await fetch(`${API_BASE}/api/staff/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: resetEmail, token: resetToken, newPassword })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setMessage(String(data?.message || 'Password reset failed. Please request a new link.'));
+        return;
       }
-
-      // 2. LocalStorage Update
-      if (resetEmail === 'pascualgenhospi@gmail.com') {
-        localStorage.setItem('adminPassword', newPassword);
-        localSuccess = true;
-      } else {
-        // For other users, update registeredUsers in localStorage
-        try {
-          const users = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
-          const userIndex = users.findIndex(u => u.email === resetEmail);
-          if (userIndex !== -1) {
-            users[userIndex].password = newPassword;
-            localStorage.setItem('registeredUsers', JSON.stringify(users));
-            localSuccess = true;
-          }
-        } catch (e) {
-          console.error("Error updating user password in localStorage:", e);
-        }
-      }
-
-      // If neither worked, it might be a user that doesn't exist or system error
-      if (!backendSuccess && !localSuccess) {
-          console.warn("Password reset might not have persisted for any known user store.");
-          // We still show success to user to avoid enumeration attacks, or we could show error if we want strictness.
-          // For now, consistent with "Account Recovery" flows, we often simulate success.
-          // But since this is an internal app, let's proceed.
-      }
+    } catch (err) {
+      console.error("Backend connection error during reset:", err);
+      setMessage('Cannot connect to the server. Your password was not changed. Please try again.');
+      return;
     }
 
     setMessage("Password successfully reset! Redirecting to login...");
