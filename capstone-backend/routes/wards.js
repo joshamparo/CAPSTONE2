@@ -632,17 +632,35 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), async (req, res)
         return res.status(404).json({ message: 'Room not found.' });
     }
     
-    if (targetRoom.occupied) {
+    if (targetRoom.occupied && String(targetRoom.patient?.id || '') !== String(patientId)) {
         console.error('[AssignPatient] Room already occupied:', roomCode, 'by', targetRoom.patient?.name);
-        return res.status(400).json({ message: `Room ${roomCode} is already occupied.` });
+        return res.status(409).json({ message: `Room ${roomCode} is already occupied.` });
     }
 
-    await prisma.patients.update({
-      where: { id: patientId },
-      data: {
-        ward_number: roomCode,
-        admission_status: 'Inpatient'
+    await prisma.$transaction(async (tx) => {
+      // Serialize assignments for this room. This closes the race where two
+      // nurses both see an available room before either update is committed.
+      await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(hashtext($1))`, String(roomCode).trim().toLowerCase());
+      const occupiedBy = await tx.patients.findFirst({
+        where: {
+          ward_number: { equals: String(roomCode).trim(), mode: 'insensitive' },
+          admission_status: { not: 'Discharged' },
+          id: { not: patientId }
+        },
+        select: { id: true, first_name: true, last_name: true }
+      });
+      if (occupiedBy) {
+        const conflict = new Error(`Room ${roomCode} was just assigned to another patient.`);
+        conflict.statusCode = 409;
+        throw conflict;
       }
+      await tx.patients.update({
+        where: { id: patientId },
+        data: {
+          ward_number: String(roomCode).trim(),
+          admission_status: 'Inpatient'
+        }
+      });
     });
 
     console.log('[AssignPatient] Success:', { patientId, roomCode });
@@ -652,7 +670,7 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), async (req, res)
     res.json({ message: 'Patient assigned successfully.' });
   } catch (err) {
     console.error('[AssignPatient] Error:', err);
-    res.status(500).json({ message: err.message || 'Failed to assign patient.' });
+    res.status(Number(err?.statusCode) || 500).json({ message: err.message || 'Failed to assign patient.' });
   }
 });
 

@@ -1210,6 +1210,7 @@ function NurseDashboard() {
 
   const handleAddPatientSubmit = async (e, options = {}) => {
     if (typeof e?.preventDefault === 'function') e.preventDefault();
+    if (addPatientSaving) return;
     setAddPatientError("");
 
     if (addPatientStep === 1) {
@@ -4161,20 +4162,16 @@ function NurseDashboard() {
                   // We use a simpler logic: check if we have seen this announcement ID before
                   // For this to work robustly, we need a persisted "last seen" ID or timestamp.
                   // Here we use localStorage to track the highest ID seen.
-                  const lastSeenId = localStorage.getItem('last_seen_announcement_id') || '0';
-                  
-                  // Filter for new announcements (assuming mongo _id or a numeric id is sortable/comparable, 
-                  // but Mongo IDs are strings. We might need a better check, e.g. "createdAt" > lastCheckTime)
-                  // For simplicity with the current mock setup, let's filter by checking if ID is NOT in our "seen list"
-                  // A better approach for production: Store 'lastCheckedTime' and filter items created after that.
-                  
-                  // Let's stick to the 'lastCheckedTime' approach for stability with MongoDB
                   const lastCheckedTime = localStorage.getItem('last_checked_announcement_time');
                   const newTime = new Date().toISOString();
                   
                   const newAnnouncements = announcements.filter(a => {
-                      if (!lastCheckedTime) return true; // First run, show all? Or maybe just recent? Let's show all for now.
-                      return new Date(a.createdAt) > new Date(lastCheckedTime);
+                      const createdAt = new Date(a.createdAt || a.created_at || 0).getTime();
+                      if (!Number.isFinite(createdAt) || createdAt <= 0) return false;
+                      // On first load show only announcements from the last day,
+                      // instead of replaying the hospital's full history.
+                      const threshold = lastCheckedTime ? new Date(lastCheckedTime).getTime() : Date.now() - 24 * 60 * 60 * 1000;
+                      return createdAt > threshold;
                   });
 
                   if (newAnnouncements.length > 0) {
@@ -4409,6 +4406,7 @@ function NurseDashboard() {
 
   const handleOrderSubmit = async (e) => {
     e.preventDefault();
+    if (orderSubmitting) return;
 
     const type = activeOrderTab === 'medications' ? 'Medication' : (activeOrderTab === 'labs' ? 'Lab' : 'Supply');
     const itemText = `${orderFormData.item || ''}${orderFormData.dosage ? ` ${orderFormData.dosage}` : ''}`.trim();
@@ -4416,6 +4414,7 @@ function NurseDashboard() {
     const qty = Number(orderFormData.quantity || 1) || 1;
     const pr = String(orderFormData.priority || 'Routine').trim() || 'Routine';
 
+    setOrderSubmitting(true);
     try {
       let res = null;
       if (type === 'Lab') {
@@ -4524,6 +4523,8 @@ function NurseDashboard() {
       setSuccessMessage(msg);
       setModalType("error");
       setShowSuccessModal(true);
+    } finally {
+      setOrderSubmitting(false);
     }
   };
 
@@ -4569,6 +4570,7 @@ function NurseDashboard() {
   const [pharmacyCatalogLoading, setPharmacyCatalogLoading] = useState(false);
   const [pharmacyCatalogError, setPharmacyCatalogError] = useState('');
   const [pharmacyCatalogSearch, setPharmacyCatalogSearch] = useState('');
+  const [orderSubmitting, setOrderSubmitting] = useState(false);
 
   const refreshPharmacyCatalog = async () => {
     setPharmacyCatalogLoading(true);
@@ -4600,6 +4602,9 @@ function NurseDashboard() {
 
   // Incident Reports State
   const [incidentReports, setIncidentReports] = useState([]);
+  const [incidentLoading, setIncidentLoading] = useState(false);
+  const [incidentSubmitting, setIncidentSubmitting] = useState(false);
+  const [incidentError, setIncidentError] = useState('');
   const [incidentFormData, setIncidentFormData] = useState({
       date: new Date().toISOString().split('T')[0],
       time: '',
@@ -4613,14 +4618,28 @@ function NurseDashboard() {
       actionTaken: '',
       followUpStatus: 'For Review'
   });
+  const resetIncidentForm = () => {
+    setIncidentFormData({
+      date: new Date().toISOString().split('T')[0],
+      time: '', type: 'Fall', severity: 'Moderate', location: '', patientId: '', patientName: '',
+      escalatedTo: '', description: '', actionTaken: '', followUpStatus: 'For Review'
+    });
+    setIncidentError('');
+  };
 
   // Fetch incidents on load
   React.useEffect(() => {
+    setIncidentLoading(true);
+    setIncidentError('');
     fetch(`${API_BASE}/api/incidents`, { headers: { ...getAuthHeaders() } })
-      .then(res => res.json())
+      .then(async (res) => {
+        const data = await res.json().catch(() => []);
+        if (!res.ok) throw new Error(data?.message || data?.error || 'Unable to load incident reports.');
+        return data;
+      })
       .then(data => {
         // Map database fields to frontend fields
-        const formatted = data.map(inc => ({
+        const formatted = (Array.isArray(data) ? data : []).map(inc => ({
             id: inc.id,
             date: new Date(inc.incident_date).toISOString().split('T')[0],
             time: inc.incident_time,
@@ -4637,14 +4656,32 @@ function NurseDashboard() {
         }));
         setIncidentReports(formatted);
       })
-      .catch(err => console.error("Failed to fetch incidents:", err));
+      .catch(err => {
+        console.error("Failed to fetch incidents:", err);
+        setIncidentError(String(err?.message || 'Unable to load incident reports.'));
+      })
+      .finally(() => setIncidentLoading(false));
   }, []);
 
   const handleIncidentSubmit = async (e) => {
       e.preventDefault();
-      
-      const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
-      const reporterEmail = currentUser.email || user.name;
+      if (incidentSubmitting) return;
+      setIncidentError('');
+
+      const description = String(incidentFormData.description || '').trim();
+      const actionTaken = String(incidentFormData.actionTaken || '').trim();
+      if (!incidentFormData.date || !incidentFormData.time || !String(incidentFormData.location || '').trim()) {
+          setIncidentError('Date, time, and location are required.');
+          return;
+      }
+      if (description.length < 10) {
+          setIncidentError('Incident description must contain at least 10 characters.');
+          return;
+      }
+      if (actionTaken.length < 3) {
+          setIncidentError('Immediate action taken is required.');
+          return;
+      }
 
       const payload = {
           incident_date: incidentFormData.date,
@@ -4655,12 +4692,12 @@ function NurseDashboard() {
           patient_id: incidentFormData.patientId || null,
           patient_name: incidentFormData.patientName || null,
           escalated_to: incidentFormData.escalatedTo || null,
-          description: incidentFormData.description,
-          action_taken: incidentFormData.actionTaken,
-          created_by_email: reporterEmail,
+          description,
+          action_taken: actionTaken,
           follow_up_status: incidentFormData.followUpStatus
       };
 
+      setIncidentSubmitting(true);
       try {
           const res = await fetch(`${API_BASE}/api/incidents`, {
               method: 'POST',
@@ -4688,32 +4725,23 @@ function NurseDashboard() {
                   followUpStatus: savedIncident.follow_up_status || incidentFormData.followUpStatus
               };
               
-              setIncidentReports([newReport, ...incidentReports]);
+              setIncidentReports((current) => [newReport, ...current.filter((report) => String(report.id) !== String(newReport.id))]);
               addActivity('Incident Reported', `${newReport.type} in ${newReport.location}`, 'alert');
               setSuccessMessage("Incident report submitted successfully.");
               setModalType("success");
               setShowSuccessModal(true);
               
               // Reset form
-              setIncidentFormData({
-                  date: new Date().toISOString().split('T')[0],
-                  time: '',
-                  type: 'Fall',
-                  severity: 'Moderate',
-                  location: '',
-                  patientId: '',
-                  patientName: '',
-                  escalatedTo: '',
-                  description: '',
-                  actionTaken: '',
-                  followUpStatus: 'For Review'
-              });
+              resetIncidentForm();
           } else {
-              throw new Error("Failed to save to database");
+              const failed = await res.json().catch(() => ({}));
+              throw new Error(String(failed?.message || failed?.error || 'Failed to save incident report.'));
           }
       } catch (err) {
           console.error(err);
-          alert("Error saving incident report");
+          setIncidentError(String(err?.message || 'Unable to save incident report. Please try again.'));
+      } finally {
+          setIncidentSubmitting(false);
       }
   };
 
@@ -7194,14 +7222,15 @@ function NurseDashboard() {
                                 </div>
 
                                 <div className="form-actions-right" style={{marginTop: '24px'}}>
-                                    <button type="button" className="btn-modal-cancel" style={{marginRight: '12px'}}>
-                                        Clear Form
-                                    </button>
-                                    <button type="submit" className="btn-primary-action shadow-btn" style={{background: 'var(--nurse-danger)'}}>
+                                        <button type="button" className="btn-modal-cancel" style={{marginRight: '12px'}} onClick={resetIncidentForm} disabled={incidentSubmitting}>
+                                            Clear Form
+                                        </button>
+                                    <button type="submit" className="btn-primary-action shadow-btn" style={{background: 'var(--nurse-danger)'}} disabled={incidentSubmitting}>
                                         <AlertTriangle size={18} />
-                                        Submit Report
+                                        {incidentSubmitting ? 'Submitting...' : 'Submit Report'}
                                     </button>
                                 </div>
+                                {incidentError ? <div className="form-error" role="alert" style={{ marginTop: 12 }}>{incidentError}</div> : null}
                             </form>
                         </div>
 
@@ -7212,6 +7241,9 @@ function NurseDashboard() {
                                 <span className="badge-count">{incidentReports.length}</span>
                             </div>
                             <div className="incident-list-container">
+                                {incidentLoading ? <p className="empty-state">Loading incident reports...</p> : null}
+                                {!incidentLoading && incidentError && incidentReports.length === 0 ? <p className="empty-state">Incident history is currently unavailable.</p> : null}
+                                {!incidentLoading && !incidentError && incidentReports.length === 0 ? <p className="empty-state">No incident reports yet.</p> : null}
                                 {incidentReports.map(report => (
                                     <div key={report.id} className="incident-history-card">
                                         <div className="incident-card-header">
@@ -8392,9 +8424,9 @@ function NurseDashboard() {
                                         <button type="button" className="btn-ghost" onClick={() => setOrderFormData({patientId: '', patientName: '', item: '', dosage: '', productId: '', productType: '', unitPrice: '', quantity: 1, priority: 'Routine', notes: ''})}>
                                             Clear Form
                                         </button>
-                                        <button type="submit" className="btn-submit-order">
+                                        <button type="submit" className="btn-submit-order" disabled={orderSubmitting}>
                                             <Plus size={18} />
-                                            Submit Order
+                                            {orderSubmitting ? 'Submitting...' : 'Submit Order'}
                                         </button>
                                     </div>
                                 </form>

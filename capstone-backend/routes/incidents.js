@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { validateIncident } = require('../utils/incidentValidation');
 
 const router = express.Router();
 
@@ -58,20 +59,11 @@ router.get('/', requireRole(['admin', 'nurse']), async (_req, res) => {
 router.post('/', requireRole(['admin', 'nurse']), async (req, res) => {
   try {
     await ensureIncidentColumns();
-    const {
-      incident_date,
-      incident_time,
-      incident_type,
-      location,
-      description,
-      action_taken,
-      created_by_email,
-      severity,
-      escalated_to,
-      patient_id,
-      patient_name,
-      follow_up_status
-    } = req.body || {};
+    const validation = validateIncident(req.body);
+    if (validation.error) return res.status(400).json({ message: validation.error });
+    const value = validation.value;
+    const reporterEmail = String(req.auth?.email || '').trim().toLowerCase();
+    if (!reporterEmail) return res.status(401).json({ message: 'Authenticated reporter is required.' });
 
     const rows = await prisma.$queryRawUnsafe(
       `
@@ -84,18 +76,18 @@ router.post('/', requireRole(['admin', 'nurse']), async (req, res) => {
                   incident_time, location, description, action_taken, status, severity,
                   escalated_to, patient_id::text AS patient_id, patient_name, follow_up_status
       `,
-      incident_date,
-      incident_time,
-      incident_type,
-      location || null,
-      description || null,
-      action_taken || null,
-      created_by_email,
-      severity || 'Moderate',
-      escalated_to || null,
-      patient_id || null,
-      patient_name || null,
-      follow_up_status || 'For Review'
+      value.incidentDate,
+      value.incidentTime,
+      value.incidentType,
+      value.location,
+      value.description,
+      value.actionTaken,
+      reporterEmail,
+      value.severity,
+      value.escalatedTo,
+      value.patientId,
+      value.patientName,
+      value.followUpStatus
     );
 
     res.status(201).json(serialize(Array.isArray(rows) ? rows[0] : null));
