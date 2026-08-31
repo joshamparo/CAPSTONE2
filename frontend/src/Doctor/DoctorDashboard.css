@@ -1026,6 +1026,25 @@
   cursor: not-allowed;
 }
 
+.doc-soap-save-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.doc-soap-save-button {
+  width: auto;
+  min-width: 132px;
+  padding: 10px 18px;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .doc-soap-save-button {
+    min-width: 120px;
+  }
+}
+
 .doc-history {
   border-top: 1px solid #f1f5f9;
   padding-top: 12px;

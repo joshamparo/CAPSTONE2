@@ -4846,9 +4846,12 @@ function DoctorDashboard() {
                       </label>
                     ))}
 
-                    <button className="doc-primary" type="button" onClick={saveNote} disabled={savingNote}>
-                      Save Note
-                    </button>
+                    <div className="doc-soap-save-actions">
+                      <button className="doc-primary doc-soap-save-button" type="button" onClick={saveNote} disabled={savingNote}>
+                        <Save size={16} />
+                        {savingNote ? 'Saving…' : 'Save Note'}
+                      </button>
+                    </div>
 
                     <div className="doc-history" style={{ marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '15px' }}>
                       <div className="doc-history-title" style={{ marginBottom: '10px' }}>Recent Notes</div>
