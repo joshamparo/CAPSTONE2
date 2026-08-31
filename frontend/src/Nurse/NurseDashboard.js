@@ -12,6 +12,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import StatusBadge from '../components/StatusBadge';
 import ModalShell from '../components/ModalShell';
+import { buildPatientWatchlist } from './nurseClinicalUtils';
 
 const LAB_SERVICES = ["Urinalysis", "Blood Chemistry", "Complete Blood Count (CBC)", "Fecalysis", "Hepa Screening", "Dengue Duo + NS1 Antigen (Package)"];
 const IMAGING_SERVICES = ["Standard 12-Lead ECG", "Stress Test", "Holter Monitoring", "Chest X-Ray"];
@@ -2968,19 +2969,7 @@ function NurseDashboard() {
       } catch (_) {}
   };
 
-  const [criticalVitals, setCriticalVitals] = useState(() => {
-      const saved = localStorage.getItem('criticalVitals');
-      if (saved) {
-          try {
-              const parsed = JSON.parse(saved);
-              return parsed.map(p => ({
-                  ...p,
-                  trend: p.trend || (Math.random() > 0.5 ? 'up' : 'down')
-              }));
-          } catch (e) { return []; }
-      }
-      return [];
-  });
+  const criticalVitals = useMemo(() => buildPatientWatchlist(patientsList), [patientsList]);
 
   // Announcement Pop-up Logic
   // Announcement Pop-up & Feed Logic
@@ -3077,56 +3066,16 @@ function NurseDashboard() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [modalType, setModalType] = useState("success"); // success or error
   const [successMessage, setSuccessMessage] = useState("");
-  const [criticalPatients, setCriticalPatients] = useState(() => {
-      const saved = localStorage.getItem('criticalPatients');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-  });
+  const criticalPatients = useMemo(
+      () => new Set(criticalVitals.map((patient) => String(patient.id))),
+      [criticalVitals]
+  );
   const [selectedBed, setSelectedBed] = useState(null); // Bed Modal State
 
-  const toggleCritical = (patient) => {
-      const newCritical = new Set(criticalPatients);
-      const patientName = `${patient.firstName} ${patient.lastName}`;
-      let updatedVitals;
-      
-      if (newCritical.has(patient._id)) {
-          newCritical.delete(patient._id);
-          // Remove from widget list
-          updatedVitals = criticalVitals.filter(p => p.id !== patient._id);
-          addActivity('Critical Status Removed', `Patient ${patientName} marked as stable.`, 'info');
-      } else {
-          newCritical.add(patient._id);
-          // Add to widget list (Mock data)
-          updatedVitals = [...criticalVitals, {
-              id: patient._id,
-              name: patientName,
-              room: `Ward ${patient.wardNumber || 'Unassigned'}`,
-              bp: '140/90', // Mock initial alert stats
-              hr: '110',
-              status: 'critical',
-              trend: Math.random() > 0.5 ? 'up' : 'down'
-          }];
-          addActivity('Critical Alert', `Patient ${patientName} marked as CRITICAL.`, 'alert');
-          
-          // Navigate to Overview to show Critical Watchlist
-          setView('overview');
-      }
-      setCriticalPatients(newCritical);
-      setCriticalVitals(updatedVitals);
-
-      // Save to LocalStorage
-      localStorage.setItem('criticalPatients', JSON.stringify([...newCritical]));
-      localStorage.setItem('criticalVitals', JSON.stringify(updatedVitals));
-  };
-
   // --- New Widgets State ---
-  const [shiftNotes, setShiftNotes] = useState("• Check Bed 4 IV drip at 2 PM\n• Dr. Smith rounds at 3 PM\n• Handover report pending for Night Shift");
+  const [shiftNotes, setShiftNotes] = useState("");
   // --- Task Management State ---
-  const [tasks, setTasks] = useState([
-      { id: 1, text: 'Vitals Round', time: '14:00', priority: 'routine', completed: false },
-      { id: 2, text: 'Antibiotics - Bed 2', time: '14:30', priority: 'urgent', completed: false },
-      { id: 3, text: 'Update Charts', time: '16:00', priority: 'handover', completed: false },
-      { id: 4, text: 'Discharge Bed 6', time: '15:00', priority: 'routine', completed: true },
-  ]);
+  const [tasks, setTasks] = useState([]);
   const [newTaskText, setNewTaskText] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState("routine");
   const [handoverId, setHandoverId] = useState(null);
@@ -7712,7 +7661,7 @@ function NurseDashboard() {
                                 {patientsList.filter(p => p.admissionStatus === 'Inpatient').map(patient => (
                                     <div 
                                         key={patient._id} 
-                                        className={`inpatient-card ${criticalPatients.has(patient._id) ? 'status-critical' : 'status-stable'}`}
+                                        className={`inpatient-card ${criticalPatients.has(String(patient._id)) ? 'status-critical' : 'status-stable'}`}
                                     >
                                         <div className="ip-card-header">
                                             <div className="ip-avatar">
@@ -7756,7 +7705,7 @@ function NurseDashboard() {
                                         </div>
 
                                         <div className="ip-actions">
-                                            <button className="btn-ip-action btn-ip-monitor">
+                                            <button className="btn-ip-action btn-ip-monitor" onClick={() => setView('vitals')}>
                                                 <Activity size={16} /> Monitor
                                             </button>
                                             <button 
@@ -7766,10 +7715,10 @@ function NurseDashboard() {
                                                 <FilePenLine size={16} /> Update
                                             </button>
                                             <button 
-                                                className={`btn-ip-action btn-ip-critical ${criticalPatients.has(patient._id) ? 'active' : ''}`}
-                                                onClick={() => toggleCritical(patient)}
+                                                className={`btn-ip-action btn-ip-critical ${criticalPatients.has(String(patient._id)) ? 'active' : ''}`}
+                                                onClick={() => handleClinicalUpdateClick(patient)}
                                             >
-                                                <AlertTriangle size={16} /> {criticalPatients.has(patient._id) ? 'Critical' : 'Alert'}
+                                                <AlertTriangle size={16} /> {criticalPatients.has(String(patient._id)) ? 'Review Alert' : 'Record Vitals'}
                                             </button>
                                         </div>
                                     </div>
