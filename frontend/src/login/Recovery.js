@@ -43,7 +43,7 @@ const Recovery = () => {
         throw new Error(String(data?.message || 'Recovery service is temporarily unavailable. Please try again later.'));
       }
       setIsSuccess(true);
-      setMessage('If this email belongs to an eligible account, a password reset link will arrive shortly.');
+      setMessage('');
     } catch (error) {
       console.error("Recovery validation error:", error);
       setMessage(String(error?.message || "Could not connect to the server. Please try again later."));
