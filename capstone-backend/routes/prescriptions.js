@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
 
 async function ensurePharmacyColumns() {
   await prisma.$executeRawUnsafe(`
@@ -89,6 +90,10 @@ router.get('/', requireRole(['doctor', 'admin', 'pharmacist']), async (req, res)
     
     if (patientId) {
       where.patient_id = patientId;
+      if (req.auth?.role === 'doctor') {
+        const access = await enforceDoctorPatientAccess(req, res, patientId);
+        if (!access.allowed) return;
+      }
     }
     
     if (sentToPharmacy === 'true') {
@@ -99,6 +104,9 @@ router.get('/', requireRole(['doctor', 'admin', 'pharmacist']), async (req, res)
     if (!patientId && all !== 'true' && sentToPharmacy !== 'true') {
         console.log("No filters provided, returning empty array");
         return res.json([]);
+    }
+    if (req.auth?.role === 'doctor' && !patientId) {
+      return res.status(403).json({ message: 'Doctors must request prescriptions for an authorized patient.' });
     }
 
     let prescriptions = await prisma.prescriptions.findMany({
@@ -146,6 +154,10 @@ router.get('/:id', requireRole(['doctor', 'admin', 'pharmacist']), async (req, r
       where: { id: BigInt(req.params.id) }
     });
     if (!p) return res.status(404).json({ message: 'Not found' });
+    if (req.auth?.role === 'doctor') {
+      const access = await enforceDoctorPatientAccess(req, res, p.patient_id);
+      if (!access.allowed) return;
+    }
     const pharmacyMeta = await loadPharmacyMeta([p.id.toString()]);
     res.json({
       ...p,
@@ -166,6 +178,8 @@ router.post('/', requireRole(['doctor', 'admin']), async (req, res) => {
     if (!patientId || !doctorName) {
       return res.status(400).json({ message: 'patientId and doctorName are required' });
     }
+    const access = await enforceDoctorPatientAccess(req, res, patientId);
+    if (!access.allowed) return;
     const cleanDiagnosis = String(diagnosis || '').trim();
     if (cleanDiagnosis.length < 2 || cleanDiagnosis.length > 500) {
       return res.status(400).json({ message: 'Diagnosis must contain 2 to 500 characters.' });
@@ -255,6 +269,10 @@ router.patch('/:id/pharmacy', requireRole(['doctor', 'admin', 'pharmacist']), as
     const id = BigInt(String(req.params.id || '').trim());
     const existing = await prisma.prescriptions.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ message: 'Not found' });
+    if (req.auth?.role === 'doctor') {
+      const access = await enforceDoctorPatientAccess(req, res, existing.patient_id);
+      if (!access.allowed) return;
+    }
 
     const updates = [];
     const values = [];

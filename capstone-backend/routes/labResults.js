@@ -10,6 +10,7 @@ const { createClient } = require('@supabase/supabase-js');
 const requireRole = require('../middleware/requireRole');
 const { parseLimit, parseOffset } = require('../utils/normalize');
 const { normalizeEmail } = require('../utils/normalize');
+const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'lab-results');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -759,6 +760,10 @@ router.post('/upload', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radi
       patientName: req.body.patientName
     });
     if (!derivedPatientId) return res.status(400).json({ message: 'Missing patientId' });
+    if (req.auth?.role === 'doctor') {
+      const access = await enforceDoctorPatientAccess(req, res, derivedPatientId);
+      if (!access.allowed) return;
+    }
     const patientId = safeId(derivedPatientId);
     const originalName = String(req.file.originalname || 'file');
     const name = `${Date.now()}_${safeFilename(originalName)}`;
@@ -971,6 +976,10 @@ router.get('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographe
       if (!own) return res.status(404).json({ message: 'Patient not found' });
       if (String(own.id) !== String(patientId)) return res.status(403).json({ message: 'Forbidden' });
     }
+    if (requesterRole === 'doctor') {
+      const access = await enforceDoctorPatientAccess(req, res, patientId);
+      if (!access.allowed) return;
+    }
     const limit = parseLimit(take, { min: 1, max: 500, fallback: 100 });
     const offset = parseOffset(skip, { min: 0, max: 5000, fallback: 0 });
 
@@ -1026,6 +1035,10 @@ router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiograph
     const resolvedPatientId = await resolvePatientId({ patientId, patientEmail, patientName });
     if (!resolvedPatientId || !title || !url) {
       return res.status(400).json({ message: 'patientId (or patientEmail), title, and url are required' });
+    }
+    if (req.auth?.role === 'doctor') {
+      const access = await enforceDoctorPatientAccess(req, res, resolvedPatientId);
+      if (!access.allowed) return;
     }
 
     const rows = await prisma.$queryRaw`
@@ -1191,6 +1204,10 @@ router.get('/:id', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogra
     );
     const row = Array.isArray(rows) && rows.length ? rows[0] : null;
     if (!row) return res.status(404).json({ message: 'Lab result not found' });
+    if (requesterRole === 'doctor') {
+      const access = await enforceDoctorPatientAccess(req, res, row.patientId);
+      if (!access.allowed) return;
+    }
     return res.json({
       ...row,
       fileUrl: row.url ?? null,
@@ -1209,11 +1226,13 @@ router.get('/:id/interpretation', requireRole(['doctor']), async (req, res) => {
     if (!email) return res.status(401).json({ message: 'Missing user email.' });
 
     const exists = await prisma.$queryRaw`
-      SELECT 1 FROM lab_results WHERE id = ${id} LIMIT 1
+      SELECT patient_id FROM lab_results WHERE id = ${id} LIMIT 1
     `;
     if (!Array.isArray(exists) || exists.length === 0) {
       return res.status(404).json({ message: 'Lab result not found.' });
     }
+    const access = await enforceDoctorPatientAccess(req, res, exists[0].patient_id);
+    if (!access.allowed) return;
 
     const rows = await prisma.$queryRaw`
       SELECT note, doctor_name, updated_at
@@ -1241,11 +1260,13 @@ router.put('/:id/interpretation', requireRole(['doctor']), async (req, res) => {
     const doctorName = String(req.body.doctorName || rawName || '').trim() || null;
 
     const exists = await prisma.$queryRaw`
-      SELECT 1 FROM lab_results WHERE id = ${id} LIMIT 1
+      SELECT patient_id FROM lab_results WHERE id = ${id} LIMIT 1
     `;
     if (!Array.isArray(exists) || exists.length === 0) {
       return res.status(404).json({ message: 'Lab result not found.' });
     }
+    const access = await enforceDoctorPatientAccess(req, res, exists[0].patient_id);
+    if (!access.allowed) return;
 
     const rows = await prisma.$queryRaw`
       INSERT INTO lab_result_interpretations (lab_result_id, doctor_email, doctor_name, note, created_at, updated_at)
@@ -1265,6 +1286,12 @@ router.post('/:id/verify', requireRole(['doctor', 'admin', 'nurse', 'medtech', '
   try {
     const id = String(req.params.id || '').trim();
     if (!/^\d+$/.test(id)) return res.status(400).json({ message: 'Invalid lab result id.' });
+    if (req.auth?.role === 'doctor') {
+      const rows = await prisma.$queryRaw`SELECT patient_id FROM lab_results WHERE id = ${BigInt(id)} LIMIT 1`;
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ message: 'Lab result not found.' });
+      const access = await enforceDoctorPatientAccess(req, res, rows[0].patient_id);
+      if (!access.allowed) return;
+    }
     enqueueVerification(id);
     res.json({ ok: true, message: 'Verification queued.' });
   } catch (err) {
@@ -1275,6 +1302,12 @@ router.post('/:id/verify', requireRole(['doctor', 'admin', 'nurse', 'medtech', '
 router.patch('/:id/verification', requireRole(['doctor', 'admin', 'nurse']), async (req, res) => {
   try {
     const id = BigInt(req.params.id);
+    if (req.auth?.role === 'doctor') {
+      const rows = await prisma.$queryRaw`SELECT patient_id FROM lab_results WHERE id = ${id} LIMIT 1`;
+      if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ message: 'Lab result not found.' });
+      const access = await enforceDoctorPatientAccess(req, res, rows[0].patient_id);
+      if (!access.allowed) return;
+    }
     const status = String(req.body.status || '').trim().toLowerCase();
     if (!['verified', 'flagged', 'rejected'].includes(status)) {
       return res.status(400).json({ message: 'Invalid status.' });

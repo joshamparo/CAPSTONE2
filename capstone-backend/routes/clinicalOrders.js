@@ -6,6 +6,7 @@ const requireRole = require('../middleware/requireRole');
 const { normalizeEmail, normalizeRole, parseLimit, parseOffset, parseDate } = require('../utils/normalize');
 const { resolveClinicalServicePricing } = require('../utils/clinicalServiceCatalog');
 const { recordLabOrderPayment, ensureBillingTablesExist, toMoney } = require('../utils/billingLedger');
+const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
 
 
 const SCHEDULABLE_ROLE_SET = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist']);
@@ -530,15 +531,21 @@ router.post('/', async (req, res) => {
     const st = normalizeStatus(payBeforeExam ? 'For Payment' : 'Pending') || (payBeforeExam ? 'For Payment' : 'Pending');
 
     const patientUuid = patientId ? String(patientId) : null;
+    let authorizedDoctor = null;
+    if (actorFromHeaders.actorRole === 'doctor') {
+      const access = await enforceDoctorPatientAccess(req, res, patientUuid);
+      if (!access.allowed) return;
+      authorizedDoctor = access.actor;
+    }
     const orderedByRoleFinal = actorFromHeaders.actorRole === 'admin'
       ? (String(orderedByRole || '').trim() || null)
       : (orderedByRoleFromActorRole(actorFromHeaders.actorRole) || null);
     const orderedByNameFinal = actorFromHeaders.actorRole === 'admin'
       ? (orderedByName || actorFromHeaders.actorName || null)
-      : (actorFromHeaders.actorName || null);
+      : (authorizedDoctor?.name || actorFromHeaders.actorName || null);
     const actorNameFinal = actorFromHeaders.actorRole === 'admin'
       ? (actorName || orderedByNameFinal || null)
-      : (actorFromHeaders.actorName || null);
+      : (authorizedDoctor?.name || actorFromHeaders.actorName || null);
     const actorRoleFinal = actorFromHeaders.actorRole === 'admin'
       ? (actorRole || orderedByRoleFinal || actorFromHeaders.actorRole || null)
       : (actorFromHeaders.actorRole || null);
@@ -728,7 +735,14 @@ router.patch('/:id', async (req, res) => {
     `;
     const current = Array.isArray(currentRows) ? currentRows[0] : null;
     if (!current) return res.status(404).json({ message: 'Not found' });
-    if (!canAccessOrderRow(current, actorFromHeaders)) return res.status(403).json({ message: 'Forbidden' });
+    if (actorFromHeaders.actorRole === 'doctor') {
+      const access = await enforceDoctorPatientAccess(req, res, current.patientId);
+      if (!access.allowed) return;
+      actorFromHeaders.actorName = access.actor?.name || actorFromHeaders.actorName;
+      actorFromHeaders.actorEmail = access.actor?.email || actorFromHeaders.actorEmail;
+    } else if (!canAccessOrderRow(current, actorFromHeaders)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
 
     const data = {};
     const newStatus = status !== undefined ? normalizeStatus(status) : null;

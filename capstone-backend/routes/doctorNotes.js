@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
 
 async function ensureClinicalDetailsColumn() {
   await prisma.$executeRawUnsafe('ALTER TABLE public.doctor_notes ADD COLUMN IF NOT EXISTS clinical_details jsonb;');
@@ -17,6 +18,8 @@ router.get('/', requireRole(['doctor', 'admin']), async (req, res) => {
     await ensureClinicalDetailsColumn();
     const { patientId } = req.query;
     if (!patientId) return res.json([]);
+    const access = await enforceDoctorPatientAccess(req, res, patientId);
+    if (!access.allowed) return;
     const notes = await prisma.doctor_notes.findMany({
       where: { patient_id: patientId },
       orderBy: { created_at: 'desc' },
@@ -45,6 +48,8 @@ router.post('/', requireRole(['doctor', 'admin']), async (req, res) => {
     if (!patientId || !doctorName) {
       return res.status(400).json({ message: 'patientId and doctorName are required' });
     }
+    const access = await enforceDoctorPatientAccess(req, res, patientId);
+    if (!access.allowed) return;
     const authenticatedDoctor = req.auth?.role === 'doctor'
       ? await prisma.doctors.findFirst({
           where: { email: { equals: req.auth.email, mode: 'insensitive' } },

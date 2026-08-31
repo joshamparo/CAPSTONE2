@@ -2,11 +2,14 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
 
 router.get('/', requireRole(['doctor', 'admin']), async (req, res) => {
   try {
     const { patientId } = req.query;
     if (!patientId) return res.json([]);
+    const access = await enforceDoctorPatientAccess(req, res, patientId);
+    if (!access.allowed) return;
 
     const certs = await prisma.$queryRaw`
       SELECT id, patient_id, doctor_name, purpose, diagnosis, recommendations, valid_until, created_at
@@ -35,6 +38,8 @@ router.post('/', requireRole(['doctor', 'admin']), async (req, res) => {
     if (!patientId || !doctorName || !purpose) {
       return res.status(400).json({ message: 'patientId, doctorName, and purpose are required' });
     }
+    const access = await enforceDoctorPatientAccess(req, res, patientId);
+    if (!access.allowed) return;
     const authenticatedDoctor = req.auth?.role === 'doctor'
       ? await prisma.doctors.findFirst({
           where: { email: { equals: req.auth.email, mode: 'insensitive' } },
