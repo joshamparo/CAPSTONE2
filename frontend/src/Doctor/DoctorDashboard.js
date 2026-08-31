@@ -2314,14 +2314,23 @@ function DoctorDashboard() {
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setProfileImage(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfilePreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    if (!String(file.type || '').startsWith('image/')) {
+      e.target.value = '';
+      setToast({ type: 'error', message: 'Please select a valid image file.' });
+      return;
     }
+    if (file.size > 5 * 1024 * 1024) {
+      e.target.value = '';
+      setToast({ type: 'error', message: 'Profile image must be 5 MB or smaller.' });
+      return;
+    }
+    setProfileImage(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfilePreview(reader.result);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleLogout = async () => {
@@ -3997,7 +4006,7 @@ function DoctorDashboard() {
         </div>
       </div>
 
-      <div className="admin-profile-form" onSubmit={(e) => { e.preventDefault(); saveProfile(); }} style={{ display: 'block' }}>
+      <form className="admin-profile-form" onSubmit={(e) => { e.preventDefault(); saveProfile(); }} style={{ display: 'block' }} noValidate>
         <div className="profile-form-grid">
           <div className="profile-column">
             <div className="profile-card">
@@ -4207,12 +4216,12 @@ function DoctorDashboard() {
           {doctorProfileFormNotice && (
             <p className="form-notice-error form-notice-error-text">{doctorProfileFormNotice}</p>
           )}
-          <button type="submit" className="btn-neutral-large flex-center-gap-8" disabled={savingProfile} onClick={saveProfile}>
+          <button type="submit" className="btn-neutral-large flex-center-gap-8" disabled={savingProfile}>
             <Save size={18} />
             {savingProfile ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 
