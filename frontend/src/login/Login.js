@@ -111,27 +111,9 @@ const Login = () => {
     let role = '';
     let isValid = false;
 
-    // 1. Check Testing/Mock Accounts First (Fail-safes)
-    if (email === 'pascualgenhospi@gmail.com' && password === 'admin123.') {
-        role = 'admin';
-        isValid = true;
-    } else if (email === 'pascualdoctors@gmail.com' && password === 'admin123.') {
-        role = 'doctor';
-        isValid = true;
-    } else if (email === 'pascualnurses@gmail.com' && password === 'admin123.') {
-        role = 'nurse';
-        isValid = true;
-        localStorage.setItem('tempUserDetails', JSON.stringify({
-          email,
-          account_type: 'nurse',
-          department: 'ER',
-          specialization: 'ER',
-          firstName: 'Pascual',
-          first_name: 'Pascual',
-          last_name: 'Nurse'
-        }));
-    } else {
-        // 2. Fallback to Real Backend Authentication
+    {
+        // Authenticate every account through the backend so protected API
+        // requests receive a signed session token.
         try {
           const res = await fetch(`${API_BASE}/api/staff/login`, {
             method: 'POST',

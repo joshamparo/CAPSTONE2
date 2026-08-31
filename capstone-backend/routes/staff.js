@@ -7,6 +7,7 @@ const { Prisma } = require('@prisma/client');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { normalizeEmail, normalizeRole } = require('../utils/normalize');
+const { createSessionToken } = require('../utils/sessionToken');
 
 function isUuid(value) {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
@@ -360,6 +361,8 @@ router.post('/login', async (req, res) => {
         // Return user info, excluding password
         const { password: _, ...userData } = user;
         const avatarUrl = await getAvatarUrl(modelType, user.id).catch(() => null);
+        const authenticatedRole = String(user.account_type || user.roles || (modelType === 'doctors' ? 'doctor' : modelType === 'nurses' ? 'nurse' : 'staff')).trim().toLowerCase();
+        const sessionToken = createSessionToken({ id: user.id, email: user.email, role: authenticatedRole });
         
         if (modelType === 'accounts') {
             const firstName = user.name || '';
@@ -380,10 +383,11 @@ router.post('/login', async (req, res) => {
                 account_type: user.roles || 'staff',
                 linkedDoctorId,
                 linked_doctor_id: linkedDoctorId,
-                avatarUrl
+                avatarUrl,
+                sessionToken
             });
         } else {
-            res.json({ ...userData, avatarUrl });
+            res.json({ ...userData, avatarUrl, sessionToken });
         }
         
     } catch (err) {

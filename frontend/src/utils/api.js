@@ -69,16 +69,32 @@ export const installApiFetchShim = () => {
     const originalFetch = window.fetch.bind(window);
     window.fetch = (input, init) => {
       try {
+        const withSession = (url, options = {}) => {
+          let isApiRequest = false;
+          try {
+            const parsed = new URL(String(url || ''), window.location.origin);
+            isApiRequest = parsed.pathname.startsWith('/api/');
+          } catch (_) {}
+          if (!isApiRequest) return options;
+          const current = safeJson(localStorage.getItem('currentUser') || 'null');
+          const pending = safeJson(localStorage.getItem('tempUserDetails') || 'null');
+          const token = String(current?.sessionToken || pending?.sessionToken || '').trim();
+          if (!token) return options;
+          const headers = new Headers(options.headers || {});
+          if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
+          return { ...options, headers };
+        };
         if (typeof input === 'string') {
-          return originalFetch(rewriteUrlForApiBase(input), init);
+          const nextUrl = rewriteUrlForApiBase(input);
+          return originalFetch(nextUrl, withSession(nextUrl, init));
         }
 
         if (input && typeof Request !== 'undefined' && input instanceof Request) {
           try {
             const nextUrl = rewriteUrlForApiBase(input.url);
-            if (nextUrl === input.url) return originalFetch(input, init);
+            const merged = withSession(nextUrl, { headers: new Headers(input.headers), ...(init || {}) });
             const nextRequest = new Request(nextUrl, input);
-            return originalFetch(nextRequest, init);
+            return originalFetch(nextRequest, merged);
           } catch (_) {
             return originalFetch(input, init);
           }
@@ -120,7 +136,9 @@ export const buildAuthHeaders = (user, fallbackRole) => {
   const name = String(u?.name || `${u?.first_name || u?.firstName || ''} ${u?.last_name || u?.lastName || ''}`.trim() || '').trim();
   const idCandidates = [u?.patientId, u?.patient_id, u?.id, u?._id];
   const patientId = idCandidates.find((v) => UUID_PATTERN.test(String(v || '').trim())) || '';
+  const sessionToken = String(u?.sessionToken || '').trim();
   return {
+    ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
     ...(role ? { 'x-user-role': role } : {}),
     ...(email ? { 'x-user-email': email } : {}),
     ...(name ? { 'x-user-name': name } : {}),

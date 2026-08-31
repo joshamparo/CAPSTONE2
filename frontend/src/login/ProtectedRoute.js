@@ -39,6 +39,7 @@ function safeNormalizeArray(value) {
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const user = safeGetUser();
   const userRole = safeNormalizeRole(user?.role);
+  const sessionToken = String(user?.sessionToken || '').trim();
   const normalizedRoles = safeNormalizeArray(allowedRoles);
 
   useEffect(() => {
@@ -77,7 +78,10 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     };
   }, [user, userRole]);
 
-  if (!user) {
+  if (!user || !sessionToken) {
+    if (user && !sessionToken) {
+      try { localStorage.removeItem('currentUser'); } catch (_) {}
+    }
     return <Navigate to="/login" replace />;
   }
 

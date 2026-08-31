@@ -1,3 +1,5 @@
+const { verifySessionToken } = require('../utils/sessionToken');
+
 function normalizeRoleHeader(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw) return '';
@@ -25,10 +27,18 @@ function requireRole(allowedRoles = []) {
 
   return (req, res, next) => {
     if (req.method === 'OPTIONS') return next();
-    const role = normalizeRoleHeader(req.headers['x-user-role']);
+    const authHeader = String(req.headers.authorization || '').trim();
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    const session = match ? verifySessionToken(match[1]) : null;
+    if (!session) return res.status(401).json({ message: 'Authentication required. Please sign in again.' });
+    const role = normalizeRoleHeader(session.role);
     if (!role || (normalizedAllowed.length > 0 && !normalizedAllowed.includes(role))) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(403).json({ message: 'Forbidden' });
     }
+    req.auth = { id: session.sub, email: session.email, role };
+    req.headers['x-user-role'] = role;
+    req.headers['x-user-email'] = session.email;
+    req.headers['x-user-id'] = session.sub;
     next();
   };
 }

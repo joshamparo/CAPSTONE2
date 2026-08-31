@@ -80,7 +80,7 @@ function derivePrescriptionRouting(body = {}) {
   };
 }
 
-router.get('/', async (req, res) => {
+router.get('/', requireRole(['doctor', 'admin', 'pharmacist']), async (req, res) => {
   try {
     await ensurePharmacyColumns();
     const { patientId, all, sentToPharmacy, pharmacyStatus, pharmacySource } = req.query;
@@ -139,7 +139,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireRole(['doctor', 'admin', 'pharmacist']), async (req, res) => {
   try {
     await ensurePharmacyColumns();
     const p = await prisma.prescriptions.findUnique({
@@ -166,18 +166,49 @@ router.post('/', requireRole(['doctor', 'admin']), async (req, res) => {
     if (!patientId || !doctorName) {
       return res.status(400).json({ message: 'patientId and doctorName are required' });
     }
-    const cleanItems = Array.isArray(items) ? items.filter((it) => it && it.medication) : [];
+    const cleanDiagnosis = String(diagnosis || '').trim();
+    if (cleanDiagnosis.length < 2 || cleanDiagnosis.length > 500) {
+      return res.status(400).json({ message: 'Diagnosis must contain 2 to 500 characters.' });
+    }
+    const authenticatedDoctor = req.auth?.role === 'doctor'
+      ? await prisma.doctors.findFirst({
+          where: { email: { equals: req.auth.email, mode: 'insensitive' } },
+          select: { first_name: true, last_name: true }
+        })
+      : null;
+    const actorName = authenticatedDoctor
+      ? `${authenticatedDoctor.first_name || ''} ${authenticatedDoctor.last_name || ''}`.trim()
+      : String(doctorName || '').trim();
+    if (!actorName) return res.status(401).json({ message: 'Unable to resolve the authenticated doctor.' });
+    const cleanInstructions = String(instructions || '').trim();
+    if (cleanInstructions.length > 500) return res.status(400).json({ message: 'Instructions cannot exceed 500 characters.' });
+    const cleanItems = Array.isArray(items)
+      ? items.map((it) => ({
+          medication: String(it?.medication || '').trim(),
+          dosage: String(it?.dosage || '').trim(),
+          frequency: String(it?.frequency || '').trim(),
+          duration: String(it?.duration || '').trim(),
+          notes: String(it?.notes || '').trim()
+        })).filter((it) => Object.values(it).some(Boolean))
+      : [];
     if (cleanItems.length === 0) {
       return res.status(400).json({ message: 'At least one medication item is required' });
     }
+    const incompleteIndex = cleanItems.findIndex((it) => !it.medication || !it.dosage || !it.frequency || !it.duration);
+    if (incompleteIndex >= 0) return res.status(400).json({ message: `Medication row ${incompleteIndex + 1} is incomplete.` });
+    if (cleanItems.some((it) => Object.values(it).some((value) => value.length > 500))) {
+      return res.status(400).json({ message: 'Prescription item fields cannot exceed 500 characters.' });
+    }
+    const medicationKeys = cleanItems.map((it) => it.medication.toLowerCase());
+    if (new Set(medicationKeys).size !== medicationKeys.length) return res.status(400).json({ message: 'Duplicate medications are not allowed.' });
 
     const routing = derivePrescriptionRouting(req.body);
     const created = await prisma.prescriptions.create({
       data: {
         patient_id: patientId,
-        doctor_name: doctorName,
-        diagnosis,
-        instructions,
+        doctor_name: actorName,
+        diagnosis: cleanDiagnosis,
+        instructions: cleanInstructions,
         items: cleanItems,
         is_sent_to_pharmacy: routing.isSentToPharmacy || !!isSentToPharmacy
       }
@@ -199,7 +230,7 @@ router.post('/', requireRole(['doctor', 'admin']), async (req, res) => {
 
     prisma.activity_logs.create({
       data: {
-        actor_name: doctorName,
+        actor_name: actorName,
         role: 'Doctor',
         action: 'Create',
         target: `Patient:${patientId}`,

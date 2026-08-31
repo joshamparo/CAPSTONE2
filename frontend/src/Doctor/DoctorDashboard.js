@@ -1095,6 +1095,8 @@ function DoctorDashboard() {
 
   const authHeaders = useMemo(() => {
     const headers = {};
+    const sessionToken = String(currentUser?.sessionToken || '').trim();
+    if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
     if (userRole) headers['x-user-role'] = userRole;
 
     // Pass the actual doctor name from the user object, fallback to doctorInboxName
@@ -1704,7 +1706,7 @@ function DoctorDashboard() {
     }
     try {
       const data = await fetchJson(`/api/doctor-notes?patientId=${patientId}`, { apiBase: API_BASE, headers: { ...authHeaders } });
-      setNotes(Array.isArray(data) ? data : []);
+      setNotes(Array.isArray(data) ? data.map((note) => ({ ...(note?.clinicalDetails || {}), ...note })) : []);
     } catch (_) {
       setNotes([]);
     }
@@ -2384,12 +2386,22 @@ function DoctorDashboard() {
         height: noteForm.height,
         o2: noteForm.o2,
       },
-      specialization: currentUser?.specialization || 'General',
-      vaccinationHistory: noteForm.vaccinationHistory,
-      heartRateRhythm: noteForm.heartRateRhythm,
-      ecgNotes: noteForm.ecgNotes,
-      lesionType: noteForm.lesionType,
-      affectedArea: noteForm.affectedArea
+      clinicalDetails: {
+        specialization: currentUser?.specialization || 'General',
+        vaccinationHistory: noteForm.vaccinationHistory,
+        milestones: noteForm.milestones,
+        heartRateRhythm: noteForm.heartRateRhythm,
+        ecgNotes: noteForm.ecgNotes,
+        chestPainDuration: noteForm.chestPainDuration,
+        lesionType: noteForm.lesionType,
+        affectedArea: noteForm.affectedArea,
+        skinType: noteForm.skinType,
+        lmp: noteForm.lmp,
+        fetalHeartRate: noteForm.fetalHeartRate,
+        operationType: noteForm.operationType,
+        anesthesiaType: noteForm.anesthesiaType,
+        surgicalSite: noteForm.surgicalSite
+      }
     };
     try {
       await fetchJson(`/api/doctor-notes`, {
@@ -2401,7 +2413,9 @@ function DoctorDashboard() {
       setNoteForm({ 
         subjective: '', objective: '', assessment: '', plan: '', 
         bp: '', hr: '', temp: '', weight: '', height: '', o2: '',
-        vaccinationHistory: '', heartRateRhythm: '', ecgNotes: '', lesionType: '', affectedArea: '' 
+        vaccinationHistory: '', milestones: '', heartRateRhythm: '', ecgNotes: '', chestPainDuration: '',
+        lesionType: '', affectedArea: '', skinType: '', lmp: '', fetalHeartRate: '',
+        operationType: '', anesthesiaType: '', surgicalSite: ''
       });
       await fetchNotes(selectedPatient._id);
       setToast({ type: 'success', message: 'Note saved.' });
@@ -4887,11 +4901,12 @@ function DoctorDashboard() {
                                   objective: n.objective || '',
                                   assessment: n.assessment || '',
                                   plan: n.plan || '',
-                                  vaccinationHistory: n.vaccinationHistory || '',
-                                  heartRateRhythm: n.heartRateRhythm || '',
-                                  ecgNotes: n.ecgNotes || '',
-                                  lesionType: n.lesionType || '',
-                                  affectedArea: n.affectedArea || ''
+                                  ...(n.clinicalDetails || {}),
+                                  vaccinationHistory: n.clinicalDetails?.vaccinationHistory || '',
+                                  heartRateRhythm: n.clinicalDetails?.heartRateRhythm || '',
+                                  ecgNotes: n.clinicalDetails?.ecgNotes || '',
+                                  lesionType: n.clinicalDetails?.lesionType || '',
+                                  affectedArea: n.clinicalDetails?.affectedArea || ''
                                 }));
                                 setToast({ type: 'success', message: 'Note copied to editor.' });
                               }}

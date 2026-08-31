@@ -3,7 +3,7 @@ const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 
-router.get('/', async (req, res) => {
+router.get('/', requireRole(['doctor', 'admin']), async (req, res) => {
   try {
     const { patientId } = req.query;
     if (!patientId) return res.json([]);
@@ -35,12 +35,22 @@ router.post('/', requireRole(['doctor', 'admin']), async (req, res) => {
     if (!patientId || !doctorName || !purpose) {
       return res.status(400).json({ message: 'patientId, doctorName, and purpose are required' });
     }
+    const authenticatedDoctor = req.auth?.role === 'doctor'
+      ? await prisma.doctors.findFirst({
+          where: { email: { equals: req.auth.email, mode: 'insensitive' } },
+          select: { first_name: true, last_name: true }
+        })
+      : null;
+    const actorName = authenticatedDoctor
+      ? `${authenticatedDoctor.first_name || ''} ${authenticatedDoctor.last_name || ''}`.trim()
+      : String(doctorName || '').trim();
+    if (!actorName) return res.status(401).json({ message: 'Unable to resolve the authenticated doctor.' });
 
     const rows = await prisma.$queryRaw`
       INSERT INTO medical_certificates (patient_id, doctor_name, purpose, diagnosis, recommendations, valid_until)
       VALUES (
         ${patientId}::uuid,
-        ${doctorName},
+        ${actorName},
         ${purpose},
         ${diagnosis || null},
         ${recommendations || null},
@@ -52,7 +62,7 @@ router.post('/', requireRole(['doctor', 'admin']), async (req, res) => {
 
     prisma.activity_logs.create({
       data: {
-        actor_name: doctorName,
+        actor_name: actorName,
         role: 'Doctor',
         action: 'Create',
         target: `Patient:${patientId}`,
