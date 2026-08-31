@@ -198,6 +198,30 @@ router.post('/messages', async (req, res) => {
     let rowCount = 0;
     let hitInsertTier = 'full';
 
+    try {
+      const columns = await getChatColumns();
+      const candidateValues = [
+        ['body', bodyRaw], ['attachment_url', attachmentUrl], ['specialty', specialty], ['room', room],
+        ['sender_role', senderRole], ['sender_name', senderName], ['sender_dept', senderDept],
+        ['sender_email', senderEmail], ['sender_username', senderUsername], ['sender_id', senderId],
+        ['reply_to_id', replyToId], ['reply_to_body', replyToBody], ['reply_to_sender', replyToSender],
+        ['reply_to_kind', replyToKind], ['attachment_kind', attachmentKind], ['attachment_name', attachmentName],
+        ['attachment_size', attachmentSize], ['attachment_mime', attachmentMime], ['attachment_path', attachmentPath],
+        ['attachment_public_url', attachmentPublicUrl], ['deleted', deleted], ['pinned', pinned]
+      ].filter(([name]) => columns.has(name));
+      if (!candidateValues.some(([name]) => name === 'body')) throw new Error('consultation_messages is missing the body column');
+      const insertColumns = candidateValues.map(([name]) => name).join(', ');
+      const placeholders = candidateValues.map((_, index) => `$${index + 1}`).join(', ');
+      rowCount = await prisma.$executeRawUnsafe(
+        `INSERT INTO public.consultation_messages (${insertColumns}) VALUES (${placeholders})`,
+        ...candidateValues.map(([, value]) => value)
+      ) || 0;
+      rowInsertedOk = true;
+      hitInsertTier = 'schema-adaptive';
+    } catch (adaptiveError) {
+      console.warn('[doctorChat] schema-adaptive insert failed; trying legacy tiers:', adaptiveError?.message || adaptiveError);
+    }
+
     const base22Values = [
       bodyRaw, attachmentUrl, specialty, room, senderRole, senderName, senderDept,
       senderEmail, senderUsername, senderId,
@@ -270,7 +294,7 @@ router.post('/messages', async (req, res) => {
     // Placeholders: 3 ✅ tier4Values LENGTH 3.
 
     // ============ TRY TIERS 1 → 4 IN ORDER ============
-    try {
+    if (!rowInsertedOk) try {
       rowCount = await prisma.$executeRawUnsafe(tier1Sql, ...base22Values) || 0;
       rowInsertedOk = true;
       hitInsertTier = 'full';

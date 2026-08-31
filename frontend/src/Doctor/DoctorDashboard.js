@@ -480,12 +480,14 @@ function DoctorDashboard() {
 
   const loadDoctorChatMessages = async (opts = {}) => {
     const isOlder = opts.older === true;
+    const isSilent = opts.silent === true;
     const existing = Array.isArray(doctorChatMessages) ? doctorChatMessages : [];
     if (isOlder && existing.length < 20) {
       setDoctorChatOlderExhausted(true);
       return;
     }
-    if (isOlder) setDoctorChatLoadingOlder(true); else setDoctorChatLoading(true);
+    if (isOlder) setDoctorChatLoadingOlder(true);
+    else if (!isSilent) setDoctorChatLoading(true);
     setDoctorChatError('');
     try {
       const PAGE = 75;
@@ -508,10 +510,13 @@ function DoctorDashboard() {
         if (rows.length) doctorChatLastSeenIdRef.current = rows[rows.length - 1]?.id || null;
       }
     } catch (e) {
-      if (!isOlder) setDoctorChatMessages([]);
-      setDoctorChatError(String(e?.message || 'Unable to load messages.'));
+      if (!isOlder && !isSilent) {
+        setDoctorChatMessages([]);
+        setDoctorChatError(String(e?.message || 'Unable to load messages.'));
+      }
     } finally {
-      if (isOlder) setDoctorChatLoadingOlder(false); else setDoctorChatLoading(false);
+      if (isOlder) setDoctorChatLoadingOlder(false);
+      else if (!isSilent) setDoctorChatLoading(false);
     }
   };
 
@@ -1887,7 +1892,7 @@ function DoctorDashboard() {
   useEffect(() => {
     if (activeNav !== 'doctor-chat') return;
     loadDoctorChatMessages();
-    const timer = setInterval(() => loadDoctorChatMessages(), 5000);
+    const timer = setInterval(() => loadDoctorChatMessages({ silent: true }), 5000);
     return () => clearInterval(timer);
   }, [activeNav, doctorChatSpecialty, doctorChatActiveTab, doctorChatUnifiedInboxFilters]);
 
