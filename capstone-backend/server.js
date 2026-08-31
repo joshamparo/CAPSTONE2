@@ -281,6 +281,7 @@ const assistantRoutes = require('./routes/assistant');
 const nurseWorkflowRoutes = require('./routes/nurseWorkflow');
 const systemSettingsRoutes = require('./routes/systemSettings');
 const doctorChatRoutes = require('./routes/doctorChat');
+const { buildRecoveryTemplateParams } = require('./utils/recoveryEmail');
 
 app.use('/api/staff', staffRoutes);
 app.use('/api/activity-logs', activityLogRoutes);
@@ -337,10 +338,6 @@ app.get('/api/health', (_req, res) => {
 
 app.post('/api/email/send-recovery', async (req, res) => {
   const { email, resetLink } = req.body;
-  let resetToken = '';
-  try {
-    resetToken = new URL(String(resetLink || '')).searchParams.get('token') || '';
-  } catch (_) {}
 
   const SERVICE_ID = process.env.EMAILJS_SERVICE_ID || "service_ur884qv";
   const PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || "45tRyW8WG36pIFeBo";
@@ -365,16 +362,7 @@ app.post('/api/email/send-recovery', async (req, res) => {
         template_id: TEMPLATE_ID,
         user_id: PUBLIC_KEY,
         accessToken: PRIVATE_KEY,
-        template_params: {
-          to_email: email,
-          reset_link: resetLink,
-          resetLink,
-          recovery_link: resetLink,
-          link: resetLink,
-          token: resetToken,
-          email,
-          subject: "Password Recovery - Pascualinga"
-        }
+        template_params: buildRecoveryTemplateParams(email, resetLink)
       })
     });
 
