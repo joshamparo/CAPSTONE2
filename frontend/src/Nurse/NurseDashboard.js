@@ -42,6 +42,8 @@ function NurseDashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
+  const [settingsSyncState, setSettingsSyncState] = useState('loading');
 
   // Settings State
   const [settings, setSettings] = useState(() => {
@@ -61,10 +63,8 @@ function NurseDashboard() {
     }
   });
 
-  // Persist Settings
+  // Apply settings immediately; account-scoped persistence is hydrated below.
   useEffect(() => {
-    localStorage.setItem('nurseSettings', JSON.stringify(settings));
-    
     // Apply compact view class to body if enabled
     if (settings.compactView) {
       document.body.classList.add('compact-mode');
@@ -234,7 +234,9 @@ function NurseDashboard() {
       const last = String(currentUser?.lastName || currentUser?.last_name || '').trim();
       const fullName = `${first} ${last}`.trim();
       const name = String(currentUser?.name || fullName || email || '').trim();
+      const sessionToken = String(currentUser?.sessionToken || '').trim();
       return {
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
         'x-user-role': 'nurse',
         ...(email ? { 'x-user-email': email } : {}),
         ...(name ? { 'x-user-name': name } : {})
@@ -243,6 +245,63 @@ function NurseDashboard() {
       return { 'x-user-role': 'nurse' };
     }
   };
+
+  useEffect(() => {
+    if (!user.email) return undefined;
+    let cancelled = false;
+    const localKey = `nurseSettings:${String(user.email).toLowerCase()}`;
+    const loadSettings = async () => {
+      setSettingsHydrated(false);
+      setSettingsSyncState('loading');
+      try {
+        const response = await fetch(`${API_BASE}/api/staff/settings`, { headers: { ...getAuthHeaders() } });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.message || 'Unable to load settings');
+        const remote = data?.prefs?.nurseDashboard;
+        if (!cancelled && remote && typeof remote === 'object') {
+          setSettings((previous) => ({ ...previous, ...remote }));
+          localStorage.setItem(localKey, JSON.stringify(remote));
+        } else if (!cancelled) {
+          const cached = JSON.parse(localStorage.getItem(localKey) || localStorage.getItem('nurseSettings') || 'null');
+          if (cached && typeof cached === 'object') setSettings((previous) => ({ ...previous, ...cached }));
+        }
+        if (!cancelled) setSettingsSyncState('synced');
+      } catch (_) {
+        if (!cancelled) {
+          try {
+            const cached = JSON.parse(localStorage.getItem(localKey) || localStorage.getItem('nurseSettings') || 'null');
+            if (cached && typeof cached === 'object') setSettings((previous) => ({ ...previous, ...cached }));
+          } catch (_ignore) {}
+          setSettingsSyncState('offline');
+        }
+      } finally {
+        if (!cancelled) setSettingsHydrated(true);
+      }
+    };
+    loadSettings();
+    return () => { cancelled = true; };
+  }, [user.email, API_BASE]);
+
+  useEffect(() => {
+    if (!settingsHydrated || !user.email) return undefined;
+    const localKey = `nurseSettings:${String(user.email).toLowerCase()}`;
+    localStorage.setItem(localKey, JSON.stringify(settings));
+    const timer = setTimeout(async () => {
+      setSettingsSyncState('saving');
+      try {
+        const response = await fetch(`${API_BASE}/api/staff/settings`, {
+          method: 'PUT',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prefs: { nurseDashboard: settings } })
+        });
+        if (!response.ok) throw new Error('Unable to save settings');
+        setSettingsSyncState('synced');
+      } catch (_) {
+        setSettingsSyncState('offline');
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [settings, settingsHydrated, user.email, API_BASE]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2871,10 +2930,10 @@ function NurseDashboard() {
   }, [patientSearch]);
 
   // Notifications Data (Moved to top for dependency)
-  const [notifications, setNotifications] = useState(() => {
-      const saved = localStorage.getItem('notifications');
-      return saved ? JSON.parse(saved) : [];
-  });
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsSyncState, setNotificationsSyncState] = useState('loading');
+
+  const notificationCacheKey = () => `nurseNotifications:${String(user.email || 'anonymous').toLowerCase()}`;
 
   const addActivity = (title, message, type = 'info') => {
       const newActivity = {
@@ -2887,10 +2946,48 @@ function NurseDashboard() {
       };
       setNotifications(prev => {
           const updated = [newActivity, ...prev];
-          localStorage.setItem('notifications', JSON.stringify(updated));
+          localStorage.setItem(notificationCacheKey(), JSON.stringify(updated.slice(0, 100)));
           return updated;
       });
   };
+
+  useEffect(() => {
+      if (!user.email) return undefined;
+      let cancelled = false;
+      const loadNotifications = async () => {
+          setNotificationsSyncState('loading');
+          try {
+              const response = await fetch(`${API_BASE}/api/staff/notifications`, { headers: { ...getAuthHeaders() } });
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok) throw new Error(data?.message || 'Unable to load notifications');
+              const remote = (Array.isArray(data?.items) ? data.items : []).map((item) => ({
+                  id: `server:${String(item?.id || `${item?.type || 'notification'}:${item?.createdAt || ''}`)}`,
+                  title: String(item?.title || 'Notification'),
+                  message: String(item?.message || ''),
+                  time: item?.createdAt ? new Date(item.createdAt).toLocaleString() : '',
+                  type: String(item?.meta?.severity || item?.type || 'info').toLowerCase().includes('alert') ? 'alert' : 'info',
+                  isUnread: Number(item?.unreadCount || 0) > 0
+              }));
+              if (!cancelled) {
+                  setNotifications((previous) => {
+                      const localOnly = previous.filter((item) => !String(item.id).startsWith('server:'));
+                      const merged = [...remote, ...localOnly].slice(0, 100);
+                      localStorage.setItem(notificationCacheKey(), JSON.stringify(merged));
+                      return merged;
+                  });
+                  setNotificationsSyncState('synced');
+              }
+          } catch (_) {
+              if (!cancelled) {
+                  try { setNotifications(JSON.parse(localStorage.getItem(notificationCacheKey()) || '[]')); } catch (_ignore) { setNotifications([]); }
+                  setNotificationsSyncState('offline');
+              }
+          }
+      };
+      loadNotifications();
+      const timer = setInterval(loadNotifications, 30000);
+      return () => { cancelled = true; clearInterval(timer); };
+  }, [user.email, API_BASE]);
 
   const pollMyLabResultVerifications = async () => {
       if (document.visibilityState !== 'visible') return;
@@ -3392,12 +3489,23 @@ function NurseDashboard() {
       updateTask(id, { completed: !target?.completed }).catch(() => {});
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
       setNotifications(prev => {
           const updated = prev.map(n => ({ ...n, isUnread: false }));
-          localStorage.setItem('notifications', JSON.stringify(updated));
+          localStorage.setItem(notificationCacheKey(), JSON.stringify(updated));
           return updated;
       });
+      try {
+          const response = await fetch(`${API_BASE}/api/staff/notifications/mark-all-read`, {
+              method: 'POST',
+              headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({})
+          });
+          if (!response.ok) throw new Error('Unable to synchronize notification status');
+          setNotificationsSyncState('synced');
+      } catch (_) {
+          setNotificationsSyncState('offline');
+      }
   };
 
   // Audible Alerts Logic
@@ -3450,10 +3558,9 @@ function NurseDashboard() {
 
   // --- Calendar State ---
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [calendarEvents, setCalendarEvents] = useState(() => {
-      const saved = localStorage.getItem('calendarEvents');
-      return saved ? JSON.parse(saved) : [];
-  });
+  const [calendarEvents, setCalendarEvents] = useState([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarSaving, setCalendarSaving] = useState(false);
   
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventDay, setNewEventDay] = useState("");
@@ -3498,7 +3605,50 @@ function NurseDashboard() {
     accounts: 0
   });
 
-  const handleAddEvent = (e) => {
+  const calendarMonthKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  const calendarCacheKey = (date) => `nurseCalendar:${String(user.email || 'anonymous').toLowerCase()}:${calendarMonthKey(date)}`;
+  const mapCalendarEvent = (event) => {
+      const rawDate = String(event?.event_date || event?.date || '').slice(0, 10);
+      return {
+          id: String(event?.id || ''),
+          title: String(event?.title || ''),
+          fullDate: rawDate,
+          date: Number(rawDate.slice(8, 10)),
+          time: String(event?.event_time || event?.time || '').slice(0, 5),
+          type: String(event?.event_type || event?.type || 'event')
+      };
+  };
+
+  useEffect(() => {
+      if (!user.email) return undefined;
+      let cancelled = false;
+      const loadCalendar = async () => {
+          setCalendarLoading(true);
+          setCalendarEventError('');
+          try {
+              const month = calendarMonthKey(currentDate);
+              const response = await fetch(`${API_BASE}/api/nurse-workflow/calendar?month=${encodeURIComponent(month)}`, { headers: { ...getAuthHeaders() } });
+              const data = await response.json().catch(() => []);
+              if (!response.ok) throw new Error(data?.message || 'Unable to load calendar');
+              const mapped = (Array.isArray(data) ? data : []).map(mapCalendarEvent);
+              if (!cancelled) {
+                  setCalendarEvents(mapped);
+                  localStorage.setItem(calendarCacheKey(currentDate), JSON.stringify(mapped));
+              }
+          } catch (error) {
+              if (!cancelled) {
+                  try { setCalendarEvents(JSON.parse(localStorage.getItem(calendarCacheKey(currentDate)) || '[]')); } catch (_) { setCalendarEvents([]); }
+                  setCalendarEventError(`${String(error?.message || 'Unable to load calendar')}. Showing cached events.`);
+              }
+          } finally {
+              if (!cancelled) setCalendarLoading(false);
+          }
+      };
+      loadCalendar();
+      return () => { cancelled = true; };
+  }, [currentDate.getFullYear(), currentDate.getMonth(), user.email, API_BASE]);
+
+  const handleAddEvent = async (e) => {
       e.preventDefault();
       const title = String(newEventTitle || '').trim();
       const day = String(newEventDay || '').trim();
@@ -3525,25 +3675,56 @@ function NurseDashboard() {
         calErr('Calendar day must be between 1 and 31.');
         return;
       }
+      const daysInSelectedMonth = getDaysInMonth(currentDate);
+      if (dayNum > daysInSelectedMonth) {
+        calErr(`This month only has ${daysInSelectedMonth} days.`);
+        return;
+      }
       setCalendarEventError("");
-      
-      const newEvent = { 
-          id: Date.now(), 
-          title, 
-          date: dayNum, 
-          time: String(newEventTime || '').trim(),
-          type: String(newEventType || 'event').trim() || 'event'
-      };
-      
-      const updatedEvents = [...calendarEvents, newEvent];
-      setCalendarEvents(updatedEvents);
-      localStorage.setItem('calendarEvents', JSON.stringify(updatedEvents));
-      addActivity('Calendar', `Added ${newEvent.type}: ${title}`, 'info');
-      
-      setNewEventTitle("");
-      setNewEventDay("");
-      setNewEventTime("");
-      setNewEventType("event");
+      const fullDate = `${calendarMonthKey(currentDate)}-${String(dayNum).padStart(2, '0')}`;
+      setCalendarSaving(true);
+      try {
+          const response = await fetch(`${API_BASE}/api/nurse-workflow/calendar`, {
+              method: 'POST',
+              headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title, date: fullDate, time: String(newEventTime || '').trim(), type: String(newEventType || 'event').trim() || 'event' })
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data?.message || 'Unable to save calendar event');
+          const newEvent = mapCalendarEvent(data);
+          setCalendarEvents((previous) => {
+              const updated = [...previous, newEvent];
+              localStorage.setItem(calendarCacheKey(currentDate), JSON.stringify(updated));
+              return updated;
+          });
+          addActivity('Calendar', `Added ${newEvent.type}: ${title}`, 'info');
+          setNewEventTitle("");
+          setNewEventDay("");
+          setNewEventTime("");
+          setNewEventType("event");
+      } catch (error) {
+          calErr(String(error?.message || 'Unable to save calendar event'));
+      } finally {
+          setCalendarSaving(false);
+      }
+  };
+
+  const deleteCalendarEvent = async (eventId) => {
+      const id = String(eventId || '').trim();
+      if (!/^\d+$/.test(id)) return;
+      setCalendarEventError('');
+      try {
+          const response = await fetch(`${API_BASE}/api/nurse-workflow/calendar/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { ...getAuthHeaders() } });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data?.message || 'Unable to delete calendar event');
+          setCalendarEvents((previous) => {
+              const updated = previous.filter((event) => String(event.id) !== id);
+              localStorage.setItem(calendarCacheKey(currentDate), JSON.stringify(updated));
+              return updated;
+          });
+      } catch (error) {
+          setCalendarEventError(String(error?.message || 'Unable to delete calendar event'));
+      }
   };
 
   const getDaysInMonth = (date) => {
@@ -6073,8 +6254,9 @@ function NurseDashboard() {
 	                                    <h4>Notifications</h4>
 	                                    <span className="mark-read" onClick={markAllAsRead}>Mark all as read</span>
 	                                </div>
+	                                {notificationsSyncState === 'offline' ? <div style={{ padding: '6px 14px', fontSize: '0.72rem', color: '#b45309' }}>Offline cache — read state will sync when the server is available.</div> : null}
 	                                <div className="notification-list">
-	                                    {notifications.map(notif => (
+	                                    {notifications.length === 0 ? <div style={{ padding: '18px', color: '#64748b', fontSize: '0.82rem' }}>No notifications.</div> : notifications.map(notif => (
 	                                        <div key={notif.id} className="notification-item">
 	                                            <div className={`notif-icon ${notif.type}`}>
 	                                                <Bell size={14} />
@@ -6159,7 +6341,9 @@ function NurseDashboard() {
 	                                    </div>
 	                                </div>
                                   <div style={{ padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
-                                      <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>Settings are saved locally.</p>
+                                      <p style={{ margin: 0, fontSize: '0.75rem', color: settingsSyncState === 'offline' ? '#b45309' : '#64748b' }}>
+                                        {settingsSyncState === 'saving' ? 'Saving to your account…' : settingsSyncState === 'offline' ? 'Offline cache — will sync when available.' : 'Synced to your Nurse account.'}
+                                      </p>
                                   </div>
 	                            </div>
 	                        )}
@@ -8623,8 +8807,11 @@ function NurseDashboard() {
                             <option value="shift">Shift</option>
                             <option value="off">Off Duty</option>
                         </select>
-                        <button type="submit" className="btn-add-task"><Plus size={18} /></button>
+                        <button type="submit" className="btn-add-task" disabled={calendarSaving || calendarLoading} title="Add calendar event"><Plus size={18} /></button>
                     </form>
+
+                    {calendarEventError ? <div style={{ marginBottom: '12px', color: '#b45309', fontSize: '0.82rem' }}>{calendarEventError}</div> : null}
+                    {calendarLoading ? <div style={{ marginBottom: '12px', color: '#64748b', fontSize: '0.82rem' }}>Loading your calendar…</div> : null}
 
                     <div className="calendar-grid-wrapper">
                         <div className="calendar-weekdays">
@@ -8644,9 +8831,12 @@ function NurseDashboard() {
                                         <span className="day-number">{day}</span>
                                         <div className="day-events">
                                             {events.map(ev => (
-                                                <div key={ev.id} className={`event-pill type-${ev.type}`}>
+                                                <div key={ev.id} className={`event-pill type-${ev.type}`} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                     {ev.time && <span style={{opacity: 0.8, marginRight: '4px', fontSize: '0.7rem'}}>{ev.time}</span>}
-                                                    {ev.title}
+                                                    <span style={{ flex: 1 }}>{ev.title}</span>
+                                                    {/^[0-9]+$/.test(String(ev.id)) ? (
+                                                      <button type="button" onClick={() => deleteCalendarEvent(ev.id)} aria-label={`Delete ${ev.title}`} title="Delete event" style={{ border: 0, background: 'transparent', color: 'inherit', padding: 0, cursor: 'pointer', display: 'inline-flex' }}><X size={11} /></button>
+                                                    ) : null}
                                                 </div>
                                             ))}
                                         </div>

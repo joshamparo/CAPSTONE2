@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { normalizeNurseCalendarMonth, validateNurseCalendarEvent } = require('../utils/nurseCalendar');
 
 const router = express.Router();
 
@@ -201,9 +202,23 @@ async function ensureWorkflowTables() {
     );
   `);
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS public.nurse_calendar_events (
+      id bigserial PRIMARY KEY,
+      owner_email text NOT NULL,
+      title text NOT NULL,
+      event_date date NOT NULL,
+      event_time text NULL,
+      event_type text NOT NULL DEFAULT 'event',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+  `);
+
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS nurse_handover_notes_department_idx ON public.nurse_handover_notes(department, created_at DESC);`).catch(() => {});
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS nurse_tasks_department_idx ON public.nurse_tasks(department, completed, priority);`).catch(() => {});
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS nurse_med_admin_logs_department_idx ON public.nurse_med_admin_logs(department, created_at DESC);`).catch(() => {});
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS nurse_calendar_events_owner_date_idx ON public.nurse_calendar_events(lower(owner_email), event_date);`).catch(() => {});
 }
 
 async function loadEmergencyLiveBoard() {
@@ -460,6 +475,77 @@ async function loadPendingMedicationRequests(department) {
 }
 
 router.use(requireRole(['nurse', 'admin']));
+
+router.get('/calendar', async (req, res) => {
+  try {
+    await ensureWorkflowTables();
+    const actor = actorFromReq(req);
+    if (!actor.email) return res.status(401).json({ message: 'Authenticated email is required' });
+    const month = normalizeNurseCalendarMonth(req.query.month);
+    if (!month) return res.status(400).json({ message: 'month must use YYYY-MM format' });
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT id, title, event_date, event_time, event_type, created_at, updated_at
+       FROM public.nurse_calendar_events
+       WHERE lower(owner_email) = lower($1)
+         AND event_date >= $2::date
+         AND event_date < ($2::date + interval '1 month')
+       ORDER BY event_date ASC, event_time ASC NULLS LAST, id ASC`,
+      actor.email,
+      `${month}-01`
+    );
+    res.json((Array.isArray(rows) ? rows : []).map(serializeRow));
+  } catch (error) {
+    console.error('Error loading nurse calendar:', error);
+    res.status(500).json({ message: 'Unable to load nurse calendar' });
+  }
+});
+
+router.post('/calendar', async (req, res) => {
+  try {
+    await ensureWorkflowTables();
+    const actor = actorFromReq(req);
+    if (!actor.email) return res.status(401).json({ message: 'Authenticated email is required' });
+    const validation = validateNurseCalendarEvent(req.body);
+    if (!validation.ok) return res.status(400).json({ message: validation.errors.join(' | ') });
+    const event = validation.value;
+    const rows = await prisma.$queryRawUnsafe(
+      `INSERT INTO public.nurse_calendar_events (owner_email, title, event_date, event_time, event_type)
+       VALUES ($1, $2, $3::date, $4, $5)
+       RETURNING id, title, event_date, event_time, event_type, created_at, updated_at`,
+      actor.email,
+      event.title,
+      event.date,
+      event.time,
+      event.type
+    );
+    res.status(201).json(serializeRow(Array.isArray(rows) ? rows[0] : null));
+  } catch (error) {
+    console.error('Error creating nurse calendar event:', error);
+    res.status(500).json({ message: 'Unable to create nurse calendar event' });
+  }
+});
+
+router.delete('/calendar/:id', async (req, res) => {
+  try {
+    await ensureWorkflowTables();
+    const actor = actorFromReq(req);
+    if (!actor.email) return res.status(401).json({ message: 'Authenticated email is required' });
+    const id = String(req.params.id || '').trim();
+    if (!/^\d+$/.test(id)) return res.status(400).json({ message: 'Invalid calendar event id' });
+    const deleted = await prisma.$queryRawUnsafe(
+      `DELETE FROM public.nurse_calendar_events
+       WHERE id = $1::bigint AND lower(owner_email) = lower($2)
+       RETURNING id`,
+      id,
+      actor.email
+    );
+    if (!Array.isArray(deleted) || !deleted.length) return res.status(404).json({ message: 'Calendar event not found' });
+    res.json({ ok: true, id });
+  } catch (error) {
+    console.error('Error deleting nurse calendar event:', error);
+    res.status(500).json({ message: 'Unable to delete nurse calendar event' });
+  }
+});
 
 router.get('/summary', async (req, res) => {
   try {

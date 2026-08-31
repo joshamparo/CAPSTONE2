@@ -1041,7 +1041,7 @@ router.get('/doctor-secretaries', requireRole(['admin', 'nurse', 'doctor_secreta
     }
 });
 
-router.get('/settings', async (req, res) => {
+router.get('/settings', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
     try {
         const { role, email } = inferRequester(req);
         if (!role || !email) return res.status(401).json({ message: 'Unauthorized' });
@@ -1062,7 +1062,7 @@ router.get('/settings', async (req, res) => {
     }
 });
 
-router.put('/settings', async (req, res) => {
+router.put('/settings', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
     try {
         const { role, email } = inferRequester(req);
         if (!role || !email) return res.status(401).json({ message: 'Unauthorized' });
@@ -1091,7 +1091,7 @@ router.put('/settings', async (req, res) => {
     }
 });
 
-router.get('/notifications', async (req, res) => {
+router.get('/notifications', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
     try {
         const { role, email, explicitName, patientId } = inferRequester(req);
         if (!role) return res.status(401).json({ message: 'Unauthorized' });
@@ -2034,7 +2034,7 @@ router.get('/notifications/stream', async (req, res) => {
     timer = setInterval(tick, 8000);
 });
 
-router.post('/notifications/mark-all-read', async (req, res) => {
+router.post('/notifications/mark-all-read', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
     try {
         const { role, email, explicitName } = inferRequester(req);
         if (!role || !email) return res.status(401).json({ message: 'Unauthorized' });
@@ -2092,7 +2092,7 @@ router.post('/notifications/mark-all-read', async (req, res) => {
     }
 });
 
-router.post('/notifications/mark-read', async (req, res) => {
+router.post('/notifications/mark-read', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
     try {
         const { role, email, explicitName } = inferRequester(req);
         if (!role || !email) return res.status(401).json({ message: 'Unauthorized' });
