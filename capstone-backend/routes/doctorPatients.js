@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { normalizeEmail, parseLimit, parseOffset } = require('../utils/normalize');
+const { canRequestPatientScope } = require('../utils/doctorAccess');
 
 
 const serialize = (obj) =>
@@ -120,7 +121,19 @@ const assertDoctorAccessToPatient = async ({ role, actor, patient }) => {
     .catch(() => []);
 
   const allowedStatuses = new Set(['Confirmed', 'Completed', 'Done']);
-  return (Array.isArray(apts) ? apts : []).some((a) => allowedStatuses.has(String(a.status || '')) && matchDoctor(a, actor));
+  const activeAppointments = (Array.isArray(apts) ? apts : []).filter((a) => allowedStatuses.has(String(a.status || '')));
+  if (activeAppointments.some((a) => matchDoctor(a, actor))) return true;
+  if (!actor?.specialization) return false;
+
+  const sameSpecDoctors = await prisma.doctors.findMany({
+    where: { specialization: { equals: actor.specialization, mode: 'insensitive' } },
+    select: { id: true, first_name: true, last_name: true, email: true }
+  }).catch(() => []);
+  return activeAppointments.some((appointment) => sameSpecDoctors.some((doctor) => matchDoctor(appointment, {
+    id: doctor.id,
+    name: `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim(),
+    email: doctor.email
+  })));
 };
 
 router.get('/patients', requireRole(['doctor', 'admin']), async (req, res) => {
@@ -129,6 +142,7 @@ router.get('/patients', requireRole(['doctor', 'admin']), async (req, res) => {
     const actor = await getActor(req);
     const q = String(req.query.q || '').trim().toLowerCase();
     const scope = String(req.query.scope || 'mine').trim().toLowerCase();
+    if (!canRequestPatientScope(role, scope)) return res.status(403).json({ message: 'All-patient scope is restricted to administrators.' });
     const statuses = getAppointmentStatuses(req.query.status);
     const take = parseLimit(req.query.take, { min: 1, max: 50, fallback: 15 });
     const skip = parseOffset(req.query.skip, { min: 0, max: 5000, fallback: 0 });

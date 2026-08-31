@@ -479,12 +479,6 @@ function DoctorDashboard() {
   }, [doctorChatActiveTab, doctorChatDeptRoomMatchKeys]);
 
   const loadDoctorChatMessages = async (opts = {}) => {
-    const specialty = doctorChatSpecialty;
-    if (!supabase) {
-      setDoctorChatMessages([]);
-      setDoctorChatError('Chat is not configured. Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY in homepage/.env, then restart the dev server and rebuild before uploading to Hostinger.');
-      return;
-    }
     const isOlder = opts.older === true;
     const existing = Array.isArray(doctorChatMessages) ? doctorChatMessages : [];
     if (isOlder && existing.length < 20) {
@@ -495,36 +489,16 @@ function DoctorDashboard() {
     setDoctorChatError('');
     try {
       const PAGE = 75;
-      const matchList = Array.from(doctorChatDeptRoomMatchKeys);
-      const baseQuery = (table) => table.from('consultation_messages').select('*').order('created_at', { ascending: false }).limit(PAGE);
-      const runWithWhere = async (builderLabel) => {
-        try {
-          let q = supabase.from('consultation_messages').select('*').order('created_at', { ascending: false }).limit(PAGE);
-          if (builderLabel === 'or') {
-            q = q.or(`specialty.in.(${matchList.map((v) => `"${String(v).replace(/"/g, '')}"`).slice(0, 250).join(',')}),room.in.(${matchList.map((v) => `"${String(v).replace(/"/g, '')}"`).slice(0, 250).join(',')})`);
-          }
-          if (isOlder && existing.length) {
-            const earliest = existing[0];
-            if (earliest?.created_at) q = q.lt('created_at', earliest.created_at);
-          }
-          const r = await q;
-          if (r.error && builderLabel === 'or') throw r.error;
-          if (!r.error && Array.isArray(r.data) && r.data.length) return r.data;
-          return null;
-        } catch (e) {
-          if (builderLabel === 'or') return null;
-          throw e;
-        }
-      };
-      let data = await runWithWhere('or');
-      if (!Array.isArray(data) || !data.length) {
-        // Fallback: load broad recent messages and apply client-side filter for unknown room names
-        const fallback = await supabase.from('consultation_messages').select('*').order('created_at', { ascending: false }).limit(200);
-        data = Array.isArray(fallback.data) ? fallback.data : [];
+      const data = await fetchJson(`/api/doctor-chat/messages?limit=${isOlder ? 200 : PAGE}`, {
+        apiBase: API_BASE,
+        headers: { ...authHeaders }
+      });
+      let rowsRaw = Array.isArray(data?.rows) ? [...data.rows] : [];
+      if (isOlder && existing.length && existing[0]?.created_at) {
+        const earliest = new Date(existing[0].created_at).getTime();
+        rowsRaw = rowsRaw.filter((row) => new Date(row?.created_at || 0).getTime() < earliest);
       }
-      if (!data) data = [];
-      const rowsRaw = Array.isArray(data) ? [...data] : [];
-      const rows = rowsRaw.filter(doctorChatUnifiedInboxFilters.filterRow).reverse();
+      const rows = rowsRaw.filter(doctorChatUnifiedInboxFilters.filterRow);
       if (isOlder) {
         if (!rows.length) setDoctorChatOlderExhausted(true);
         setDoctorChatMessages((prev) => [...rows, ...(Array.isArray(prev) ? prev : [])]);
@@ -718,13 +692,14 @@ function DoctorDashboard() {
   };
 
   const doctorChatSoftDelete = async (m) => {
-    if (!doctorChatMessageDeletable(m) || !supabase) return;
+    if (!doctorChatMessageDeletable(m)) return;
     try {
-      const { error } = await supabase
-        .from('consultation_messages')
-        .update({ deleted: true, deleted_at: new Date().toISOString(), deleted_by: doctorChatSenderIdentity.name })
-        .eq('id', m.id);
-      if (error) throw error;
+      await fetchJson(`/api/doctor-chat/messages/${encodeURIComponent(String(m.id))}`, {
+        apiBase: API_BASE,
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ action: 'delete' })
+      });
       setDoctorChatMessages((prev) => (Array.isArray(prev) ? prev : []).map((x) => String(x?.id) === String(m?.id) ? { ...x, deleted: true, deleted_at: new Date().toISOString(), deleted_by: doctorChatSenderIdentity.name } : x));
       setDoctorChatDeleteConfirm(null);
       setToast({ type: 'success', message: 'Message deleted.' });
@@ -734,7 +709,7 @@ function DoctorDashboard() {
   };
 
   const doctorChatTogglePin = async (m) => {
-    if (!supabase || !m?.id) return;
+    if (!m?.id) return;
     const pinned = !m?.pinned;
     if (pinned && doctorChatPinnedMessages.length >= 3) {
       setToast({ type: 'warning', message: 'Maximum 3 pinned messages. Unpin an older one first.' });
@@ -742,8 +717,12 @@ function DoctorDashboard() {
     }
     try {
       const payload = pinned ? { pinned: true, pinned_at: new Date().toISOString(), pinned_by: doctorChatSenderIdentity.name } : { pinned: false, pinned_at: null, pinned_by: null };
-      const { error } = await supabase.from('consultation_messages').update(payload).eq('id', m.id);
-      if (error) throw error;
+      await fetchJson(`/api/doctor-chat/messages/${encodeURIComponent(String(m.id))}`, {
+        apiBase: API_BASE,
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ action: pinned ? 'pin' : 'unpin' })
+      });
       setDoctorChatMessages((prev) => (Array.isArray(prev) ? prev : []).map((x) => String(x?.id) === String(m?.id) ? { ...x, ...payload } : x));
       setDoctorChatMsgMenu(null);
       setToast({ type: 'success', message: pinned ? '📌 Pinned to top.' : 'Unpinned.' });
@@ -797,100 +776,32 @@ function DoctorDashboard() {
       setTimeout(() => setDoctorChatInputInvalid(false), 900);
       return;
     }
-    if (!supabase) return;
     try {
       const uDept = String(currentUser?.department || currentUser?.dept || currentUser?.departmentName || '').trim();
       const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || uDept || doctorChatSpecialty;
-      const senderId = String(currentUser?.id || currentUser?.uuid || '').trim() || null;
-      const senderEmail = String(currentUser?.email || '').trim() || null;
-      const senderUsername = String(currentUser?.username || doctorChatSenderIdentity.username || '').trim() || null;
       const payload = {
-      specialty, room: roomValue, sender_role: 'doctor',
-      sender_id: senderId, sender_email: senderEmail, sender_username: senderUsername,
-      body,
-      sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept
-    };
-    if (doctorChatReplying?.id) {
-      payload.reply_to_id = doctorChatReplying.id; payload.reply_to_body = String(doctorChatReplying.body || '').slice(0, 240); payload.reply_to_sender = guessDisplayName(doctorChatReplying);
-    }
-    const isSchemaMissingColErr = (errMsg) => {
-      const m = String(errMsg || '').toLowerCase();
-      return (m.includes('could not find') && m.includes('column')) ||
-             m.includes('schema cache') ||
-             (m.includes('column') && (m.includes('room') || m.includes('reply_to') || m.includes('sender_email') || m.includes('sender_username') || m.includes('sender_id'))) ||
-             m.includes('violates not-null constraint') ||
-             m.includes('new row violates row-level security policy') ||
-             m.includes('violates row-level security policy') ||
-             m.includes('row level security') ||
-             m.includes('42501') ||
-             m.includes('permission denied');
-    };
-    let hitTier = 1;
-    let { error } = await supabase.from('consultation_messages').insert([payload]);
-    if (error && isSchemaMissingColErr(error.message)) {
-      hitTier = 2;
-      const midPayload = {
-        specialty, room: roomValue, sender_role: 'doctor', body,
-        sender_name: doctorChatSenderIdentity.name, sender_dept: doctorChatSenderIdentity.dept
+        specialty,
+        room: roomValue,
+        body
       };
-      const mid = await supabase.from('consultation_messages').insert([midPayload]);
-      if (!mid.error) { error = null; }
-      else {
-        hitTier = 3;
-        const legacyPayload = { specialty, sender_role: 'doctor', body };
-        const legacy = await supabase.from('consultation_messages').insert([legacyPayload]);
-        error = legacy.error;
+      if (doctorChatReplying?.id) {
+        payload.reply_to_id = doctorChatReplying.id;
+        payload.reply_to_body = String(doctorChatReplying.body || '').slice(0, 240);
+        payload.reply_to_sender = guessDisplayName(doctorChatReplying);
       }
-    }
-    // =====================================================================
-    // TIER 4 (GUARANTEED!): BACKEND PRISMA DIRECT INSERT BYPASSES ALL RLS!
-    // If all 3 Supabase anon client tiers failed → POST to our Express API
-    // route /api/doctor-chat/messages which inserts via Prisma direct DB
-    // connection — RLS does NOT apply to direct Postgres connections!
-    // =====================================================================
-    if (error) {
-      hitTier = 4;
-      try {
-        const backendPayload = {
-          body, attachment_url: null,
-          specialty, room: roomValue,
-          sender_role: 'doctor',
-          sender_name: doctorChatSenderIdentity.name,
-          sender_dept: doctorChatSenderIdentity.dept,
-          sender_email: senderEmail, sender_username: senderUsername, sender_id: senderId,
-          reply_to_id: doctorChatReplying?.id || null,
-          reply_to_body: doctorChatReplying?.body ? String(doctorChatReplying.body).slice(0, 240) : null,
-          reply_to_sender: doctorChatReplying?.guessDisplayName ? String(guessDisplayName(doctorChatReplying)).slice(0, 60) : null,
-        };
-        const res = await fetch('/api/doctor-chat/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(backendPayload)
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data?.ok) {
-          throw new Error(data?.error || `Backend status ${res.status}`);
-        }
-        error = null;
-      } catch (beErr) {
-        error = beErr;
-        console.error('[chat-send] tier4 backend fail:', beErr);
-      }
-    }
-    if (error) throw error;
-    if (hitTier === 4) {
-      setToast({ type: 'success', message: '✅ Message sent via Backend Direct Prisma (all RLS bypassed)! Run Migrations 007 for direct supabase anon to also work.' });
-    } else if (hitTier === 3) {
-      setToast({ type: 'warning', message: '📋 Migrations 003+005 needed! Message sent (ultra-legacy mode). Run all SQL in /supabase/migrations (003→007) for full Nurse ↔ Doctor sync.' });
-    }
-    setDoctorChatText('');
-    setDoctorChatInputInvalid(false);
-    setDoctorChatReplying(null);
-    setTimeout(() => {
-      loadDoctorChatMessages();
-      scrollDoctorChatToBottom();
-    }, 180);
+      await fetchJson('/api/doctor-chat/messages', {
+        apiBase: API_BASE,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(payload)
+      });
+      setDoctorChatText('');
+      setDoctorChatInputInvalid(false);
+      setDoctorChatReplying(null);
+      setTimeout(() => {
+        loadDoctorChatMessages();
+        scrollDoctorChatToBottom();
+      }, 180);
   } catch (e) {
     setToast({ type: 'error', message: String(e?.message || 'Failed to send.') });
   }
@@ -1976,73 +1887,9 @@ function DoctorDashboard() {
   useEffect(() => {
     if (activeNav !== 'doctor-chat') return;
     loadDoctorChatMessages();
-    const specialty = String(doctorChatSpecialty || '').trim();
-    if (!supabase) return;
-    const channel = supabase
-      .channel(`consultation:unified:${specialty}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'consultation_messages'
-        },
-        (payload) => {
-          if (!payload) return;
-          const evType = String(payload?.eventType || '').toLowerCase();
-          const next = payload?.new || null;
-          const old = payload?.old || null;
-          if (evType === 'insert') {
-            if (!next) return;
-            setDoctorChatMessages((prev) => {
-              const list = Array.isArray(prev) ? prev : [];
-              if (next.id && list.some((m) => String(m?.id || '') === String(next.id))) return list;
-              const merged = [...list, next];
-              const seen = new Set();
-              const deduped = [];
-              for (let i = merged.length - 1; i >= 0; i -= 1) {
-                const m = merged[i] || {};
-                const k = String(m?.id || `${m.created_at}_${m.body}`);
-                if (seen.has(k)) continue;
-                seen.add(k);
-                deduped.unshift(m);
-              }
-              return deduped;
-            });
-            setDoctorChatMessages((prev) => {
-              const last = Array.isArray(prev) ? prev[prev.length - 1] : null;
-              if (!last || isDoctorChatMine(last)) {
-                setTimeout(() => scrollDoctorChatToBottom(false), 120);
-                return prev;
-              }
-              const passesTab = doctorChatUnifiedInboxFilters.filterRow(last);
-              if (passesTab) {
-                setDoctorChatUnreadBadge((n) => n + 1);
-              }
-              const el = doctorChatScrollRef?.current;
-              if (el) {
-                const near = el.scrollHeight - el.scrollTop - el.clientHeight;
-                if (near < 220) {
-                  setTimeout(() => scrollDoctorChatToBottom(false), 120);
-                } else if (passesTab) {
-                  setDoctorChatShowFAB(true);
-                  setDoctorChatScrollInterrupt(true);
-                }
-              }
-              return prev;
-            });
-          } else if (evType === 'update' && next) {
-            setDoctorChatMessages((prev) => (Array.isArray(prev) ? prev : []).map((m) => String(m?.id) === String(next?.id || old?.id) ? { ...m, ...next } : m));
-          } else if (evType === 'delete' && old) {
-            setDoctorChatMessages((prev) => (Array.isArray(prev) ? prev : []).filter((m) => String(m?.id) !== String(old?.id)));
-          }
-        }
-      )
-      .subscribe();
-    return () => {
-      try { supabase.removeChannel(channel); } catch (_) {}
-    };
-  }, [activeNav, doctorChatSpecialty, supabase, doctorChatActiveTab, doctorChatUnifiedInboxFilters]);
+    const timer = setInterval(() => loadDoctorChatMessages(), 5000);
+    return () => clearInterval(timer);
+  }, [activeNav, doctorChatSpecialty, doctorChatActiveTab, doctorChatUnifiedInboxFilters]);
 
   useEffect(() => {
     if (activeNav !== 'doctor-chat') return;

@@ -29,6 +29,9 @@ const path = require('path');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const prisma = require('../utils/prisma');
+const requireRole = require('../middleware/requireRole');
+
+router.use(requireRole(['doctor']));
 
 // =============================================================================
 // SUPABASE STORAGE CLIENT (SERVICE ROLE!) — BYPASSES ALL STORAGE RLS!
@@ -81,17 +84,35 @@ const upload = multer({
   }
 });
 
-const VALID_ROLES = new Set([
-  'doctor','nurse','medtech','radiographer','physical_therapist',
-  'pharmacist','cashier','admin','staff','pt','lab','rad','radiology','laboratory'
-]);
-
 const cleanStr = (v, max = 2000) => {
   if (v === null || v === undefined) return null;
   const s = String(v).replace(/\0/g, '').trim();
   if (!s) return null;
   if (max > 0 && s.length > max) return s.slice(0, max);
   return s;
+};
+
+const getAuthenticatedDoctor = async (req) => {
+  const authId = String(req.auth?.id || '').trim();
+  const authEmail = String(req.auth?.email || '').trim().toLowerCase();
+  let doctor = authId
+    ? await prisma.doctors.findUnique({ where: { id: authId } }).catch(() => null)
+    : null;
+  if (!doctor && authEmail) {
+    doctor = await prisma.doctors.findFirst({ where: { email: { equals: authEmail, mode: 'insensitive' } } }).catch(() => null);
+  }
+  if (!doctor) return null;
+  const firstName = String(doctor.first_name || '').trim();
+  const lastName = String(doctor.last_name || '').trim();
+  const email = String(doctor.email || authEmail).trim().toLowerCase();
+  return {
+    id: String(doctor.id || authId),
+    email,
+    role: 'doctor',
+    name: `${firstName} ${lastName}`.trim() || 'Doctor',
+    department: String(doctor.department || doctor.specialization || '').trim() || null,
+    username: email ? email.split('@')[0] : null
+  };
 };
 
 const cleanText = (v, max = 10000) => {
@@ -108,6 +129,8 @@ const cleanText = (v, max = 10000) => {
 // =============================================================================
 router.post('/messages', async (req, res) => {
   try {
+    const actor = await getAuthenticatedDoctor(req);
+    if (!actor) return res.status(403).json({ ok: false, error: 'Authenticated doctor account was not found.' });
     const bodyRaw = cleanText(req.body?.body, 2000);
     const attachmentUrl = cleanStr(req.body?.attachment_url, 2048);
     if (!bodyRaw && !attachmentUrl) {
@@ -116,16 +139,12 @@ router.post('/messages', async (req, res) => {
 
     const specialty = cleanStr(req.body?.specialty || 'global_doctors', 120);
     const room = cleanStr(req.body?.room, 120);
-    let senderRole = cleanStr(req.body?.sender_role, 40);
-    if (!senderRole || !VALID_ROLES.has(String(senderRole).toLowerCase())) {
-      senderRole = senderRole && VALID_ROLES.has(String(senderRole).toLowerCase())
-        ? senderRole : 'staff';
-    }
-    const senderName = cleanStr(req.body?.sender_name, 120) || 'Staff';
-    const senderDept = cleanStr(req.body?.sender_dept, 120);
-    const senderEmail = cleanStr(req.body?.sender_email, 254);
-    const senderUsername = cleanStr(req.body?.sender_username, 120);
-    const senderId = cleanStr(req.body?.sender_id, 200);
+    const senderRole = actor.role;
+    const senderName = actor.name;
+    const senderDept = actor.department;
+    const senderEmail = actor.email;
+    const senderUsername = actor.username;
+    const senderId = actor.id;
 
     const replyToId = cleanStr(req.body?.reply_to_id, 200);
     const replyToBody = cleanText(req.body?.reply_to_body, 2000);
@@ -317,6 +336,55 @@ router.get('/messages', async (req, res) => {
   }
 });
 
+router.patch('/messages/:id', async (req, res) => {
+  try {
+    const actor = await getAuthenticatedDoctor(req);
+    if (!actor) return res.status(403).json({ ok: false, error: 'Authenticated doctor account was not found.' });
+    const messageId = String(req.params.id || '').trim();
+    if (!/^\d+$/.test(messageId)) return res.status(400).json({ ok: false, error: 'Invalid message id.' });
+    const action = String(req.body?.action || '').trim().toLowerCase();
+
+    if (action === 'delete') {
+      const changed = await prisma.$executeRawUnsafe(`
+        UPDATE public.consultation_messages
+        SET deleted = true, deleted_at = NOW(), deleted_by = $1, updated_at = NOW()
+        WHERE id = $2::bigint
+          AND COALESCE(sender_id, '') = $3
+          AND COALESCE(deleted, false) = false
+          AND created_at >= NOW() - INTERVAL '5 minutes'
+      `, actor.name, messageId, actor.id);
+      if (!Number(changed || 0)) return res.status(403).json({ ok: false, error: 'Only your own recent messages can be deleted.' });
+      return res.json({ ok: true, id: messageId, deleted: true });
+    }
+
+    if (action === 'pin' || action === 'unpin') {
+      const pinned = action === 'pin';
+      if (pinned) {
+        const countRows = await prisma.$queryRawUnsafe(`
+          SELECT COUNT(*)::int AS count FROM public.consultation_messages
+          WHERE COALESCE(pinned, false) = true AND COALESCE(deleted, false) = false
+        `);
+        if (Number(countRows?.[0]?.count || 0) >= 3) {
+          return res.status(409).json({ ok: false, error: 'Maximum 3 pinned messages. Unpin an older one first.' });
+        }
+      }
+      const changed = await prisma.$executeRawUnsafe(`
+        UPDATE public.consultation_messages
+        SET pinned = $1, pinned_at = CASE WHEN $1 THEN NOW() ELSE NULL END,
+            pinned_by = CASE WHEN $1 THEN $2 ELSE NULL END, updated_at = NOW()
+        WHERE id = $3::bigint AND COALESCE(deleted, false) = false
+      `, pinned, actor.name, messageId);
+      if (!Number(changed || 0)) return res.status(404).json({ ok: false, error: 'Message not found.' });
+      return res.json({ ok: true, id: messageId, pinned, pinned_by: pinned ? actor.name : null });
+    }
+
+    return res.status(400).json({ ok: false, error: 'Unsupported chat action.' });
+  } catch (err) {
+    console.error('[doctorChat] PATCH /messages/:id:', err);
+    return res.status(500).json({ ok: false, error: 'Unable to update chat message.' });
+  }
+});
+
 // =============================================================================
 // POST /api/doctor-chat/attachments — UPLOAD FILE + INSERT MESSAGE VIA BACKEND
 // Multipart form: file (1 file, req.file) + body fields (caption/specialty/room/...)
@@ -326,6 +394,8 @@ router.get('/messages', async (req, res) => {
 // =============================================================================
 router.post('/attachments', upload.single('file'), async (req, res) => {
   try {
+    const actor = await getAuthenticatedDoctor(req);
+    if (!actor) return res.status(403).json({ ok: false, error: 'Authenticated doctor account was not found.' });
     if (!req.file) return res.status(400).json({ ok: false, error: 'file is required' });
 
     const f = req.file; // { originalname, mimetype, size, buffer }
@@ -336,15 +406,12 @@ router.post('/attachments', upload.single('file'), async (req, res) => {
     const caption = cleanText(req.body?.caption, 2000) || '';
     const specialty = cleanStr(req.body?.specialty || 'global_doctors', 120);
     const room = cleanStr(req.body?.room, 120);
-    let senderRole = cleanStr(req.body?.sender_role, 40);
-    if (!senderRole || !VALID_ROLES.has(String(senderRole).toLowerCase())) {
-      senderRole = 'staff';
-    }
-    const senderName = cleanStr(req.body?.sender_name, 120) || 'Staff';
-    const senderDept = cleanStr(req.body?.sender_dept, 120);
-    const senderEmail = cleanStr(req.body?.sender_email, 254);
-    const senderUsername = cleanStr(req.body?.sender_username, 120);
-    const senderId = cleanStr(req.body?.sender_id, 200);
+    const senderRole = actor.role;
+    const senderName = actor.name;
+    const senderDept = actor.department;
+    const senderEmail = actor.email;
+    const senderUsername = actor.username;
+    const senderId = actor.id;
 
     // Guess attachment kind by mime/ext
     const mime = String(f.mimetype || '').toLowerCase();
