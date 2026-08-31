@@ -9,6 +9,8 @@ const requireRole = require('../middleware/requireRole');
 const { normalizeEmail, normalizeRole } = require('../utils/normalize');
 const { createSessionToken } = require('../utils/sessionToken');
 const { createPasswordResetToken, hashResetToken, resetTokenIsValid } = require('../utils/passwordReset');
+const { createRateLimiter } = require('../utils/rateLimit');
+const { sendRecoveryEmail } = require('../utils/recoveryMailer');
 
 function isUuid(value) {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
@@ -249,6 +251,30 @@ async function findUserByEmail(email) {
     return null;
 }
 
+async function findAllUsersByEmail(email) {
+    const normalized = normalizeEmail(email);
+    if (!normalized) return [];
+    const [staff, nurse, doctor, account] = await Promise.all([
+        prisma.staff.findFirst({ where: { email: { equals: normalized, mode: 'insensitive' } } }).catch(() => null),
+        prisma.nurses.findFirst({ where: { email: { equals: normalized, mode: 'insensitive' } } }).catch(() => null),
+        prisma.doctors.findFirst({ where: { email: { equals: normalized, mode: 'insensitive' } } }).catch(() => null),
+        prisma.accounts.findFirst({ where: { email: { equals: normalized, mode: 'insensitive' } } }).catch(() => null)
+    ]);
+    return [
+        staff ? { user: staff, model: 'staff' } : null,
+        nurse ? { user: nurse, model: 'nurses' } : null,
+        doctor ? { user: doctor, model: 'doctors' } : null,
+        account ? { user: account, model: 'accounts' } : null
+    ].filter(Boolean);
+}
+
+const emailRateKey = (req) => normalizeEmail(req.body?.email || '');
+const tokenRateKey = (req) => hashResetToken(req.body?.token || '').slice(0, 16);
+const loginRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 8, key: emailRateKey });
+const recoveryRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 4, key: emailRateKey });
+const tokenVerifyRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30, key: tokenRateKey });
+const passwordResetRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 8, key: tokenRateKey });
+
 function inferRequester(req) {
     const role = normalizeRole(req.headers['x-user-role'] || '');
     const email = normalizeEmail(req.headers['x-user-email'] || '');
@@ -277,36 +303,26 @@ function inferDisplayNameFromUser(found, emailFallback) {
 }
 
 // LOGIN Route
-router.post('/login', async (req, res) => {
+router.post('/login', loginRateLimit, async (req, res) => {
     try {
         let { email, password } = req.body;
         
         // Trim inputs
         if (email) email = normalizeEmail(email);
         if (password) password = password.trim();
+        if (!email || !password) return res.status(400).json({ message: 'Invalid email or password.' });
 
         // Note: Supabase handles auth natively. If you use Supabase Auth, you don't need this.
         // But assuming we stick to the custom implementation for now using the new tables.
         
-        // Find user in any collection sequentially
-        let user = await prisma.staff.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
-        let modelType = 'staff';
+        const matches = await findAllUsersByEmail(email);
+        if (matches.length > 1) console.error(`[Auth] Duplicate account email detected across ${matches.map((match) => match.model).join(', ')}`);
+        const selected = matches.length === 1 ? matches[0] : null;
+        const user = selected?.user || null;
+        const modelType = selected?.model || null;
         
         if (!user) {
-            user = await prisma.nurses.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
-            modelType = 'nurses';
-        }
-        if (!user) {
-            user = await prisma.doctors.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
-            modelType = 'doctors';
-        }
-        if (!user) {
-            user = await prisma.accounts.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
-            modelType = 'accounts';
-        }
-        
-        if (!user) {
-            return res.status(400).json({ message: 'Invalid Credentials' });
+            return res.status(400).json({ message: 'Invalid email or password.' });
         }
 
         let isMatch = false;
@@ -328,11 +344,18 @@ router.post('/login', async (req, res) => {
                 }
             }
         } else {
-            isMatch = await bcrypt.compare(password, storedPassword);
+            isMatch = looksBcrypt ? await bcrypt.compare(password, storedPassword) : password === storedPassword;
+            if (isMatch && !looksBcrypt) {
+                const hashedPassword = await bcrypt.hash(password, 10);
+                await prisma[modelType].update({
+                    where: { id: user.id },
+                    data: { password: hashedPassword }
+                });
+            }
         }
 
         if (!isMatch) {
-            return res.status(400).json({ message: 'Invalid Credentials' });
+            return res.status(400).json({ message: 'Invalid email or password.' });
         }
         
         // Update status to Online
@@ -2552,27 +2575,20 @@ router.post('/recovery-email-allowed', async (req, res) => {
     }
 });
 
-// FORGOT PASSWORD Route
-router.post('/forgot-password', async (req, res) => {
+const requestPasswordReset = async (req, res) => {
     try {
         const email = normalizeEmail(req.body?.email || '');
         if (!email) return res.status(400).json({ message: "Email is required" });
-        
-        // Find user in any collection
-        const [staff, nurse, doctor, account] = await Promise.all([
-            prisma.staff.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } }),
-            prisma.nurses.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } }),
-            prisma.doctors.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } }),
-            prisma.accounts.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } })
-        ]);
-        
-        const user = staff || nurse || doctor || account;
-        let modelType = staff ? 'staff' : (nurse ? 'nurses' : (doctor ? 'doctors' : (account ? 'accounts' : null)));
-        
-        if (!user) {
-            return res.status(404).json({ message: "User with this email does not exist" });
+        const matches = await findAllUsersByEmail(email);
+        // Use one response for missing, disallowed, and duplicate accounts so
+        // this endpoint cannot be used to enumerate hospital accounts.
+        if (matches.length !== 1) {
+            if (matches.length > 1) console.error(`[Recovery] Duplicate account email detected across ${matches.map((match) => match.model).join(', ')}`);
+            return res.json({ ok: true, message: 'If the account is eligible, a password reset email will arrive shortly.' });
         }
-        
+        const { user, model: modelType } = matches[0];
+        const accountType = normalizeRole(user.account_type || user.roles || 'staff');
+        if (accountType === 'patient') return res.json({ ok: true, message: 'If the account is eligible, a password reset email will arrive shortly.' });
         const { token, tokenHash, expiresAt } = createPasswordResetToken();
         await prisma[modelType].update({
             where: { id: user.id },
@@ -2581,25 +2597,53 @@ router.post('/forgot-password', async (req, res) => {
                 reset_password_expires: expiresAt
             }
         });
-
-        // Only the emailed link receives the one-time raw token. The database
-        // stores its hash so a database read cannot be used as a reset link.
-        res.json({ 
-            token, 
-            email: user.email, 
-            firstName: modelType === 'accounts' ? user.name : user.first_name,
-            message: "Password reset token generated"
-        });
-        
+        const configuredOrigin = String(process.env.PUBLIC_WEB_ORIGIN || process.env.WEB_ORIGIN || 'https://pascualinga.com').trim().replace(/\/+$/, '');
+        const webOrigin = /^https:\/\//i.test(configuredOrigin) || /^http:\/\/localhost(?::\d+)?$/i.test(configuredOrigin)
+            ? configuredOrigin
+            : 'https://pascualinga.com';
+        const resetLink = `${webOrigin}/reset-password?token=${encodeURIComponent(token)}`;
+        try {
+            await sendRecoveryEmail({ email: user.email, resetLink });
+        } catch (emailError) {
+            await prisma[modelType].update({
+                where: { id: user.id },
+                data: { reset_password_token: null, reset_password_expires: null }
+            }).catch(() => null);
+            console.error('[Recovery] Email delivery failed:', String(emailError?.message || emailError));
+            return res.status(503).json({ message: 'Recovery email could not be delivered. Please try again later.' });
+        }
+        return res.json({ ok: true, message: 'If the account is eligible, a password reset email will arrive shortly.' });
     } catch (err) {
+        console.error('[Recovery] Request failed:', String(err?.message || err));
         res.status(500).json({ message: "Server Error" });
+    }
+};
+
+router.post('/request-password-reset', recoveryRateLimit, requestPasswordReset);
+// Backward-compatible endpoint; no raw token is returned anymore.
+router.post('/forgot-password', recoveryRateLimit, requestPasswordReset);
+
+router.post('/verify-reset-token', tokenVerifyRateLimit, async (req, res) => {
+    try {
+        const token = String(req.body?.token || '').trim();
+        if (!token) return res.status(400).json({ valid: false, message: 'Reset token is required' });
+        const tokenHash = hashResetToken(token);
+        let user = null;
+        for (const candidate of ['staff', 'nurses', 'doctors', 'accounts']) {
+            user = await prisma[candidate].findFirst({ where: { reset_password_token: tokenHash } });
+            if (user) break;
+        }
+        const valid = Boolean(user && resetTokenIsValid({ providedToken: token, storedTokenHash: user.reset_password_token, expiresAt: user.reset_password_expires }));
+        return res.status(valid ? 200 : 400).json({ valid, message: valid ? 'Reset link is valid' : 'This password reset link is invalid or has expired.' });
+    } catch (err) {
+        console.error('[Recovery] Token verification failed:', String(err?.message || err));
+        res.status(500).json({ valid: false, message: 'Unable to verify password reset link' });
     }
 });
 
 // RESET PASSWORD Route
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', passwordResetRateLimit, async (req, res) => {
     try {
-        const email = normalizeEmail(req.body?.email || '');
         const newPassword = String(req.body?.newPassword || '').trim();
         const token = String(req.body?.token || '').trim();
         
@@ -2610,9 +2654,7 @@ router.post('/reset-password', async (req, res) => {
             return res.status(400).json({ message: "Password must be at least 11 characters and include a number and special character." });
         }
 
-        const lookup = email
-            ? { email: { equals: email, mode: 'insensitive' } }
-            : { reset_password_token: hashResetToken(token) };
+        const lookup = { reset_password_token: hashResetToken(token) };
         let user = null;
         let modelType = null;
         for (const candidate of ['staff', 'nurses', 'doctors', 'accounts']) {
@@ -2624,7 +2666,7 @@ router.post('/reset-password', async (req, res) => {
         }
         
         if (!user) {
-            return res.status(404).json({ message: "User not found" });
+            return res.status(400).json({ message: "This password reset link is invalid or has expired. Please request a new one." });
         }
 
         if (!resetTokenIsValid({
@@ -2639,14 +2681,17 @@ router.post('/reset-password', async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(newPassword, salt);
         
-        await prisma[modelType].update({
-            where: { id: user.id },
+        const consumed = await prisma[modelType].updateMany({
+            where: { id: user.id, reset_password_token: lookup.reset_password_token },
             data: {
                 password: hashedPassword,
                 reset_password_token: null,
                 reset_password_expires: null
             }
         });
+        if (consumed.count !== 1) {
+            return res.status(400).json({ message: "This password reset link has already been used. Please request a new one." });
+        }
         
         res.json({ message: "Password updated successfully" });
         
@@ -2654,6 +2699,12 @@ router.post('/reset-password', async (req, res) => {
         console.error("Reset password error:", err);
         res.status(500).json({ message: "Server Error" });
     }
+});
+
+router.get('/version', (_req, res) => {
+    const commit = String(process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || 'unknown').trim();
+    res.set('Cache-Control', 'no-store');
+    res.json({ service: 'pascualinga-api', commit: commit === 'unknown' ? commit : commit.slice(0, 12), node: process.version });
 });
 
 // BACKGROUND JOB: Auto-offline inactive users

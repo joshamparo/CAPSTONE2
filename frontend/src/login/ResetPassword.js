@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, Check, X } from 'lucide-react';
 import './Login.css';
-
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+import { API_BASE } from '../utils/api';
 
 const ResetPassword = () => {
   const [newPassword, setNewPassword] = useState('');
@@ -12,8 +11,44 @@ const ResetPassword = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [message, setMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
+  const [tokenStatus, setTokenStatus] = useState('checking');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const resetToken = new URLSearchParams(location.search).get('token') || '';
+
+  useEffect(() => {
+    let active = true;
+    const verifyToken = async () => {
+      if (!resetToken) {
+        setTokenStatus('invalid');
+        setMessage('This password reset link is incomplete. Please request a new one.');
+        return;
+      }
+      try {
+        const response = await fetch(`${API_BASE}/api/staff/verify-reset-token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: resetToken })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!active) return;
+        if (!response.ok || data?.valid !== true) {
+          setTokenStatus('invalid');
+          setMessage(String(data?.message || 'This password reset link is invalid or has expired. Please request a new one.'));
+          return;
+        }
+        setTokenStatus('valid');
+        setMessage('');
+      } catch (err) {
+        if (!active) return;
+        setTokenStatus('invalid');
+        setMessage('The reset link could not be verified. Please try again or request a new one.');
+      }
+    };
+    verifyToken();
+    return () => { active = false; };
+  }, [resetToken]);
 
   // Validation Logic
   const hasLength = newPassword.length >= 11;
@@ -24,6 +59,11 @@ const ResetPassword = () => {
     e.preventDefault();
     setMessage('');
     setIsSuccess(false);
+
+    if (tokenStatus !== 'valid') {
+      setMessage('This password reset link is invalid or has expired. Please request a new one.');
+      return;
+    }
 
     if (!newPassword.trim() || !confirmPassword.trim()) {
       setMessage("No empty field should be left out.");
@@ -40,22 +80,12 @@ const ResetPassword = () => {
       return;
     }
 
-    // Save the new password
-    // Get email from URL parameters or fallback to local storage
-    const queryParams = new URLSearchParams(location.search);
-    const resetEmail = queryParams.get('email') || localStorage.getItem('resetPasswordEmail');
-    const resetToken = queryParams.get('token');
-    
-    if (!resetToken) {
-      setMessage('This password reset link is incomplete. Please request a new one.');
-      return;
-    }
-
+    setIsSubmitting(true);
     try {
       const response = await fetch(`${API_BASE}/api/staff/reset-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: resetEmail, token: resetToken, newPassword })
+          body: JSON.stringify({ token: resetToken, newPassword })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -66,8 +96,11 @@ const ResetPassword = () => {
       console.error("Backend connection error during reset:", err);
       setMessage('Cannot connect to the server. Your password was not changed. Please try again.');
       return;
+    } finally {
+      setIsSubmitting(false);
     }
 
+    window.history.replaceState({}, document.title, '/reset-password');
     setMessage("Password successfully reset! Redirecting to login...");
     setIsSuccess(true);
     setTimeout(() => {
@@ -149,7 +182,9 @@ const ResetPassword = () => {
             </div>
           </div>
 
-          <button type="submit" className="submit-btn">Confirm Password</button>
+          <button type="submit" className="submit-btn" disabled={tokenStatus !== 'valid' || isSubmitting}>
+            {tokenStatus === 'checking' ? 'Verifying link...' : (isSubmitting ? 'Updating password...' : 'Confirm Password')}
+          </button>
         </form>
 
         <div className="login-footer">

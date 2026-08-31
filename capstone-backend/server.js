@@ -281,7 +281,6 @@ const assistantRoutes = require('./routes/assistant');
 const nurseWorkflowRoutes = require('./routes/nurseWorkflow');
 const systemSettingsRoutes = require('./routes/systemSettings');
 const doctorChatRoutes = require('./routes/doctorChat');
-const { buildRecoveryTemplateParams } = require('./utils/recoveryEmail');
 
 app.use('/api/staff', staffRoutes);
 app.use('/api/activity-logs', activityLogRoutes);
@@ -336,48 +335,8 @@ app.get('/api/health', (_req, res) => {
 
 // --- EmailJS Backend Routes ---
 
-app.post('/api/email/send-recovery', async (req, res) => {
-  const { email, resetLink } = req.body;
-
-  const SERVICE_ID = process.env.EMAILJS_SERVICE_ID || "service_ur884qv";
-  const PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || "45tRyW8WG36pIFeBo";
-  const PRIVATE_KEY = process.env.EMAILJS_PRIVATE_KEY;
-  const TEMPLATE_ID = process.env.EMAILJS_RECOVERY_TEMPLATE_ID || "template_xyatwcf";
-
-  if (!SERVICE_ID || !PUBLIC_KEY || !PRIVATE_KEY) {
-    console.error('[Backend Recovery] Missing credentials. Private Key present:', !!PRIVATE_KEY);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'EmailJS credentials missing from backend environment.' 
-    });
-  }
-
-  try {
-    console.log(`[Backend Recovery] Sending reset link to ${email}...`);
-    const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        service_id: SERVICE_ID,
-        template_id: TEMPLATE_ID,
-        user_id: PUBLIC_KEY,
-        accessToken: PRIVATE_KEY,
-        template_params: buildRecoveryTemplateParams(email, resetLink)
-      })
-    });
-
-    if (response.ok) {
-      console.log('[Backend Recovery] Success!');
-      return res.status(200).json({ success: true, message: 'Recovery email sent' });
-    }
-
-    const errorText = await response.text();
-    console.error('[Backend Recovery] EmailJS REST API failed:', errorText);
-    return res.status(500).json({ success: false, message: 'EmailJS failed to send recovery email.', details: errorText });
-  } catch (error) {
-    console.error('[Backend Recovery] Server error:', error);
-    return res.status(500).json({ success: false, message: 'Server error while attempting to send email.' });
-  }
+app.post('/api/email/send-recovery', (_req, res) => {
+  res.status(410).json({ message: 'Use the protected account recovery endpoint.' });
 });
 
 app.post('/api/email/send-otp', async (req, res) => {
