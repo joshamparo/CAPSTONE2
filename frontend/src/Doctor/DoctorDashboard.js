@@ -1245,13 +1245,60 @@ function DoctorDashboard() {
   }, []);
 
   const activePatientMeta = useMemo(() => {
-    const p = recordProfile || selectedPatient || {};
-    const email = p.email || p.email_address || '';
-    const contact = p.contactNumber || p.contact_number || p.phone || '';
-    const gender = p.gender || p.sex || '';
-    const allergies = p.allergies || '';
+    const profilePatient = recordProfile?.patient || recordProfile || {};
+    const selected = selectedPatient || {};
+    const email = profilePatient.email || profilePatient.email_address || selected.email || selected.email_address || '';
+    const contact = profilePatient.contactNumber || profilePatient.contact_number || profilePatient.phone || selected.contactNumber || selected.contact_number || selected.phone || '';
+    const gender = profilePatient.gender || profilePatient.sex || selected.gender || selected.sex || '';
+    const allergies = profilePatient.allergies || selected.allergies || '';
     return { email, contact, gender, allergies };
   }, [selectedPatient, recordProfile]);
+
+  const activePatientDetails = useMemo(() => {
+    const profilePatient = recordProfile?.patient || recordProfile || {};
+    const populatedProfile = Object.fromEntries(
+      Object.entries(profilePatient).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+    );
+    return { ...(selectedPatient || {}), ...populatedProfile };
+  }, [selectedPatient, recordProfile]);
+
+  const activeVitals = useMemo(() => {
+    const normalize = (raw) => {
+      if (!raw || typeof raw !== 'object') return null;
+      const value = (keys) => keys.map((key) => raw[key]).find((entry) => entry !== undefined && entry !== null && String(entry).trim() !== '');
+      const result = {
+        bp: value(['bp', 'blood_pressure', 'bloodPressure']),
+        hr: value(['hr', 'heart_rate', 'heartRate']),
+        temp: value(['temp', 'temperature']),
+        spo2: value(['spo2', 'oxygen_saturation', 'oxygenSaturation', 'o2']),
+        rr: value(['rr', 'respiratory_rate', 'respiratoryRate']),
+        weight: value(['weight']),
+        height: value(['height'])
+      };
+      return Object.values(result).some((entry) => entry !== undefined && entry !== null && String(entry).trim() !== '') ? result : null;
+    };
+
+    const clinicalRecords = activePatientDetails?.clinical_records || activePatientDetails?.clinicalRecords || recordProfile?.summary?.clinical_records;
+    const clinicalCandidates = [];
+    if (Array.isArray(clinicalRecords)) {
+      [...clinicalRecords].reverse().forEach((entry) => clinicalCandidates.push(entry?.vitals || entry));
+    } else if (clinicalRecords && typeof clinicalRecords === 'object') {
+      const walkIns = Array.isArray(clinicalRecords.walkInIntakes) ? clinicalRecords.walkInIntakes : [];
+      walkIns.forEach((entry) => clinicalCandidates.push(entry?.vitals || entry));
+      clinicalCandidates.push(clinicalRecords.erRegistration?.vitals, clinicalRecords.erRegistration);
+    }
+
+    const candidates = [
+      erVitals,
+      ...clinicalCandidates,
+      selectedPatient?.vitals,
+      selectedPatient?.vitalsFallback
+    ];
+    return candidates.map(normalize).find(Boolean) || {};
+  }, [erVitals, activePatientDetails, recordProfile, selectedPatient]);
+
+  const hasVital = (value) => value !== undefined && value !== null && String(value).trim() !== '';
+  const formatVital = (value, suffix = '') => hasVital(value) ? `${value}${suffix}` : '—';
 
   const fetchRecordList = async () => {
     if (!userRole) return;
@@ -1435,6 +1482,8 @@ function DoctorDashboard() {
 
   const fetchPatientVitalsAndTriage = async (patientId) => {
     if (!patientId) return;
+    setERVitals(null);
+    setERTriage(null);
     try {
       if (!supabase) return;
 
@@ -1446,7 +1495,7 @@ function DoctorDashboard() {
         .limit(1)
         .maybeSingle();
 
-      if (!vErr) setERVitals(vitals);
+      if (!vErr) setERVitals(vitals || null);
 
       const { data: triage, error: tErr } = await supabase
         .from('er_triage_logs')
@@ -1456,7 +1505,7 @@ function DoctorDashboard() {
         .limit(1)
         .maybeSingle();
 
-      if (!tErr) setERTriage(triage);
+      if (!tErr) setERTriage(triage || null);
     } catch (e) {
       console.error('Failed to fetch patient data:', e);
     }
@@ -3094,27 +3143,27 @@ function DoctorDashboard() {
         )}
 
         {/* ER Vitals */}
-        {erVitals && (
+        {Object.keys(activeVitals).length > 0 && (
           <div className="er-section" style={{ marginBottom: '20px' }}>
             <h4 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#64748b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <HeartPulse size={14} /> INITIAL ER VITALS
             </h4>
             <div className="er-vitals-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '10px' }}>
-              <div className={`er-vital-box ${Number(erVitals.spo2) < 95 ? 'critical' : ''}`}>
+              <div className={`er-vital-box ${hasVital(activeVitals.spo2) && Number(activeVitals.spo2) < 95 ? 'critical' : ''}`}>
                 <div className="label"><Wind size={12} /> SpO2</div>
-                <div className="value">{erVitals.spo2 || '—'}%</div>
+                <div className="value">{formatVital(activeVitals.spo2, '%')}</div>
               </div>
-              <div className={`er-vital-box ${(Number(erVitals.temp) > 37.8 || Number(erVitals.temp) < 35.5) ? 'critical' : ''}`}>
+              <div className={`er-vital-box ${hasVital(activeVitals.temp) && (Number(activeVitals.temp) > 37.8 || Number(activeVitals.temp) < 35.5) ? 'critical' : ''}`}>
                 <div className="label"><Thermometer size={12} /> TEMP</div>
-                <div className="value">{erVitals.temp || '—'}°C</div>
+                <div className="value">{formatVital(activeVitals.temp, '°C')}</div>
               </div>
-              <div className={`er-vital-box ${(Number(erVitals.hr) > 100 || Number(erVitals.hr) < 60) ? 'critical' : ''}`}>
+              <div className={`er-vital-box ${hasVital(activeVitals.hr) && (Number(activeVitals.hr) > 100 || Number(activeVitals.hr) < 60) ? 'critical' : ''}`}>
                 <div className="label"><Activity size={12} /> HR</div>
-                <div className="value">{erVitals.hr || '—'} bpm</div>
+                <div className="value">{formatVital(activeVitals.hr, ' bpm')}</div>
               </div>
               <div className="er-vital-box">
                 <div className="label"><Droplets size={12} /> BP</div>
-                <div className="value" style={{ fontSize: '0.95rem' }}>{erVitals.bp || '—'}</div>
+                <div className="value" style={{ fontSize: '0.95rem' }}>{formatVital(activeVitals.bp)}</div>
               </div>
             </div>
           </div>
@@ -3674,24 +3723,24 @@ function DoctorDashboard() {
           }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>BP</div>
-              <div style={{ fontWeight: 800, color: '#0f172a' }}>{erVitals?.bp || selectedPatient?.vitalsFallback?.bp || '—'}</div>
+              <div style={{ fontWeight: 800, color: '#0f172a' }}>{formatVital(activeVitals.bp)}</div>
             </div>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>HR</div>
-              <div style={{ fontWeight: 800, color: (Number(erVitals?.hr || selectedPatient?.vitalsFallback?.hr) > 100 || Number(erVitals?.hr || selectedPatient?.vitalsFallback?.hr) < 60) ? '#b91c1c' : '#0f172a' }}>{erVitals?.hr || selectedPatient?.vitalsFallback?.hr || '—'}</div>
+              <div style={{ fontWeight: 800, color: hasVital(activeVitals.hr) && (Number(activeVitals.hr) > 100 || Number(activeVitals.hr) < 60) ? '#b91c1c' : '#0f172a' }}>{formatVital(activeVitals.hr)}</div>
             </div>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Temp</div>
-              <div style={{ fontWeight: 800, color: (Number(erVitals?.temp || selectedPatient?.vitalsFallback?.temp) > 37.8 || Number(erVitals?.temp || selectedPatient?.vitalsFallback?.temp) < 35.5) ? '#b91c1c' : '#0f172a' }}>{erVitals?.temp || selectedPatient?.vitalsFallback?.temp || '—'}°C</div>
+              <div style={{ fontWeight: 800, color: hasVital(activeVitals.temp) && (Number(activeVitals.temp) > 37.8 || Number(activeVitals.temp) < 35.5) ? '#b91c1c' : '#0f172a' }}>{formatVital(activeVitals.temp, '°C')}</div>
             </div>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>SpO2</div>
-              <div style={{ fontWeight: 800, color: Number(erVitals?.spo2 || selectedPatient?.vitalsFallback?.spo2) < 95 ? '#b91c1c' : '#0f172a' }}>{erVitals?.spo2 || selectedPatient?.vitalsFallback?.spo2 || '—'}%</div>
+              <div style={{ fontWeight: 800, color: hasVital(activeVitals.spo2) && Number(activeVitals.spo2) < 95 ? '#b91c1c' : '#0f172a' }}>{formatVital(activeVitals.spo2, '%')}</div>
             </div>
-            {(erVitals?.rr || selectedPatient?.vitalsFallback?.rr) && (
+            {hasVital(activeVitals.rr) && (
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>RR</div>
-                <div style={{ fontWeight: 800, color: '#0f172a' }}>{erVitals?.rr || selectedPatient?.vitalsFallback?.rr}</div>
+                <div style={{ fontWeight: 800, color: '#0f172a' }}>{formatVital(activeVitals.rr)}</div>
               </div>
             )}
           </div>
@@ -3701,10 +3750,10 @@ function DoctorDashboard() {
             <div className="doc-pill"><span className="doc-pill-k">Contact</span><span className="doc-pill-v">{activePatientMeta.contact || '—'}</span></div>
             <div className="doc-pill"><span className="doc-pill-k">Gender</span><span className="doc-pill-v">{activePatientMeta.gender || '—'}</span></div>
             <div className="doc-pill"><span className="doc-pill-k">Allergies</span><span className="doc-pill-v">{activePatientMeta.allergies || '—'}</span></div>
-            <div className="doc-pill"><span className="doc-pill-k">Blood Type</span><span className="doc-pill-v">{recordProfile?.blood_type || recordProfile?.bloodType || selectedPatient?.bloodType || '—'}</span></div>
-            <div className="doc-pill"><span className="doc-pill-k">Diagnosis</span><span className="doc-pill-v">{recordProfile?.diagnosis || selectedPatient?.diagnosis || '—'}</span></div>
-            <div className="doc-pill"><span className="doc-pill-k">Ward</span><span className="doc-pill-v">{recordProfile?.ward_number || recordProfile?.wardNumber || selectedPatient?.wardNumber || '—'}</span></div>
-            <div className="doc-pill"><span className="doc-pill-k">Admission</span><span className="doc-pill-v">{recordProfile?.admission_status || recordProfile?.admissionStatus || selectedPatient?.admissionStatus || '—'}</span></div>
+            <div className="doc-pill"><span className="doc-pill-k">Blood Type</span><span className="doc-pill-v">{activePatientDetails.blood_type || activePatientDetails.bloodType || '—'}</span></div>
+            <div className="doc-pill"><span className="doc-pill-k">Diagnosis</span><span className="doc-pill-v">{activePatientDetails.diagnosis || recordProfile?.summary?.diagnosis || '—'}</span></div>
+            <div className="doc-pill"><span className="doc-pill-k">Ward</span><span className="doc-pill-v">{activePatientDetails.ward_number || activePatientDetails.wardNumber || '—'}</span></div>
+            <div className="doc-pill"><span className="doc-pill-k">Admission</span><span className="doc-pill-v">{activePatientDetails.admission_status || activePatientDetails.admissionStatus || '—'}</span></div>
           </div>
 
           <div className="doc-history">
@@ -4705,12 +4754,12 @@ function DoctorDashboard() {
                   <div className="doc-form">
                     <div className="doc-vitals-display" style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', padding: '12px', background: '#f8fafc', borderRadius: '8px', marginBottom: '15px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}>
                       <div style={{fontWeight: 700, color: '#475569', width: '100%', marginBottom: '4px'}}><Activity size={14} style={{display: 'inline', verticalAlign: 'text-bottom', marginRight: '4px'}}/> Vitals (Auto-Pulled from Triage)</div>
-                      <div><span style={{color: '#64748b'}}>BP:</span> <strong>{selectedPatient?.vitals?.bp || '—'}</strong></div>
-                      <div><span style={{color: '#64748b'}}>HR:</span> <strong>{selectedPatient?.vitals?.hr || '—'}</strong></div>
-                      <div><span style={{color: '#64748b'}}>Temp:</span> <strong>{selectedPatient?.vitals?.temp || '—'}</strong></div>
-                      <div><span style={{color: '#64748b'}}>Weight:</span> <strong>{selectedPatient?.vitals?.weight || '—'}</strong></div>
-                      <div><span style={{color: '#64748b'}}>Height:</span> <strong>{selectedPatient?.vitals?.height || '—'}</strong></div>
-                      <div><span style={{color: '#64748b'}}>SpO2:</span> <strong>{selectedPatient?.vitals?.o2 || selectedPatient?.vitals?.spo2 || '—'}</strong></div>
+                      <div><span style={{color: '#64748b'}}>BP:</span> <strong>{formatVital(activeVitals.bp)}</strong></div>
+                      <div><span style={{color: '#64748b'}}>HR:</span> <strong>{formatVital(activeVitals.hr)}</strong></div>
+                      <div><span style={{color: '#64748b'}}>Temp:</span> <strong>{formatVital(activeVitals.temp, '°C')}</strong></div>
+                      <div><span style={{color: '#64748b'}}>Weight:</span> <strong>{formatVital(activeVitals.weight, ' kg')}</strong></div>
+                      <div><span style={{color: '#64748b'}}>Height:</span> <strong>{formatVital(activeVitals.height, ' cm')}</strong></div>
+                      <div><span style={{color: '#64748b'}}>SpO2:</span> <strong>{formatVital(activeVitals.spo2, '%')}</strong></div>
                     </div>
 
                     {doctorSpecialization.toLowerCase().includes('pediatric') && (
@@ -5003,7 +5052,7 @@ function DoctorDashboard() {
                       </datalist>
 
                     {doctorSpecialization.toLowerCase().includes('pediatric') && (() => {
-                      const weightMatch = String(selectedPatient?.vitals?.weight || '').match(/(\d+(\.\d+)?)/);
+                      const weightMatch = String(activeVitals.weight || '').match(/(\d+(\.\d+)?)/);
                       const weightKg = weightMatch ? parseFloat(weightMatch[1]) : 0;
                       return (
                         <div style={{ background: '#f0fdfa', border: '1px solid #4ade80', padding: '12px', borderRadius: '8px', marginBottom: '15px' }}>
