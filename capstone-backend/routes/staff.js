@@ -124,6 +124,34 @@ async function ensureAccountsDoctorLinkSchema() {
 
 ensureAccountsDoctorLinkSchema().catch(() => {});
 
+let staffActivationSchemaPromise = null;
+function ensureStaffActivationSchemaOnce() {
+    if (!staffActivationSchemaPromise) {
+        staffActivationSchemaPromise = (async () => {
+            await prisma.$executeRawUnsafe(`ALTER TABLE public.accounts ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false;`);
+            await prisma.$executeRawUnsafe(`ALTER TABLE public.accounts ADD COLUMN IF NOT EXISTS reset_password_token TEXT;`);
+            await prisma.$executeRawUnsafe(`ALTER TABLE public.accounts ADD COLUMN IF NOT EXISTS reset_password_expires TIMESTAMPTZ;`);
+            await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS accounts_reset_password_token_idx ON public.accounts(reset_password_token);`);
+        })().catch((error) => {
+            staffActivationSchemaPromise = null;
+            throw error;
+        });
+    }
+    return staffActivationSchemaPromise;
+}
+
+// Prisma selects declared model fields even for ordinary account lookups. Wait
+// for legacy production databases to receive the activation columns first.
+router.use(async (_req, res, next) => {
+    try {
+        await ensureStaffActivationSchemaOnce();
+        next();
+    } catch (error) {
+        console.error('[Staff activation] Database schema setup failed:', error?.message || error);
+        res.status(503).json({ message: 'Staff account service is updating its database. Please try again shortly.' });
+    }
+});
+
 async function ensureUserSettingsSchema() {
     try {
         await prisma.$executeRawUnsafe(`
