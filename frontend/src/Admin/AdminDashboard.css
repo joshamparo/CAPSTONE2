@@ -1490,13 +1490,14 @@ body {
 }
 
 .staff-registration-actions .btn-orange-large {
-  width: auto;
-  min-width: 190px;
-  min-height: 40px;
+  width: 170px !important;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 38px;
   flex: 0 0 auto;
-  padding: 10px 20px;
-  border-radius: 9px;
-  font-size: 0.84rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
 }
 
 .staff-registration-actions .btn-gray {
@@ -1518,7 +1519,7 @@ body {
 @media (max-width: 520px) {
   .staff-registration-actions .btn-orange-large,
   .staff-registration-actions .btn-gray {
-    width: 100%;
+    width: 100% !important;
   }
 }
 

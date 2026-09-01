@@ -1084,7 +1084,7 @@ function AdminDashboard() {
               target: l.target || '',
               details: l.details || ''
             })) : [];
-            setRecentActivities(mapped.slice(0, 5));
+            setRecentActivities(mapped.slice(0, 8));
         } catch (_) {}
 
         try {
