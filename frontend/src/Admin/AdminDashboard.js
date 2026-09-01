@@ -55,13 +55,6 @@ function AdminDashboard() {
     }
   };
 
-  const sendStaffWelcomeEmail = ({ email, name, temporaryPassword }) => fetchJson('/api/email/send-staff-welcome', {
-    apiBase: API_BASE,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-    body: JSON.stringify({ email, name, temporaryPassword })
-  });
-
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -2904,7 +2897,6 @@ function AdminDashboard() {
     setCreateStaffSuccess("");
     setCreateStaffLoading(true);
     let newUser = null;
-    let tempPassword = "";
     try {
       const clean = (v) => String(v || "").trim();
       const resolvedCity = clean(staffFormData.city) || clean(selectedCity);
@@ -2972,9 +2964,6 @@ function AdminDashboard() {
         (specClean === "Doctor's Secretary" || specClean === 'Doctor Secretary');
       if (isDocSec && !clean(newUser.linkedDoctorId)) errors.push("Linked Doctor is required for Doctor Secretary.");
 
-      // Auto-generate secure temporary password (strong 11+ chars: 8 rand + Temp1! = 14 chars)
-      tempPassword = Math.random().toString(36).slice(-8) + "Temp1!";
-      newUser.password = tempPassword;
       
       if (errors.length > 0) {
         setCreateStaffError(errors.join("\n"));
@@ -2982,7 +2971,7 @@ function AdminDashboard() {
       }
       
       try {
-          await fetchJson(`/api/staff`, {
+          const created = await fetchJson(`/api/staff`, {
             apiBase: API_BASE,
             method: 'POST',
             headers: {
@@ -2999,9 +2988,7 @@ function AdminDashboard() {
               let emailOk = false;
               let emailErr = '';
               try {
-                const staffName = `${String(newUser.firstName || '').trim()} ${String(newUser.lastName || '').trim()}`.trim();
-                const resp = await sendStaffWelcomeEmail({ email: newUser.email, name: staffName, temporaryPassword: tempPassword });
-                emailOk = !!resp?.success;
+                emailOk = !!created?.invitationSent;
               } catch (_) {
                 emailOk = false;
                 emailErr = String(_?.text || _?.message || '').trim();
@@ -3009,13 +2996,15 @@ function AdminDashboard() {
 
               setCreateStaffSuccess(
                 emailOk
-                  ? "Staff account created successfully. Credentials email has been sent."
+                  ? "Staff account created. A secure one-time setup link has been sent."
                   : `Staff account created successfully. Credentials email was not sent${emailErr ? ` — ${emailErr}` : ' — please check the backend email configuration.'}`
               );
               fetchStaff(); 
       } catch (error) {
               const msg = String(error?.message || '');
-              const looksDuplicate = /already\s+registered|already\s+exists|duplicate/i.test(msg);
+              // Never delete an existing account as a side effect of registration.
+              // Duplicates are reported for deliberate review by an administrator.
+              const looksDuplicate = false;
               if (looksDuplicate && newUser.email) {
                   const ok = window.confirm(`Email "${newUser.email}" is already registered.\n\nDo you want to remove the existing account for this email and try again?`);
                   if (ok) {
@@ -3035,7 +3024,7 @@ function AdminDashboard() {
                           return;
                       }
                       try {
-                          await fetchJson(`/api/staff`, {
+                          const createdRetry = await fetchJson(`/api/staff`, {
                             apiBase: API_BASE,
                             method: 'POST',
                             headers: { 
@@ -3052,9 +3041,7 @@ function AdminDashboard() {
                           let emailOk = false;
                           let emailErr = '';
                           try {
-                            const staffName = `${String(newUser.firstName || '').trim()} ${String(newUser.lastName || '').trim()}`.trim();
-                            const resp = await sendStaffWelcomeEmail({ email: newUser.email, name: staffName, temporaryPassword: tempPassword });
-                            emailOk = !!resp?.success;
+                            emailOk = !!createdRetry?.invitationSent;
                           } catch (_) {
                             emailOk = false;
                             emailErr = String(_?.text || _?.message || '').trim();
@@ -3062,7 +3049,7 @@ function AdminDashboard() {
 
                           setCreateStaffSuccess(
                             emailOk
-                              ? "Staff account created successfully. Credentials email has been sent."
+                              ? "Staff account created. A secure one-time setup link has been sent."
                               : `Staff account created successfully. Credentials email was not sent${emailErr ? ` — ${emailErr}` : ' — please check the backend email configuration.'}`
                           );
                           fetchStaff();

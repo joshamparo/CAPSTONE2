@@ -11,7 +11,32 @@ const { createSessionToken } = require('../utils/sessionToken');
 const { createPasswordResetToken, hashResetToken, resetTokenIsValid } = require('../utils/passwordReset');
 const { createRateLimiter } = require('../utils/rateLimit');
 const { sendRecoveryEmail } = require('../utils/recoveryMailer');
+const { sendStaffInvitationEmail } = require('../utils/staffInvitationMailer');
 const { selectCanonicalAccount } = require('../utils/accountMatch');
+
+const publicWebOrigin = () => String(process.env.PUBLIC_WEB_ORIGIN || 'https://pascualinga.com').replace(/\/+$/, '');
+
+function safeAccountResponse(record) {
+    const result = JSON.parse(JSON.stringify(record, (key, value) => typeof value === 'bigint' ? value.toString() : value));
+    delete result.password;
+    delete result.reset_password_token;
+    delete result.reset_password_expires;
+    return result;
+}
+
+async function deliverStaffInvitation({ name, email, rawToken }) {
+    try {
+        await sendStaffInvitationEmail({
+            email,
+            name,
+            setupLink: `${publicWebOrigin()}/reset-password?token=${encodeURIComponent(rawToken)}`
+        });
+        return { invitationSent: true, invitationMessage: 'Secure account setup email sent.' };
+    } catch (error) {
+        console.error('[Staff invitation] Delivery failed:', error?.message || error);
+        return { invitationSent: false, invitationMessage: 'Account created, but the setup email could not be delivered. Check email configuration, then resend the invitation.' };
+    }
+}
 
 function isUuid(value) {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
@@ -275,6 +300,7 @@ const loginRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 8, key
 const recoveryRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 4, key: emailRateKey });
 const tokenVerifyRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30, key: tokenRateKey });
 const passwordResetRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 8, key: tokenRateKey });
+const invitationRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 4, key: emailRateKey });
 
 function inferRequester(req) {
     const role = normalizeRole(req.headers['x-user-role'] || '');
@@ -668,7 +694,6 @@ router.post('/', requireRole(['admin']), async (req, res) => {
             postalCode,
             country,
             accountType,
-            password,
             linkedDoctorId
         } = req.body;
 
@@ -695,15 +720,6 @@ router.post('/', requireRole(['admin']), async (req, res) => {
         if (middleNameClean && !isValidName(middleNameClean)) errors.push("Middle Name contains invalid characters.");
         if (!roleClean) errors.push("Role / accountType is required.");
 
-        const rawPassword = String(password || "").trim();
-        if (!rawPassword) errors.push("Password is required.");
-        else {
-            const pwErrors = [];
-            if (rawPassword.length < 11) pwErrors.push("11 characters");
-            if (!/[^A-Za-z0-9]/.test(rawPassword)) pwErrors.push("special character");
-            if (!/[0-9]/.test(rawPassword)) pwErrors.push("number");
-            if (pwErrors.length > 0) errors.push(`Password must contain at least: ${pwErrors.join(", ")}.`);
-        }
         if (!emailClean) {
             errors.push("Email is required.");
         } else if (!isValidEmail(emailClean)) {
@@ -781,9 +797,10 @@ router.post('/', requireRole(['admin']), async (req, res) => {
         else if (normalizedAccountType === 'admin' || normalizedAccountType === 'cashier' || normalizedAccountType === 'doctor_secretary') modelType = 'accounts';
         else modelType = 'staff';
 
-        // Hash password before saving
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+        // Initial credentials are backend-owned. The random placeholder is
+        // never returned or emailed; only the one-time setup link can replace it.
+        const hashedPassword = await bcrypt.hash(crypto.randomBytes(48).toString('base64url'), 10);
+        const invitation = createPasswordResetToken();
 
         const accountName = `${String(firstName || '').trim()} ${String(lastName || '').trim()}`.trim()
             || (email ? String(email).split('@')[0] : normalizedAccountType)
@@ -809,7 +826,10 @@ router.post('/', requireRole(['admin']), async (req, res) => {
                     name,
                     email: emailClean || null,
                     password: hashedPassword,
-                    roles: normalizedAccountType
+                    roles: normalizedAccountType,
+                    must_change_password: true,
+                    reset_password_token: invitation.tokenHash,
+                    reset_password_expires: invitation.expiresAt
                 }
             });
 
@@ -821,14 +841,13 @@ router.post('/', requireRole(['admin']), async (req, res) => {
                 ).catch(() => {});
             }
 
-            const responseData = JSON.parse(JSON.stringify(savedAcc, (key, value) =>
-                typeof value === 'bigint' ? value.toString() : value
-            ));
+            const responseData = safeAccountResponse(savedAcc);
             if (normalizedAccountType === 'doctor_secretary') {
                 responseData.linkedDoctorId = linkedDoctorIdRaw || null;
                 responseData.linked_doctor_id = linkedDoctorIdRaw || null;
             }
-            return res.status(201).json(responseData);
+            const delivery = await deliverStaffInvitation({ name, email: emailClean, rawToken: invitation.token });
+            return res.status(201).json({ ...responseData, ...delivery, requiresActivation: true });
         }
 
         const baseData = {
@@ -836,7 +855,10 @@ router.post('/', requireRole(['admin']), async (req, res) => {
             last_name: lastName,
             email: emailClean || null,
             account_type: normalizedAccountType,
-            password: hashedPassword
+            password: hashedPassword,
+            must_change_password: true,
+            reset_password_token: invitation.tokenHash,
+            reset_password_expires: invitation.expiresAt
         };
 
         if (modelType === 'staff') {
@@ -848,7 +870,8 @@ router.post('/', requireRole(['admin']), async (req, res) => {
             };
             try {
                 const savedDoc = await prisma.staff.create({ data });
-                return res.status(201).json(savedDoc);
+                const delivery = await deliverStaffInvitation({ name: accountName, email: emailClean, rawToken: invitation.token });
+                return res.status(201).json({ ...safeAccountResponse(savedDoc), ...delivery, requiresActivation: true });
             } catch (e) {
                 const msg = String(e?.message || '');
                 if (msg.includes('staff_account_type_check') || msg.includes('23514')) {
@@ -856,7 +879,8 @@ router.post('/', requireRole(['admin']), async (req, res) => {
                     staffAccountTypeConstraintPromise = null;
                     await ensureStaffAccountTypeConstraint();
                     const savedDoc = await prisma.staff.create({ data });
-                    return res.status(201).json(savedDoc);
+                    const delivery = await deliverStaffInvitation({ name: accountName, email: emailClean, rawToken: invitation.token });
+                    return res.status(201).json({ ...safeAccountResponse(savedDoc), ...delivery, requiresActivation: true });
                 }
                 throw e;
             }
@@ -894,18 +918,8 @@ router.post('/', requireRole(['admin']), async (req, res) => {
 
         const savedDoc = await prisma[modelType].create({ data });
         
-        try {
-            await prisma.accounts.create({
-                data: {
-                    name: accountName || `${normalizedAccountType}`.trim(),
-                    email: emailClean || null,
-                    password: hashedPassword,
-                    roles: normalizedAccountType
-                }
-            }).catch(() => {});
-        } catch (_) {}
-
-        return res.status(201).json(savedDoc);
+        const delivery = await deliverStaffInvitation({ name: accountName, email: emailClean, rawToken: invitation.token });
+        return res.status(201).json({ ...safeAccountResponse(savedDoc), ...delivery, requiresActivation: true });
     } catch (err) {
         if (err.code === 'P2002') {
             const target = Array.isArray(err?.meta?.target) ? err.meta.target.join(', ') : (String(err.meta?.target || '') || '');
@@ -921,6 +935,40 @@ router.post('/', requireRole(['admin']), async (req, res) => {
         console.error("STAFF CREATE ERROR:", err?.code || 'NO_CODE', err?.message || 'NO_MESSAGE', err?.meta || 'NO_META');
         const safeMsg = String(err?.message || '').slice(0, 300) || 'Database rejected the staff creation request.';
         res.status(500).json({ message: safeMsg, code: err?.code, prismaMeta: err?.meta ? String(JSON.stringify(err.meta)).slice(0,200) : undefined });
+    }
+});
+
+router.post('/resend-invitation', requireRole(['admin']), invitationRateLimit, async (req, res) => {
+    try {
+        const email = normalizeEmail(req.body?.email || '');
+        if (!email) return res.status(400).json({ message: 'A valid email is required.' });
+
+        const matches = [];
+        for (const model of ['staff', 'nurses', 'doctors', 'accounts']) {
+            const user = await prisma[model].findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
+            if (user) matches.push({ model, user });
+        }
+        const choice = selectCanonicalAccount(matches);
+        if (!choice.selected || choice.conflicting) {
+            return res.status(choice.conflicting ? 409 : 404).json({ message: choice.conflicting ? 'Conflicting account records must be resolved before an invitation can be sent.' : 'Staff account not found.' });
+        }
+
+        const { model, user } = choice.selected;
+        if (user.must_change_password === false && !user.reset_password_token) {
+            return res.status(409).json({ message: 'This account is already activated. Use password recovery if access was lost.' });
+        }
+        const invitation = createPasswordResetToken();
+        await prisma[model].update({
+            where: { id: user.id },
+            data: { must_change_password: true, reset_password_token: invitation.tokenHash, reset_password_expires: invitation.expiresAt }
+        });
+        const name = String(user.name || `${user.first_name || ''} ${user.last_name || ''}`).trim() || 'Staff member';
+        const delivery = await deliverStaffInvitation({ name, email, rawToken: invitation.token });
+        if (!delivery.invitationSent) return res.status(502).json(delivery);
+        return res.json(delivery);
+    } catch (error) {
+        console.error('[Staff invitation] Resend failed:', error?.message || error);
+        return res.status(500).json({ message: 'Unable to resend the invitation right now.' });
     }
 });
 
@@ -2689,7 +2737,8 @@ router.post('/reset-password', passwordResetRateLimit, async (req, res) => {
             data: {
                 password: hashedPassword,
                 reset_password_token: null,
-                reset_password_expires: null
+                reset_password_expires: null,
+                must_change_password: false
             }
         });
         if (consumed.count !== 1) {

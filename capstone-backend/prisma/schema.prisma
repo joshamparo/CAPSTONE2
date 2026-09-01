@@ -398,6 +398,8 @@ model accounts {
   contact_number BigInt?
   status         String?
   must_change_password Boolean @default(false)
+  reset_password_token String?
+  reset_password_expires DateTime? @db.Timestamptz(6)
   last_active    DateTime? @db.Timestamptz(6)
   avatar_url     String?
   @@schema("public")

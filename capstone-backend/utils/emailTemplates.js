@@ -52,6 +52,17 @@ function staffWelcomeEmail({ name, email, temporaryPassword, loginUrl }) {
   });
 }
 
+function staffInvitationEmail({ name, email, setupLink }) {
+  return brandedEmail({
+    preheader: 'Set up your Pascualinga staff account',
+    title: 'Your staff account is ready',
+    intro: `Hello ${name}, an administrator created your Pascualinga staff account.`,
+    content: `<p style="margin:0 0 12px;text-align:center">Use <strong>${escapeHtml(email)}</strong> to sign in after you create your password.</p><p style="margin:0;text-align:center;color:${BRAND.muted}">For your security, credentials are created only through this link.</p>`,
+    action: { url: setupLink, label: 'Set up account' },
+    notice: 'This secure link expires in 30 minutes and works only once. If you were not expecting this account, contact your administrator.'
+  });
+}
+
 function appointmentEmail({ title, message, service, schedule, status, footer }) {
   return brandedEmail({
     preheader: `${title}: ${schedule}`,
@@ -62,4 +73,4 @@ function appointmentEmail({ title, message, service, schedule, status, footer })
   });
 }
 
-module.exports = { escapeHtml, otpEmail, recoveryEmail, staffWelcomeEmail, appointmentEmail };
+module.exports = { escapeHtml, otpEmail, recoveryEmail, staffWelcomeEmail, staffInvitationEmail, appointmentEmail };

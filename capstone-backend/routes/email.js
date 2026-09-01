@@ -30,6 +30,9 @@ router.post('/send-otp', async (req, res) => {
 });
 
 router.post('/send-staff-welcome', requireRole(['admin']), async (req, res) => {
+  return res.status(410).json({ success: false, message: 'Temporary-password email delivery has been retired. Create or resend the staff invitation through /api/staff.' });
+  /* istanbul ignore next -- retained temporarily for old clients; unreachable by design */
+  /*
   const email = cleanText(req.body?.email).toLowerCase();
   const name = cleanText(req.body?.name || 'Staff member', 120);
   const temporaryPassword = String(req.body?.temporaryPassword || '');
@@ -51,6 +54,7 @@ router.post('/send-staff-welcome', requireRole(['admin']), async (req, res) => {
     console.error(`[Email] ${configuredProvider()} staff welcome send failed:`, error?.message || error);
     return res.status(502).json({ success: false, message: 'Staff account was created, but its email could not be sent.' });
   }
+  */
 });
 
 module.exports = router;
