@@ -231,7 +231,7 @@ function AdminDashboard() {
   };
 
   // Staff Registration Wizard State
-  const [registrationStep, setRegistrationStep] = useState(1);
+  const [registrationStep, setRegistrationStep] = useState(3);
   const initialStaffFormData = {
     firstName: '',
     lastName: '',
@@ -2509,7 +2509,7 @@ function AdminDashboard() {
      setCreateStaffError(""); // Clear general error
      setCreateStaffSuccess(""); // Clear success message
      // Clear password state
-     setRegistrationStep(1);
+     setRegistrationStep(3);
      setStaffFormData(initialStaffFormData);
      setPassword("");
      setConfirmPassword("");
@@ -3120,7 +3120,7 @@ function AdminDashboard() {
 
   const isValidRegisterStep = useMemo(() => {
     const clean = (v) => String(v || "").trim();
-    if (registrationStep === 1) {
+    {
       if (!clean(staffFormData.firstName) || clean(staffFormData.firstName).length < 2) return false;
       if (!clean(staffFormData.lastName) || clean(staffFormData.lastName).length < 2) return false;
       if (!clean(staffFormData.middleName) || clean(staffFormData.middleName).length < 2) return false;
@@ -3137,7 +3137,8 @@ function AdminDashboard() {
       if (!clean(staffFormData.gender)) return false;
       if (!clean(staffFormData.civilStatus)) return false;
       if (!clean(staffFormData.nationality)) return false;
-    } else if (registrationStep === 2) {
+    }
+    {
       if (!clean(staffFormData.role)) return false;
       const hiredStr = clean(staffFormData.dateHired);
       if (!hiredStr) return false;
@@ -3155,10 +3156,8 @@ function AdminDashboard() {
       const isDoctorSecretary = ['Office Staff', 'Staff'].includes(clean(staffFormData.role)) &&
         (specClean === "Doctor's Secretary" || specClean === 'Doctor Secretary');
       if (isDoctorSecretary && !clean(staffFormData.linkedDoctorId)) return false;
-      if (['Nurse', 'Medtech', 'Radiographer', 'ECG Operator', 'Physical Therapist'].includes(clean(staffFormData.role)) && !clean(staffFormData.department)) {
-        return false;
-      }
-    } else if (registrationStep === 3) {
+    }
+    {
       // Step 3: accept whichever city source is already populated so the UI and payload stay aligned
       const emailClean = clean(staffFormData.email);
       const phoneDigits = clean(staffFormData.phone).replace(/[\s\-()]/g, '');
@@ -3172,13 +3171,13 @@ function AdminDashboard() {
       if (!cityForStep || cityForStep.length < 2) return false;
     }
     return true;
-  }, [registrationStep, staffFormData, selectedCity]);
+  }, [staffFormData, selectedCity]);
 
   // Dynamic UX: show EXACT reasons why button is disabled (so user never guesses)
   const registerStepBlockers = useMemo(() => {
     const clean = (v) => String(v || "").trim();
     const blockers = [];
-    if (registrationStep === 1) {
+    {
       if (!clean(staffFormData.firstName) || clean(staffFormData.firstName).length < 2) blockers.push("First Name (min 2 letters)");
       if (!clean(staffFormData.middleName) || clean(staffFormData.middleName).length < 2) blockers.push("Middle Name (min 2 letters)");
       if (!clean(staffFormData.lastName) || clean(staffFormData.lastName).length < 2) blockers.push("Last Name (min 2 letters)");
@@ -3199,7 +3198,8 @@ function AdminDashboard() {
       if (!clean(staffFormData.gender)) blockers.push("Gender");
       if (!clean(staffFormData.civilStatus)) blockers.push("Civil Status");
       if (!clean(staffFormData.nationality)) blockers.push("Nationality");
-    } else if (registrationStep === 2) {
+    }
+    {
       if (!clean(staffFormData.role)) blockers.push("Role / Position");
       const hiredStr = clean(staffFormData.dateHired);
       if (!hiredStr) blockers.push("Date Hired");
@@ -3220,10 +3220,8 @@ function AdminDashboard() {
       const isDoctorSecretary = ['Office Staff', 'Staff'].includes(clean(staffFormData.role)) &&
         (specClean === "Doctor's Secretary" || specClean === 'Doctor Secretary');
       if (isDoctorSecretary && !clean(staffFormData.linkedDoctorId)) blockers.push("Linked Doctor");
-      if (['Nurse', 'Medtech', 'Radiographer', 'ECG Operator', 'Physical Therapist'].includes(clean(staffFormData.role)) && !clean(staffFormData.department)) {
-        blockers.push("Department");
-      }
-    } else if (registrationStep === 3) {
+    }
+    {
       const emailClean = clean(staffFormData.email);
       const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
       if (!emailClean) blockers.push("Email Address");
@@ -3238,7 +3236,7 @@ function AdminDashboard() {
       if (!cityStep || cityStep.length < 2) blockers.push("City / Municipality");
     }
     return blockers;
-  }, [registrationStep, staffFormData, selectedCity]);
+  }, [staffFormData, selectedCity]);
 
   const handleNextStep = () => {
     setCreateStaffError(""); // Clear previous errors
@@ -5778,7 +5776,7 @@ function AdminDashboard() {
               </div>
             </div>
 
-            <div className="form-actions-row">
+            <div className="form-actions-row staff-registration-actions">
               {updateNotice && (
                 <p className="form-notice-error form-notice-error-text">{updateNotice}</p>
               )}
@@ -5796,27 +5794,19 @@ function AdminDashboard() {
     if (view === "register-staff") {
       const medicalRoles = ['Doctor', 'Nurse', 'Pharmacist'];
       return (
-        <div className="patient-form-container">
-          <form className="compact-form" onSubmit={handleCreateStaff} id="staff-wizard-form">
-            <div className="wizard-progress-bar">
-                <div className={`wizard-step ${registrationStep >= 1 ? (registrationStep > 1 ? 'completed' : 'active') : ''}`}>
-                    <div className="wizard-step-icon">1</div>
-                    <div className="wizard-step-label">Personal</div>
-                </div>
-                <div className={`wizard-progress-line ${registrationStep > 1 ? 'completed' : ''}`}></div>
-                <div className={`wizard-step ${registrationStep >= 2 ? (registrationStep > 2 ? 'completed' : 'active') : ''}`}>
-                    <div className="wizard-step-icon">2</div>
-                    <div className="wizard-step-label">Professional</div>
-                </div>
-                <div className={`wizard-progress-line ${registrationStep > 2 ? 'completed' : ''}`}></div>
-                <div className={`wizard-step ${registrationStep >= 3 ? 'active' : ''}`}>
-                    <div className="wizard-step-icon">3</div>
-                    <div className="wizard-step-label">Contact & Account</div>
-                </div>
+        <div className="patient-form-container staff-registration-shell">
+          <form className="compact-form staff-registration-form" onSubmit={handleCreateStaff} id="staff-wizard-form">
+            <div className="staff-registration-intro">
+              <div>
+                <span className="staff-registration-eyebrow">Staff onboarding</span>
+                <h2>Create a staff account</h2>
+                <p>Complete the personal, professional, and account information in one workspace.</p>
+              </div>
+              <div className="staff-registration-status"><ShieldCheck size={18} /> Secure administrator action</div>
             </div>
 
-            {registrationStep === 1 && (
-            <div className="form-section-container">
+            <div className="staff-registration-horizontal-grid">
+            <div className="form-section-container staff-registration-column staff-registration-personal">
               <div className="form-grid-main">
                 <div className="form-left-col">
                   <h3 className="section-title">Personal Information</h3>
@@ -5917,10 +5907,8 @@ function AdminDashboard() {
                 </div>
               </div>
             </div>
-            )}
 
-            {registrationStep === 2 && (
-            <div className="form-section-container">
+            <div className="form-section-container staff-registration-column staff-registration-professional">
               <div className="form-section-group" style={{ padding: '24px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', width: '100%' }}>
                 <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #cbd5e1', paddingBottom: '12px', marginBottom: '24px' }}>
                   <Award size={22} className="text-blue-600" />
@@ -6077,10 +6065,8 @@ function AdminDashboard() {
                 </div>
               </div>
             </div>
-            )}
 
-            {registrationStep === 3 && (
-            <div className="form-section-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div className="form-section-container staff-registration-column staff-registration-account" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
               <div className="form-section-group" style={{ padding: '24px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                 <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #cbd5e1', paddingBottom: '12px', marginBottom: '24px' }}>
@@ -6174,7 +6160,7 @@ function AdminDashboard() {
                 </div>
               </div>
             </div>
-            )}
+            </div>
 
             {createStaffError && (
                 <div className="field-notice-error" style={{ whiteSpace: 'pre-line', marginBottom: '16px', fontWeight: 'bold', textAlign: 'center', background: '#fef2f2', padding: '12px', borderRadius: '8px', border: '1px solid #fecaca' }}>
