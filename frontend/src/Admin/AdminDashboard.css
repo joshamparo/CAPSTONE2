@@ -3025,6 +3025,34 @@ body {
   background: #f8fafc;
 }
 
+.staff-activation-badge {
+  display: block;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.staff-activation-badge.is-pending {
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+
+.staff-activation-badge.is-active {
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.staff-resend-btn:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .request-details-box {
   background: #f8fafc;
   padding: 16px;

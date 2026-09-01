@@ -1025,6 +1025,7 @@ function AdminDashboard() {
   const [staffPage, setStaffPage] = useState(1);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // ID of staff to delete
   const [viewingStaff, setViewingStaff] = useState(null);
+  const [resendingInvitationId, setResendingInvitationId] = useState(null);
 
   // Patient Management State
   const [patientList, setPatientList] = useState([]);
@@ -2676,6 +2677,31 @@ function AdminDashboard() {
 
   const handleDeleteStaff = (id) => {
     setDeleteConfirmation(id);
+  };
+
+  const handleResendStaffInvitation = async (staff) => {
+    if (!staff?.email || resendingInvitationId) return;
+    setResendingInvitationId(staff.id);
+    try {
+      const result = await fetchJson('/api/staff/resend-invitation', {
+        apiBase: API_BASE,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ email: staff.email })
+      });
+      setStaffList((current) => current.map((item) => item.id === staff.id
+        ? { ...item, activationStatus: 'pending', invitationExpiresAt: result?.invitationExpiresAt || item.invitationExpiresAt }
+        : item));
+      setModalType('success');
+      setSuccessMessage('A new secure setup link was sent. The previous link is now invalid.');
+      setShowSuccessModal(true);
+    } catch (error) {
+      setModalType('error');
+      setSuccessMessage(String(error?.message || 'Unable to resend the setup link.'));
+      setShowSuccessModal(true);
+    } finally {
+      setResendingInvitationId(null);
+    }
   };
 
   const confirmDelete = async () => {
@@ -6677,6 +6703,7 @@ function AdminDashboard() {
                       const phone = staff.phone || "N/A";
                       const status = staff.status || "Offline";
                       const tone = status === 'Online' ? 'status-duty' : 'status-off';
+                      const pendingActivation = staff.activationStatus === 'pending' || staff.must_change_password === true;
 
                       return (
                         <tr key={staff.id}>
@@ -6699,6 +6726,9 @@ function AdminDashboard() {
                           <td className="text-sm text-slate-600">{phone}</td>
                           <td>
                             <span className={`status-badge-table ${tone}`}>{status}</span>
+                            <span className={`staff-activation-badge ${pendingActivation ? 'is-pending' : 'is-active'}`}>
+                              {pendingActivation ? 'Pending activation' : 'Account active'}
+                            </span>
                           </td>
                           <td className="inc-right">
                             <div className="inc-actions">
@@ -6710,6 +6740,18 @@ function AdminDashboard() {
                                 <Edit size={16} />
                                 Edit
                               </button>
+                              {pendingActivation ? (
+                                <button
+                                  type="button"
+                                  className="inc-btn inc-btn-ghost staff-resend-btn"
+                                  onClick={() => handleResendStaffInvitation(staff)}
+                                  disabled={resendingInvitationId === staff.id}
+                                  title={staff.invitationExpiresAt ? `Current link expires ${new Date(staff.invitationExpiresAt).toLocaleString()}` : 'Send a new setup link'}
+                                >
+                                  <Mail size={16} />
+                                  {resendingInvitationId === staff.id ? 'Sending...' : 'Resend setup'}
+                                </button>
+                              ) : null}
                               <button type="button" className="inc-btn inc-btn-ghost" onClick={() => handleDeleteStaff(staff.id)}>
                                 <Trash2 size={16} />
                                 Delete

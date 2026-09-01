@@ -18,6 +18,10 @@ const publicWebOrigin = () => String(process.env.PUBLIC_WEB_ORIGIN || 'https://p
 
 function safeAccountResponse(record) {
     const result = JSON.parse(JSON.stringify(record, (key, value) => typeof value === 'bigint' ? value.toString() : value));
+    result.activationStatus = result.must_change_password ? 'pending' : 'active';
+    result.invitationExpiresAt = result.must_change_password && result.reset_password_expires
+        ? result.reset_password_expires
+        : null;
     delete result.password;
     delete result.reset_password_token;
     delete result.reset_password_expires;
@@ -993,7 +997,8 @@ router.post('/resend-invitation', requireRole(['admin']), invitationRateLimit, a
         const name = String(user.name || `${user.first_name || ''} ${user.last_name || ''}`).trim() || 'Staff member';
         const delivery = await deliverStaffInvitation({ name, email, rawToken: invitation.token });
         if (!delivery.invitationSent) return res.status(502).json(delivery);
-        return res.json(delivery);
+        router._staffListCache = null;
+        return res.json({ ...delivery, invitationExpiresAt: invitation.expiresAt.toISOString() });
     } catch (error) {
         console.error('[Staff invitation] Resend failed:', error?.message || error);
         return res.status(500).json({ message: 'Unable to resend the invitation right now.' });
@@ -1066,6 +1071,7 @@ router.get('/', requireRole(['admin']), async (req, res) => {
 
             const allUsers = [...staff, ...nurses, ...doctors, ...formattedAccounts]
                 .filter(isNotPatient)
+                .map(safeAccountResponse)
                 .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
             router._staffListCache.fetchedAt = Date.now();
