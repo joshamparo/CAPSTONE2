@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Settings, UserPlus, Users, ChevronLeft, ChevronRight, LogOut, ArrowLeft, QrCode, AlertCircle, User, Eye, EyeOff, Check, X, ClipboardList, Activity, FileText, MessageSquare, Calendar, ChevronDown, History, LayoutDashboard, Phone, MapPin, Trash2, Key, Save, Mail, Briefcase, Shield, Edit, Search, Megaphone, Clock, ListTodo, Plus, Pill, SlidersHorizontal, Eye as EyeIcon, Download, Upload, ShieldCheck, UserCog, Layers, Bell, ArrowRight, RefreshCw, IdCard, Stethoscope, Award, Menu } from "lucide-react";
 import { BarChart, Bar, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import emailjs from '@emailjs/browser';
 import "./AdminDashboard.css";
 import { supabase } from "../lib/supabaseClient";
 import AccountHeaderActions from "../components/AccountHeaderActions";
@@ -11,10 +10,6 @@ import { checkBackendHealth, fetchJson } from "../utils/api";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const WEB_ORIGIN = String(process.env.REACT_APP_WEB_ORIGIN || '').trim() || 'https://pascualinga.com';
-const LOGIN_LINK = 'https://pascualinga.com/login';
-const EMAILJS_SERVICE_ID = 'service_ur884qv';
-const EMAILJS_PUBLIC_KEY = '45tRyW8WG36pIFeBo';
-const EMAILJS_STAFF_TEMPLATE_ID = 'template_zkps5b8';
 
 const ADMIN_WARD_ROOM_PLAN = [
   { id: 'icu', name: 'ICU', total: 5, color: '#ef4444', shortCode: 'ICU', aliases: ['icu'] },
@@ -59,6 +54,13 @@ function AdminDashboard() {
       return { 'x-user-role': 'admin' };
     }
   };
+
+  const sendStaffWelcomeEmail = ({ email, name, temporaryPassword }) => fetchJson('/api/email/send-staff-welcome', {
+    apiBase: API_BASE,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify({ email, name, temporaryPassword })
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -2997,26 +2999,9 @@ function AdminDashboard() {
               let emailOk = false;
               let emailErr = '';
               try {
-                if (EMAILJS_STAFF_TEMPLATE_ID) {
-                  const staffName = `${String(newUser.firstName || '').trim()} ${String(newUser.lastName || '').trim()}`.trim();
-                  const resp = await emailjs.send(
-                    EMAILJS_SERVICE_ID,
-                    EMAILJS_STAFF_TEMPLATE_ID,
-                    {
-                      staff_name: staffName,
-                      staff_email: newUser.email,
-                      to_email: newUser.email,
-                      temp_password: tempPassword,
-                      system_name: 'Pascualinga',
-                      login_link: LOGIN_LINK,
-                      login_url: LOGIN_LINK,
-                      portal_link: LOGIN_LINK,
-                      website_url: 'https://pascualinga.com'
-                    },
-                    EMAILJS_PUBLIC_KEY
-                  );
-                  emailOk = !!(resp && resp.status === 200);
-                }
+                const staffName = `${String(newUser.firstName || '').trim()} ${String(newUser.lastName || '').trim()}`.trim();
+                const resp = await sendStaffWelcomeEmail({ email: newUser.email, name: staffName, temporaryPassword: tempPassword });
+                emailOk = !!resp?.success;
               } catch (_) {
                 emailOk = false;
                 emailErr = String(_?.text || _?.message || '').trim();
@@ -3025,7 +3010,7 @@ function AdminDashboard() {
               setCreateStaffSuccess(
                 emailOk
                   ? "Staff account created successfully. Credentials email has been sent."
-                  : `Staff account created successfully. Credentials email was not sent${emailErr ? ` — ${emailErr}` : ' — please check EmailJS template settings.'} (template: ${EMAILJS_STAFF_TEMPLATE_ID}, service: ${EMAILJS_SERVICE_ID})`
+                  : `Staff account created successfully. Credentials email was not sent${emailErr ? ` — ${emailErr}` : ' — please check the backend email configuration.'}`
               );
               fetchStaff(); 
       } catch (error) {
@@ -3067,26 +3052,9 @@ function AdminDashboard() {
                           let emailOk = false;
                           let emailErr = '';
                           try {
-                            if (EMAILJS_STAFF_TEMPLATE_ID) {
-                              const staffName = `${String(newUser.firstName || '').trim()} ${String(newUser.lastName || '').trim()}`.trim();
-                              const resp = await emailjs.send(
-                                EMAILJS_SERVICE_ID,
-                                EMAILJS_STAFF_TEMPLATE_ID,
-                                {
-                                  staff_name: staffName,
-                                  staff_email: newUser.email,
-                                  to_email: newUser.email,
-                                  temp_password: tempPassword,
-                                  system_name: 'Pascualinga',
-                                  login_link: LOGIN_LINK,
-                                  login_url: LOGIN_LINK,
-                                  portal_link: LOGIN_LINK,
-                                  website_url: 'https://pascualinga.com'
-                                },
-                                EMAILJS_PUBLIC_KEY
-                              );
-                              emailOk = !!(resp && resp.status === 200);
-                            }
+                            const staffName = `${String(newUser.firstName || '').trim()} ${String(newUser.lastName || '').trim()}`.trim();
+                            const resp = await sendStaffWelcomeEmail({ email: newUser.email, name: staffName, temporaryPassword: tempPassword });
+                            emailOk = !!resp?.success;
                           } catch (_) {
                             emailOk = false;
                             emailErr = String(_?.text || _?.message || '').trim();
@@ -3095,7 +3063,7 @@ function AdminDashboard() {
                           setCreateStaffSuccess(
                             emailOk
                               ? "Staff account created successfully. Credentials email has been sent."
-                              : `Staff account created successfully. Credentials email was not sent${emailErr ? ` — ${emailErr}` : ' — please check EmailJS template settings.'} (template: ${EMAILJS_STAFF_TEMPLATE_ID}, service: ${EMAILJS_SERVICE_ID})`
+                              : `Staff account created successfully. Credentials email was not sent${emailErr ? ` — ${emailErr}` : ' — please check the backend email configuration.'}`
                           );
                           fetchStaff();
                           return;

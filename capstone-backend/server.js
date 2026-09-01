@@ -281,6 +281,7 @@ const assistantRoutes = require('./routes/assistant');
 const nurseWorkflowRoutes = require('./routes/nurseWorkflow');
 const systemSettingsRoutes = require('./routes/systemSettings');
 const doctorChatRoutes = require('./routes/doctorChat');
+const emailRoutes = require('./routes/email');
 
 app.use('/api/staff', staffRoutes);
 app.use('/api/activity-logs', activityLogRoutes);
@@ -316,6 +317,8 @@ app.use('/api/assistant', assistantRoutes);
 app.use('/api/nurse-workflow', nurseWorkflowRoutes);
 app.use('/api/system-settings', systemSettingsRoutes);
 app.use('/api/doctor-chat', doctorChatRoutes);
+// Mounted before the legacy direct endpoints below, so migrated routes are handled here.
+app.use('/api/email', emailRoutes);
 
 app.get('/api/health', (_req, res) => {
   const dbConfigured = Boolean(String(process.env.DATABASE_URL || '').trim());

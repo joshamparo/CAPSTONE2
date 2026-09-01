@@ -6,6 +6,8 @@ const { normalizeEmail, parseLimit, parseOffset } = require('../utils/normalize'
 const { resolveClinicalServicePricing } = require('../utils/clinicalServiceCatalog');
 const { ensureBillingTablesExist, toMoney, syncHmoDataFromAppointmentToInvoice } = require('../utils/billingLedger');
 const { createClient } = require('@supabase/supabase-js');
+const { sendEmail } = require('../utils/mailer');
+const { appointmentEmail } = require('../utils/emailTemplates');
 
 let _supabaseAdmin = null;
 function getSupabaseAdmin() {
@@ -300,43 +302,17 @@ async function nextWalkInTicket(tx, dateKey, doctorKey = null) {
 }
 
 async function sendAppointmentSummaryEmail({ to, subject, templateParams }) {
-    if (typeof fetch !== 'function') {
-        console.error('Fetch is not available');
-        return { ok: false, skipped: true };
-    }
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeout = setTimeout(() => controller?.abort?.(), 10000);
     try {
-        const payload = {
-            service_id: 'service_krta25e',
-            template_id: 'template_65mdd0e',
-            user_id: '45tRyW8WG36pIFeBo',
-            accessToken: 'kU0CO4gDDa24CzBI8XuZB',
-            template_params: {
-                to_email: to,
-                subject: subject,
-                message_html: '', // For backward compatibility
-                ...templateParams
-            }
-        };
-
-        console.log('Sending EmailJS request to:', to);
-
-        const resp = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            signal: controller?.signal
+        const body = [templateParams?.message_body, `Service: ${templateParams?.service_label || ''}`, `Schedule: ${templateParams?.scheduled_time || ''}`, `Status: ${templateParams?.status_label || ''}`, templateParams?.footer_note].filter(Boolean).join('\n\n');
+        return await sendEmail({
+            to, subject, text: body,
+            html: appointmentEmail({ title: templateParams?.subject || subject, message: templateParams?.message_body, service: templateParams?.service_label, schedule: templateParams?.scheduled_time, status: templateParams?.status_label, footer: templateParams?.footer_note }),
+            templateId: process.env.EMAILJS_APPOINTMENT_TEMPLATE_ID || 'template_65mdd0e',
+            templateParams: { subject, message_html: '', ...templateParams }
         });
-        
-        const data = await resp.text().catch(() => '');
-        console.log('EmailJS Response:', { ok: resp.ok, status: resp.status, data });
-        return { ok: resp.ok, provider: 'emailjs', data };
     } catch (e) {
-        console.error('EmailJS Error:', e);
+        console.error('Appointment email error:', e?.message || e);
         return { ok: false, error: String(e?.message || e) };
-    } finally {
-        clearTimeout(timeout);
     }
 }
 
