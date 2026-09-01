@@ -6208,7 +6208,7 @@ function AdminDashboard() {
               </div>
             )}
 
-            <div className="form-actions-row">
+            <div className="form-actions-row staff-registration-actions">
               {registrationStep > 1 && (
                 <button type="button" className="btn-gray shadow-btn" onClick={() => setRegistrationStep(prev => prev - 1)} disabled={createStaffLoading}>Back</button>
               )}
@@ -6220,7 +6220,7 @@ function AdminDashboard() {
                 <button
                   type="submit"
                   className="shadow-btn staff-registration-submit"
-                  style={{ width: 'auto', minWidth: '160px', flex: '0 0 auto' }}
+                  style={{ width: '160px', minWidth: '160px', maxWidth: '160px', flex: '0 0 160px' }}
                   disabled={createStaffLoading || !isValidRegisterStep}
                 >
                   {createStaffLoading ? '⏳ Creating Staff Account…' : 'Create Staff Account'}
