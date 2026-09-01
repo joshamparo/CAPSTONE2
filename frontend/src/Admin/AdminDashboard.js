@@ -6217,7 +6217,12 @@ function AdminDashboard() {
                   {createStaffLoading ? 'Processing…' : 'Next'}
                 </button>
               ) : (
-                <button type="submit" className="btn-orange-large shadow-btn" disabled={createStaffLoading || !isValidRegisterStep}>
+                <button
+                  type="submit"
+                  className="shadow-btn staff-registration-submit"
+                  style={{ width: 'auto', minWidth: '160px', flex: '0 0 auto' }}
+                  disabled={createStaffLoading || !isValidRegisterStep}
+                >
                   {createStaffLoading ? '⏳ Creating Staff Account…' : 'Create Staff Account'}
                 </button>
               )}

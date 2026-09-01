@@ -1500,6 +1500,33 @@ body {
   font-size: 0.78rem;
 }
 
+.staff-registration-submit {
+  width: auto !important;
+  min-width: 160px !important;
+  max-width: 190px;
+  min-height: 38px;
+  flex: 0 0 auto !important;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.staff-registration-submit:hover:not(:disabled) {
+  background: var(--primary-hover);
+  box-shadow: 0 6px 14px rgba(234, 88, 12, 0.24);
+}
+
+.staff-registration-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .staff-registration-actions .btn-gray {
   width: auto;
   min-height: 40px;
@@ -1518,8 +1545,10 @@ body {
 
 @media (max-width: 520px) {
   .staff-registration-actions .btn-orange-large,
-  .staff-registration-actions .btn-gray {
+  .staff-registration-actions .btn-gray,
+  .staff-registration-submit {
     width: 100% !important;
+    max-width: none;
   }
 }
 
