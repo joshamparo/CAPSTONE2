@@ -75,7 +75,9 @@ const buildAuthHeaders = (user) => {
   const role = String(user?.role || '').toLowerCase();
   const email = String(user?.email || '').trim();
   const name = String(user?.name || user?.first_name || user?.firstName || '').trim();
+  const sessionToken = String(user?.sessionToken || '').trim();
   return {
+    ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
     'x-user-role': role,
     ...(email ? { 'x-user-email': email } : {}),
     ...(name ? { 'x-user-name': name } : {})
@@ -554,28 +556,35 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   };
 
   const handleQuickStatus = async (id, nextStatus) => {
+    setOrdersError('');
     try {
       await updateOrder(id, { status: nextStatus });
       await refreshOrders();
       if (viewingOrder && String(viewingOrder.id) === String(id)) {
         await openOrder({ ...viewingOrder, status: nextStatus });
       }
-    } catch (_) {}
+    } catch (error) {
+      setOrdersError(String(error?.message || 'Unable to update the order status.'));
+    }
   };
 
   const handleAcknowledge = async (id) => {
+    setOrdersError('');
     try {
       await updateOrder(id, { acknowledged: true });
       await refreshOrders();
       if (viewingOrder && String(viewingOrder.id) === String(id)) {
         await openOrder({ ...viewingOrder, acknowledgedAt: new Date().toISOString() });
       }
-    } catch (_) {}
+    } catch (error) {
+      setOrdersError(String(error?.message || 'Unable to acknowledge the order.'));
+    }
   };
 
   const handleScheduleSave = async () => {
     if (!viewingOrder) return;
     setScheduleSaving(true);
+    setScheduleError('');
     try {
       const when = scheduleWhen ? new Date(scheduleWhen).toISOString() : null;
       await updateOrder(viewingOrder.id, {
@@ -587,7 +596,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       await refreshOrders();
       await refreshSchedule();
       await openOrder({ ...viewingOrder, scheduledAt: when, status: viewingOrder.status });
-    } catch (_) {
+    } catch (error) {
+      setScheduleError(String(error?.message || 'Unable to save the schedule.'));
     } finally {
       setScheduleSaving(false);
     }
@@ -613,10 +623,11 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       const fd = new FormData();
       fd.append('file', resultFile);
       fd.append('patientId', viewingOrder.patientId || '');
+      fd.append('orderId', viewingOrder.id || '');
 
       const uploadRes = await fetch(`${API_BASE}/api/lab-results/upload`, {
         method: 'POST',
-        headers: { 'x-user-role': role },
+        headers: buildAuthHeaders(user),
         body: fd
       });
       const uploadData = await uploadRes.json().catch(() => ({}));
@@ -684,6 +695,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
   const handleCreateEvent = async () => {
     setCreatingEvent(true);
+    setScheduleError('');
     try {
       await fetchJson(`/api/clinical-schedule`, {
         apiBase: API_BASE,
@@ -702,7 +714,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       });
       setEventForm({ title: '', startAt: '', endAt: '', location: '', notes: '' });
       await refreshSchedule();
-    } catch (_) {
+    } catch (error) {
+      setScheduleError(String(error?.message || 'Unable to create the schedule event.'));
     } finally {
       setCreatingEvent(false);
     }

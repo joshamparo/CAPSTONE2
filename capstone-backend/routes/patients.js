@@ -316,6 +316,36 @@ async function sendAppointmentSummaryEmail({ to, subject, templateParams }) {
     }
 }
 
+const CLINICAL_STAFF_ROLES = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist']);
+
+function clinicalPatientOrderScope(req) {
+    const role = getRequesterRole(req);
+    if (!CLINICAL_STAFF_ROLES.has(role)) return null;
+    const email = getRequesterEmail(req);
+    return {
+        clinical_orders: {
+            some: {
+                assigned_role: role,
+                ...(email ? { OR: [{ assigned_to: email }, { assigned_to: null }] } : { assigned_to: null })
+            }
+        }
+    };
+}
+
+async function enforceClinicalPatientAccess(req, res, patientId) {
+    const scope = clinicalPatientOrderScope(req);
+    if (!scope) return true;
+    const match = await prisma.patients.findFirst({
+        where: { id: String(patientId), ...scope },
+        select: { id: true }
+    });
+    if (!match) {
+        res.status(403).json({ message: 'This patient is not assigned to your clinical service.' });
+        return false;
+    }
+    return true;
+}
+
 function normalizeWalkInRouteType(value) {
     const raw = String(value || '').trim().toLowerCase();
     if (!raw) return 'er_consult';
@@ -786,8 +816,12 @@ router.get('/', async (req, res) => {
             ];
         }
 
+        const clinicalScope = clinicalPatientOrderScope(req);
+        const scopedWhere = clinicalScope
+            ? (Object.keys(where).length ? { AND: [where, clinicalScope] } : clinicalScope)
+            : (Object.keys(where).length ? where : undefined);
         const patients = await prisma.patients.findMany({
-            where: Object.keys(where).length ? where : undefined,
+            where: scopedWhere,
             orderBy: { created_at: 'desc' },
             ...(limit ? { take: limit } : {}),
             ...(offset ? { skip: offset } : {})
@@ -807,6 +841,8 @@ router.get('/:id/full-record', async (req, res) => {
 
         const patient = await prisma.patients.findUnique({ where: { id: patientId } }).catch(() => null);
         if (!patient) return res.status(404).json({ message: 'Patient not found' });
+
+        if (!(await enforceClinicalPatientAccess(req, res, patientId))) return;
 
         if (requesterRole === 'patient') {
             if (!requesterEmail) return res.status(401).json({ message: 'Missing user email' });
@@ -1135,6 +1171,7 @@ router.get('/:id', async (req, res) => {
             if (String(own.id) !== String(req.params.id)) return res.status(403).json({ message: "Forbidden" });
         }
 
+        if (!(await enforceClinicalPatientAccess(req, res, req.params.id))) return;
         const patient = await prisma.patients.findUnique({
             where: { id: req.params.id }
         });

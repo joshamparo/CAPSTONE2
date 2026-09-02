@@ -524,6 +524,12 @@ router.post('/', async (req, res) => {
     if (assignedRole && roleNorm && !ASSIGNABLE_ROLE_SET.has(roleNorm)) {
       return res.status(400).json({ message: 'Invalid assignedRole' });
     }
+    if (SCHEDULABLE_ROLE_SET.has(actorFromHeaders.actorRole)) {
+      if (roleNorm !== actorFromHeaders.actorRole) return res.status(403).json({ message: 'Clinical staff can only create orders for their own service.' });
+      if (assignedTo && normalizeEmail(assignedTo) !== actorFromHeaders.actorEmail) {
+        return res.status(403).json({ message: 'Clinical staff can only assign orders to their own account.' });
+      }
+    }
 
     const pr = String(priority || 'Routine').trim() || 'Routine';
     const pricing = resolveClinicalServicePricing({ kind, service });
@@ -820,10 +826,19 @@ router.patch('/:id', async (req, res) => {
     const roleNorm = assignedRole !== undefined ? normalizeRole(assignedRole) : null;
     if (assignedRole !== undefined) {
       if (roleNorm && !ASSIGNABLE_ROLE_SET.has(roleNorm)) return res.status(400).json({ message: 'Invalid assignedRole' });
+      if (SCHEDULABLE_ROLE_SET.has(actorFromHeaders.actorRole) && roleNorm !== actorFromHeaders.actorRole) {
+        return res.status(403).json({ message: 'Clinical staff cannot reassign an order to another service.' });
+      }
       data.assigned_role = roleNorm || null;
     }
 
-    if (assignedTo !== undefined) data.assigned_to = assignedTo ? normalizeEmail(assignedTo) : null;
+    if (assignedTo !== undefined) {
+      const targetEmail = assignedTo ? normalizeEmail(assignedTo) : null;
+      if (SCHEDULABLE_ROLE_SET.has(actorFromHeaders.actorRole) && targetEmail !== actorFromHeaders.actorEmail) {
+        return res.status(403).json({ message: 'Clinical staff cannot reassign an order to another account.' });
+      }
+      data.assigned_to = targetEmail;
+    }
 
     const sched = scheduledAt !== undefined && scheduledAt !== null && String(scheduledAt).trim()
       ? new Date(scheduledAt)

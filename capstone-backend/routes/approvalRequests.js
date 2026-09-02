@@ -265,6 +265,25 @@ const ROLE_SERVICE_KEYS = {
   physical_therapist: ['physical therapy']
 };
 
+function requestMatchesClinicalRole(requestRow, role) {
+  const expected = ROLE_SERVICE_KEYS[role];
+  if (!expected) return true;
+  const routingText = [
+    requestRow?.department_key,
+    requestRow?.service_category,
+    requestRow?.service_type,
+    requestRow?.service_name,
+    requestRow?.reason
+  ]
+    .map((value) => normalizeServiceKey(value).replace(/_/g, ' '))
+    .join(' ');
+  if (role === 'medtech') return routingText.includes('laboratory') || /(^|\s)lab(\s|$)/.test(routingText);
+  if (role === 'radiographer') return routingText.includes('radiology') || routingText.includes('x-ray') || routingText.includes('xray') || routingText.includes('imaging');
+  if (role === 'ecg_operator') return /(^|\s)ecg(\s|$)/.test(routingText) || routingText.includes('electrocardio');
+  if (role === 'physical_therapist') return routingText.includes('physical therapy') || routingText.includes('physiotherapy') || /(^|\s)pt(\s|$)/.test(routingText);
+  return false;
+}
+
 function inferConsultationMode(reqRow) {
   const direct = String(reqRow?.consultation_mode || reqRow?.consultationMode || '').trim().toLowerCase();
   if (direct === 'video' || direct === 'onsite') return direct;
@@ -1211,6 +1230,9 @@ router.get('/:id', async (req, res) => {
     `;
     const r = Array.isArray(rows) ? rows[0] : null;
     if (!r) return res.status(404).json({ message: 'Request not found' });
+    if (ROLE_SERVICE_KEYS[hdr.role] && !requestMatchesClinicalRole(r, hdr.role)) {
+      return res.status(403).json({ message: 'This request is assigned to another clinical service.' });
+    }
     if (hdr.role === 'doctor') await requireDoctorRequestAccess(r, hdr);
     res.json(serializeRequestRow(r));
   } catch (err) {
@@ -1237,6 +1259,10 @@ router.get('/:id/messages', async (req, res) => {
     `;
     let requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
     if (!requestRow) return res.status(404).json({ message: 'Request not found' });
+
+    if (ROLE_SERVICE_KEYS[hdr.role] && !requestMatchesClinicalRole(requestRow, hdr.role)) {
+      return res.status(403).json({ message: 'This request is assigned to another clinical service.' });
+    }
     if (role === 'doctor' && hdr.role !== 'admin') await requireDoctorRequestAccess(requestRow, hdr);
 
     const field = role === 'doctor' ? 'doctor_last_read_at' : 'nurse_last_read_at';
@@ -1417,6 +1443,10 @@ router.patch('/:id', async (req, res) => {
     `;
     let requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
     if (!requestRow) return res.status(404).json({ message: 'Request not found' });
+
+    if (ROLE_SERVICE_KEYS[hdr.role] && !requestMatchesClinicalRole(requestRow, hdr.role)) {
+      return res.status(403).json({ message: 'This request is assigned to another clinical service.' });
+    }
 
     if (department) {
       const reqService = inferServiceKey(requestRow);

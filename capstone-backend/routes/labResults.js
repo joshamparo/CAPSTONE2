@@ -171,6 +171,41 @@ function isStaffRole(role) {
   return STAFF_ROLES.has(String(role || '').trim().toLowerCase());
 }
 
+const CLINICAL_RESULT_ROLES = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist']);
+
+async function enforceClinicalOrderAccess(req, res, { orderId, patientId }) {
+  const role = String(req.auth?.role || '').trim().toLowerCase();
+  if (!CLINICAL_RESULT_ROLES.has(role)) return true;
+  const id = String(orderId || '').trim();
+  if (!/^\d+$/.test(id)) {
+    res.status(400).json({ message: 'A valid orderId is required for clinical results.' });
+    return false;
+  }
+  const rows = await prisma.$queryRaw`
+    SELECT patient_id::text AS "patientId", assigned_role AS "assignedRole", assigned_to AS "assignedTo"
+    FROM public.clinical_orders
+    WHERE id = ${BigInt(id)}
+    LIMIT 1
+  `;
+  const order = Array.isArray(rows) ? rows[0] : null;
+  if (!order) {
+    res.status(404).json({ message: 'Clinical order not found.' });
+    return false;
+  }
+  const assignedRole = String(order.assignedRole || '').trim().toLowerCase();
+  const assignedTo = normalizeEmail(order.assignedTo || '');
+  const actorEmail = normalizeEmail(req.auth?.email || '');
+  if (assignedRole !== role || (assignedTo && assignedTo !== actorEmail)) {
+    res.status(403).json({ message: 'This order is assigned to another clinical staff account.' });
+    return false;
+  }
+  if (patientId && String(order.patientId) !== String(patientId)) {
+    res.status(400).json({ message: 'The patient does not match the clinical order.' });
+    return false;
+  }
+  return true;
+}
+
 function uniqueFlags(flags) {
   return Array.from(new Set((Array.isArray(flags) ? flags : []).filter(Boolean)));
 }
@@ -760,6 +795,7 @@ router.post('/upload', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radi
       patientName: req.body.patientName
     });
     if (!derivedPatientId) return res.status(400).json({ message: 'Missing patientId' });
+    if (!(await enforceClinicalOrderAccess(req, res, { orderId: req.body.orderId, patientId: derivedPatientId }))) return;
     if (req.auth?.role === 'doctor') {
       const access = await enforceDoctorPatientAccess(req, res, derivedPatientId);
       if (!access.allowed) return;
@@ -980,6 +1016,9 @@ router.get('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographe
       const access = await enforceDoctorPatientAccess(req, res, patientId);
       if (!access.allowed) return;
     }
+    if (CLINICAL_RESULT_ROLES.has(requesterRole)) {
+      if (!(await enforceClinicalOrderAccess(req, res, { orderId, patientId }))) return;
+    }
     const limit = parseLimit(take, { min: 1, max: 500, fallback: 100 });
     const offset = parseOffset(skip, { min: 0, max: 5000, fallback: 0 });
 
@@ -1040,6 +1079,7 @@ router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiograph
       const access = await enforceDoctorPatientAccess(req, res, resolvedPatientId);
       if (!access.allowed) return;
     }
+    if (!(await enforceClinicalOrderAccess(req, res, { orderId, patientId: resolvedPatientId }))) return;
 
     const rows = await prisma.$queryRaw`
       INSERT INTO lab_results (patient_id, order_id, type, title, url, result_date, uploaded_by, verification_status, file_hash, file_meta)
@@ -1208,6 +1248,9 @@ router.get('/:id', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogra
       const access = await enforceDoctorPatientAccess(req, res, row.patientId);
       if (!access.allowed) return;
     }
+    if (CLINICAL_RESULT_ROLES.has(requesterRole)) {
+      if (!(await enforceClinicalOrderAccess(req, res, { orderId: row.orderId, patientId: row.patientId }))) return;
+    }
     return res.json({
       ...row,
       fileUrl: row.url ?? null,
@@ -1291,6 +1334,15 @@ router.post('/:id/verify', requireRole(['doctor', 'admin', 'nurse', 'medtech', '
       if (!Array.isArray(rows) || !rows[0]) return res.status(404).json({ message: 'Lab result not found.' });
       const access = await enforceDoctorPatientAccess(req, res, rows[0].patient_id);
       if (!access.allowed) return;
+    }
+    if (CLINICAL_RESULT_ROLES.has(req.auth?.role)) {
+      const rows = await prisma.$queryRaw`
+        SELECT patient_id::text AS "patientId", order_id::text AS "orderId"
+        FROM lab_results WHERE id = ${BigInt(id)} LIMIT 1
+      `;
+      const result = Array.isArray(rows) ? rows[0] : null;
+      if (!result) return res.status(404).json({ message: 'Lab result not found.' });
+      if (!(await enforceClinicalOrderAccess(req, res, result))) return;
     }
     enqueueVerification(id);
     res.json({ ok: true, message: 'Verification queued.' });
