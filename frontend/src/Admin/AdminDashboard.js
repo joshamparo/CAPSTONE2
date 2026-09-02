@@ -1054,7 +1054,7 @@ function AdminDashboard() {
   const [logDateTo, setLogDateTo] = useState("");
   const [reportsDateFrom, setReportsDateFrom] = useState("");
   const [reportsDateTo, setReportsDateTo] = useState("");
-  const [salesMonitorDate, setSalesMonitorDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [salesMonitorDate, setSalesMonitorDate] = useState(() => manilaDateKey());
   const [salesMonitor, setSalesMonitor] = useState(null);
   const [salesMonitorLoading, setSalesMonitorLoading] = useState(false);
   const [salesMonitorError, setSalesMonitorError] = useState('');
@@ -1591,11 +1591,18 @@ function AdminDashboard() {
       const from = parseDateStart(fromDate);
       const to = parseDateEnd(toDate);
       const params = new URLSearchParams();
-      params.set('take', '5000');
+      params.set('take', '500');
       if (from) params.set('start', from.toISOString());
       if (to) params.set('end', to.toISOString());
-      const data = await fetchJson(`/api/activity-logs?${params.toString()}`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
-      return Array.isArray(data) ? data.map((l) => ({
+      const allRows = [];
+      for (let skip = 0; skip < 5000; skip += 500) {
+        params.set('skip', String(skip));
+        const page = await fetchJson(`/api/activity-logs?${params.toString()}`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
+        if (!Array.isArray(page)) break;
+        allRows.push(...page);
+        if (page.length < 500) break;
+      }
+      return allRows.map((l) => ({
         ...l,
         id: String(l.id || l._id || ''),
         actorName: l.actorName || l.actor_name || '',
@@ -1603,7 +1610,7 @@ function AdminDashboard() {
         action: l.action || '',
         target: l.target || '',
         details: l.details || ''
-      })) : [];
+      }));
   };
 
   // Fetch Announcements
@@ -3448,32 +3455,56 @@ function AdminDashboard() {
   };
 
   // --- REPORTING EXPORT HELPERS ---
-  const downloadCSV = (data, filename) => {
+  const fetchAllReportRows = async (path, pageSize, maxRows = 10000) => {
+      const rows = [];
+      for (let skip = 0; skip < maxRows; skip += pageSize) {
+          const separator = path.includes('?') ? '&' : '?';
+          const page = await fetchJson(`${path}${separator}take=${pageSize}&skip=${skip}`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
+          if (!Array.isArray(page)) break;
+          rows.push(...page);
+          if (page.length < pageSize) break;
+      }
+      return rows;
+  };
+
+  const escapeCsvCell = (value) => {
+      let text = String(value ?? '').replace(/"/g, '""');
+      if (/^[\t\r ]*[=+\-@]/.test(text)) text = `'${text}`;
+      return `"${text}"`;
+  };
+
+  const escapeReportHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[char]));
+
+  const downloadCSV = (data, filename, reportLabel = 'Report') => {
       if (!data || data.length === 0) {
           alert("No data available to export.");
           return;
       }
-      const headers = Object.keys(data[0]).join(',');
-      const rows = data.map(obj => Object.values(obj).map(val => `"${val}"`).join(',')).join('\n');
-      const csv = `${headers}\n${rows}`;
-      const blob = new Blob([csv], { type: 'text/csv' });
+      const columns = Object.keys(data[0]);
+      const headers = columns.map(escapeCsvCell).join(',');
+      const rows = data.map((obj) => columns.map((column) => escapeCsvCell(obj[column])).join(',')).join('\r\n');
+      const csv = `\uFEFF${headers}\r\n${rows}`;
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
       a.click();
       window.URL.revokeObjectURL(url);
+      logActivity('Export', `Exported ${reportLabel}`, `Report: ${filename}`).catch(() => {});
   };
 
   const parseDateStart = (value) => {
       if (!value) return null;
-      const d = new Date(`${value}T00:00:00`);
+      const d = new Date(`${value}T00:00:00+08:00`);
       return Number.isNaN(d.getTime()) ? null : d;
   };
 
   const parseDateEnd = (value) => {
       if (!value) return null;
-      const d = new Date(`${value}T23:59:59.999`);
+      const d = new Date(`${value}T23:59:59.999+08:00`);
       return Number.isNaN(d.getTime()) ? null : d;
   };
 
@@ -3487,11 +3518,17 @@ function AdminDashboard() {
 
   const printTableReport = (title, subtitle, columns, rows) => {
       const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+          setModalType('error');
+          setSuccessMessage('The printable report was blocked by the browser. Allow pop-ups and try again.');
+          setShowSuccessModal(true);
+          return;
+      }
       const now = new Date().toLocaleString();
-      const safeTitle = String(title || 'Report');
-      const safeSubtitle = String(subtitle || '');
-      const th = columns.map((c) => `<th>${String(c)}</th>`).join('');
-      const td = rows.map((r) => `<tr>${columns.map((c) => `<td>${String(r[c] ?? '')}</td>`).join('')}</tr>`).join('');
+      const safeTitle = escapeReportHtml(title || 'Report');
+      const safeSubtitle = escapeReportHtml(subtitle || '');
+      const th = columns.map((c) => `<th>${escapeReportHtml(c)}</th>`).join('');
+      const td = rows.map((r) => `<tr>${columns.map((c) => `<td>${escapeReportHtml(r[c])}</td>`).join('')}</tr>`).join('');
 
       printWindow.document.write(`
         <html>
@@ -3527,6 +3564,7 @@ function AdminDashboard() {
           printWindow.print();
           printWindow.close();
       }, 350);
+      logActivity('Export', `Printed ${String(title || 'report')}`, 'Report: printable output').catch(() => {});
   };
 
   const isLowStockItem = (item) => {
@@ -3539,19 +3577,28 @@ function AdminDashboard() {
       return false;
   };
 
-  const exportStaffReport = () => {
-      const data = staffList.map(s => ({ Name: `${s.firstName} ${s.lastName}`, Role: getStaffRoleInfo(s).label, Email: s.email, Phone: s.phone, Status: s.status }));
-      downloadCSV(data, `staff_roster_${new Date().toISOString().split('T')[0]}.csv`);
+  const exportStaffReport = async () => {
+      const source = await fetchAllReportRows('/api/staff', 200);
+      const data = source.map((s) => ({
+          Name: `${s.first_name || s.firstName || ''} ${s.last_name || s.lastName || ''}`.trim(),
+          Role: getStaffRoleInfo(s).label,
+          Email: s.email || '',
+          Phone: s.phone || s.contact_number || '',
+          Status: s.status || 'Offline',
+          Activation: s.activationStatus === 'pending' || s.must_change_password ? 'Pending activation' : 'Active'
+      }));
+      downloadCSV(data, `staff_roster_${manilaDateKey()}.csv`, 'staff roster');
   };
 
-  const exportPatientReport = () => {
-      const data = patientList.map(p => ({
+  const exportPatientReport = async () => {
+      const source = await fetchAllReportRows('/api/patients', 2000, 20000);
+      const data = source.map(p => ({
           Name: `${p.first_name || p.firstName} ${p.last_name || p.lastName}`,
           Gender: p.gender,
-          Contact: p.contactNumber || p.phone,
+          Contact: p.contact_number || p.contactNumber || p.phone,
           DateOfBirth: p.date_of_birth ? new Date(p.date_of_birth).toLocaleDateString() : (p.dateOfBirth ? new Date(p.dateOfBirth).toLocaleDateString() : 'N/A')
       }));
-      downloadCSV(data, `patient_demographics_${new Date().toISOString().split('T')[0]}.csv`);
+      downloadCSV(data, `patient_demographics_${manilaDateKey()}.csv`, 'patient demographics');
   };
 
   const exportActivityReport = (rowsOverride) => {
@@ -3563,11 +3610,19 @@ function AdminDashboard() {
           Target: l.target,
           Details: l.details
       }));
-      downloadCSV(data, `activity_audit_${new Date().toISOString().split('T')[0]}.csv`);
+      downloadCSV(data, `activity_audit_${manilaDateKey()}.csv`, 'activity audit');
   };
 
-  const exportIncidentReport = (rowsOverride) => {
-      const source = Array.isArray(rowsOverride) ? rowsOverride : incidents;
+  const exportIncidentReport = async (rowsOverride) => {
+      let source = Array.isArray(rowsOverride) ? rowsOverride : await fetchAllReportRows('/api/incidents', 500);
+      if (!Array.isArray(rowsOverride) && (reportsDateFrom || reportsDateTo)) {
+          const from = parseDateStart(reportsDateFrom);
+          const to = parseDateEnd(reportsDateTo);
+          source = source.filter((incident) => {
+              const date = new Date(incident.incident_date || incident.created_at || 0);
+              return !Number.isNaN(date.getTime()) && withinRange(date, from, to);
+          });
+      }
       const data = source.map((i) => ({
           Date: i.date || (i.incident_date ? new Date(i.incident_date).toLocaleDateString() : ''),
           Time: i.time || (i.incident_time ? new Date(i.incident_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
@@ -3578,7 +3633,7 @@ function AdminDashboard() {
           Description: i.description || '',
           ActionTaken: i.action_taken || i.actionTaken || ''
       }));
-      downloadCSV(data, `incident_reports_${new Date().toISOString().split('T')[0]}.csv`);
+      downloadCSV(data, `incident_reports_${manilaDateKey()}.csv`, 'incident reports');
   };
 
   const exportSalesMonitoringReport = () => {
@@ -3605,7 +3660,7 @@ function AdminDashboard() {
               InvoicesByStatus: JSON.stringify(invoicesByStatus)
           }
       ];
-      downloadCSV(summary, `sales_monitoring_${(salesMonitorDate || new Date().toISOString().slice(0, 10))}.csv`);
+      downloadCSV(summary, `sales_monitoring_${(salesMonitorDate || manilaDateKey())}.csv`, 'sales monitoring');
   };
 
   const renderContent = () => {
@@ -7160,6 +7215,7 @@ function AdminDashboard() {
     if (view === "reports") {
         const repFrom = parseDateStart(reportsDateFrom);
         const repTo = parseDateEnd(reportsDateTo);
+        const reportRangeInvalid = Boolean(repFrom && repTo && repFrom.getTime() > repTo.getTime());
         const reportIncidents = incidents.filter((i) => {
           const d = new Date(i.incident_date || i.created_at || i.createdAt || 0);
           if (!repFrom && !repTo) return true;
@@ -7218,6 +7274,11 @@ function AdminDashboard() {
                         {salesMonitorError ? (
                           <div className="patient-alert error" style={{ marginTop: 12 }}>
                             {salesMonitorError}
+                          </div>
+                        ) : null}
+                        {salesMonitor?.billing?.warning ? (
+                          <div className="patient-alert error" style={{ marginTop: 12 }}>
+                            Partial data: {salesMonitor.billing.warning}
                           </div>
                         ) : null}
 
@@ -7323,9 +7384,9 @@ function AdminDashboard() {
                             <button
                               className="btn-orange-sm shadow-sm"
                               onClick={() => {
-                                exportIncidentReport(reportIncidents);
+                                exportIncidentReport();
                               }}
-                              disabled={incidentsLoading || incidents.length === 0}
+                              disabled={reportRangeInvalid || incidentsLoading || incidents.length === 0}
                             >
                               <Download size={16} /> Incidents CSV
                             </button>
@@ -7341,7 +7402,7 @@ function AdminDashboard() {
                                   setShowSuccessModal(true);
                                 }
                               }}
-                              disabled={Boolean(activityLogsError)}
+                              disabled={reportRangeInvalid || Boolean(activityLogsError)}
                             >
                               <Download size={16} /> Audit Logs CSV
                             </button>
@@ -7360,12 +7421,15 @@ function AdminDashboard() {
                                 }));
                                 printTableReport('Operational Report (Incidents)', 'Filtered report', Object.keys(rows[0] || {}), rows);
                               }}
-                              disabled={incidentsLoading || incidents.length === 0}
+                              disabled={reportRangeInvalid || incidentsLoading || incidents.length === 0}
                             >
                               <Download size={16} /> Print Incidents
                             </button>
                           </div>
                         </div>
+                        {reportRangeInvalid ? (
+                          <div className="patient-alert error" style={{ marginTop: 12 }}>The From date must be earlier than or equal to the To date.</div>
+                        ) : null}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
                           <div className="dashboard-section-card" style={{ margin: 0, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                             <div className="dashboard-section-header" style={{ padding: '18px 22px' }}>
@@ -7576,16 +7640,16 @@ function AdminDashboard() {
                             </thead>
                             <tbody>
                               <tr>
-                                <td className="text-sm text-slate-700">Active Staff</td>
-                                <td className="text-sm font-medium text-slate-700">{staffList.length}</td>
+                                <td className="text-sm text-slate-700">Registered Staff</td>
+                                <td className="text-sm font-medium text-slate-700">{Number(dashboardStats?.registered?.total ?? staffList.length)}</td>
                               </tr>
                               <tr>
                                 <td className="text-sm text-slate-700">Total Patients</td>
-                                <td className="text-sm font-medium text-slate-700">{patientList.length}</td>
+                                <td className="text-sm font-medium text-slate-700">{Number(dashboardStats?.patients?.total ?? patientList.length)}</td>
                               </tr>
                               <tr>
                                 <td className="text-sm text-slate-700">Low Stock Alerts</td>
-                                <td className="text-sm font-medium text-slate-700">{inventory.filter((i) => isLowStockItem(i)).length}</td>
+                                <td className="text-sm font-medium text-slate-700">{Number((dashboardStats?.inventory?.lowStockMeds ?? 0) + (dashboardStats?.inventory?.lowStockSupplies ?? 0))}</td>
                               </tr>
                               <tr>
                                 <td className="text-sm text-slate-700">Incidents (Filtered)</td>
@@ -7945,12 +8009,18 @@ function AdminDashboard() {
   const exportPDFAnalytics = () => {
       // Open a temporary printable window
       const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+          setModalType('error');
+          setSuccessMessage('The PDF report was blocked by the browser. Allow pop-ups and try again.');
+          setShowSuccessModal(true);
+          return;
+      }
       
       // Calculate analytical data derived from Supabase
-      const totalStaff = staffList.length;
-      const totalPatients = patientList.length || dashboardStats?.patients?.total || 0;
-      const lowStock = inventory.filter(i => i.status === 'Low Stock' || i.status === 'Out of Stock').length;
-      const onlineCount = staffList.filter(s => s.status === 'Online').length;
+      const totalStaff = Number(dashboardStats?.registered?.total ?? staffList.length);
+      const totalPatients = Number(dashboardStats?.patients?.total ?? patientList.length);
+      const lowStock = Number((dashboardStats?.inventory?.lowStockMeds ?? 0) + (dashboardStats?.inventory?.lowStockSupplies ?? 0));
+      const onlineCount = Number(dashboardStats?.online?.total ?? staffList.filter(s => s.status === 'Online').length);
       
       printWindow.document.write(`
           <html>
@@ -7999,6 +8069,7 @@ function AdminDashboard() {
           printWindow.print();
           printWindow.close();
       }, 500); // Small delay to ensure styles apply before print dialog
+      logActivity('Export', 'Exported executive analytics PDF', 'Report: executive analytics').catch(() => {});
   };
 
   const onlineStaffNow = staffList.filter(s => s.status === 'Online');

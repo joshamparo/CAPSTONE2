@@ -305,6 +305,8 @@ router.get('/admin-overview', requireRole(['admin']), async (_req, res) => {
             doctorsOnline,
             nursesOnline,
             pharmacistsOnline,
+            accountsRegistered,
+            accountsOnline,
             totalPatients,
             inpatients,
             pendingRequests,
@@ -312,14 +314,16 @@ router.get('/admin-overview', requireRole(['admin']), async (_req, res) => {
             waitingAppointmentsToday,
             totalAppointmentsToday
         ] = await Promise.all([
-            safeCount(() => prisma.staff.count({ where: { account_type: { in: ['staff', 'admin'] } } })),
+            safeCount(() => prisma.staff.count()),
             safeCount(() => prisma.doctors.count()),
             safeCount(() => prisma.nurses.count()),
             safeCount(() => prisma.staff.count({ where: { account_type: 'pharmacist' } })),
-            safeCount(() => prisma.staff.count({ where: { account_type: { in: ['staff', 'admin'] }, status: 'Online' } })),
+            safeCount(() => prisma.staff.count({ where: { status: 'Online' } })),
             safeCount(() => prisma.doctors.count({ where: { status: 'Online' } })),
             safeCount(() => prisma.nurses.count({ where: { status: 'Online' } })),
             safeCount(() => prisma.staff.count({ where: { account_type: 'pharmacist', status: 'Online' } })),
+            safeCount(() => prisma.accounts.count({ where: { roles: { in: ['admin', 'cashier', 'doctor_secretary'] } } })),
+            safeCount(() => prisma.accounts.count({ where: { roles: { in: ['admin', 'cashier', 'doctor_secretary'] }, status: 'Online' } })),
             prisma.patients.count(),
             safeCount(() => prisma.patients.count({ where: { admission_status: 'Inpatient' } })),
             safeCount(() => prisma.requests.count({ where: { status: 'Pending' } })),
@@ -341,13 +345,17 @@ router.get('/admin-overview', requireRole(['admin']), async (_req, res) => {
                 employees: employeesRegistered,
                 doctors: doctorsRegistered,
                 nurses: nursesRegistered,
-                pharmacists: pharmacistsRegistered
+                pharmacists: pharmacistsRegistered,
+                accounts: accountsRegistered,
+                total: employeesRegistered + doctorsRegistered + nursesRegistered + accountsRegistered
             },
             online: {
                 employees: employeesOnline,
                 doctors: doctorsOnline,
                 nurses: nursesOnline,
-                pharmacists: pharmacistsOnline
+                pharmacists: pharmacistsOnline,
+                accounts: accountsOnline,
+                total: employeesOnline + doctorsOnline + nursesOnline + accountsOnline
             },
             patients: {
                 total: totalPatients,
@@ -431,18 +439,18 @@ router.get('/admin-sales-monitoring', requireRole(['admin']), async (req, res) =
                 SELECT COALESCE(SUM(total_amount), 0) AS net_sales
                 FROM public.sales
                 WHERE created_at >= ${start} AND created_at <= ${end}
-            `.catch(() => [{ net_sales: 0 }]),
+            `,
             prisma.$queryRaw`
                 SELECT COUNT(*)::int AS tx_count
                 FROM public.sales
                 WHERE created_at >= ${start} AND created_at <= ${end}
-            `.catch(() => [{ tx_count: 0 }]),
+            `,
             prisma.$queryRaw`
                 SELECT COUNT(*)::int AS count
                 FROM public.activity_logs
                 WHERE target = 'SalesReport'
                   AND timestamp >= ${start} AND timestamp <= ${end}
-            `.catch(() => [{ count: 0 }])
+            `
         ]);
 
         const paid = Array.isArray(billingPaidRow) ? billingPaidRow[0] : billingPaidRow;

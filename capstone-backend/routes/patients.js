@@ -432,8 +432,14 @@ function mergeWalkInClinicalRecords(currentValue, entry) {
 
 function toPatientResponse(row) {
     if (!row || typeof row !== 'object') return row;
+    const {
+        password: _password,
+        reset_password_token: _resetPasswordToken,
+        reset_password_expires: _resetPasswordExpires,
+        ...safeRow
+    } = row;
     return {
-        ...row,
+        ...safeRow,
         id: row.id,
         firstName: row.first_name ?? null,
         middleName: row.middle_name ?? null,
