@@ -1413,6 +1413,7 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
             where.consultation_mode = 'video';
             where.AND = [
                 ...(Array.isArray(where.AND) ? where.AND : []),
+                { doctor_uuid: String(req.auth?.id || '') },
                 {
                     OR: [
                         { reason: { contains: 'Physical Therapy', mode: 'insensitive' } },
@@ -2618,7 +2619,7 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         // as a protected department queue, but never allow PT staff to start a
         // consultation belonging to another specialty.
         if (requesterRole === 'physical_therapist' && inferSpecializationFromVideoReason(apt.reason) === 'Physical Therapy') {
-            isAssigned = true;
+            isAssigned = Boolean(req.auth?.id && apt.doctor_uuid && String(apt.doctor_uuid) === String(req.auth.id));
         }
 
         // 1. Check UUID match (most reliable)

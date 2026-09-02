@@ -576,7 +576,12 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
       email: effectiveEmail,
       phone: patient.phone || null,
       date_of_birth: patient.dateOfBirth ? new Date(patient.dateOfBirth) : null,
-      reason: requestRow.service_type || requestRow.reason || 'Appointment',
+      // Keep the routed specialty in video appointment reasons. The PT queue
+      // and start authorization both use it to distinguish Physical Therapy
+      // from other online-consultation providers.
+      reason: consultationMode === 'video'
+        ? (requestRow.reason || requestRow.service_type || 'Video Consultation')
+        : (requestRow.service_type || requestRow.reason || 'Appointment'),
       appointment_date: apptDate,
       appointment_time: apptTime,
       doctor_id: doctorName,
@@ -637,10 +642,12 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   const updated = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
 
   const isDoctorApproval = actorRole === 'Doctor';
-  const actorName = secretaryName || (isDoctorApproval ? doctorName : 'Doctor Secretary');
-  const senderRole = isDoctorApproval ? 'doctor' : 'doctor_secretary';
-  const msgBody = isDoctorApproval
-    ? `Approved by ${actorName || 'Doctor'}`
+  const isPhysicalTherapistApproval = actorRole === 'Physical Therapist';
+  const isProviderApproval = isDoctorApproval || isPhysicalTherapistApproval;
+  const actorName = secretaryName || (isProviderApproval ? doctorName : 'Doctor Secretary');
+  const senderRole = isDoctorApproval ? 'doctor' : (isPhysicalTherapistApproval ? 'physical_therapist' : 'doctor_secretary');
+  const msgBody = isProviderApproval
+    ? `Approved by ${actorName || actorRole}`
     : `Approved and forwarded to doctor by ${actorName}`;
   await prisma.$queryRaw`
     INSERT INTO appointment_messages (request_id, sender_role, sender_name, body, created_at)
@@ -1422,6 +1429,7 @@ router.patch('/:id', async (req, res) => {
     if (hdr.role && hdr.role !== 'admin' && hdr.role !== role) return res.status(403).json({ message: 'Forbidden' });
 
     let verifiedDoctor = null;
+    let verifiedPhysicalTherapistId = '';
     if (role === 'doctor' && hdr.role !== 'admin') {
       verifiedDoctor = await resolveSignedDoctor(hdr);
       await canonicalizeLegacyDoctorAssignments(verifiedDoctor);
@@ -1464,6 +1472,46 @@ router.patch('/:id', async (req, res) => {
       }
     }
 
+    if (role === 'physical_therapist' && hdr.role !== 'admin') {
+      const routingText = [
+        requestRow.department_key,
+        requestRow.service_name,
+        requestRow.service_type,
+        requestRow.reason
+      ].map((value) => String(value || '').toLowerCase()).join(' ');
+      const isPhysicalTherapyRequest = routingText.includes('physical therapy')
+        || routingText.includes('physiotherapy')
+        || /(^|[^a-z])pt([^a-z]|$)/i.test(routingText);
+      if (!isPhysicalTherapyRequest) {
+        return res.status(403).json({ message: 'This request is not assigned to Physical Therapy.' });
+      }
+
+      verifiedPhysicalTherapistId = isUuid(hdr.id) ? hdr.id.toLowerCase() : '';
+      if (!verifiedPhysicalTherapistId) {
+        return res.status(403).json({ message: 'Physical therapist account is not linked to a valid staff record.' });
+      }
+      const requestProviderId = requestRow?.doctor_id ? String(requestRow.doctor_id).toLowerCase() : '';
+      if (requestProviderId && requestProviderId !== verifiedPhysicalTherapistId) {
+        return res.status(409).json({ message: 'This request is assigned to another physical therapist.' });
+      }
+      if (!requestProviderId) {
+        const claimedRows = await prisma.$queryRaw`
+          UPDATE appointment_approval_requests
+          SET doctor_id = ${verifiedPhysicalTherapistId}::uuid,
+              doctor_name = ${actor || hdr.name || 'Physical Therapist'},
+              updated_at = now()
+          WHERE id = ${id}
+            AND doctor_id IS NULL
+            AND appointment_id IS NULL
+            AND lower(regexp_replace(trim(status), '[\\s_-]+', ' ', 'g')) IN ('pending', 'pending approval', 'suggested')
+          RETURNING *
+        `;
+        const claimed = Array.isArray(claimedRows) ? claimedRows[0] : claimedRows;
+        if (!claimed) return res.status(409).json({ message: 'This Physical Therapy request is already being handled.' });
+        requestRow = claimed;
+      }
+    }
+
     const currentStatus = normalizeApprovalStatus(requestRow.status);
     const canRepairApprovedVideo = currentStatus === 'approved'
       && status === 'Approved'
@@ -1494,6 +1542,39 @@ router.patch('/:id', async (req, res) => {
         department
       });
       return res.json(serializeRequestRow(updated));
+    }
+
+    if (role === 'physical_therapist' && status === 'Approved' && inferConsultationMode(requestRow) === 'video') {
+      const processingRows = await prisma.$queryRaw`
+        UPDATE appointment_approval_requests
+        SET status = 'Processing', updated_at = now()
+        WHERE id = ${id}
+          AND lower(regexp_replace(trim(status), '[\\s_-]+', ' ', 'g')) IN ('pending', 'pending approval', 'suggested')
+          AND doctor_id = ${verifiedPhysicalTherapistId}::uuid
+          AND appointment_id IS NULL
+        RETURNING *
+      `;
+      const processing = Array.isArray(processingRows) ? processingRows[0] : processingRows;
+      if (!processing) return res.status(409).json({ message: 'This Physical Therapy request is already being handled.' });
+      try {
+        const updated = await createAppointmentFromSecretaryApproval({
+          id,
+          hdr,
+          requestRow: processing,
+          secretaryName: actor || hdr.name || 'Physical Therapist',
+          department,
+          overriddenDoctorId: verifiedPhysicalTherapistId,
+          actorRole: 'Physical Therapist'
+        });
+        return res.json(serializeRequestRow(updated));
+      } catch (error) {
+        await prisma.$executeRaw`
+          UPDATE appointment_approval_requests
+          SET status = 'Pending', updated_at = now()
+          WHERE id = ${id} AND status = 'Processing' AND appointment_id IS NULL
+        `.catch(() => {});
+        throw error;
+      }
     }
 
     // A doctor-approved video request must also become an appointment immediately.

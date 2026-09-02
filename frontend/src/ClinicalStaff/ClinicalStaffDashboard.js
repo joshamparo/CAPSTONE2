@@ -793,6 +793,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       setApprovalNote('');
       await refreshApprovals();
       await refreshOrders();
+      if (isPhysicalTherapist) await refreshVideoAppointments();
     } catch (e) {
       setApprovalActionError(String(e.message || 'Update failed'));
     } finally {
