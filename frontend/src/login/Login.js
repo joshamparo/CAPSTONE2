@@ -35,6 +35,7 @@ const Login = () => {
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [isLockedOut, setIsLockedOut] = useState(false);
   const [lockoutTimer, setLockoutTimer] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const navigate = useNavigate();
 
@@ -98,7 +99,7 @@ const Login = () => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (isLockedOut) return;
+    if (isLockedOut || isSubmitting) return;
 
     setError('');
     setSuccess('');
@@ -110,11 +111,13 @@ const Login = () => {
 
     let role = '';
     let isValid = false;
+    let credentialFailure = false;
 
     {
         // Authenticate every account through the backend so protected API
         // requests receive a signed session token.
         try {
+          setIsSubmitting(true);
           const res = await fetch(`${API_BASE}/api/staff/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -128,13 +131,18 @@ const Login = () => {
             localStorage.setItem('tempUserDetails', JSON.stringify(data));
           } else {
             const errorData = await res.json().catch(() => ({}));
-            setError(errorData.message || 'Invalid Email or Password.');
+            credentialFailure = res.status === 400;
+            setError(errorData.message || (credentialFailure
+              ? 'Invalid Email or Password.'
+              : 'The login service is temporarily unavailable. Please try again.'));
           }
         } catch (err) {
           console.error("Login API connection error:", err);
           setError("Cannot connect to the server. Please try again later.");
+          setIsSubmitting(false);
           return; 
         }
+        setIsSubmitting(false);
     }
 
     if (isValid) {
@@ -294,7 +302,7 @@ const Login = () => {
         navigate('/otp');
       }, 1500);
 
-    } else {
+    } else if (credentialFailure) {
       // Failed Login
       const newAttempts = loginAttempts + 1;
       setLoginAttempts(newAttempts);
@@ -407,8 +415,8 @@ const Login = () => {
               </span>
             </div>
 
-            <button type="submit" className="submit-btn" disabled={isLockedOut}>
-              Login
+            <button type="submit" className="submit-btn" disabled={isLockedOut || isSubmitting}>
+              {isSubmitting ? 'Signing in…' : 'Login'}
             </button>
           </form>
 
