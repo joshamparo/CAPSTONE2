@@ -21,12 +21,13 @@ function signatureFor(encodedPayload) {
   return crypto.createHmac('sha256', getSecret()).update(encodedPayload).digest('base64url');
 }
 
-function createSessionToken({ id, email, role }) {
+function createSessionToken({ id, email, role, sessionVersion = 0 }) {
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     sub: String(id || ''),
     email: String(email || '').trim().toLowerCase(),
     role: String(role || '').trim().toLowerCase(),
+    sv: Number.isInteger(Number(sessionVersion)) ? Number(sessionVersion) : 0,
     iat: now,
     exp: now + TOKEN_TTL_SECONDS
   };
@@ -44,7 +45,7 @@ function verifySessionToken(token) {
   try {
     const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
     const now = Math.floor(Date.now() / 1000);
-    if (!payload?.sub || !payload?.email || !payload?.role || !Number.isFinite(payload?.exp) || payload.exp <= now) return null;
+    if (!payload?.sub || !payload?.email || !payload?.role || !Number.isInteger(payload?.sv) || !Number.isFinite(payload?.exp) || payload.exp <= now) return null;
     return payload;
   } catch (_) {
     return null;

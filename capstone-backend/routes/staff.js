@@ -140,6 +140,7 @@ function ensureStaffActivationSchemaOnce() {
                 await prisma.$executeRawUnsafe(`ALTER TABLE public.${table} ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;`);
                 await prisma.$executeRawUnsafe(`ALTER TABLE public.${table} ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;`);
                 await prisma.$executeRawUnsafe(`ALTER TABLE public.${table} ADD COLUMN IF NOT EXISTS archived_by TEXT;`);
+                await prisma.$executeRawUnsafe(`ALTER TABLE public.${table} ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;`);
             }
         })().catch((error) => {
             staffActivationSchemaPromise = null;
@@ -459,7 +460,7 @@ router.post('/login', loginRateLimit, async (req, res) => {
         const { password: _, ...userData } = user;
         const avatarUrl = await getAvatarUrl(modelType, user.id).catch(() => null);
         const authenticatedRole = String(user.account_type || user.roles || (modelType === 'doctors' ? 'doctor' : modelType === 'nurses' ? 'nurse' : 'staff')).trim().toLowerCase();
-        const sessionToken = createSessionToken({ id: user.id, email: user.email, role: authenticatedRole });
+        const sessionToken = createSessionToken({ id: user.id, email: user.email, role: authenticatedRole, sessionVersion: user.session_version });
         
         if (modelType === 'accounts') {
             const firstName = user.name || '';
@@ -2452,6 +2453,7 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         const { currentPassword, requiresPasswordAuth, _id, id, newPassword, confirmNewPassword, profilePicture, avatarUrl, avatar_url, department, phone, role, accountType, account_type, specialization, linkedDoctorId, linked_doctor_id, ...restData } = req.body;
         
         let updateData = { ...restData };
+        if (hasPasswordUpdate) updateData.session_version = { increment: 1 };
         if (emailClean && updateData.email !== undefined) updateData.email = emailClean;
         if (model !== 'accounts') {
             // The API accepts the frontend's camelCase fields, while Prisma uses
@@ -2570,7 +2572,8 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
             archived_by: archivedBy,
             status: 'Offline',
             reset_password_token: null,
-            reset_password_expires: null
+            reset_password_expires: null,
+            session_version: { increment: 1 }
         };
         if (email) {
             await prisma.$transaction([
@@ -2646,7 +2649,8 @@ router.post('/:id/reactivate', requireRole(['admin']), reactivationRateLimit, as
             password: lockedPassword,
             must_change_password: true,
             reset_password_token: invitation.tokenHash,
-            reset_password_expires: invitation.expiresAt
+            reset_password_expires: invitation.expiresAt,
+            session_version: { increment: 1 }
         };
 
         await prisma.$transaction([
@@ -2831,7 +2835,8 @@ router.post('/reset-password', passwordResetRateLimit, async (req, res) => {
                 password: hashedPassword,
                 reset_password_token: null,
                 reset_password_expires: null,
-                must_change_password: false
+                must_change_password: false,
+                session_version: { increment: 1 }
             }
         });
         if (consumed.count !== 1) {
@@ -2851,7 +2856,8 @@ router.post('/reset-password', passwordResetRateLimit, async (req, res) => {
                 data: {
                     password: hashedPassword,
                     reset_password_token: null,
-                    reset_password_expires: null
+                    reset_password_expires: null,
+                    session_version: { increment: 1 }
                 }
             }).catch((mirrorError) => console.warn('[Recovery] Could not synchronize legacy account mirror:', mirrorError?.message));
         }
@@ -2937,7 +2943,8 @@ router.post('/first-login-change-password', async (req, res) => {
         // Update password in DB and set must_change_password to false
         const updateData = { 
             password: hashedPassword,
-            must_change_password: false
+            must_change_password: false,
+            session_version: { increment: 1 }
         };
 
         if (modelType === 'accounts') {

@@ -5,6 +5,8 @@ const express = require('express');
 process.env.SESSION_SECRET = 'doctor-chat-route-test-secret';
 
 const { createSessionToken } = require('../utils/sessionToken');
+const requireRole = require('../middleware/requireRole');
+requireRole.setSessionAccountVerifier(async () => true);
 const doctorChatRoutes = require('../routes/doctorChat');
 
 async function withServer(run) {

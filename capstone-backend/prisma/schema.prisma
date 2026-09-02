@@ -192,6 +192,7 @@ model doctors {
   is_active                      Boolean   @default(true)
   archived_at                    DateTime? @db.Timestamptz(6)
   archived_by                    String?
+  session_version                Int       @default(0)
   @@schema("public")
 }
 
@@ -264,6 +265,7 @@ model nurses {
   is_active                      Boolean   @default(true)
   archived_at                    DateTime? @db.Timestamptz(6)
   archived_by                    String?
+  session_version                Int       @default(0)
   @@schema("public")
 }
 
@@ -381,6 +383,7 @@ model staff {
   is_active              Boolean   @default(true)
   archived_at            DateTime? @db.Timestamptz(6)
   archived_by            String?
+  session_version        Int       @default(0)
   @@schema("public")
 }
 
@@ -412,6 +415,7 @@ model accounts {
   is_active Boolean @default(true)
   archived_at DateTime? @db.Timestamptz(6)
   archived_by String?
+  session_version Int @default(0)
   last_active    DateTime? @db.Timestamptz(6)
   avatar_url     String?
   @@schema("public")

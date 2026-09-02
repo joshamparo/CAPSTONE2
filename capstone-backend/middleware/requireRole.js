@@ -1,9 +1,25 @@
 const { verifySessionToken } = require('../utils/sessionToken');
+const prisma = require('../utils/prisma');
+
+let sessionSchemaPromise = null;
+function ensureSessionSchema() {
+  if (!sessionSchemaPromise) {
+    sessionSchemaPromise = (async () => {
+      for (const table of ['staff', 'nurses', 'doctors', 'accounts']) {
+        await prisma.$executeRawUnsafe(`ALTER TABLE public.${table} ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`);
+        await prisma.$executeRawUnsafe(`ALTER TABLE public.${table} ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0`);
+      }
+    })().catch((error) => {
+      sessionSchemaPromise = null;
+      throw error;
+    });
+  }
+  return sessionSchemaPromise;
+}
 
 function normalizeRoleHeader(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw) return '';
-
   if (raw === 'administrator' || raw === 'administrator_account') return 'admin';
   if (raw.includes('doctor') && raw.includes('secretary')) return 'doctor_secretary';
   if (raw.includes('office') && raw.includes('staff')) return 'staff';
@@ -18,14 +34,33 @@ function normalizeRoleHeader(value) {
   if (raw.includes('pediatric') || raw.includes('pedia')) return 'doctor';
   if (raw.includes('doctor')) return 'doctor';
   if (raw.includes('admin')) return 'admin';
-
   return raw.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
-function requireRole(allowedRoles = []) {
-  const normalizedAllowed = allowedRoles.map((r) => normalizeRoleHeader(r));
+async function verifyActiveSessionAccount(session, normalizedRole) {
+  if (normalizedRole === 'patient') return true;
+  await ensureSessionSchema();
+  const rows = await prisma.$queryRawUnsafe(`
+    SELECT account_type::text AS account_role, is_active, session_version FROM public.staff WHERE lower(email) = lower($1)
+    UNION ALL
+    SELECT account_type::text AS account_role, is_active, session_version FROM public.nurses WHERE lower(email) = lower($1)
+    UNION ALL
+    SELECT account_type::text AS account_role, is_active, session_version FROM public.doctors WHERE lower(email) = lower($1)
+    UNION ALL
+    SELECT roles::text AS account_role, is_active, session_version FROM public.accounts WHERE lower(email) = lower($1)
+  `, String(session.email || '').trim().toLowerCase());
+  return (Array.isArray(rows) ? rows : []).some((row) => (
+    normalizeRoleHeader(row.account_role) === normalizedRole
+    && row.is_active === true
+    && Number(row.session_version) === Number(session.sv)
+  ));
+}
 
-  return (req, res, next) => {
+let sessionAccountVerifier = verifyActiveSessionAccount;
+
+function requireRole(allowedRoles = []) {
+  const normalizedAllowed = allowedRoles.map((role) => normalizeRoleHeader(role));
+  return async (req, res, next) => {
     if (req.method === 'OPTIONS') return next();
     const authHeader = String(req.headers.authorization || '').trim();
     const match = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -35,12 +70,23 @@ function requireRole(allowedRoles = []) {
     if (!role || (normalizedAllowed.length > 0 && !normalizedAllowed.includes(role))) {
       return res.status(403).json({ message: 'Forbidden' });
     }
-    req.auth = { id: session.sub, email: session.email, role };
+    try {
+      const sessionIsCurrent = await sessionAccountVerifier(session, role);
+      if (!sessionIsCurrent) return res.status(401).json({ message: 'Your session is no longer active. Please sign in again.' });
+    } catch (error) {
+      console.error('[Session authorization] Account verification failed:', error?.message || error);
+      return res.status(503).json({ message: 'Unable to verify your session right now. Please try again.' });
+    }
+    req.auth = { id: session.sub, email: session.email, role, sessionVersion: session.sv };
     req.headers['x-user-role'] = role;
     req.headers['x-user-email'] = session.email;
     req.headers['x-user-id'] = session.sub;
     next();
   };
 }
+
+requireRole.setSessionAccountVerifier = (verifier) => {
+  sessionAccountVerifier = typeof verifier === 'function' ? verifier : verifyActiveSessionAccount;
+};
 
 module.exports = requireRole;
