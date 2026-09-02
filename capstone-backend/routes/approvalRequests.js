@@ -279,6 +279,18 @@ function inferConsultationMode(reqRow) {
   return 'onsite';
 }
 
+function normalizeApprovalStatus(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, ' ');
+}
+
+function isClaimableApprovalStatus(value) {
+  const status = normalizeApprovalStatus(value);
+  return status === 'pending' || status === 'pending approval' || status === 'suggested';
+}
+
 function specializationVariants(value) {
   const base = String(value || '').trim();
   const lower = base.toLowerCase();
@@ -336,7 +348,7 @@ async function canonicalizeLegacyDoctorAssignments(doctor) {
         doctor_name = ${`Dr. ${doctor.name}`},
         updated_at = now()
     WHERE r.doctor_id <> ${doctor.id}::uuid
-      AND r.status IN ('Pending', 'Suggested')
+      AND lower(regexp_replace(trim(r.status), '[\\s_-]+', ' ', 'g')) IN ('pending', 'pending approval', 'suggested')
       AND r.appointment_id IS NULL
       AND r.doctor_id IN (
         SELECT d.id
@@ -1426,7 +1438,8 @@ router.patch('/:id', async (req, res) => {
               updated_at = now()
           WHERE id = ${id}
             AND doctor_id IS NULL
-            AND status = 'Pending'
+            AND appointment_id IS NULL
+            AND lower(regexp_replace(trim(status), '[\\s_-]+', ' ', 'g')) IN ('pending', 'pending approval', 'suggested')
           RETURNING *
         `;
         const claimed = Array.isArray(claimedRows) ? claimedRows[0] : claimedRows;
@@ -1435,21 +1448,29 @@ router.patch('/:id', async (req, res) => {
         } else {
           const latestRows = await prisma.$queryRaw`SELECT * FROM appointment_approval_requests WHERE id = ${id} LIMIT 1`;
           const latest = Array.isArray(latestRows) ? latestRows[0] : latestRows;
-          if (!latest || String(latest.doctor_id || '') !== verifiedDoctor.id) {
+          if (!latest) return res.status(404).json({ message: 'Request not found.' });
+          const latestDoctorId = String(latest.doctor_id || '');
+          if (latestDoctorId && latestDoctorId !== verifiedDoctor.id) {
             return res.status(409).json({ message: 'This request was already claimed by another doctor.' });
+          }
+          if (latest.appointment_id || !isClaimableApprovalStatus(latest.status)) {
+            return res.status(409).json({ message: `This request can no longer be claimed. Current status: ${String(latest.status || 'Unknown')}.` });
+          }
+          if (!latestDoctorId) {
+            return res.status(409).json({ message: 'The request changed while it was being claimed. Refresh the inbox and try once more.' });
           }
           requestRow = latest;
         }
       }
     }
 
-    const currentStatus = String(requestRow.status || '');
-    const canRepairApprovedVideo = currentStatus === 'Approved'
+    const currentStatus = normalizeApprovalStatus(requestRow.status);
+    const canRepairApprovedVideo = currentStatus === 'approved'
       && status === 'Approved'
       && role === 'doctor'
       && !requestRow.appointment_id
       && inferConsultationMode(requestRow) === 'video';
-    if ((currentStatus === 'Approved' || currentStatus === 'Rejected') && !canRepairApprovedVideo) {
+    if ((currentStatus === 'approved' || currentStatus === 'rejected') && !canRepairApprovedVideo) {
       return res.status(409).json({ message: 'Request already closed.' });
     }
 
@@ -1492,7 +1513,7 @@ router.patch('/:id', async (req, res) => {
           UPDATE appointment_approval_requests
           SET status = 'Processing', updated_at = now()
           WHERE id = ${id}
-            AND status IN ('Pending', 'Suggested')
+            AND lower(regexp_replace(trim(status), '[\\s_-]+', ' ', 'g')) IN ('pending', 'pending approval', 'suggested')
             AND doctor_id = ${doctorId}::uuid
           RETURNING *
         `;
