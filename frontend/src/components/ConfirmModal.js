@@ -63,7 +63,7 @@ export default function ConfirmModal({
           <button
             type="button"
             className={confirmClass}
-            onClick={onConfirm}
+            onClick={() => onConfirm(confirmation)}
             disabled={confirmDisabled || !textMatches}
           >
             {confirmLabel}

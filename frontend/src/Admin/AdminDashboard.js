@@ -1034,6 +1034,8 @@ function AdminDashboard() {
   const [staffSort, setStaffSort] = useState('Newest');
   const [staffPage, setStaffPage] = useState(1);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // ID of staff to delete
+  const [deleteConfirmationError, setDeleteConfirmationError] = useState("");
+  const [deleteConfirmationLoading, setDeleteConfirmationLoading] = useState(false);
   const [viewingStaff, setViewingStaff] = useState(null);
   const [resendingInvitationId, setResendingInvitationId] = useState(null);
 
@@ -2693,6 +2695,7 @@ function AdminDashboard() {
   };
 
   const handleDeleteStaff = (id) => {
+    setDeleteConfirmationError("");
     setDeleteConfirmation(id);
   };
 
@@ -2721,32 +2724,34 @@ function AdminDashboard() {
     }
   };
 
-  const confirmDelete = async () => {
-    if (!deleteConfirmation) return;
+  const confirmDelete = async (typedConfirmation) => {
+    if (!deleteConfirmation || deleteConfirmationLoading) return;
+    setDeleteConfirmationError("");
+    setDeleteConfirmationLoading(true);
     
     try {
-        const staffToDelete = staffList.find(s => s.id === deleteConfirmation);
-        const confirmation = `${staffToDelete?.firstName || ''} ${staffToDelete?.lastName || ''}`.trim() || staffToDelete?.email || '';
         await fetchJson(`/api/staff/${deleteConfirmation}`, {
           apiBase: API_BASE,
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-          body: JSON.stringify({ confirmation })
+          body: JSON.stringify({ confirmation: String(typedConfirmation || '').trim() })
         });
-        setStaffList(staffList.filter(staff => staff.id !== deleteConfirmation));
+        setStaffList((current) => current.filter((staff) => String(staff.id) !== String(deleteConfirmation)));
         setDeleteConfirmation(null);
         setModalType("success");
         setSuccessMessage("Staff account deactivated. Historical records were preserved.");
         setShowSuccessModal(true);
     } catch (error) {
         console.error("Error deleting staff:", error);
-        setModalType("error");
-        setSuccessMessage(String(error?.message || "Failed to delete staff."));
-        setShowSuccessModal(true);
+        setDeleteConfirmationError(String(error?.message || "Failed to deactivate staff account."));
+    } finally {
+        setDeleteConfirmationLoading(false);
     }
   };
 
   const cancelDelete = () => {
+    if (deleteConfirmationLoading) return;
+    setDeleteConfirmationError("");
     setDeleteConfirmation(null);
   };
 
@@ -8554,11 +8559,14 @@ function AdminDashboard() {
           onConfirm={confirmDelete}
           title="Deactivate staff account?"
           message="Login will be disabled, pending setup links will be revoked, and historical records will be preserved."
-          subtext={`${staffList.find((staff) => staff.id === deleteConfirmation)?.firstName || ''} ${staffList.find((staff) => staff.id === deleteConfirmation)?.lastName || ''}`.trim()}
-          requiredText={`${staffList.find((staff) => staff.id === deleteConfirmation)?.firstName || ''} ${staffList.find((staff) => staff.id === deleteConfirmation)?.lastName || ''}`.trim() || staffList.find((staff) => staff.id === deleteConfirmation)?.email || ''}
+          subtext={`${staffList.find((staff) => String(staff.id) === String(deleteConfirmation))?.firstName || ''} ${staffList.find((staff) => String(staff.id) === String(deleteConfirmation))?.lastName || ''}`.trim()}
+          requiredText={`${staffList.find((staff) => String(staff.id) === String(deleteConfirmation))?.firstName || ''} ${staffList.find((staff) => String(staff.id) === String(deleteConfirmation))?.lastName || ''}`.trim() || staffList.find((staff) => String(staff.id) === String(deleteConfirmation))?.email || ''}
           cancelLabel="Cancel"
           confirmLabel="Deactivate"
           confirmVariant="danger"
+          confirmDisabled={deleteConfirmationLoading}
+          cancelDisabled={deleteConfirmationLoading}
+          error={deleteConfirmationError}
         />
       )}
 
