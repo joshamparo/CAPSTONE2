@@ -1043,16 +1043,19 @@ router.get('/', requireRole(['admin']), async (req, res) => {
 
         // Small cache to avoid hammering the DB on dashboard polling.
         if (!router._staffListCache) router._staffListCache = { key: '', fetchedAt: 0, payload: null, promise: null };
+        // Keep a stable reference for this request. A concurrent create/update/
+        // delete may invalidate the router cache while this query is in flight.
+        const staffListCache = router._staffListCache;
         const cacheKey = JSON.stringify({ take, skip, recordScope });
         const now = Date.now();
-        if (isActive && router._staffListCache.payload && router._staffListCache.key === cacheKey && now - router._staffListCache.fetchedAt < 15000) {
-            return res.json(router._staffListCache.payload);
+        if (isActive && staffListCache.payload && staffListCache.key === cacheKey && now - staffListCache.fetchedAt < 15000) {
+            return res.json(staffListCache.payload);
         }
-        if (isActive && router._staffListCache.promise && router._staffListCache.key === cacheKey) {
-            const payload = await router._staffListCache.promise;
+        if (isActive && staffListCache.promise && staffListCache.key === cacheKey) {
+            const payload = await staffListCache.promise;
             return res.json(payload);
         }
-        if (isActive) router._staffListCache.key = cacheKey;
+        if (isActive) staffListCache.key = cacheKey;
 
         // Not all Prisma models expose created_at/updated_at. Order by id for stability.
         const listPromise = (async () => {
@@ -1103,19 +1106,20 @@ router.get('/', requireRole(['admin']), async (req, res) => {
                 .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
             if (isActive) {
-                router._staffListCache.fetchedAt = Date.now();
-                router._staffListCache.payload = allUsers;
+                staffListCache.fetchedAt = Date.now();
+                staffListCache.payload = allUsers;
             }
             return allUsers;
         })().finally(() => {
-            if (isActive) router._staffListCache.promise = null;
+            if (isActive) staffListCache.promise = null;
         });
-        if (isActive) router._staffListCache.promise = listPromise;
+        if (isActive) staffListCache.promise = listPromise;
 
         const payload = await listPromise;
         return res.json(payload);
     } catch (err) {
-        res.status(500).json(err);
+        console.error('[Staff list] Failed:', err?.message || err);
+        res.status(500).json({ message: 'Unable to load staff records right now. Please try again.' });
     }
 });
 
