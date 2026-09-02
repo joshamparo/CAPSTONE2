@@ -1065,11 +1065,60 @@ function makeRoomId(appointmentId) {
 }
 
 function getJitsiBaseUrl() {
+    if (getJaasConfig()) return 'https://8x8.vc';
     const base = String(process.env.JITSI_BASE_URL || '').trim();
     return base || 'https://meet.jit.si';
 }
 
-function buildJitsiUrl(roomId, displayName) {
+function getJaasConfig() {
+    const appId = String(process.env.JAAS_APP_ID || '').trim();
+    const keyId = String(process.env.JAAS_KEY_ID || '').trim();
+    const privateKey = String(process.env.JAAS_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
+    if (!appId && !keyId && !privateKey) return null;
+    if (!appId || !keyId || !privateKey) {
+        throw new Error('JaaS is partially configured. JAAS_APP_ID, JAAS_KEY_ID, and JAAS_PRIVATE_KEY are all required.');
+    }
+    return { appId, keyId, privateKey };
+}
+
+function encodeJwtPart(value) {
+    return Buffer.from(JSON.stringify(value)).toString('base64url');
+}
+
+function createJaasJwt({ roomId, displayName, email, userId, moderator }) {
+    const config = getJaasConfig();
+    if (!config) return null;
+    const now = Math.floor(Date.now() / 1000);
+    const header = { alg: 'RS256', kid: config.keyId, typ: 'JWT' };
+    const payload = {
+        aud: 'jitsi',
+        iss: 'chat',
+        sub: config.appId,
+        room: String(roomId),
+        nbf: now - 10,
+        exp: now + (2 * 60 * 60),
+        context: {
+            user: {
+                id: String(userId || crypto.randomUUID()),
+                name: String(displayName || (moderator ? 'Doctor' : 'Patient')),
+                email: String(email || ''),
+                moderator: moderator ? 'true' : 'false'
+            },
+            features: {
+                livestreaming: false,
+                recording: false,
+                transcription: false,
+                'outbound-call': false
+            },
+            room: { regex: false }
+        }
+    };
+    const unsigned = `${encodeJwtPart(header)}.${encodeJwtPart(payload)}`;
+    const signature = crypto.sign('RSA-SHA256', Buffer.from(unsigned), config.privateKey).toString('base64url');
+    return `${unsigned}.${signature}`;
+}
+
+function buildJitsiUrl(roomId, displayName, options = {}) {
     const rawRoom = String(roomId || '').trim();
     const name = String(displayName || '').trim();
     const hash = [
@@ -1088,9 +1137,18 @@ function buildJitsiUrl(roomId, displayName) {
         return `${rawRoom}#${hash}`;
     }
 
+    const jaas = getJaasConfig();
     const base = getJitsiBaseUrl().replace(/\/+$/, '');
     const safeRoom = encodeURIComponent(rawRoom);
-    return `${base}/${safeRoom}#${hash}`;
+    const roomPath = jaas ? `${encodeURIComponent(jaas.appId)}/${safeRoom}` : safeRoom;
+    const jwt = createJaasJwt({
+        roomId: rawRoom,
+        displayName: name,
+        email: options.email,
+        userId: options.userId,
+        moderator: Boolean(options.moderator)
+    });
+    return `${base}/${roomPath}${jwt ? `?jwt=${encodeURIComponent(jwt)}` : ''}#${hash}`;
 }
 
 async function ensurePatientFromAppointment(apt) {
@@ -2605,7 +2663,11 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
                     meeting_expires_at: expiresAt
                 }
             });
-            const url = buildJitsiUrl(updated.meeting_room_id, doctorName);
+            const url = buildJitsiUrl(updated.meeting_room_id, doctorName, {
+                moderator: true,
+                email: requesterEmail,
+                userId: reqDoctorUuid || requesterEmail
+            });
             // #region debug-point D:start-response-created
             reportVideoRoomDebug({
                 hypothesisId: 'D',
@@ -2630,7 +2692,11 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
                 where: { id: resolvedAppointmentId },
                 data: { meeting_started_at: now, meeting_expires_at: expiresAt }
             });
-            const url = buildJitsiUrl(updated.meeting_room_id, doctorName);
+            const url = buildJitsiUrl(updated.meeting_room_id, doctorName, {
+                moderator: true,
+                email: requesterEmail,
+                userId: reqDoctorUuid || requesterEmail
+            });
             // #region debug-point D:start-response-reused
             reportVideoRoomDebug({
                 hypothesisId: 'D',
@@ -2648,7 +2714,11 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             return res.json({ roomId: updated.meeting_room_id, url, startedAt: updated.meeting_started_at });
         }
 
-        const url = buildJitsiUrl(apt.meeting_room_id, doctorName);
+        const url = buildJitsiUrl(apt.meeting_room_id, doctorName, {
+            moderator: true,
+            email: requesterEmail,
+            userId: reqDoctorUuid || requesterEmail
+        });
         // #region debug-point D:start-response-existing
         reportVideoRoomDebug({
             hypothesisId: 'D',
@@ -2752,7 +2822,11 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therap
 
             if (!isAssigned) return res.status(403).json({ message: 'Not assigned to this doctor.' });
             
-            const url = buildJitsiUrl(roomId, name);
+            const url = buildJitsiUrl(roomId, name, {
+                moderator: true,
+                email,
+                userId: reqDoctorUuid || email
+            });
             // #region debug-point E:join-doctor-response
             reportVideoRoomDebug({
                 hypothesisId: 'E',
@@ -2776,7 +2850,11 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therap
                 matchesPatientId = patient?.id && String(patient.id) === String(apt.patient_id);
             }
             if (!matchesEmail && !matchesPatientId) return res.status(403).json({ message: 'Not allowed to join this call.' });
-            const url = buildJitsiUrl(roomId, inferName(req) || 'Patient');
+            const url = buildJitsiUrl(roomId, inferName(req) || 'Patient', {
+                moderator: false,
+                email,
+                userId: apt.patient_id || email
+            });
             // #region debug-point E:join-patient-response
             reportVideoRoomDebug({
                 hypothesisId: 'E',
