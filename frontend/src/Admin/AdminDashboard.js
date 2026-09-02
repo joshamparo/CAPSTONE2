@@ -1038,6 +1038,9 @@ function AdminDashboard() {
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // ID of staff to delete
   const [deleteConfirmationError, setDeleteConfirmationError] = useState("");
   const [deleteConfirmationLoading, setDeleteConfirmationLoading] = useState(false);
+  const [reactivateConfirmation, setReactivateConfirmation] = useState(null);
+  const [reactivateConfirmationError, setReactivateConfirmationError] = useState("");
+  const [reactivateConfirmationLoading, setReactivateConfirmationLoading] = useState(false);
   const [viewingStaff, setViewingStaff] = useState(null);
   const [resendingInvitationId, setResendingInvitationId] = useState(null);
 
@@ -2776,6 +2779,42 @@ function AdminDashboard() {
     if (deleteConfirmationLoading) return;
     setDeleteConfirmationError("");
     setDeleteConfirmation(null);
+  };
+
+  const handleReactivateStaff = (staff) => {
+    setReactivateConfirmationError("");
+    setReactivateConfirmation(staff);
+  };
+
+  const confirmReactivateStaff = async (typedConfirmation) => {
+    if (!reactivateConfirmation?.id || reactivateConfirmationLoading) return;
+    setReactivateConfirmationError("");
+    setReactivateConfirmationLoading(true);
+    try {
+      const result = await fetchJson(`/api/staff/${reactivateConfirmation.id}/reactivate`, {
+        apiBase: API_BASE,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ confirmation: String(typedConfirmation || '').trim() })
+      });
+      const restoredId = reactivateConfirmation.id;
+      setDeactivatedStaffList((current) => current.filter((staff) => String(staff.id) !== String(restoredId)));
+      setReactivateConfirmation(null);
+      await fetchStaff();
+      setModalType('success');
+      setSuccessMessage(result?.message || 'Staff account reactivated. A new setup link was sent.');
+      setShowSuccessModal(true);
+    } catch (error) {
+      setReactivateConfirmationError(String(error?.message || 'Failed to reactivate staff account.'));
+    } finally {
+      setReactivateConfirmationLoading(false);
+    }
+  };
+
+  const cancelReactivateStaff = () => {
+    if (reactivateConfirmationLoading) return;
+    setReactivateConfirmationError("");
+    setReactivateConfirmation(null);
   };
 
   const handleUpdateIncidentStatus = async (id, newStatus) => {
@@ -6827,6 +6866,12 @@ function AdminDashboard() {
                                 <EyeIcon size={16} />
                                 View
                               </button>
+                              {isDeactivated ? (
+                                <button type="button" className="inc-btn inc-btn-ghost" onClick={() => handleReactivateStaff(staff)}>
+                                  <RefreshCw size={16} />
+                                  Reactivate
+                                </button>
+                              ) : null}
                               {!isDeactivated ? <button type="button" className="inc-btn inc-btn-ghost" onClick={() => handleEditStaff(staff)}>
                                 <Edit size={16} />
                                 Edit
@@ -8609,6 +8654,23 @@ function AdminDashboard() {
           confirmDisabled={deleteConfirmationLoading}
           cancelDisabled={deleteConfirmationLoading}
           error={deleteConfirmationError}
+        />
+      )}
+
+      {reactivateConfirmation && (
+        <ConfirmModal
+          open={Boolean(reactivateConfirmation)}
+          onClose={cancelReactivateStaff}
+          onConfirm={confirmReactivateStaff}
+          title="Reactivate staff account?"
+          message="The old password will be invalidated and a fresh one-time setup link will be sent to this staff member."
+          subtext={`${reactivateConfirmation.firstName || ''} ${reactivateConfirmation.lastName || ''}`.trim() || reactivateConfirmation.email || ''}
+          requiredText={`${reactivateConfirmation.firstName || ''} ${reactivateConfirmation.lastName || ''}`.trim() || reactivateConfirmation.email || ''}
+          cancelLabel="Cancel"
+          confirmLabel={reactivateConfirmationLoading ? 'Reactivating...' : 'Reactivate'}
+          confirmDisabled={reactivateConfirmationLoading}
+          cancelDisabled={reactivateConfirmationLoading}
+          error={reactivateConfirmationError}
         />
       )}
 

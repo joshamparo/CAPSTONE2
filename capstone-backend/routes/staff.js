@@ -338,6 +338,11 @@ const recoveryRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 4, 
 const tokenVerifyRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30, key: tokenRateKey });
 const passwordResetRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 8, key: tokenRateKey });
 const invitationRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 4, key: emailRateKey });
+const reactivationRateLimit = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 6,
+    key: (req) => `${normalizeEmail(req.auth?.email || '') || req.ip || 'admin'}:${String(req.params?.id || '')}`
+});
 
 function inferRequester(req) {
     const role = normalizeRole(req.headers['x-user-role'] || '');
@@ -2593,6 +2598,86 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
         res.json({ success: true, message: "Staff account deactivated. Historical records were preserved.", email: email || null });
     } catch (err) {
         res.status(500).json({ message: "Server error" });
+    }
+});
+
+router.post('/:id/reactivate', requireRole(['admin']), reactivationRateLimit, async (req, res) => {
+    try {
+        const id = String(req.params.id || '').trim();
+        const result = await findUserById(id);
+        if (!result) return res.status(404).json({ message: 'Staff account not found.' });
+        if (result.user.is_active !== false) return res.status(409).json({ message: 'This staff account is already active.' });
+
+        const email = normalizeEmail(result.user.email || '');
+        if (!email) return res.status(409).json({ message: 'This archived account has no valid email address and cannot be reactivated.' });
+
+        const displayName = inferDisplayNameFromUser(result, email);
+        const confirmation = String(req.body?.confirmation || '').trim();
+        if (!confirmation || confirmation.localeCompare(displayName, undefined, { sensitivity: 'accent' }) !== 0) {
+            return res.status(400).json({ message: `Type "${displayName}" exactly to reactivate this account.` });
+        }
+
+        const activeMatches = await findAllUsersByEmail(email);
+        if (activeMatches.length > 0) {
+            return res.status(409).json({ message: 'An active account already uses this email address. Resolve that account before reactivating this one.' });
+        }
+
+        const archivedMatches = [];
+        for (const model of ['staff', 'nurses', 'doctors', 'accounts']) {
+            const user = await prisma[model].findFirst({
+                where: { email: { equals: email, mode: 'insensitive' }, is_active: false }
+            }).catch(() => null);
+            if (user) archivedMatches.push({ model, user });
+        }
+        const canonical = selectCanonicalAccount(archivedMatches);
+        if (!canonical.selected || canonical.conflicting) {
+            return res.status(409).json({ message: 'Conflicting archived account records must be resolved before this account can be reactivated.' });
+        }
+
+        const invitation = createPasswordResetToken();
+        const lockedPassword = await bcrypt.hash(crypto.randomBytes(48).toString('base64url'), 10);
+        const actorEmail = normalizeEmail(req.auth?.email || req.headers['x-user-email'] || '') || 'admin';
+        const targetRole = normalizeRole(result.user.account_type || result.user.roles || (result.model === 'doctors' ? 'doctor' : result.model === 'nurses' ? 'nurse' : 'staff'));
+        const reactivateData = {
+            is_active: true,
+            archived_at: null,
+            archived_by: null,
+            status: 'Offline',
+            password: lockedPassword,
+            must_change_password: true,
+            reset_password_token: invitation.tokenHash,
+            reset_password_expires: invitation.expiresAt
+        };
+
+        await prisma.$transaction([
+            prisma.staff.updateMany({ where: { email: { equals: email, mode: 'insensitive' }, is_active: false }, data: reactivateData }),
+            prisma.nurses.updateMany({ where: { email: { equals: email, mode: 'insensitive' }, is_active: false }, data: reactivateData }),
+            prisma.doctors.updateMany({ where: { email: { equals: email, mode: 'insensitive' }, is_active: false }, data: reactivateData }),
+            prisma.accounts.updateMany({ where: { email: { equals: email, mode: 'insensitive' }, is_active: false }, data: reactivateData }),
+            prisma.activity_logs.create({
+                data: {
+                    actor_name: actorEmail,
+                    role: 'Admin',
+                    action: 'Reactivate User',
+                    details: `Reactivated ${displayName} (${targetRole}); old password invalidated and a new setup link issued.`,
+                    target: email
+                }
+            })
+        ]);
+
+        router._staffListCache = null;
+        const delivery = await deliverStaffInvitation({ name: displayName, email, rawToken: invitation.token });
+        return res.status(delivery.invitationSent ? 200 : 202).json({
+            success: true,
+            reactivated: true,
+            ...delivery,
+            message: delivery.invitationSent
+                ? 'Staff account reactivated. A new secure setup link was sent.'
+                : 'Staff account reactivated, but the setup email could not be delivered. Use Resend setup from Active Staff.'
+        });
+    } catch (error) {
+        console.error('[Staff reactivation] Failed:', error?.message || error);
+        return res.status(500).json({ message: 'Unable to reactivate this staff account right now.' });
     }
 });
 
