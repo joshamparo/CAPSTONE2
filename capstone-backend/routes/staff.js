@@ -151,16 +151,11 @@ function ensureStaffActivationSchemaOnce() {
     return staffActivationSchemaPromise;
 }
 
-// Prisma selects declared model fields even for ordinary account lookups. Wait
-// for legacy production databases to receive the activation columns first.
-router.use(async (_req, res, next) => {
-    try {
-        await ensureStaffActivationSchemaOnce();
-        next();
-    } catch (error) {
-        console.error('[Staff activation] Database schema setup failed:', error?.message || error);
-        res.status(503).json({ message: 'Staff account service is updating its database. Please try again shortly.' });
-    }
+// Schema compatibility runs in the background. Never put login or other staff
+// requests behind runtime DDL: concurrent Railway instances can contend on
+// ALTER TABLE locks even when every required column already exists.
+ensureStaffActivationSchemaOnce().catch((error) => {
+    console.error('[Staff activation] Background schema setup failed:', error?.message || error);
 });
 
 async function ensureUserSettingsSchema() {

@@ -116,12 +116,15 @@ const Login = () => {
     {
         // Authenticate every account through the backend so protected API
         // requests receive a signed session token.
+        const controller = new AbortController();
+        const loginTimeout = window.setTimeout(() => controller.abort(), 15000);
         try {
           setIsSubmitting(true);
           const res = await fetch(`${API_BASE}/api/staff/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email.trim(), password: password.trim() })
+            body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+            signal: controller.signal
           });
     
           if (res.ok) {
@@ -138,11 +141,14 @@ const Login = () => {
           }
         } catch (err) {
           console.error("Login API connection error:", err);
-          setError("Cannot connect to the server. Please try again later.");
-          setIsSubmitting(false);
+          setError(err?.name === 'AbortError'
+            ? 'Login request timed out. Please try again.'
+            : 'Cannot connect to the server. Please try again later.');
           return; 
+        } finally {
+          window.clearTimeout(loginTimeout);
+          setIsSubmitting(false);
         }
-        setIsSubmitting(false);
     }
 
     if (isValid) {
