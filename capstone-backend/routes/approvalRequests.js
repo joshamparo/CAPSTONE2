@@ -660,19 +660,57 @@ router.get('/inbox', async (req, res) => {
       }
     } else
     if (role === 'doctor' && doctorId) {
+      const doctor = await prisma.doctors.findUnique({
+        where: { id: doctorId },
+        select: { specialization: true }
+      }).catch(() => null);
+      const specialization = String(doctor?.specialization || '').trim();
+      const specializationVariants = [specialization];
+      const specLower = specialization.toLowerCase();
+      if (specLower.includes('pedi')) specializationVariants.push('Pedia', 'Pediatrics');
+      if (specLower.includes('ortho')) specializationVariants.push('Ortho', 'Orthopedics');
+      if (specLower.includes('obstetric') || specLower.includes('gyne') || specLower.includes('obgyn')) specializationVariants.push('OB-GYN', 'OBGYN');
+      if (specLower.includes('otorhin') || specLower.includes('otolaryng') || specLower === 'ent') specializationVariants.push('ENT');
+      if (specLower.includes('ophthalm') || specLower.includes('optha')) specializationVariants.push('Optha', 'Ophthalmology');
+      const uniqueVariants = [...new Set(specializationVariants.map((v) => String(v || '').trim()).filter(Boolean))];
+
+      const doctorIdIndex = i++;
+      params.push(doctorId);
+      let nameClause = '';
+      if (name) {
+        const nameIndex = i++;
+        params.push(name);
+        nameClause = `OR regexp_replace(regexp_replace(lower(coalesce(r.doctor_name, '')), '^(dr\\.?\\s*)', ''), '\\s+', ' ', 'g')
+              = regexp_replace(regexp_replace(lower($${nameIndex}), '^(dr\\.?\\s*)', ''), '\\s+', ' ', 'g')`;
+      }
+
+      let specializationClause = '';
+      if (uniqueVariants.length) {
+        const variantStart = i;
+        params.push(...uniqueVariants);
+        i += uniqueVariants.length;
+        const routeExpr = `lower(concat_ws(' ', coalesce(r.department_key,''), coalesce(r.service_name,''), coalesce(r.service_type,''), coalesce(r.reason,''), coalesce(r.doctor_name,'')))`;
+        const variantMatches = uniqueVariants
+          .map((_, idx) => `${routeExpr} LIKE '%' || lower($${variantStart + idx}) || '%'`)
+          .join(' OR ');
+        const doctorNameExpr = `lower(trim(coalesce(r.doctor_name,'')))`;
+        const unassignedNameMatches = uniqueVariants
+          .map((_, idx) => `${doctorNameExpr} LIKE '%' || lower($${variantStart + idx}) || '%'`)
+          .join(' OR ');
+        specializationClause = `OR (
+          r.doctor_id IS NULL
+          AND (${doctorNameExpr} IN ('','doctor','dr','dr.','unknown','n/a','na') OR ${unassignedNameMatches})
+          AND (${variantMatches})
+        )`;
+      }
+
       where = `
         WHERE (
-          r.doctor_id = $${i}::uuid
-          ${name ? `OR regexp_replace(regexp_replace(lower(coalesce(r.doctor_name, '')), '^(dr\\.?\\s*)', ''), '\\s+', ' ', 'g')
-              = regexp_replace(regexp_replace(lower($${i + 1}), '^(dr\\.?\\s*)', ''), '\\s+', ' ', 'g')` : ''}
+          r.doctor_id = $${doctorIdIndex}::uuid
+          ${nameClause}
+          ${specializationClause}
         )
       `;
-      params.push(doctorId);
-      i += 1;
-      if (name) {
-        params.push(name);
-        i += 1;
-      }
     } else
     if ((role === 'nurse' && department) || ROLE_SERVICE_KEYS[role]) {
       const deptNorm = String(department || '').trim().toLowerCase();
