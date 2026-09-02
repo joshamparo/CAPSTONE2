@@ -142,7 +142,8 @@ function inferRequester(req) {
   const role = String(req.headers['x-user-role'] || '').trim().toLowerCase();
   const name = String(req.headers['x-user-name'] || '').trim();
   const email = String(req.headers['x-user-email'] || '').trim();
-  return { role: role || '', name: name || '', email: email || '' };
+  const id = String(req.auth?.id || req.headers['x-user-id'] || '').trim();
+  return { role: role || '', name: name || '', email: email || '', id };
 }
 
 function timeToDateObj(hhmm) {
@@ -296,10 +297,20 @@ async function resolveSignedDoctor(hdr) {
     err.statusCode = 403;
     throw err;
   }
-  const doctor = await prisma.doctors.findFirst({
-    where: { email: { equals: hdr.email, mode: 'insensitive' } },
-    select: { id: true, first_name: true, last_name: true, specialization: true, email: true }
-  }).catch(() => null);
+  const select = { id: true, first_name: true, last_name: true, specialization: true, email: true };
+  let doctor = isUuid(hdr.id)
+    ? await prisma.doctors.findUnique({ where: { id: hdr.id }, select }).catch(() => null)
+    : null;
+  // The signed session UUID is authoritative. The email fallback only supports
+  // legacy sessions created before the UUID was included in the session token.
+  if (doctor && String(doctor.email || '').trim().toLowerCase() !== hdr.email.toLowerCase()) doctor = null;
+  if (!doctor) {
+    doctor = await prisma.doctors.findFirst({
+      where: { email: { equals: hdr.email, mode: 'insensitive' } },
+      orderBy: { created_at: 'desc' },
+      select
+    }).catch(() => null);
+  }
   if (!doctor) {
     const err = new Error('Doctor account is not linked to a doctor record.');
     err.statusCode = 403;
@@ -309,8 +320,30 @@ async function resolveSignedDoctor(hdr) {
     id: String(doctor.id),
     name: `${String(doctor.first_name || '').trim()} ${String(doctor.last_name || '').trim()}`.trim(),
     specialization: String(doctor.specialization || '').trim(),
+    email: String(doctor.email || '').trim(),
     variants: specializationVariants(doctor.specialization)
   };
+}
+
+async function canonicalizeLegacyDoctorAssignments(doctor) {
+  if (!doctor?.id || !doctor?.email) return;
+  // PostgreSQL unique email constraints are case-sensitive. Older imports could
+  // therefore leave two doctor UUIDs for the same login email. Only pending,
+  // appointment-less requests for that exact case-insensitive email are moved.
+  await prisma.$executeRaw`
+    UPDATE appointment_approval_requests r
+    SET doctor_id = ${doctor.id}::uuid,
+        doctor_name = ${`Dr. ${doctor.name}`},
+        updated_at = now()
+    WHERE r.doctor_id <> ${doctor.id}::uuid
+      AND r.status IN ('Pending', 'Suggested')
+      AND r.appointment_id IS NULL
+      AND r.doctor_id IN (
+        SELECT d.id
+        FROM doctors d
+        WHERE lower(trim(d.email)) = lower(trim(${doctor.email}))
+      )
+  `;
 }
 
 function doctorCanAccessRequest(requestRow, doctor) {
@@ -652,6 +685,7 @@ router.get('/inbox', async (req, res) => {
 
     if (role === 'doctor' && hdr.role !== 'admin') {
       const signedDoctor = await resolveSignedDoctor(hdr);
+      await canonicalizeLegacyDoctorAssignments(signedDoctor);
       doctorId = signedDoctor.id;
       name = signedDoctor.name;
     }
@@ -768,8 +802,8 @@ router.get('/inbox', async (req, res) => {
       if (name) {
         const nameIndex = i++;
         params.push(name);
-        nameClause = `OR regexp_replace(regexp_replace(lower(coalesce(r.doctor_name, '')), '^(dr\\.?\\s*)', ''), '\\s+', ' ', 'g')
-              = regexp_replace(regexp_replace(lower($${nameIndex}), '^(dr\\.?\\s*)', ''), '\\s+', ' ', 'g')`;
+        nameClause = `OR (r.doctor_id IS NULL AND regexp_replace(regexp_replace(lower(coalesce(r.doctor_name, '')), '^(dr\\.?\\s*)', ''), '\\s+', ' ', 'g')
+              = regexp_replace(regexp_replace(lower($${nameIndex}), '^(dr\\.?\\s*)', ''), '\\s+', ' ', 'g'))`;
       }
 
       let specializationClause = '';
@@ -1377,6 +1411,12 @@ router.patch('/:id', async (req, res) => {
 
     let verifiedDoctor = null;
     if (role === 'doctor' && hdr.role !== 'admin') {
+      verifiedDoctor = await resolveSignedDoctor(hdr);
+      await canonicalizeLegacyDoctorAssignments(verifiedDoctor);
+      const refreshedRows = await prisma.$queryRaw`
+        SELECT * FROM appointment_approval_requests WHERE id = ${id} LIMIT 1
+      `;
+      requestRow = Array.isArray(refreshedRows) ? refreshedRows[0] : requestRow;
       verifiedDoctor = await requireDoctorRequestAccess(requestRow, hdr);
       if (!requestRow.doctor_id) {
         const claimedRows = await prisma.$queryRaw`
