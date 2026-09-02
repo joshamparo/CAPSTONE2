@@ -116,7 +116,6 @@ export default function AccountHeaderActions({
   const announcementHideRef = useRef(null);
   const announcementPollRef = useRef(null);
   const announcementSseRef = useRef(null);
-  const notifSseRef = useRef(null);
   const quietHoursRef = useRef(false);
 
   const name = useMemo(() => getDisplayName(user), [user]);
@@ -382,39 +381,6 @@ export default function AccountHeaderActions({
     const t = setInterval(() => fetchNotifications({ silent: true }), 30000);
     return () => clearInterval(t);
   }, [rawRole, userEmail, authHeaders]);
-
-  useEffect(() => {
-    if (!rawRole || !userEmail) return;
-    if (typeof window === 'undefined' || typeof window.EventSource === 'undefined') return;
-    if (rawRole === 'admin') return;
-
-    try {
-      if (notifSseRef.current) notifSseRef.current.close();
-    } catch (_) {}
-
-    const url = `${API_BASE}/api/staff/notifications/stream?role=${encodeURIComponent(rawRole)}&email=${encodeURIComponent(userEmail)}&name=${encodeURIComponent(name)}`;
-    const es = new EventSource(url);
-    notifSseRef.current = es;
-
-    const onNotif = () => fetchNotifications({ silent: true });
-    es.addEventListener('notif', onNotif);
-    es.addEventListener('hello', () => {});
-    es.addEventListener('error', () => {});
-    es.onerror = () => {
-      try {
-        es.close();
-      } catch (_) {}
-      if (notifSseRef.current === es) notifSseRef.current = null;
-    };
-
-    return () => {
-      try {
-        es.removeEventListener('notif', onNotif);
-        es.close();
-      } catch (_) {}
-      if (notifSseRef.current === es) notifSseRef.current = null;
-    };
-  }, [rawRole, userEmail, name, authHeaders]);
 
   useEffect(() => {
     if (!rawRole || !userEmail) return;

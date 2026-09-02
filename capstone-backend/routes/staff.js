@@ -25,6 +25,7 @@ function safeAccountResponse(record) {
     delete result.password;
     delete result.reset_password_token;
     delete result.reset_password_expires;
+    delete result.session_version;
     return result;
 }
 
@@ -348,7 +349,8 @@ const reactivationRateLimit = createRateLimiter({
 function inferRequester(req) {
     const role = normalizeRole(req.headers['x-user-role'] || '');
     const email = normalizeEmail(req.headers['x-user-email'] || '');
-    const explicitName = String(req.headers['x-user-name'] || '').trim();
+    // Display identity is resolved from the signed email, never from a client header.
+    const explicitName = '';
     const patientId = String(req.headers['x-patient-id'] || '').trim();
     return { role, email, explicitName, patientId };
 }
@@ -598,6 +600,11 @@ router.get('/by-email', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
     try {
         const email = normalizeEmail(req.query.email || '');
         if (!email) return res.status(400).json({ message: 'email is required' });
+        const requesterRole = normalizeRole(req.auth?.role || '');
+        const requesterEmail = normalizeEmail(req.auth?.email || '');
+        if (requesterRole !== 'admin' && requesterEmail !== email) {
+            return res.status(403).json({ message: 'You can only view your own staff profile.' });
+        }
 
         let user = await prisma.staff.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
         let modelType = 'staff';
@@ -615,7 +622,7 @@ router.get('/by-email', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         }
         if (!user) return res.status(404).json({ message: 'User not found' });
 
-        const { password: _, ...userData } = user;
+        const userData = safeAccountResponse(user);
         const avatarUrl = await getAvatarUrl(modelType, user.id).catch(() => null);
         res.json({ ...userData, id: user.id ? user.id.toString() : undefined, avatarUrl, account_type: user.account_type || user.roles || modelType });
     } catch (err) {
@@ -1962,10 +1969,10 @@ router.get('/notifications', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) 
     }
 });
 
-router.get('/notifications/stream', async (req, res) => {
-    const role = normalizeRole(req.query.role || req.headers['x-user-role'] || '');
-    const email = normalizeEmail(req.query.email || req.headers['x-user-email'] || '');
-    const explicitName = String(req.query.name || req.headers['x-user-name'] || '').trim();
+router.get('/notifications/stream', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
+    const role = normalizeRole(req.auth?.role || '');
+    const email = normalizeEmail(req.auth?.email || '');
+    const explicitName = '';
     if (!role || !email) return res.status(401).json({ message: 'Unauthorized' });
 
     res.status(200);
@@ -2283,10 +2290,16 @@ router.post('/notifications/mark-read', requireRole(STAFF_ACCOUNT_TYPES), async 
 });
 
 // READ One
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
     try {
         const result = await findUserById(req.params.id);
         if (result) {
+            const requesterRole = normalizeRole(req.auth?.role || '');
+            const requesterEmail = normalizeEmail(req.auth?.email || '');
+            const targetEmail = normalizeEmail(result.user?.email || '');
+            if (requesterRole !== 'admin' && (!requesterEmail || requesterEmail !== targetEmail)) {
+                return res.status(403).json({ message: 'You can only view your own staff profile.' });
+            }
             const user = { ...safeAccountResponse(result.user), id: result.user.id ? result.user.id.toString() : undefined };
             if (user.contact_number) user.contact_number = user.contact_number.toString();
             res.json(user);
