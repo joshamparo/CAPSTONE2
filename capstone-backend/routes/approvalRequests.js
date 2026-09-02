@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { createClient } = require('@supabase/supabase-js');
+const { recordVideoConsultationPayment } = require('../utils/billingLedger');
 
 let supabaseAdmin = null;
 function isUuid(value) {
@@ -107,6 +108,15 @@ async function ensureTables() {
   await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS service_category text;`);
   await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS department_key text;`);
   await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS service_name text;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS booking_ref text;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS paymongo_checkout_session_id text;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS paymongo_payment_id text;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS paymongo_event_id text;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS payment_status text;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS paid_at timestamptz;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS amount integer;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS currency text;`);
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS appointment_approval_requests_booking_ref_uidx ON appointment_approval_requests(booking_ref) WHERE booking_ref IS NOT NULL;`);
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS appointment_messages (
@@ -446,9 +456,44 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
       doctor_uuid: doctorUuid || null,
       patient_id: patient.patientId,
       consultation_mode: consultationMode,
-      status: 'Confirmed'
+      status: 'Confirmed',
+      ...(consultationMode === 'video' ? {
+        paymongo_checkout_session_id: requestRow.paymongo_checkout_session_id || null,
+        paymongo_payment_id: requestRow.paymongo_payment_id || null,
+        paymongo_event_id: requestRow.paymongo_event_id || null,
+        payment_status: requestRow.payment_status || null,
+        paid_at: requestRow.paid_at ? new Date(requestRow.paid_at) : null,
+        amount: requestRow.amount != null ? Number(requestRow.amount) : null,
+        currency: requestRow.currency || 'PHP'
+      } : {})
     }
   });
+
+  if (consultationMode === 'video') {
+    await prisma.appointments.update({
+      where: { id: BigInt(appt.id) },
+      data: { meeting_room_id: `pascualinga-${String(appt.id)}`, meeting_created_at: new Date() }
+    }).catch((err) => console.error('[Video Approval] Failed to create meeting room:', err?.message));
+    if (String(requestRow.payment_status || '').toLowerCase() === 'paid') {
+      await recordVideoConsultationPayment(prisma, {
+        appointmentId: BigInt(appt.id),
+        patientId: patient.patientId,
+        patientName: [patient.firstName, patient.lastName].filter(Boolean).join(' ').trim() || requestRow.patient_name || null,
+        doctorName,
+        serviceType: requestRow.service_type || requestRow.department_key || 'Video Consultation',
+        amount: requestRow.amount != null ? Number(requestRow.amount) : 0,
+        paymentReference: requestRow.paymongo_payment_id || requestRow.paymongo_checkout_session_id || requestRow.booking_ref || null,
+        receivedBy: 'paymongo-webhook'
+      }).catch((err) => console.error('[Video Approval] Failed to sync paid invoice:', err?.message));
+    }
+    if (requestRow.booking_ref) {
+      await prisma.$executeRaw`
+        UPDATE video_booking_holds
+        SET status = 'APPOINTMENT_CREATED', appointment_id = ${BigInt(appt.id)}, updated_at = now()
+        WHERE booking_ref = ${String(requestRow.booking_ref)}
+      `.catch((err) => console.error('[Video Approval] Failed to link booking hold:', err?.message));
+    }
+  }
 
   const updatedRows = await prisma.$queryRaw`
     UPDATE appointment_approval_requests
@@ -1200,6 +1245,14 @@ router.patch('/:id', async (req, res) => {
       id
     );
     const updated = Array.isArray(rows) ? rows[0] : rows;
+
+    if (status === 'Rejected' && requestRow.booking_ref) {
+      await prisma.$executeRaw`
+        UPDATE video_booking_holds
+        SET status = 'REJECTED', updated_at = now()
+        WHERE booking_ref = ${String(requestRow.booking_ref)}
+      `.catch((err) => console.error('[Video Approval] Failed to mark booking rejected:', err?.message));
+    }
 
     const roleName = role.charAt(0).toUpperCase() + role.slice(1);
     const systemBody = status === 'Approved'

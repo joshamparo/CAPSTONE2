@@ -3,7 +3,6 @@ const crypto = require('crypto');
 const { Prisma } = require('@prisma/client');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
-const { recordVideoConsultationPayment } = require('../utils/billingLedger');
 
 const router = express.Router();
 
@@ -26,6 +25,7 @@ async function ensureVideoBookingTables() {
       status TEXT NOT NULL DEFAULT 'HOLD',
       expires_at TIMESTAMPTZ NOT NULL,
       appointment_id BIGINT NULL,
+      approval_request_id BIGINT NULL,
       paymongo_checkout_session_id TEXT NULL,
       paymongo_checkout_url TEXT NULL,
       paymongo_payment_id TEXT NULL,
@@ -40,6 +40,19 @@ async function ensureVideoBookingTables() {
   await prisma.$executeRawUnsafe(`ALTER TABLE video_booking_holds ADD COLUMN IF NOT EXISTS slot_date date;`);
   await prisma.$executeRawUnsafe(`ALTER TABLE video_booking_holds ADD COLUMN IF NOT EXISTS slot_time time;`);
   await prisma.$executeRawUnsafe(`ALTER TABLE video_booking_holds ADD COLUMN IF NOT EXISTS doctor_id uuid;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE video_booking_holds ADD COLUMN IF NOT EXISTS approval_request_id bigint;`);
+
+  // A paid video booking waits in the doctor's existing approval inbox before
+  // an appointment is created. Keep its payment data on that pending request.
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS booking_ref text;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS paymongo_checkout_session_id text;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS paymongo_payment_id text;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS paymongo_event_id text;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS payment_status text;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS paid_at timestamptz;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS amount integer;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS currency text;`);
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS appointment_approval_requests_booking_ref_uidx ON appointment_approval_requests(booking_ref) WHERE booking_ref IS NOT NULL;`);
 
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS video_booking_holds_doctor_start_idx ON video_booking_holds(doctor_name, start_at);`);
   await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS video_booking_holds_patient_idx ON video_booking_holds(patient_id, created_at DESC);`);
@@ -669,7 +682,7 @@ router.post('/checkout', requireRole(['patient']), async (req, res) => {
     }
 
     const status = String(hold.status || '').trim().toUpperCase();
-    if (status === 'PAID' || status === 'APPOINTMENT_CREATED') {
+    if (status === 'PAID' || status === 'APPROVAL_PENDING' || status === 'APPOINTMENT_CREATED') {
       return res.json({ bookingRef, status: status.toLowerCase() });
     }
 
@@ -835,7 +848,8 @@ router.post('/paymongo/webhook', async (req, res) => {
     const rows = await prisma.$queryRaw(
       Prisma.sql`
         SELECT booking_ref, patient_id, patient_email, patient_name, doctor_name, doctor_id, specialization, service_type,
-               start_at, end_at, slot_date, slot_time, status, expires_at, amount, currency, appointment_id, paymongo_event_id
+               start_at, end_at, slot_date, slot_time, status, expires_at, amount, currency, appointment_id,
+               approval_request_id, paymongo_event_id
         FROM video_booking_holds
         WHERE booking_ref = ${String(bookingRef)}
         LIMIT 1
@@ -883,10 +897,6 @@ router.post('/paymongo/webhook', async (req, res) => {
     const day = hold.slot_date ? new Date(hold.slot_date).toISOString().slice(0, 10) : null;
     const time = hold.slot_time ? String(hold.slot_time).slice(0, 5) : null;
     if (!day || !time) return res.json({ ok: true });
-    const dummyDate = new Date();
-    const [hh, mm] = time.split(':');
-    dummyDate.setHours(parseInt(hh, 10), parseInt(mm, 10), 0, 0);
-
     let firstName = null;
     let lastName = null;
     let patientEmail = hold.patient_email ? String(hold.patient_email) : null;
@@ -912,66 +922,45 @@ router.post('/paymongo/webhook', async (req, res) => {
     const holdDoctorId = hold.doctor_id ? String(hold.doctor_id).trim() : '';
     const doctorUuid = holdDoctorId || (doctorName ? await resolveDoctorUuidFromDoctorName(doctorName) : null);
 
-    const newAppointment = await prisma.appointments.create({
-      data: {
-        first_name: firstName,
-        last_name: lastName,
-        email: patientEmail,
-        doctor_id: doctorName || null,
-        ...(doctorUuid ? { doctor_uuid: doctorUuid } : {}),
-        // Keep the department in the appointment reason. Doctor dashboards use
-        // this value when showing department-wide video bookings, and a generic
-        // "Video Consultation - Video Consultation" reason cannot be routed to
-        // Orthopedics (or any other specialization).
-        reason: (() => {
-          const specialization = String(hold.specialization || '').trim();
-          const serviceType = String(hold.service_type || '').trim();
-          if (specialization) {
-            const detail = serviceType && !/^video consultation$/i.test(serviceType)
-              ? `: ${serviceType.replace(/^video consultation\s*-?\s*/i, '').trim()}`
-              : '';
-            return `Video Consultation - ${specialization}${detail}`;
-          }
-          return serviceType ? `Video Consultation - ${serviceType}` : 'Video Consultation';
-        })(),
-        appointment_date: new Date(day),
-        appointment_time: dummyDate,
-        status: 'Confirmed',
-        patient_id: patientId,
-        consultation_mode: 'video',
-        paymongo_checkout_session_id: checkoutId,
-        paymongo_payment_id: paymentId,
-        paymongo_event_id: eventId,
-        payment_status: 'paid',
-        paid_at: new Date(),
-        amount: hold.amount ? Number(hold.amount) : null,
-        currency: hold.currency ? String(hold.currency) : 'PHP'
-      }
-    });
+    if (!doctorUuid) throw new Error('Paid booking has no valid assigned doctor.');
+    const specialization = String(hold.specialization || '').trim();
+    const serviceType = String(hold.service_type || '').trim() || 'Video Consultation';
+    const patientName = [firstName, lastName].filter(Boolean).join(' ').trim()
+      || String(hold.patient_name || '').trim()
+      || patientEmail
+      || 'Patient';
+    const reason = `Video Consultation${specialization ? ` - ${specialization}` : ''} (Paid; PAYREF:${paymentId || checkoutId || bookingRef})`;
 
-    await recordVideoConsultationPayment(prisma, {
-      appointmentId: BigInt(newAppointment.id),
-      patientId,
-      patientName: [firstName, lastName].filter(Boolean).join(' ').trim() || String(hold.patient_name || '').trim() || null,
-      doctorName: doctorName || null,
-      serviceType: hold.service_type ? String(hold.service_type) : 'Video Consultation',
-      amount: hold.amount ? Number(hold.amount) : 0,
-      paymentReference: paymentId || checkoutId || String(bookingRef),
-      receivedBy: 'paymongo-webhook'
-    });
-
-    await prisma.appointments
-      .update({
-        where: { id: BigInt(newAppointment.id) },
-        data: { meeting_room_id: makeRoomId(newAppointment.id), meeting_created_at: new Date() }
-      })
-      .catch(() => {});
+    const requestRows = await prisma.$queryRaw(
+      Prisma.sql`
+        INSERT INTO appointment_approval_requests (
+          patient_id, patient_name, doctor_name, doctor_id, nurse_name,
+          requested_date, requested_time, service_type, service_category,
+          department_key, service_name, reason, status, booking_ref,
+          paymongo_checkout_session_id, paymongo_payment_id, paymongo_event_id,
+          payment_status, paid_at, amount, currency, created_at, updated_at
+        ) VALUES (
+          ${patientId}::uuid, ${patientName}, ${doctorName || null}, ${doctorUuid}::uuid, 'Online Consultation',
+          ${day}::date, ${time}::time, ${serviceType}, 'consultation',
+          ${specialization || serviceType}, ${specialization || serviceType}, ${reason}, 'Pending', ${String(bookingRef)},
+          ${checkoutId}, ${paymentId}, ${eventId}, 'paid', now(),
+          ${hold.amount ? Number(hold.amount) : null}, ${hold.currency ? String(hold.currency) : 'PHP'}, now(), now()
+        )
+        ON CONFLICT (booking_ref) WHERE booking_ref IS NOT NULL
+        DO UPDATE SET
+          paymongo_event_id = EXCLUDED.paymongo_event_id,
+          paymongo_payment_id = COALESCE(appointment_approval_requests.paymongo_payment_id, EXCLUDED.paymongo_payment_id),
+          payment_status = 'paid', paid_at = COALESCE(appointment_approval_requests.paid_at, now()), updated_at = now()
+        RETURNING id
+      `
+    );
+    const approvalRequestId = Array.isArray(requestRows) ? requestRows[0]?.id : requestRows?.id;
 
     await prisma.$executeRaw(
       Prisma.sql`
         UPDATE video_booking_holds
-        SET status = 'APPOINTMENT_CREATED',
-            appointment_id = ${BigInt(newAppointment.id)},
+        SET status = 'APPROVAL_PENDING',
+            approval_request_id = ${approvalRequestId ? BigInt(approvalRequestId) : null},
             paymongo_checkout_session_id = ${checkoutId},
             paymongo_payment_id = ${paymentId},
             paymongo_event_id = ${eventId},
