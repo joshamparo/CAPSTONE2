@@ -1041,6 +1041,9 @@ function AdminDashboard() {
   const [reactivateConfirmation, setReactivateConfirmation] = useState(null);
   const [reactivateConfirmationError, setReactivateConfirmationError] = useState("");
   const [reactivateConfirmationLoading, setReactivateConfirmationLoading] = useState(false);
+  const [permanentDeleteConfirmation, setPermanentDeleteConfirmation] = useState(null);
+  const [permanentDeleteError, setPermanentDeleteError] = useState("");
+  const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false);
   const [viewingStaff, setViewingStaff] = useState(null);
   const [resendingInvitationId, setResendingInvitationId] = useState(null);
 
@@ -2815,6 +2818,41 @@ function AdminDashboard() {
     if (reactivateConfirmationLoading) return;
     setReactivateConfirmationError("");
     setReactivateConfirmation(null);
+  };
+
+  const handlePermanentDeleteStaff = (staff) => {
+    setPermanentDeleteError("");
+    setPermanentDeleteConfirmation(staff);
+  };
+
+  const confirmPermanentDeleteStaff = async (typedConfirmation) => {
+    if (!permanentDeleteConfirmation?.id || permanentDeleteLoading) return;
+    setPermanentDeleteError("");
+    setPermanentDeleteLoading(true);
+    try {
+      await fetchJson(`/api/staff/${permanentDeleteConfirmation.id}/permanent`, {
+        apiBase: API_BASE,
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ confirmation: String(typedConfirmation || '').trim() })
+      });
+      const deletedId = permanentDeleteConfirmation.id;
+      setDeactivatedStaffList((current) => current.filter((staff) => String(staff.id) !== String(deletedId)));
+      setPermanentDeleteConfirmation(null);
+      setModalType('success');
+      setSuccessMessage('Deactivated staff account permanently deleted. Historical records were preserved.');
+      setShowSuccessModal(true);
+    } catch (error) {
+      setPermanentDeleteError(String(error?.message || 'Failed to permanently delete staff account.'));
+    } finally {
+      setPermanentDeleteLoading(false);
+    }
+  };
+
+  const cancelPermanentDeleteStaff = () => {
+    if (permanentDeleteLoading) return;
+    setPermanentDeleteError("");
+    setPermanentDeleteConfirmation(null);
   };
 
   const handleUpdateIncidentStatus = async (id, newStatus) => {
@@ -6872,6 +6910,12 @@ function AdminDashboard() {
                                   Reactivate
                                 </button>
                               ) : null}
+                              {isDeactivated ? (
+                                <button type="button" className="inc-btn inc-btn-ghost" onClick={() => handlePermanentDeleteStaff(staff)}>
+                                  <Trash2 size={16} />
+                                  Delete
+                                </button>
+                              ) : null}
                               {!isDeactivated ? <button type="button" className="inc-btn inc-btn-ghost" onClick={() => handleEditStaff(staff)}>
                                 <Edit size={16} />
                                 Edit
@@ -8671,6 +8715,24 @@ function AdminDashboard() {
           confirmDisabled={reactivateConfirmationLoading}
           cancelDisabled={reactivateConfirmationLoading}
           error={reactivateConfirmationError}
+        />
+      )}
+
+      {permanentDeleteConfirmation && (
+        <ConfirmModal
+          open={Boolean(permanentDeleteConfirmation)}
+          onClose={cancelPermanentDeleteStaff}
+          onConfirm={confirmPermanentDeleteStaff}
+          title="Permanently delete staff account?"
+          message="This removes the deactivated account permanently. Clinical and activity history will not be deleted."
+          subtext={`${permanentDeleteConfirmation.firstName || ''} ${permanentDeleteConfirmation.lastName || ''}`.trim() || permanentDeleteConfirmation.email || ''}
+          requiredText={`DELETE ${`${permanentDeleteConfirmation.firstName || ''} ${permanentDeleteConfirmation.lastName || ''}`.trim() || permanentDeleteConfirmation.email || ''}`}
+          cancelLabel="Cancel"
+          confirmLabel={permanentDeleteLoading ? 'Deleting...' : 'Delete permanently'}
+          confirmVariant="danger"
+          confirmDisabled={permanentDeleteLoading}
+          cancelDisabled={permanentDeleteLoading}
+          error={permanentDeleteError}
         />
       )}
 

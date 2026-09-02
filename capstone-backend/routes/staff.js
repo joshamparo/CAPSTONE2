@@ -345,6 +345,11 @@ const reactivationRateLimit = createRateLimiter({
     max: 6,
     key: (req) => `${normalizeEmail(req.auth?.email || '') || req.ip || 'admin'}:${String(req.params?.id || '')}`
 });
+const permanentDeleteRateLimit = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 4,
+    key: (req) => `${normalizeEmail(req.auth?.email || '') || req.ip || 'admin'}:${String(req.params?.id || '')}`
+});
 
 function inferRequester(req) {
     const role = normalizeRole(req.headers['x-user-role'] || '');
@@ -2695,6 +2700,75 @@ router.post('/:id/reactivate', requireRole(['admin']), reactivationRateLimit, as
     } catch (error) {
         console.error('[Staff reactivation] Failed:', error?.message || error);
         return res.status(500).json({ message: 'Unable to reactivate this staff account right now.' });
+    }
+});
+
+router.delete('/:id/permanent', requireRole(['admin']), permanentDeleteRateLimit, async (req, res) => {
+    try {
+        const id = String(req.params.id || '').trim();
+        const result = await findUserById(id);
+        if (!result) return res.status(404).json({ message: 'Staff account not found.' });
+        if (result.user.is_active !== false) {
+            return res.status(409).json({ message: 'Active staff accounts must be deactivated before permanent deletion.' });
+        }
+
+        const email = normalizeEmail(result.user.email || '');
+        const displayName = inferDisplayNameFromUser(result, email);
+        const requiredConfirmation = `DELETE ${displayName}`;
+        const confirmation = String(req.body?.confirmation || '').trim();
+        if (confirmation !== requiredConfirmation) {
+            return res.status(400).json({ message: `Type "${requiredConfirmation}" exactly to permanently delete this account.` });
+        }
+
+        const archivedMatches = [];
+        if (email) {
+            for (const model of ['staff', 'nurses', 'doctors', 'accounts']) {
+                const user = await prisma[model].findFirst({
+                    where: { email: { equals: email, mode: 'insensitive' }, is_active: false }
+                }).catch(() => null);
+                if (user) archivedMatches.push({ model, user });
+            }
+            const canonical = selectCanonicalAccount(archivedMatches);
+            if (!canonical.selected || canonical.conflicting) {
+                return res.status(409).json({ message: 'Conflicting archived account records must be resolved before permanent deletion.' });
+            }
+        }
+
+        const actorEmail = normalizeEmail(req.auth?.email || '') || 'admin';
+        const targetRole = normalizeRole(result.user.account_type || result.user.roles || (result.model === 'doctors' ? 'doctor' : result.model === 'nurses' ? 'nurse' : 'staff'));
+
+        await prisma.$transaction(async (tx) => {
+            if (email) {
+                const archivedEmailWhere = { email: { equals: email, mode: 'insensitive' }, is_active: false };
+                // Compatibility account rows are removed first. Clinical tables
+                // are never cascaded or modified by this operation.
+                await tx.accounts.deleteMany({ where: archivedEmailWhere });
+                await tx.staff.deleteMany({ where: archivedEmailWhere });
+                await tx.nurses.deleteMany({ where: archivedEmailWhere });
+                await tx.doctors.deleteMany({ where: archivedEmailWhere });
+            } else {
+                const deleteWhere = result.model === 'accounts' ? { id: Number(id) } : { id };
+                await tx[result.model].delete({ where: deleteWhere });
+            }
+            await tx.activity_logs.create({
+                data: {
+                    actor_name: actorEmail,
+                    role: 'Admin',
+                    action: 'Permanently Delete User',
+                    details: `Permanently deleted the deactivated ${targetRole || 'staff'} account for ${displayName}. Clinical and activity history was not deleted.`,
+                    target: email || id
+                }
+            });
+        });
+
+        router._staffListCache = null;
+        return res.json({ success: true, message: 'Deactivated staff account permanently deleted. Historical records were preserved.' });
+    } catch (error) {
+        console.error('[Staff permanent deletion] Failed:', error?.message || error);
+        if (error?.code === 'P2003' || /foreign key|constraint/i.test(String(error?.message || ''))) {
+            return res.status(409).json({ message: 'This account is linked to historical hospital records and cannot be permanently deleted. Keep it deactivated instead.' });
+        }
+        return res.status(500).json({ message: 'Unable to permanently delete this staff account right now.' });
     }
 });
 
