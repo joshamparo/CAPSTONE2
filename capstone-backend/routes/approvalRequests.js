@@ -278,6 +278,73 @@ function inferConsultationMode(reqRow) {
   return 'onsite';
 }
 
+function specializationVariants(value) {
+  const base = String(value || '').trim();
+  const lower = base.toLowerCase();
+  const variants = [base];
+  if (lower.includes('pedi')) variants.push('Pedia', 'Pediatrics');
+  if (lower.includes('ortho')) variants.push('Ortho', 'Orthopedics');
+  if (lower.includes('obstetric') || lower.includes('gyne') || lower.includes('obgyn')) variants.push('OB-GYN', 'OBGYN');
+  if (lower.includes('otorhin') || lower.includes('otolaryng') || lower === 'ent') variants.push('ENT');
+  if (lower.includes('ophthalm') || lower.includes('optha')) variants.push('Optha', 'Ophthalmology');
+  return [...new Set(variants.map((v) => String(v || '').trim().toLowerCase()).filter(Boolean))];
+}
+
+async function resolveSignedDoctor(hdr) {
+  if (hdr.role !== 'doctor' || !hdr.email) {
+    const err = new Error('A signed doctor account is required.');
+    err.statusCode = 403;
+    throw err;
+  }
+  const doctor = await prisma.doctors.findFirst({
+    where: { email: { equals: hdr.email, mode: 'insensitive' } },
+    select: { id: true, first_name: true, last_name: true, specialization: true, email: true }
+  }).catch(() => null);
+  if (!doctor) {
+    const err = new Error('Doctor account is not linked to a doctor record.');
+    err.statusCode = 403;
+    throw err;
+  }
+  return {
+    id: String(doctor.id),
+    name: `${String(doctor.first_name || '').trim()} ${String(doctor.last_name || '').trim()}`.trim(),
+    specialization: String(doctor.specialization || '').trim(),
+    variants: specializationVariants(doctor.specialization)
+  };
+}
+
+function doctorCanAccessRequest(requestRow, doctor) {
+  const assignedId = requestRow?.doctor_id ? String(requestRow.doctor_id) : '';
+  if (assignedId) return assignedId === doctor.id;
+
+  const normalizeName = (value) => String(value || '').trim().toLowerCase().replace(/^dr\.?\s*/, '').replace(/\s+/g, ' ');
+  const assignedName = normalizeName(requestRow?.doctor_name);
+  if (assignedName && assignedName === normalizeName(doctor.name)) return true;
+
+  const genericNames = new Set(['', 'doctor', 'dr', 'dr.', 'unknown', 'n/a', 'na']);
+  const nameLooksLikeSpecialty = doctor.variants.some((variant) => assignedName.includes(variant));
+  if (!genericNames.has(String(requestRow?.doctor_name || '').trim().toLowerCase()) && !nameLooksLikeSpecialty) return false;
+
+  const routingText = [
+    requestRow?.department_key,
+    requestRow?.service_name,
+    requestRow?.service_type,
+    requestRow?.reason,
+    requestRow?.doctor_name
+  ].map((v) => String(v || '').toLowerCase()).join(' ');
+  return doctor.variants.some((variant) => routingText.includes(variant));
+}
+
+async function requireDoctorRequestAccess(requestRow, hdr) {
+  const doctor = await resolveSignedDoctor(hdr);
+  if (!doctorCanAccessRequest(requestRow, doctor)) {
+    const err = new Error('This approval request is assigned to another doctor or specialization.');
+    err.statusCode = 403;
+    throw err;
+  }
+  return doctor;
+}
+
 async function resolvePatientForRequestRow(requestRow) {
   let patientId = requestRow.patient_id || null;
   let patientName = String(requestRow.patient_name || '').trim();
@@ -420,7 +487,7 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   const patient = await resolvePatientForRequestRow(requestRow);
   const consultationMode = inferConsultationMode(requestRow);
   const modeKey = String(consultationMode || '').trim().toLowerCase() || 'onsite';
-  if (modeKey === 'onsite' && doctorUuid) {
+  if (doctorUuid) {
     const dateKey = apptDate.toISOString().slice(0, 10);
     const minutes = timeToMinutesLoose(apptTime);
     if (minutes !== null) {
@@ -435,6 +502,21 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
         err.statusCode = 409;
         throw err;
       }
+    }
+
+    const conflicts = await prisma.$queryRaw`
+      SELECT id
+      FROM appointments
+      WHERE doctor_uuid = ${doctorUuid}::uuid
+        AND appointment_date = ${dateKey}::date
+        AND appointment_time::time = ${apptTime}::time
+        AND lower(coalesce(status, '')) NOT IN ('cancelled', 'canceled', 'rejected', 'declined')
+      LIMIT 1
+    `;
+    if (Array.isArray(conflicts) && conflicts.length) {
+      const err = new Error('This doctor already has an appointment at the requested date and time.');
+      err.statusCode = 409;
+      throw err;
     }
   }
   const effectiveEmail = patient.email || (requestRow?.email ? String(requestRow.email).trim() : null) || null;
@@ -545,8 +627,8 @@ router.get('/inbox', async (req, res) => {
   try {
     const hdr = inferRequester(req);
     const role = String(req.query.role || hdr.role || '').trim().toLowerCase();
-    const name = String(req.query.name || hdr.name || '').trim();
-    const doctorId = String(req.query.doctorId || '').trim();
+    let name = String(req.query.name || hdr.name || '').trim();
+    let doctorId = String(req.query.doctorId || '').trim();
     const department = String(req.query.department || req.query.serviceType || '').trim();
     const take = Math.min(Math.max(Number(req.query.take || 50) || 50, 1), 200);
     const status = String(req.query.status || '').trim();
@@ -567,6 +649,12 @@ router.get('/inbox', async (req, res) => {
     if (role === 'doctor' && !name && !doctorId) return res.status(400).json({ message: 'doctorId or name is required' });
     if (role === 'nurse' && !name && !department) return res.status(400).json({ message: 'name or department is required' });
     if (role === 'doctor_secretary' && !hdr.email && !(hdr.role === 'admin' && doctorId)) return res.status(400).json({ message: 'email is required' });
+
+    if (role === 'doctor' && hdr.role !== 'admin') {
+      const signedDoctor = await resolveSignedDoctor(hdr);
+      doctorId = signedDoctor.id;
+      name = signedDoctor.name;
+    }
 
     const filterField = role === 'doctor' ? 'doctor_name' : 'nurse_name';
     const readField = role === 'doctor' ? 'doctor_last_read_at' : 'nurse_last_read_at';
@@ -985,8 +1073,82 @@ router.get('/cleanup-demo', async (req, res) => {
   }
 });
 
+router.get('/reconciliation/video-payments', async (req, res) => {
+  try {
+    const hdr = inferRequester(req);
+    if (hdr.role !== 'admin') return res.status(403).json({ message: 'Administrator access required.' });
+
+    const [paidWithoutApproval, approvedWithoutAppointment, appointmentWithoutBilling, rejectedPaid, stuckProcessing] = await Promise.all([
+      prisma.$queryRaw`
+        SELECT h.booking_ref, h.patient_id, h.doctor_id, h.status, h.paymongo_payment_id, h.amount, h.currency, h.updated_at
+        FROM video_booking_holds h
+        LEFT JOIN appointment_approval_requests r ON r.booking_ref = h.booking_ref
+        WHERE h.paymongo_payment_id IS NOT NULL
+          AND r.id IS NULL
+        ORDER BY h.updated_at DESC
+        LIMIT 100
+      `,
+      prisma.$queryRaw`
+        SELECT id, booking_ref, patient_id, doctor_id, paymongo_payment_id, amount, currency, updated_at
+        FROM appointment_approval_requests
+        WHERE status = 'Approved'
+          AND appointment_id IS NULL
+          AND (payment_status = 'paid' OR paymongo_payment_id IS NOT NULL)
+        ORDER BY updated_at DESC
+        LIMIT 100
+      `,
+      prisma.$queryRaw`
+        SELECT a.id, a.patient_id, a.doctor_uuid, a.paymongo_payment_id, a.amount, a.currency, a.updated_at
+        FROM appointments a
+        LEFT JOIN billing_invoices bi ON bi.appointment_id = a.id
+        WHERE lower(coalesce(a.consultation_mode, '')) = 'video'
+          AND lower(coalesce(a.payment_status, '')) = 'paid'
+          AND bi.id IS NULL
+        ORDER BY a.updated_at DESC
+        LIMIT 100
+      `,
+      prisma.$queryRaw`
+        SELECT id, booking_ref, patient_id, doctor_id, paymongo_payment_id, amount, currency, suggested_note, updated_at
+        FROM appointment_approval_requests
+        WHERE status = 'Rejected'
+          AND (payment_status = 'paid' OR paymongo_payment_id IS NOT NULL)
+        ORDER BY updated_at DESC
+        LIMIT 100
+      `,
+      prisma.$queryRaw`
+        SELECT id, booking_ref, patient_id, doctor_id, updated_at
+        FROM appointment_approval_requests
+        WHERE status = 'Processing'
+          AND appointment_id IS NULL
+          AND updated_at < now() - interval '10 minutes'
+        ORDER BY updated_at ASC
+        LIMIT 100
+      `
+    ]);
+
+    const safe = (rows) => (Array.isArray(rows) ? rows : []).map((row) =>
+      Object.fromEntries(Object.entries(row).map(([key, value]) => [key, typeof value === 'bigint' ? value.toString() : value]))
+    );
+    const report = {
+      generatedAt: new Date().toISOString(),
+      paidBookingWithoutApproval: safe(paidWithoutApproval),
+      approvedRequestWithoutAppointment: safe(approvedWithoutAppointment),
+      paidAppointmentWithoutBilling: safe(appointmentWithoutBilling),
+      rejectedPaidBookingRequiringRefund: safe(rejectedPaid),
+      stuckProcessingRequest: safe(stuckProcessing)
+    };
+    res.json({
+      ...report,
+      counts: Object.fromEntries(Object.entries(report).filter(([key]) => key !== 'generatedAt').map(([key, rows]) => [key, rows.length]))
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Unable to reconcile paid video consultations.' });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
+    const hdr = inferRequester(req);
     const id = BigInt(req.params.id);
     const rows = await prisma.$queryRaw`
       SELECT *
@@ -996,6 +1158,7 @@ router.get('/:id', async (req, res) => {
     `;
     const r = Array.isArray(rows) ? rows[0] : null;
     if (!r) return res.status(404).json({ message: 'Request not found' });
+    if (hdr.role === 'doctor') await requireDoctorRequestAccess(r, hdr);
     res.json(serializeRequestRow(r));
   } catch (err) {
     res.status(Number(err?.statusCode) || 400).json({ message: err.message });
@@ -1019,8 +1182,9 @@ router.get('/:id/messages', async (req, res) => {
       WHERE id = ${id}
       LIMIT 1
     `;
-    const requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
+    let requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
     if (!requestRow) return res.status(404).json({ message: 'Request not found' });
+    if (role === 'doctor' && hdr.role !== 'admin') await requireDoctorRequestAccess(requestRow, hdr);
 
     const field = role === 'doctor' ? 'doctor_last_read_at' : 'nurse_last_read_at';
     await prisma.$executeRawUnsafe(`UPDATE appointment_approval_requests SET ${field} = now(), updated_at = now() WHERE id = $1`, id);
@@ -1037,7 +1201,7 @@ router.get('/:id/messages', async (req, res) => {
       messages: (Array.isArray(msgRows) ? msgRows : []).map(serializeMessageRow)
     });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(Number(err?.statusCode) || 400).json({ message: err.message });
   }
 });
 
@@ -1107,7 +1271,7 @@ router.post('/', async (req, res) => {
 
     res.status(201).json(serializeRequestRow(created));
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(Number(err?.statusCode) || 400).json({ message: err.message });
   }
 });
 
@@ -1116,7 +1280,7 @@ router.post('/:id/messages', async (req, res) => {
     const id = BigInt(req.params.id);
     const hdr = inferRequester(req);
     const senderRole = String(req.body.senderRole || '').trim().toLowerCase();
-    const senderName = String(req.body.senderName || '').trim() || null;
+    let senderName = String(req.body.senderName || '').trim() || null;
     const body = String(req.body.body || '').trim();
 
     if (senderRole !== 'doctor' && senderRole !== 'nurse') return res.status(400).json({ message: 'senderRole must be doctor or nurse' });
@@ -1129,8 +1293,14 @@ router.post('/:id/messages', async (req, res) => {
       WHERE id = ${id}
       LIMIT 1
     `;
-    const requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
+    let requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
     if (!requestRow) return res.status(404).json({ message: 'Request not found' });
+    if (senderRole === 'doctor' && hdr.role !== 'admin') {
+      const signedDoctor = await requireDoctorRequestAccess(requestRow, hdr);
+      senderName = signedDoctor.name;
+    } else if (hdr.role !== 'admin' && hdr.name) {
+      senderName = hdr.name;
+    }
 
     const rows = await prisma.$queryRaw`
       INSERT INTO appointment_messages (request_id, sender_role, sender_name, body, created_at)
@@ -1154,7 +1324,7 @@ router.post('/:id/messages', async (req, res) => {
 
     res.status(201).json(serializeMessageRow(created));
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(Number(err?.statusCode) || 400).json({ message: err.message });
   }
 });
 
@@ -1192,7 +1362,7 @@ router.patch('/:id', async (req, res) => {
       WHERE id = ${id}
       LIMIT 1
     `;
-    const requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
+    let requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
     if (!requestRow) return res.status(404).json({ message: 'Request not found' });
 
     if (department) {
@@ -1200,6 +1370,36 @@ router.patch('/:id', async (req, res) => {
       const deptKey = normalizeServiceKey(department);
       if (reqService && deptKey && reqService !== deptKey) {
         return res.status(403).json({ message: 'Forbidden: service type mismatch.' });
+      }
+    }
+
+    if (hdr.role && hdr.role !== 'admin' && hdr.role !== role) return res.status(403).json({ message: 'Forbidden' });
+
+    let verifiedDoctor = null;
+    if (role === 'doctor' && hdr.role !== 'admin') {
+      verifiedDoctor = await requireDoctorRequestAccess(requestRow, hdr);
+      if (!requestRow.doctor_id) {
+        const claimedRows = await prisma.$queryRaw`
+          UPDATE appointment_approval_requests
+          SET doctor_id = ${verifiedDoctor.id}::uuid,
+              doctor_name = ${`Dr. ${verifiedDoctor.name}`},
+              updated_at = now()
+          WHERE id = ${id}
+            AND doctor_id IS NULL
+            AND status = 'Pending'
+          RETURNING *
+        `;
+        const claimed = Array.isArray(claimedRows) ? claimedRows[0] : claimedRows;
+        if (claimed) {
+          requestRow = claimed;
+        } else {
+          const latestRows = await prisma.$queryRaw`SELECT * FROM appointment_approval_requests WHERE id = ${id} LIMIT 1`;
+          const latest = Array.isArray(latestRows) ? latestRows[0] : latestRows;
+          if (!latest || String(latest.doctor_id || '') !== verifiedDoctor.id) {
+            return res.status(409).json({ message: 'This request was already claimed by another doctor.' });
+          }
+          requestRow = latest;
+        }
       }
     }
 
@@ -1216,8 +1416,6 @@ router.patch('/:id', async (req, res) => {
     if (status !== 'Approved' && status !== 'Rejected' && status !== 'Suggested') {
       return res.status(400).json({ message: 'status must be Approved, Rejected, or Suggested' });
     }
-
-    if (hdr.role && hdr.role !== 'admin' && hdr.role !== role) return res.status(403).json({ message: 'Forbidden' });
 
     if (role === 'doctor_secretary' && hdr.role === 'doctor_secretary') {
       const { doctorUuid } = await resolveSecretaryLinkedDoctor(hdr);
@@ -1241,25 +1439,48 @@ router.patch('/:id', async (req, res) => {
     // The patient schedule can display the approval request itself, but the doctor's
     // Video Consultations queue is populated from the appointments table.
     if (role === 'doctor' && status === 'Approved' && inferConsultationMode(requestRow) === 'video') {
-      const suppliedDoctorId = String(req.body.doctorId || '').trim();
       const requestDoctorId = requestRow?.doctor_id ? String(requestRow.doctor_id) : '';
-      const doctorId = requestDoctorId || suppliedDoctorId;
+      const doctorId = verifiedDoctor?.id || requestDoctorId;
       if (!isUuid(doctorId)) {
         return res.status(400).json({ message: 'Doctor account is not linked to a valid doctor record.' });
       }
-      if (requestDoctorId && suppliedDoctorId && requestDoctorId !== suppliedDoctorId) {
+      if (requestDoctorId && verifiedDoctor && requestDoctorId !== verifiedDoctor.id) {
         return res.status(403).json({ message: 'Forbidden' });
       }
-      const updated = await createAppointmentFromSecretaryApproval({
-        id,
-        hdr,
-        requestRow,
-        secretaryName: actor || hdr.name || requestRow.doctor_name || null,
-        department,
-        overriddenDoctorId: doctorId,
-        actorRole: 'Doctor'
-      });
-      return res.json(serializeRequestRow(updated));
+      if (!canRepairApprovedVideo) {
+        const processingRows = await prisma.$queryRaw`
+          UPDATE appointment_approval_requests
+          SET status = 'Processing', updated_at = now()
+          WHERE id = ${id}
+            AND status IN ('Pending', 'Suggested')
+            AND doctor_id = ${doctorId}::uuid
+          RETURNING *
+        `;
+        const processing = Array.isArray(processingRows) ? processingRows[0] : processingRows;
+        if (!processing) return res.status(409).json({ message: 'This request is already being handled.' });
+        requestRow = processing;
+      }
+      try {
+        const updated = await createAppointmentFromSecretaryApproval({
+          id,
+          hdr,
+          requestRow,
+          secretaryName: actor || hdr.name || requestRow.doctor_name || null,
+          department,
+          overriddenDoctorId: doctorId,
+          actorRole: 'Doctor'
+        });
+        return res.json(serializeRequestRow(updated));
+      } catch (error) {
+        if (!canRepairApprovedVideo) {
+          await prisma.$executeRaw`
+            UPDATE appointment_approval_requests
+            SET status = 'Pending', updated_at = now()
+            WHERE id = ${id} AND status = 'Processing' AND appointment_id IS NULL
+          `.catch(() => {});
+        }
+        throw error;
+      }
     }
 
     const updateField = role === 'doctor' ? 'doctor_last_read_at' : 'nurse_last_read_at';
