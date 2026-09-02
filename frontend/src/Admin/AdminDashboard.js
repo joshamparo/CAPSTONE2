@@ -1026,6 +1026,8 @@ function AdminDashboard() {
 
   // Staff Management State
   const [staffList, setStaffList] = useState([]);
+  const [deactivatedStaffList, setDeactivatedStaffList] = useState([]);
+  const [staffRecordsView, setStaffRecordsView] = useState('active');
   const [staffError, setStaffError] = useState("");
   const [staffSearchTerm, setStaffSearchTerm] = useState("");
   const [staffGenderFilter, setStaffGenderFilter] = useState('All');
@@ -2697,6 +2699,27 @@ function AdminDashboard() {
   const handleDeleteStaff = (id) => {
     setDeleteConfirmationError("");
     setDeleteConfirmation(id);
+  };
+
+  const fetchDeactivatedStaff = async () => {
+    try {
+      setStaffError("");
+      const data = await fetchJson('/api/staff?scope=deactivated', { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
+      setDeactivatedStaffList(Array.isArray(data) ? data.map((item) => ({
+        id: item._id || item.id,
+        firstName: item.first_name || item.firstName,
+        lastName: item.last_name || item.lastName,
+        role: item.account_type === 'staff' ? item.specialization || 'Staff' : item.account_type,
+        status: item.status || 'Offline',
+        email: item.email,
+        phone: item.phone,
+        ...item
+      })) : []);
+    } catch (error) {
+      console.error('Error fetching deactivated staff:', error);
+      setDeactivatedStaffList([]);
+      setStaffError(String(error?.message || 'Unable to load deactivated staff accounts.'));
+    }
   };
 
   const handleResendStaffInvitation = async (staff) => {
@@ -6553,7 +6576,8 @@ function AdminDashboard() {
       const r = String(staffRoleFilter || 'All').toLowerCase();
       const st = String(staffStatusFilter || 'All').toLowerCase();
 
-      const filteredStaff = staffList.filter((s) => {
+      const staffRecords = staffRecordsView === 'deactivated' ? deactivatedStaffList : staffList;
+      const filteredStaff = staffRecords.filter((s) => {
         const fullName = `${s.firstName || ""} ${s.lastName || ""}`.trim().toLowerCase();
         const email = (s.email || "").toLowerCase();
         const roleInfo = getStaffRoleInfo(s);
@@ -6721,6 +6745,23 @@ function AdminDashboard() {
            </div>
 
           <div className="dashboard-section-card admin-shell-card" style={{ maxHeight: 'calc(100vh - 220px)', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '14px 16px', borderBottom: '1px solid #e2e8f0' }}>
+              <strong>Staff Records</strong>
+              <select
+                className="patient-filter-select"
+                value={staffRecordsView}
+                onChange={(event) => {
+                  const nextView = event.target.value;
+                  setStaffRecordsView(nextView);
+                  setStaffPage(1);
+                  if (nextView === 'deactivated') fetchDeactivatedStaff();
+                }}
+                aria-label="Choose staff records"
+              >
+                <option value="active">Active Staff</option>
+                <option value="deactivated">Deactivated Staff</option>
+              </select>
+            </div>
             <div className="logs-table-container">
               <table className="staff-table">
                 <thead>
@@ -6738,7 +6779,7 @@ function AdminDashboard() {
                   {sortedStaff.length === 0 ? (
                     <tr>
                       <td colSpan="7" className="text-center py-8 text-slate-500">
-                        No staff members found.
+                        {staffRecordsView === 'deactivated' ? 'No deactivated staff accounts found.' : 'No staff members found.'}
                       </td>
                     </tr>
                   ) : (
@@ -6750,7 +6791,8 @@ function AdminDashboard() {
                       const linkedDoctorName = staff?.linkedDoctor?.name ? String(staff.linkedDoctor.name) : '';
                       const employeeId = staff.employeeId || "N/A";
                       const phone = staff.phone || "N/A";
-                      const status = staff.status || "Offline";
+                      const isDeactivated = staffRecordsView === 'deactivated' || staff.is_active === false;
+                      const status = isDeactivated ? 'Deactivated' : (staff.status || "Offline");
                       const tone = status === 'Online' ? 'status-duty' : 'status-off';
                       const pendingActivation = staff.activationStatus === 'pending' || staff.must_change_password === true;
 
@@ -6775,8 +6817,8 @@ function AdminDashboard() {
                           <td className="text-sm text-slate-600">{phone}</td>
                           <td>
                             <span className={`status-badge-table ${tone}`}>{status}</span>
-                            <span className={`staff-activation-badge ${pendingActivation ? 'is-pending' : 'is-active'}`}>
-                              {pendingActivation ? 'Pending activation' : 'Account active'}
+                            <span className={`staff-activation-badge ${isDeactivated || pendingActivation ? 'is-pending' : 'is-active'}`}>
+                              {isDeactivated ? 'Account deactivated' : (pendingActivation ? 'Pending activation' : 'Account active')}
                             </span>
                           </td>
                           <td className="inc-right">
@@ -6785,11 +6827,11 @@ function AdminDashboard() {
                                 <EyeIcon size={16} />
                                 View
                               </button>
-                              <button type="button" className="inc-btn inc-btn-ghost" onClick={() => handleEditStaff(staff)}>
+                              {!isDeactivated ? <button type="button" className="inc-btn inc-btn-ghost" onClick={() => handleEditStaff(staff)}>
                                 <Edit size={16} />
                                 Edit
-                              </button>
-                              {pendingActivation ? (
+                              </button> : null}
+                              {!isDeactivated && pendingActivation ? (
                                 <button
                                   type="button"
                                   className="inc-btn inc-btn-ghost staff-resend-btn"
@@ -6801,10 +6843,10 @@ function AdminDashboard() {
                                   {resendingInvitationId === staff.id ? 'Sending...' : 'Resend setup'}
                                 </button>
                               ) : null}
-                              <button type="button" className="inc-btn inc-btn-ghost" onClick={() => handleDeleteStaff(staff.id)}>
+                              {!isDeactivated ? <button type="button" className="inc-btn inc-btn-ghost" onClick={() => handleDeleteStaff(staff.id)}>
                                 <Trash2 size={16} />
                                 Deactivate
-                              </button>
+                              </button> : null}
                             </div>
                           </td>
                         </tr>

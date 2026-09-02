@@ -1020,28 +1020,30 @@ router.get('/', requireRole(['admin']), async (req, res) => {
         await ensureAccountsDoctorLinkSchema().catch(() => {});
         const take = Math.min(Math.max(parseInt(req.query.take, 10) || 100, 1), 200);
         const skip = Math.max(parseInt(req.query.skip, 10) || 0, 0);
+        const recordScope = String(req.query.scope || 'active').trim().toLowerCase() === 'deactivated' ? 'deactivated' : 'active';
+        const isActive = recordScope === 'active';
 
         // Small cache to avoid hammering the DB on dashboard polling.
         if (!router._staffListCache) router._staffListCache = { key: '', fetchedAt: 0, payload: null, promise: null };
-        const cacheKey = JSON.stringify({ take, skip });
+        const cacheKey = JSON.stringify({ take, skip, recordScope });
         const now = Date.now();
-        if (router._staffListCache.payload && router._staffListCache.key === cacheKey && now - router._staffListCache.fetchedAt < 15000) {
+        if (isActive && router._staffListCache.payload && router._staffListCache.key === cacheKey && now - router._staffListCache.fetchedAt < 15000) {
             return res.json(router._staffListCache.payload);
         }
-        if (router._staffListCache.promise && router._staffListCache.key === cacheKey) {
+        if (isActive && router._staffListCache.promise && router._staffListCache.key === cacheKey) {
             const payload = await router._staffListCache.promise;
             return res.json(payload);
         }
-        router._staffListCache.key = cacheKey;
+        if (isActive) router._staffListCache.key = cacheKey;
 
         // Not all Prisma models expose created_at/updated_at. Order by id for stability.
-        router._staffListCache.promise = (async () => {
+        const listPromise = (async () => {
             const [staff, nurses, doctors, accounts] = await Promise.all([
-                prisma.staff.findMany({ where: { is_active: true }, take, skip, orderBy: { id: 'desc' } }).catch(() => []),
-                prisma.nurses.findMany({ where: { is_active: true }, take, skip, orderBy: { id: 'desc' } }).catch(() => []),
-                prisma.doctors.findMany({ where: { is_active: true }, take, skip, orderBy: { id: 'desc' } }).catch(() => []),
+                prisma.staff.findMany({ where: { is_active: isActive }, take, skip, orderBy: { id: 'desc' } }).catch(() => []),
+                prisma.nurses.findMany({ where: { is_active: isActive }, take, skip, orderBy: { id: 'desc' } }).catch(() => []),
+                prisma.doctors.findMany({ where: { is_active: isActive }, take, skip, orderBy: { id: 'desc' } }).catch(() => []),
                 prisma.accounts.findMany({
-                    where: { roles: { in: ['admin', 'cashier', 'doctor_secretary'] }, is_active: true },
+                    where: { roles: { in: ['admin', 'cashier', 'doctor_secretary'] }, is_active: isActive },
                     take,
                     skip,
                     orderBy: { id: 'desc' }
@@ -1082,14 +1084,17 @@ router.get('/', requireRole(['admin']), async (req, res) => {
                 .map(safeAccountResponse)
                 .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
-            router._staffListCache.fetchedAt = Date.now();
-            router._staffListCache.payload = allUsers;
+            if (isActive) {
+                router._staffListCache.fetchedAt = Date.now();
+                router._staffListCache.payload = allUsers;
+            }
             return allUsers;
         })().finally(() => {
-            router._staffListCache.promise = null;
+            if (isActive) router._staffListCache.promise = null;
         });
+        if (isActive) router._staffListCache.promise = listPromise;
 
-        const payload = await router._staffListCache.promise;
+        const payload = await listPromise;
         return res.json(payload);
     } catch (err) {
         res.status(500).json(err);
