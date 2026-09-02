@@ -294,10 +294,7 @@ router.get('/admin-overview', requireRole(['admin']), async (_req, res) => {
         }
 
         adminOverviewCache.promise = (async () => {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        const end = new Date();
-        end.setHours(23, 59, 59, 999);
+        const { start, end } = makeManilaDateRange(todayManilaKey());
 
         const [
             employeesRegistered,
@@ -323,12 +320,12 @@ router.get('/admin-overview', requireRole(['admin']), async (_req, res) => {
             safeCount(() => prisma.doctors.count({ where: { status: 'Online' } })),
             safeCount(() => prisma.nurses.count({ where: { status: 'Online' } })),
             safeCount(() => prisma.staff.count({ where: { account_type: 'pharmacist', status: 'Online' } })),
-            safeCount(() => prisma.patients.count()),
+            prisma.patients.count(),
             safeCount(() => prisma.patients.count({ where: { admission_status: 'Inpatient' } })),
             safeCount(() => prisma.requests.count({ where: { status: 'Pending' } })),
-            safeCount(() => prisma.patients.count({ where: { created_at: { gte: start, lte: end } } })),
-            safeCount(() => prisma.appointments.count({ where: { appointment_date: { gte: start, lte: end }, status: 'Waiting' } })),
-            safeCount(() => prisma.appointments.count({ where: { appointment_date: { gte: start, lte: end } } }))
+            prisma.patients.count({ where: { created_at: { gte: start, lte: end } } }),
+            prisma.appointments.count({ where: { appointment_date: { gte: start, lte: end }, status: 'Waiting' } }),
+            prisma.appointments.count({ where: { appointment_date: { gte: start, lte: end } } })
         ]);
 
         const [lowStockMedsRow, lowStockSuppliesRow] = await Promise.all([

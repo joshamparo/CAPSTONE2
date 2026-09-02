@@ -11,6 +11,16 @@ import { checkBackendHealth, fetchJson } from "../utils/api";
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const WEB_ORIGIN = String(process.env.REACT_APP_WEB_ORIGIN || '').trim() || 'https://pascualinga.com';
 
+function manilaDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 const ADMIN_WARD_ROOM_PLAN = [
   { id: 'icu', name: 'ICU', total: 5, color: '#ef4444', shortCode: 'ICU', aliases: ['icu'] },
   { id: 'general', name: 'General Ward', total: 12, color: '#3b82f6', shortCode: 'GW', aliases: ['general ward', 'general'] },
@@ -1175,7 +1185,7 @@ function AdminDashboard() {
 
   useEffect(() => {
     fetchDashboardData(); // Initial fetch
-    const interval = setInterval(fetchDashboardData, 10000); // Poll every 10s
+    const interval = setInterval(fetchDashboardData, 30000); // Keep dashboard sections synchronized without excessive polling
     return () => clearInterval(interval);
   }, []); // Refetch when selectedDate changes
 
@@ -3522,7 +3532,8 @@ function AdminDashboard() {
   const isLowStockItem = (item) => {
       const status = String(item.status || '').toLowerCase();
       const stock = Number(item.stock);
-      const threshold = Number(opsSettings.lowStockThreshold);
+      const itemThreshold = Number(item.min_level ?? item.minLevel);
+      const threshold = Number.isFinite(itemThreshold) ? itemThreshold : Number(opsSettings.lowStockThreshold);
       if (status === 'low stock' || status === 'out of stock') return true;
       if (Number.isFinite(stock) && Number.isFinite(threshold)) return stock <= threshold;
       return false;
@@ -3666,26 +3677,16 @@ function AdminDashboard() {
       });
 
       // 2. Online Staff
-      let onlineStaff = staffList.filter(s => s.status === 'Online');
-      const currentActiveEmail = localStorage.getItem('tempLoginEmail') || JSON.parse(localStorage.getItem('currentUser') || '{}').email || adminProfile?.email;
-      if (currentActiveEmail && !onlineStaff.some(s => s.email === currentActiveEmail)) {
-          const dbUser = staffList.find(s => s.email === currentActiveEmail);
-          if (dbUser) {
-              onlineStaff.push({ ...dbUser, status: 'Online' });
-          } else {
-              onlineStaff.push({ 
-                  firstName: adminProfile?.name?.split(' ')[0] || 'Admin',
-                  lastName: adminProfile?.name?.split(' ').slice(1).join(' ') || '',
-                  email: currentActiveEmail, 
-                  status: 'Online' 
-              });
-          }
-      }
+      const onlineStaff = staffList.filter(s => s.status === 'Online');
 
       // Get Recent Data
       const recentPatients = [...safePatientList]
-          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+          .sort((a, b) => new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0))
           .slice(0, 10);
+      const todayKey = manilaDateKey();
+      const patientsAddedTodayLocal = safePatientList.filter((patient) =>
+        manilaDateKey(patient.createdAt || patient.created_at) === todayKey
+      ).length;
       
       const totalAppointmentsCount = 0; // Placeholder
       
@@ -3834,32 +3835,28 @@ function AdminDashboard() {
           .filter(Boolean)
       );
 
-      const totalPatients = Number(dashboardStats?.patients?.total || patientList.length || 0);
+      const totalPatients = Number(dashboardStats?.patients?.total ?? patientList.length ?? 0);
       const totalStaffCount = Number(staffList.length || 0);
       const todayAppointmentsLocal = safeAppointmentEvents.filter((appt) => {
         const rawDate = appt?.appointmentDate || appt?.appointment_date || null;
-        if (!rawDate) return false;
-        const d = new Date(rawDate);
-        if (Number.isNaN(d.getTime())) return false;
-        const now = new Date();
-        return d.getFullYear() === now.getFullYear()
-          && d.getMonth() === now.getMonth()
-          && d.getDate() === now.getDate();
+        return rawDate ? manilaDateKey(rawDate) === todayKey : false;
       }).length;
-      const totalAppointments = Number(dashboardStats?.appointments?.totalToday || todayAppointmentsLocal || 0);
-      const waitingAppointments = Number(dashboardStats?.appointments?.waitingToday || 0);
+      const totalAppointments = Number(dashboardStats?.appointments?.totalToday ?? todayAppointmentsLocal ?? 0);
+      const waitingAppointments = Number(dashboardStats?.appointments?.waitingToday ?? 0);
       const pendingIncidentsCount = incidents.filter((i) => {
         const s = String(i?.status || '').trim().toLowerCase();
         return s !== 'reviewed' && s !== 'resolved';
       }).length;
       const lowStockCount = inventory.filter((i) => isLowStockItem(i)).length;
       const pendingRestockCount = restockRequests.filter((r) => String(r?.status || '').toLowerCase() === 'pending').length;
+      const lowStockKeys = inventory.filter((i) => isLowStockItem(i)).map((i) => `medicine:${String(i.id || '')}`);
+      const inventoryAlertCount = new Set([...lowStockKeys, ...pendingRestockMedicine]).size;
       const pendingTasksCount = adminTodos.filter((t) => !t.completed).length;
       const activeAnnouncementsCount = announcements.filter((ann) => {
         const expiresAt = ann?.expiresAt || ann?.expires_at;
         if (!expiresAt) return true;
         const d = new Date(expiresAt);
-        return Number.isNaN(d.getTime()) ? true : d.getTime() > Date.now();
+        return !Number.isNaN(d.getTime()) && d.getTime() > Date.now();
       }).length;
       const totalTrendPatients = patientTrendData.reduce((sum, item) => sum + Number(item?.count || 0), 0);
       const previousTrendSlice = patientTrendData.slice(0, Math.max(0, patientTrendData.length - Math.ceil(patientTrendData.length / 2)));
@@ -3876,7 +3873,7 @@ function AdminDashboard() {
           label: 'Total Patients',
           value: totalPatients,
           tone: 'blue',
-          detail: `${Number(dashboardStats?.patients?.newToday || recentPatients.length || 0)} added today`,
+          detail: `${Number(dashboardStats?.patients?.newToday ?? patientsAddedTodayLocal)} added today`,
           icon: <Users size={18} />
         },
         {
@@ -3914,8 +3911,8 @@ function AdminDashboard() {
         {
           key: 'inventory',
           label: 'Inventory Alerts',
-          value: lowStockCount + pendingRestockCount,
-          tone: lowStockCount + pendingRestockCount > 0 ? 'amber' : 'slate',
+          value: inventoryAlertCount,
+          tone: inventoryAlertCount > 0 ? 'amber' : 'slate',
           detail: `${lowStockCount} low stock • ${pendingRestockCount} requests`,
           icon: <Pill size={18} />
         }
