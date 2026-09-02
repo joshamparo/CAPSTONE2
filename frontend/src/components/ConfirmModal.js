@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import './AccountHeaderActions.css';
 
 export default function ConfirmModal({
@@ -13,9 +13,14 @@ export default function ConfirmModal({
   confirmVariant = 'primary', // 'primary' | 'danger'
   confirmDisabled = false,
   cancelDisabled = false,
-  error
+  error,
+  requiredText = ''
 }) {
+  const [confirmation, setConfirmation] = useState('');
+  useEffect(() => { if (open) setConfirmation(''); }, [open, requiredText]);
   if (!open) return null;
+
+  const textMatches = !requiredText || confirmation === requiredText;
 
   const confirmClass =
     confirmVariant === 'danger' ? 'aha-confirm-btn danger' : 'aha-confirm-btn primary';
@@ -33,6 +38,18 @@ export default function ConfirmModal({
         {message ? <div className="aha-confirm-text">{message}</div> : null}
         {subtext ? <div className="aha-confirm-subtext">{subtext}</div> : null}
         {error ? <div className="aha-confirm-error">{error}</div> : null}
+        {requiredText ? (
+          <label className="aha-confirm-type">
+            Type <strong>{requiredText}</strong> to continue
+            <input
+              className="aha-confirm-input"
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+              autoComplete="off"
+              autoFocus
+            />
+          </label>
+        ) : null}
 
         <div className="aha-confirm-actions">
           <button
@@ -47,7 +64,7 @@ export default function ConfirmModal({
             type="button"
             className={confirmClass}
             onClick={onConfirm}
-            disabled={confirmDisabled}
+            disabled={confirmDisabled || !textMatches}
           >
             {confirmLabel}
           </button>
@@ -56,4 +73,3 @@ export default function ConfirmModal({
     </div>
   );
 }
-

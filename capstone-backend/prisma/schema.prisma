@@ -189,6 +189,9 @@ model doctors {
   must_change_password           Boolean   @default(false)
   reset_password_token           String?
   reset_password_expires         DateTime? @db.Timestamptz(6)
+  is_active                      Boolean   @default(true)
+  archived_at                    DateTime? @db.Timestamptz(6)
+  archived_by                    String?
   @@schema("public")
 }
 
@@ -258,6 +261,9 @@ model nurses {
   must_change_password           Boolean   @default(false)
   reset_password_token           String?
   reset_password_expires         DateTime? @db.Timestamptz(6)
+  is_active                      Boolean   @default(true)
+  archived_at                    DateTime? @db.Timestamptz(6)
+  archived_by                    String?
   @@schema("public")
 }
 
@@ -372,6 +378,9 @@ model staff {
   must_change_password   Boolean   @default(false)
   reset_password_token   String?
   reset_password_expires DateTime? @db.Timestamptz(6)
+  is_active              Boolean   @default(true)
+  archived_at            DateTime? @db.Timestamptz(6)
+  archived_by            String?
   @@schema("public")
 }
 
@@ -400,6 +409,9 @@ model accounts {
   must_change_password Boolean @default(false)
   reset_password_token String?
   reset_password_expires DateTime? @db.Timestamptz(6)
+  is_active Boolean @default(true)
+  archived_at DateTime? @db.Timestamptz(6)
+  archived_by String?
   last_active    DateTime? @db.Timestamptz(6)
   avatar_url     String?
   @@schema("public")

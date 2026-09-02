@@ -2726,12 +2726,17 @@ function AdminDashboard() {
     
     try {
         const staffToDelete = staffList.find(s => s.id === deleteConfirmation);
-        await fetchJson(`/api/staff/${deleteConfirmation}`, { apiBase: API_BASE, method: 'DELETE', headers: { ...getAuthHeaders() } });
-        await logActivity('Delete', `Deleted staff member ${staffToDelete ? staffToDelete.firstName + ' ' + staffToDelete.lastName : 'Unknown'}`, `Staff: ${staffToDelete ? staffToDelete.email : deleteConfirmation}`);
+        const confirmation = `${staffToDelete?.firstName || ''} ${staffToDelete?.lastName || ''}`.trim() || staffToDelete?.email || '';
+        await fetchJson(`/api/staff/${deleteConfirmation}`, {
+          apiBase: API_BASE,
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({ confirmation })
+        });
         setStaffList(staffList.filter(staff => staff.id !== deleteConfirmation));
         setDeleteConfirmation(null);
         setModalType("success");
-        setSuccessMessage("Staff deleted successfully.");
+        setSuccessMessage("Staff account deactivated. Historical records were preserved.");
         setShowSuccessModal(true);
     } catch (error) {
         console.error("Error deleting staff:", error);
@@ -2914,7 +2919,6 @@ function AdminDashboard() {
           },
           body: JSON.stringify(payload)
         });
-            await logActivity('Update', `Updated staff details for ${updatedStaff.firstName} ${updatedStaff.lastName}`, `Staff: ${updatedStaff.email}`);
             setStaffList(staffList.map(staff => 
                 staff.id === editingStaff.id ? { ...staff, ...updatedStaff, id: updatedStaff._id } : staff
             ));
@@ -6230,18 +6234,6 @@ function AdminDashboard() {
             {createStaffError && (
                 <div className="field-notice-error" style={{ whiteSpace: 'pre-line', marginBottom: '16px', fontWeight: 'bold', textAlign: 'center', background: '#fef2f2', padding: '12px', borderRadius: '8px', border: '1px solid #fecaca' }}>
                   {createStaffError}
-                  {(/already\s+registered|already\s+exists|duplicate/i.test(String(createStaffError)) && String(staffFormData.email || '').trim()) ? (
-                    <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center' }}>
-                      <button
-                        type="button"
-                        className="btn-gray shadow-btn"
-                        onClick={handleForceRemoveEmail}
-                        disabled={purgeEmailLoading}
-                      >
-                        {purgeEmailLoading ? 'Removing…' : 'Force Remove Email'}
-                      </button>
-                    </div>
-                  ) : null}
                 </div>
             )}
             {createStaffSuccess && (
@@ -6806,7 +6798,7 @@ function AdminDashboard() {
                               ) : null}
                               <button type="button" className="inc-btn inc-btn-ghost" onClick={() => handleDeleteStaff(staff.id)}>
                                 <Trash2 size={16} />
-                                Delete
+                                Deactivate
                               </button>
                             </div>
                           </td>
@@ -8560,10 +8552,12 @@ function AdminDashboard() {
           open={Boolean(deleteConfirmation)}
           onClose={cancelDelete}
           onConfirm={confirmDelete}
-          title="Delete staff member?"
-          message="This action cannot be undone."
+          title="Deactivate staff account?"
+          message="Login will be disabled, pending setup links will be revoked, and historical records will be preserved."
+          subtext={`${staffList.find((staff) => staff.id === deleteConfirmation)?.firstName || ''} ${staffList.find((staff) => staff.id === deleteConfirmation)?.lastName || ''}`.trim()}
+          requiredText={`${staffList.find((staff) => staff.id === deleteConfirmation)?.firstName || ''} ${staffList.find((staff) => staff.id === deleteConfirmation)?.lastName || ''}`.trim() || staffList.find((staff) => staff.id === deleteConfirmation)?.email || ''}
           cancelLabel="Cancel"
-          confirmLabel="Delete"
+          confirmLabel="Deactivate"
           confirmVariant="danger"
         />
       )}

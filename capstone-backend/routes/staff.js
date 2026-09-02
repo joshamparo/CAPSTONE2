@@ -136,6 +136,11 @@ function ensureStaffActivationSchemaOnce() {
             await prisma.$executeRawUnsafe(`ALTER TABLE public.accounts ADD COLUMN IF NOT EXISTS reset_password_token TEXT;`);
             await prisma.$executeRawUnsafe(`ALTER TABLE public.accounts ADD COLUMN IF NOT EXISTS reset_password_expires TIMESTAMPTZ;`);
             await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS accounts_reset_password_token_idx ON public.accounts(reset_password_token);`);
+            for (const table of ['staff', 'nurses', 'doctors', 'accounts']) {
+                await prisma.$executeRawUnsafe(`ALTER TABLE public.${table} ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;`);
+                await prisma.$executeRawUnsafe(`ALTER TABLE public.${table} ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;`);
+                await prisma.$executeRawUnsafe(`ALTER TABLE public.${table} ADD COLUMN IF NOT EXISTS archived_by TEXT;`);
+            }
         })().catch((error) => {
             staffActivationSchemaPromise = null;
             throw error;
@@ -313,10 +318,10 @@ async function findAllUsersByEmail(email) {
     const normalized = normalizeEmail(email);
     if (!normalized) return [];
     const [staff, nurse, doctor, account] = await Promise.all([
-        prisma.staff.findFirst({ where: { email: { equals: normalized, mode: 'insensitive' } } }).catch(() => null),
-        prisma.nurses.findFirst({ where: { email: { equals: normalized, mode: 'insensitive' } } }).catch(() => null),
-        prisma.doctors.findFirst({ where: { email: { equals: normalized, mode: 'insensitive' } } }).catch(() => null),
-        prisma.accounts.findFirst({ where: { email: { equals: normalized, mode: 'insensitive' } } }).catch(() => null)
+        prisma.staff.findFirst({ where: { email: { equals: normalized, mode: 'insensitive' }, is_active: true } }).catch(() => null),
+        prisma.nurses.findFirst({ where: { email: { equals: normalized, mode: 'insensitive' }, is_active: true } }).catch(() => null),
+        prisma.doctors.findFirst({ where: { email: { equals: normalized, mode: 'insensitive' }, is_active: true } }).catch(() => null),
+        prisma.accounts.findFirst({ where: { email: { equals: normalized, mode: 'insensitive' }, is_active: true } }).catch(() => null)
     ]);
     return [
         staff ? { user: staff, model: 'staff' } : null,
@@ -383,6 +388,9 @@ router.post('/login', loginRateLimit, async (req, res) => {
         
         if (!user) {
             return res.status(400).json({ message: 'Invalid email or password.' });
+        }
+        if (user.is_active === false) {
+            return res.status(403).json({ message: 'This account has been deactivated. Contact an administrator.' });
         }
 
         let isMatch = false;
@@ -1029,11 +1037,11 @@ router.get('/', requireRole(['admin']), async (req, res) => {
         // Not all Prisma models expose created_at/updated_at. Order by id for stability.
         router._staffListCache.promise = (async () => {
             const [staff, nurses, doctors, accounts] = await Promise.all([
-                prisma.staff.findMany({ take, skip, orderBy: { id: 'desc' } }).catch(() => []),
-                prisma.nurses.findMany({ take, skip, orderBy: { id: 'desc' } }).catch(() => []),
-                prisma.doctors.findMany({ take, skip, orderBy: { id: 'desc' } }).catch(() => []),
+                prisma.staff.findMany({ where: { is_active: true }, take, skip, orderBy: { id: 'desc' } }).catch(() => []),
+                prisma.nurses.findMany({ where: { is_active: true }, take, skip, orderBy: { id: 'desc' } }).catch(() => []),
+                prisma.doctors.findMany({ where: { is_active: true }, take, skip, orderBy: { id: 'desc' } }).catch(() => []),
                 prisma.accounts.findMany({
-                    where: { roles: { in: ['admin', 'cashier', 'doctor_secretary'] } },
+                    where: { roles: { in: ['admin', 'cashier', 'doctor_secretary'] }, is_active: true },
                     take,
                     skip,
                     orderBy: { id: 'desc' }
@@ -2268,7 +2276,7 @@ router.get('/:id', async (req, res) => {
     try {
         const result = await findUserById(req.params.id);
         if (result) {
-            const user = { ...result.user, id: result.user.id ? result.user.id.toString() : undefined };
+            const user = { ...safeAccountResponse(result.user), id: result.user.id ? result.user.id.toString() : undefined };
             if (user.contact_number) user.contact_number = user.contact_number.toString();
             res.json(user);
         }
@@ -2278,108 +2286,8 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-async function purgeEmailAcrossModels(email, prismaOrTx) {
-    const e = normalizeEmail(email);
-    if (!e) return;
-
-    const client = prismaOrTx || prisma;
-    let hasClinicalOrders = false;
-    let hasClinicalOrdersAssignedTo = false;
-    let hasClinicalSchedule = false;
-    let hasClinicalScheduleStaffEmail = false;
-
-    try {
-        const reg = await client.$queryRaw`
-          SELECT to_regclass('public.clinical_orders') AS clinical_orders,
-                 to_regclass('public.clinical_schedule_events') AS clinical_schedule_events
-        `;
-        const info = Array.isArray(reg) ? reg[0] : null;
-        hasClinicalOrders = Boolean(info && info.clinical_orders);
-        hasClinicalSchedule = Boolean(info && info.clinical_schedule_events);
-    } catch (_) {
-        hasClinicalOrders = false;
-        hasClinicalSchedule = false;
-    }
-
-    if (hasClinicalOrders || hasClinicalSchedule) {
-        try {
-            const cols = await client.$queryRaw`
-              SELECT table_name, column_name
-              FROM information_schema.columns
-              WHERE table_schema = 'public'
-                AND (
-                  (table_name = 'clinical_orders' AND column_name = 'assigned_to')
-                  OR (table_name = 'clinical_schedule_events' AND column_name = 'staff_email')
-                )
-            `;
-            const rows = Array.isArray(cols) ? cols : [];
-            hasClinicalOrdersAssignedTo = rows.some((r) => String(r.table_name || '') === 'clinical_orders' && String(r.column_name || '') === 'assigned_to');
-            hasClinicalScheduleStaffEmail = rows.some((r) => String(r.table_name || '') === 'clinical_schedule_events' && String(r.column_name || '') === 'staff_email');
-        } catch (_) {
-            hasClinicalOrdersAssignedTo = false;
-            hasClinicalScheduleStaffEmail = false;
-        }
-    }
-
-    if (hasClinicalOrders && hasClinicalOrdersAssignedTo) {
-        await client.$executeRaw`
-          UPDATE public.clinical_orders
-          SET assigned_to = NULL
-          WHERE lower(assigned_to) = ${e}
-        `;
-    }
-
-    if (hasClinicalSchedule && hasClinicalScheduleStaffEmail) {
-        await client.$executeRaw`
-          DELETE FROM public.clinical_schedule_events
-          WHERE lower(staff_email) = ${e}
-        `;
-    }
-
-    if (prismaOrTx) {
-        await Promise.all([
-            client.staff.deleteMany({ where: { email: { equals: e, mode: 'insensitive' } } }),
-            client.nurses.deleteMany({ where: { email: { equals: e, mode: 'insensitive' } } }),
-            client.doctors.deleteMany({ where: { email: { equals: e, mode: 'insensitive' } } }),
-            client.accounts.deleteMany({ where: { email: { equals: e, mode: 'insensitive' } } }),
-            client.patients.updateMany({ where: { email: { equals: e, mode: 'insensitive' } }, data: { email: null } })
-        ]);
-        return;
-    }
-
-    await prisma.$transaction(async (tx) => {
-        await Promise.all([
-            tx.staff.deleteMany({ where: { email: { equals: e, mode: 'insensitive' } } }),
-            tx.nurses.deleteMany({ where: { email: { equals: e, mode: 'insensitive' } } }),
-            tx.doctors.deleteMany({ where: { email: { equals: e, mode: 'insensitive' } } }),
-            tx.accounts.deleteMany({ where: { email: { equals: e, mode: 'insensitive' } } }),
-            tx.patients.updateMany({ where: { email: { equals: e, mode: 'insensitive' } }, data: { email: null } })
-        ]);
-    });
-}
-
 router.delete('/by-email', requireRole(['admin']), async (req, res) => {
-    try {
-        let { email } = req.body || {};
-        email = normalizeEmail(email);
-        if (!email) return res.status(400).json({ message: 'Email is required' });
-
-        await purgeEmailAcrossModels(email);
-
-        prisma.activity_logs.create({
-            data: {
-                actor_name: String(req.headers['x-user-email'] || req.headers['x-user-role'] || 'admin'),
-                role: 'Admin',
-                action: 'Purge Email',
-                details: `Purged ${email}`,
-                target: email
-            }
-        }).catch(() => {});
-
-        res.json({ success: true, message: 'Account(s) removed for this email.', email });
-    } catch (err) {
-        res.status(500).json({ message: 'Server error' });
-    }
+    return res.status(410).json({ message: 'Force deletion by email has been retired. Deactivate the staff account from Staff Management instead.' });
 });
 
 // UPDATE
@@ -2389,6 +2297,11 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         if (!result) return res.status(404).json({ message: "User not found" });
         
         const { user, model } = result;
+        const originalRole = normalizeRole(user.account_type || user.roles || (model === 'doctors' ? 'doctor' : model === 'nurses' ? 'nurse' : 'staff'));
+        const explicitRole = req.body?.accountType ?? req.body?.account_type;
+        if (explicitRole !== undefined && normalizeRole(explicitRole) !== originalRole) {
+            return res.status(409).json({ message: 'Changing an account to a different role requires a controlled migration and is not allowed from profile editing.' });
+        }
 
         const profileRequesterRole = normalizeRole(req.headers['x-user-role'] || '');
         const profileRequesterEmail = normalizeEmail(req.headers['x-user-email'] || '');
@@ -2576,8 +2489,22 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             where: updateWhere,
             data: updateData
         });
+
+        const auditFields = ['name', 'first_name', 'last_name', 'email', 'phone', 'contact_number', 'department', 'specialization', 'status'];
+        const before = Object.fromEntries(auditFields.filter((key) => user[key] !== undefined).map((key) => [key, typeof user[key] === 'bigint' ? user[key].toString() : user[key]]));
+        const after = Object.fromEntries(auditFields.filter((key) => updatedUser[key] !== undefined).map((key) => [key, typeof updatedUser[key] === 'bigint' ? updatedUser[key].toString() : updatedUser[key]]));
+        await prisma.activity_logs.create({
+            data: {
+                actor_name: normalizeEmail(req.auth?.email || req.headers['x-user-email'] || '') || 'staff',
+                role: requesterRole || 'staff',
+                action: 'Update Staff',
+                target: emailClean || String(req.params.id),
+                details: JSON.stringify({ model, before, after }).slice(0, 3000)
+            }
+        }).catch(() => {});
+        router._staffListCache = null;
         
-        const { password: _password, ...safeUpdatedUser } = updatedUser;
+        const { password: _password, reset_password_token: _resetToken, reset_password_expires: _resetExpiry, ...safeUpdatedUser } = updatedUser;
         const resUser = { ...safeUpdatedUser, id: updatedUser.id ? updatedUser.id.toString() : undefined };
         if (resUser.contact_number) resUser.contact_number = resUser.contact_number.toString();
         res.json(resUser);
@@ -2598,25 +2525,67 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
         if (!result) return res.status(404).json({ message: "User not found" });
 
         const email = (result.user && result.user.email) ? normalizeEmail(result.user.email) : '';
-
-        if (email) {
-            await purgeEmailAcrossModels(email);
-        } else {
-            const deleteWhere = result.model === 'accounts' ? { id: Number(id) } : { id };
-            await prisma[result.model].delete({ where: deleteWhere });
+        const displayName = inferDisplayNameFromUser(result, email);
+        const confirmation = String(req.body?.confirmation || '').trim();
+        if (!confirmation || confirmation.localeCompare(displayName, undefined, { sensitivity: 'accent' }) !== 0) {
+            return res.status(400).json({ message: `Type "${displayName}" exactly to deactivate this account.` });
         }
 
-        prisma.activity_logs.create({
+        const actorEmail = normalizeEmail(req.auth?.email || req.headers['x-user-email'] || '');
+        if (email && actorEmail && email === actorEmail) {
+            return res.status(409).json({ message: 'You cannot deactivate your own administrator account.' });
+        }
+
+        const targetRole = normalizeRole(result.user.account_type || result.user.roles || '');
+        if (targetRole === 'admin') {
+            const adminRows = await prisma.$queryRaw`
+                SELECT COUNT(DISTINCT lower(email))::int AS count
+                FROM (
+                    SELECT email FROM public.staff WHERE lower(coalesce(account_type, '')) = 'admin' AND is_active = true
+                    UNION ALL
+                    SELECT email FROM public.accounts WHERE lower(coalesce(roles, '')) = 'admin' AND is_active = true
+                ) active_admins
+                WHERE email IS NOT NULL
+            `;
+            const activeAdminCount = Number(Array.isArray(adminRows) ? adminRows[0]?.count : 0);
+            if (activeAdminCount <= 1) {
+                return res.status(409).json({ message: 'The last active administrator cannot be deactivated.' });
+            }
+        }
+
+        const archivedBy = actorEmail || 'admin';
+        const archiveData = {
+            is_active: false,
+            archived_at: new Date(),
+            archived_by: archivedBy,
+            status: 'Offline',
+            reset_password_token: null,
+            reset_password_expires: null
+        };
+        if (email) {
+            await prisma.$transaction([
+                prisma.staff.updateMany({ where: { email: { equals: email, mode: 'insensitive' } }, data: archiveData }),
+                prisma.nurses.updateMany({ where: { email: { equals: email, mode: 'insensitive' } }, data: archiveData }),
+                prisma.doctors.updateMany({ where: { email: { equals: email, mode: 'insensitive' } }, data: archiveData }),
+                prisma.accounts.updateMany({ where: { email: { equals: email, mode: 'insensitive' } }, data: archiveData })
+            ]);
+        } else {
+            const archiveWhere = result.model === 'accounts' ? { id: Number(id) } : { id };
+            await prisma[result.model].update({ where: archiveWhere, data: archiveData });
+        }
+
+        await prisma.activity_logs.create({
             data: {
-                actor_name: String(req.headers['x-user-email'] || req.headers['x-user-role'] || 'admin'),
+                actor_name: archivedBy,
                 role: 'Admin',
-                action: 'Delete User',
-                details: `Deleted ${id}${email ? ` (${email})` : ''}`,
+                action: 'Deactivate User',
+                details: `Deactivated ${displayName} (${targetRole || 'staff'}); login disabled and pending invitations revoked. Historical records retained.`,
                 target: email || id
             }
-        }).catch(() => {});
+        });
+        router._staffListCache = null;
 
-        res.json({ success: true, message: "User has been deleted.", email: email || null });
+        res.json({ success: true, message: "Staff account deactivated. Historical records were preserved.", email: email || null });
     } catch (err) {
         res.status(500).json({ message: "Server error" });
     }

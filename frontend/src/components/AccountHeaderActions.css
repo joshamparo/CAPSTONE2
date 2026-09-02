@@ -109,6 +109,9 @@ html[data-theme='dark'] .aha-toggle-thumb{background:#fff;}
 .aha-confirm-btn.danger:hover{background:#dc2626; border-color:#dc2626;}
 .aha-confirm-subtext{margin-top:10px; padding:10px 12px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc; color:#0f172a; font-weight:800;}
 .aha-confirm-error{margin-top:10px; color:#ef4444; font-weight:850;}
+.aha-confirm-type{display:block; margin-top:14px; color:#475569; font-size:.86rem; font-weight:750;}
+.aha-confirm-input{display:block; width:100%; box-sizing:border-box; margin-top:8px; border:1px solid #cbd5e1; border-radius:10px; padding:10px 12px; background:#fff; color:#0f172a; font:inherit;}
+.aha-confirm-input:focus{outline:2px solid rgba(234,88,12,.2); border-color:#ea580c;}
 
 html[data-theme='dark'] .aha-icon-btn{border-color:var(--app-border); background:var(--app-card);}
 html[data-theme='dark'] .aha-icon-btn:hover{background:var(--app-hover);}
@@ -163,6 +166,8 @@ html[data-theme='dark'] .aha-confirm-text{color:var(--app-muted);}
 html[data-theme='dark'] .aha-confirm-btn{border-color:var(--app-border); background:var(--app-card); color:var(--app-text);}
 html[data-theme='dark'] .aha-confirm-btn:hover{background:var(--app-hover);}
 html[data-theme='dark'] .aha-confirm-subtext{border-color:var(--app-border); background:var(--app-hover); color:var(--app-text);}
+html[data-theme='dark'] .aha-confirm-type{color:var(--app-muted);}
+html[data-theme='dark'] .aha-confirm-input{border-color:var(--app-border); background:var(--app-input-bg); color:var(--app-input-text);}
 
 @media (max-width: 768px){
   .aha-actions-group{flex-wrap:wrap; justify-content:flex-end;}
