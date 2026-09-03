@@ -6270,7 +6270,7 @@ function NurseDashboard() {
             </div>
 
             <div className="header-actions-group">
-                <div className="header-actions">
+                {false && <div className="header-actions">
                     {/* Notifications */}
                     <div className="header-icon-btn relative" onClick={() => {setShowNotifications(!showNotifications); setShowSettings(false);}}>
                         <Bell size={20} className="text-slate-500" />
@@ -6376,21 +6376,27 @@ function NurseDashboard() {
 	                            </div>
 	                        )}
 	                    </div>
-	                </div>
+	                </div>}
 	                
 	                <div className="header-separator"></div>
 
                 <AccountHeaderActions
-                  user={user}
+                  user={{ ...user, role: 'nurse' }}
                   roleLabel={user.roleLabel || 'Nurse'}
                   showDepartment={true}
                   departmentValue={activeDept}
                   departmentOptions={[{ value: activeDept, label: activeDept }]}
-                  showNotificationsButton={false}
-                  showSettingsButton={false}
                   onMyProfile={() => setView('profile')}
                   showChangePasswordMenu={false}
                   onSignOut={() => setShowLogoutConfirm(true)}
+                  onOpenNotification={(notification) => {
+                    const type = String(notification?.type || '').toLowerCase();
+                    if (type.includes('appointment') || type.includes('approval')) setView('appointments');
+                    else if (type.includes('lab') || type.includes('result') || type.includes('order')) setView('medical-orders');
+                    else if (type.includes('medicine') || type.includes('prescription')) setView('medicine-requests');
+                    else if (type.includes('message')) setView('communication');
+                    else setView('dashboard');
+                  }}
                 />
             </div>
         </header>
@@ -8101,7 +8107,7 @@ function NurseDashboard() {
                             <h2 className="page-title">Medical Orders</h2>
                             <p className="page-subtitle">Manage patient medications, lab requests, and supplies</p>
                         </div>
-                        <button className="btn-primary-action" onClick={() => setShowNotifications(true)}>
+                        <button className="btn-primary-action" onClick={() => setView('activity')}>
                             <Clock size={18} /> History
                         </button>
                     </div>

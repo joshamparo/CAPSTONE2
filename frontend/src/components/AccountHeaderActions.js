@@ -53,8 +53,8 @@ const getRoleLabel = (u, fallback) => {
   if (r === 'doctor_secretary') return 'Doctor Secretary';
   if (r === 'medtech') return 'Medtech';
   if (r === 'radiographer') return 'Radiographer';
-  if (r === 'ecg') return 'ECG Operator';
-  if (r === 'pt') return 'Physical Therapist';
+  if (r === 'ecg' || r === 'ecg_operator') return 'ECG Operator';
+  if (r === 'pt' || r === 'physical_therapist') return 'Physical Therapist';
   if (r === 'patient') return 'Patient';
   return r.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 };
@@ -617,6 +617,8 @@ export default function AccountHeaderActions({
                   setShowProfileMenu(false);
                 }}
                 aria-label="Notifications"
+                aria-expanded={showNotifications}
+                aria-haspopup="dialog"
               >
                 <Bell size={20} className="aha-icon" />
                 {notifUnreadCount > 0 ? <span className="aha-badge">{notifUnreadCount > 9 ? '9+' : notifUnreadCount}</span> : null}
@@ -708,6 +710,8 @@ export default function AccountHeaderActions({
                   setShowProfileMenu(false);
                 }}
                 aria-label="Settings"
+                aria-expanded={showSettings}
+                aria-haspopup="dialog"
               >
                 <Settings size={20} className="aha-icon" />
               </button>

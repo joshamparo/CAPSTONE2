@@ -1015,7 +1015,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
               <span className={statusBadgeClass('Scheduled')}>Upcoming</span>
               <span>{metrics.upcoming}</span>
             </div>
-            <AccountHeaderActions user={user} showChangePasswordMenu={false} onSignOut={handleLogout} onMyProfile={() => setActiveTab('profile')} onOpenNotification={(n) => {
+            <AccountHeaderActions user={{ ...user, role }} roleLabel={cfg.label} showChangePasswordMenu={false} onSignOut={handleLogout} onMyProfile={() => setActiveTab('profile')} onOpenNotification={(n) => {
               const type = String(n?.type || '').toLowerCase();
               if (type.includes('lab') || type.includes('result') || type.includes('imaging') || type.includes('radiology') || type.includes('ecg')) {
                 setActiveTab('orders');
