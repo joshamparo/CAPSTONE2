@@ -15,6 +15,21 @@ const HOSPITAL_LOCATION = {
 const GOOGLE_MAPS_PLACE_URL = "https://www.google.com/maps/place/Pascual+General+Hospital/@14.6670465,121.0081596,225m/data=!3m1!1e3!4m6!3m5!1s0x3397b695162c8be5:0xc37a34c97bbe0f67!8m2!3d14.666991!4d121.0090838!16s%2Fg%2F1tjgxx8x";
 const GOOGLE_MAPS_EMBED_URL = `https://maps.google.com/maps?hl=en&q=${HOSPITAL_LOCATION.latitude},${HOSPITAL_LOCATION.longitude}%20(${encodeURIComponent(HOSPITAL_LOCATION.name)})&z=21&t=k&iwloc=B&output=embed`;
 
+const DASHBOARD_PATH_BY_ROLE = {
+  admin: '/admin',
+  staff: '/admin',
+  patient: '/patient',
+  doctor: '/doctor',
+  nurse: '/nurse',
+  pharmacist: '/pharmacist',
+  cashier: '/cashier',
+  doctor_secretary: '/doctor-secretary',
+  medtech: '/medtech',
+  radiographer: '/radiographer',
+  ecg_operator: '/ecg',
+  physical_therapist: '/pt'
+};
+
 const serviceGroups = [
   {
     key: "clinical",
@@ -169,14 +184,19 @@ function HomePage() {
     // Check for logged in user
     const storedUser = localStorage.getItem('currentUser');
     if (storedUser) {
-      const parsedUser = JSON.parse(storedUser);
-      // Construct a user object that the component expects, ensuring name and role are present
-      const name = parsedUser.first_name ? `${parsedUser.first_name}` : (parsedUser.name || 'Staff');
-      setUser({
-        ...parsedUser,
-        name: name,
-        accountType: parsedUser.account_type || parsedUser.accountType,
-      });
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        // Keep the same role fallbacks used by authentication and protected routes.
+        const name = parsedUser.first_name ? `${parsedUser.first_name}` : (parsedUser.name || 'Staff');
+        setUser({
+          ...parsedUser,
+          name,
+          accountType: parsedUser.account_type || parsedUser.accountType || parsedUser.role || parsedUser.roles,
+        });
+      } catch (error) {
+        console.error('Failed to restore the current user session:', error);
+        localStorage.removeItem('currentUser');
+      }
     }
 
     const slideInterval = setInterval(() => {
@@ -292,10 +312,10 @@ function HomePage() {
   };
 
   const handleGoToDashboard = () => {
-    if (user && user.accountType) {
-      const role = user.accountType.toLowerCase();
-      navigate(`/${role}`);
-    }
+    const role = String(user?.accountType || user?.account_type || user?.role || user?.roles || '')
+      .trim()
+      .toLowerCase();
+    navigate(DASHBOARD_PATH_BY_ROLE[role] || '/login');
   };
 
   return (
