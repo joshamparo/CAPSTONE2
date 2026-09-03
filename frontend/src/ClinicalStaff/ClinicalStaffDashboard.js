@@ -59,18 +59,6 @@ const statusBadgeClass = (status) => {
   return 'cs-badge';
 };
 
-const buildHeaders = (user) => {
-  const role = String(user?.role || '').toLowerCase();
-  const email = String(user?.email || '').trim();
-  const name = String(user?.name || user?.first_name || user?.firstName || '').trim();
-  return {
-    'Content-Type': 'application/json',
-    'x-user-role': role,
-    ...(email ? { 'x-user-email': email } : {}),
-    ...(name ? { 'x-user-name': name } : {})
-  };
-};
-
 const buildAuthHeaders = (user) => {
   const role = String(user?.role || '').toLowerCase();
   const email = String(user?.email || '').trim();
@@ -83,6 +71,11 @@ const buildAuthHeaders = (user) => {
     ...(name ? { 'x-user-name': name } : {})
   };
 };
+
+const buildJsonAuthHeaders = (user) => ({
+  ...buildAuthHeaders(user),
+  'Content-Type': 'application/json'
+});
 
 const CLINICAL_PAGE_SIZE = 8;
 
@@ -329,7 +322,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/start`, {
         apiBase: API_BASE,
         method: 'POST',
-        headers: { ...buildHeaders(user), 'x-user-role': role },
+        headers: { ...buildJsonAuthHeaders(user), 'x-user-role': role },
         body: JSON.stringify({ action: 'start', sourceTable: 'appointments' })
       });
       const url = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();
@@ -550,7 +543,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     return await fetchJson(`/api/clinical-orders/${id}`, {
       apiBase: API_BASE,
       method: 'PATCH',
-      headers: buildHeaders(user),
+      headers: buildJsonAuthHeaders(user),
       body: JSON.stringify(payload)
     });
   };
@@ -636,7 +629,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       const createData = await fetchJson(`/api/lab-results`, {
         apiBase: API_BASE,
         method: 'POST',
-        headers: buildHeaders(user),
+        headers: buildJsonAuthHeaders(user),
         body: JSON.stringify({
           patientId: viewingOrder.patientId,
           orderId: viewingOrder.id,
@@ -700,7 +693,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       await fetchJson(`/api/clinical-schedule`, {
         apiBase: API_BASE,
         method: 'POST',
-        headers: buildHeaders(user),
+        headers: buildJsonAuthHeaders(user),
         body: JSON.stringify({
           role,
           staffEmail: user.email || null,
@@ -740,7 +733,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       await fetchJson(`/api/clinical-orders`, {
         apiBase: API_BASE,
         method: 'POST',
-        headers: buildHeaders(user),
+        headers: buildJsonAuthHeaders(user),
         body: JSON.stringify({
           patientId,
           patientName: patientName || null,
@@ -794,7 +787,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       await fetchJson(`/api/approval-requests/${selectedApproval.id}`, {
         apiBase: API_BASE,
         method: 'PATCH',
-        headers: buildHeaders(user),
+        headers: buildJsonAuthHeaders(user),
         body: JSON.stringify({
           status: nextStatus,
           role,
@@ -881,7 +874,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       const saved = await fetchJson(`/api/staff/${encodeURIComponent(String(user.id || user._id))}`, {
         apiBase: API_BASE,
         method: 'PUT',
-        headers: { ...buildHeaders(user), 'x-user-role': role },
+        headers: { ...buildJsonAuthHeaders(user), 'x-user-role': role },
         body: JSON.stringify(payload)
       });
       const updatedUser = {
