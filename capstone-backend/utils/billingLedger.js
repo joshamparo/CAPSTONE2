@@ -33,12 +33,13 @@ async function recordLabOrderPayment(prisma, {
   await ensureBillingTablesExist(prisma);
   const amountMoney = toMoney(amount);
   const paymentMoney = toMoney(paymentAmount == null ? amount : paymentAmount);
-  const marker = `Lab Order #${String(orderId)}`;
-  const description = `${String(service || kind || 'Laboratory Service').trim() || 'Laboratory Service'} - Lab Payment`;
+  const marker = `Clinical Order #${String(orderId)}`;
+  const legacyMarker = `Lab Order #${String(orderId)}`;
+  const description = `${String(service || kind || 'Clinical Service').trim() || 'Clinical Service'} - Clinical Service Payment`;
 
-  return prisma.$transaction(async (tx) => {
+  const writePayment = async (tx) => {
     let invoice = await tx.billing_invoices.findFirst({
-      where: { notes: { contains: marker } },
+      where: { OR: [{ notes: { contains: marker } }, { notes: { contains: legacyMarker } }] },
       include: { payments: true }
     }).catch(() => null);
 
@@ -47,7 +48,7 @@ async function recordLabOrderPayment(prisma, {
         data: {
           patient_id: patientId || null,
           status: 'Paid',
-          notes: `${marker} • Auto-created from cashier lab payment`,
+          notes: `${marker} • Auto-created from cashier clinical-service payment`,
           created_by: receivedBy || null,
           total_amount: amountMoney
         },
@@ -107,7 +108,13 @@ async function recordLabOrderPayment(prisma, {
     }
 
     return invoice.id;
-  });
+  };
+
+  // Prisma transaction clients do not expose $transaction. Reuse the caller's
+  // transaction when supplied so the payment ledger and order status commit together.
+  return typeof prisma.$transaction === 'function'
+    ? prisma.$transaction(writePayment)
+    : writePayment(prisma);
 }
 
 async function recordVideoConsultationPayment(prisma, {

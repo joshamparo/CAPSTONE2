@@ -1463,7 +1463,7 @@ export default function OfficeStaffDashboard({ mode }) {
       base.splice(1, 0, { key: 'appointments', label: 'Appointments', icon: <ClipboardList size={18} /> });
     }
     if (role === 'cashier') {
-      base.push({ key: 'lab-payments', label: 'Lab Payments', icon: <CreditCard size={18} /> });
+      base.push({ key: 'lab-payments', label: 'Clinical Service Payments', icon: <CreditCard size={18} /> });
       base.push({ key: 'payments', label: 'Payments', icon: <CreditCard size={18} /> });
       base.push({ key: 'closeout', label: 'Daily Closeout', icon: <FileText size={18} /> });
     }
@@ -1711,7 +1711,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   {view === 'dashboard' ? 'Overview' :
                    view === 'profile' ? 'My Profile' :
                    view === 'hmo' ? 'HMO Monitoring' :
-                   view === 'lab-payments' ? 'Lab Payments' :
+                   view === 'lab-payments' ? 'Clinical Service Payments' :
                    view === 'closeout' ? 'Daily Closeout' :
                    view.charAt(0).toUpperCase() + view.slice(1)}
                 </div>
@@ -1763,7 +1763,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div className="office-kpi-v">{dashboardKpis.unpaidCount}</div>
               </div>
               <div className="office-kpi">
-                <div className="office-kpi-k">Lab Payments Waiting</div>
+                <div className="office-kpi-k">Clinical Payments Waiting</div>
                 <div className="office-kpi-v">{displayedLabOrders.length}</div>
                 <div className="office-kpi-meta">Pay-before-exam queue</div>
               </div>
@@ -1773,7 +1773,7 @@ export default function OfficeStaffDashboard({ mode }) {
               <div className="office-card" style={{ marginTop: 16 }}>
                 <div className="office-billing-section-head">
                   <div>
-                    <div className="office-title" style={{ fontSize: '1.05rem' }}>Pending Lab Payments</div>
+                    <div className="office-title" style={{ fontSize: '1.05rem' }}>Pending Clinical Service Payments</div>
                     <div className="office-subtitle">Patients must pay cashier first before the lab exam can proceed.</div>
                   </div>
                   <button type="button" className="office-btn" onClick={() => { setView('lab-payments'); refreshLabOrders(); }}>
@@ -2356,7 +2356,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div style={{ marginTop: 16, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
                   <div className="office-billing-section-head">
                     <div>
-                      <div className="office-title" style={{ fontSize: '1rem' }}>Lab Payments Preview</div>
+                      <div className="office-title" style={{ fontSize: '1rem' }}>Clinical Service Payments Preview</div>
                       <div className="office-subtitle">These still pay at cashier first before the exam starts.</div>
                     </div>
                     <button type="button" className="office-btn ghost" onClick={() => setView('lab-payments')}>
@@ -2582,7 +2582,7 @@ export default function OfficeStaffDashboard({ mode }) {
           <div className="office-card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div className="office-title" style={{ fontSize: '1.05rem' }}>Lab Payments</div>
+                <div className="office-title" style={{ fontSize: '1.05rem' }}>Clinical Service Payments</div>
                 <div className="office-subtitle">Orders for pay-before-exam (laboratory / ECG / radiology / imaging). HMO-approved rows show green PAID(HMO) badge with no further payment needed.</div>
               </div>
               <div className="office-row">
@@ -2816,7 +2816,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div className="office-kpi-meta">Online receipts on this page</div>
               </div>
               <div className="office-kpi">
-                <div className="office-kpi-k">Lab Payments</div>
+                <div className="office-kpi-k">Clinical Service Payments</div>
                 <div className="office-kpi-v">{paymentHistorySummary.labCount}</div>
                 <div className="office-kpi-meta">Lab receipts on this page</div>
               </div>

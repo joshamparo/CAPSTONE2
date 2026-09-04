@@ -144,6 +144,19 @@ function canTransitionStatus({ fromStatus, toStatus, actorRole, assignedRole }) 
     return Boolean(assigned && role === assigned);
   }
 
+  if (SCHEDULABLE_ROLE_SET.has(role)) {
+    if (role !== assigned) return false;
+    const allowed = {
+      Pending: new Set(['Scheduled', 'In Progress', 'Cancelled']),
+      Scheduled: new Set(['In Progress', 'Cancelled']),
+      'In Progress': new Set(['Result', 'Cancelled']),
+      Paid: new Set(['Exam']),
+      Exam: new Set(['Result']),
+      Result: new Set(['Completed'])
+    };
+    return Boolean(allowed[from]?.has(to));
+  }
+
   return true;
 }
 
@@ -272,7 +285,7 @@ router.get('/', async (req, res) => {
                   { status: 'Pending', assigned_role: { in: Array.from(SCHEDULABLE_ROLE_SET) } }
                 ]
               },
-              { assigned_role: { in: ['medtech', 'radiographer', 'ecg_operator', 'lab_technician', 'laboratory_technician', 'imaging_technician'] } }
+              { assigned_role: { in: ['medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'lab_technician', 'laboratory_technician', 'imaging_technician'] } }
             ];
             delete where.status;
             delete where.OR;
@@ -338,14 +351,17 @@ router.get('/', async (req, res) => {
                .map((p, i) => `(${p})`)
                .join(',')}
              ) AS v(id)
-             WHERE notes ILIKE '%Lab Order #' || v.id::text || '%'
+             WHERE notes ILIKE '%Clinical Order #' || v.id::text || '%'
+                OR notes ILIKE '%Lab Order #' || v.id::text || '%'
            )
            LIMIT 500`,
           ...params
         ).catch(() => []);
         (Array.isArray(invRows) ? invRows : []).forEach((inv) => {
-          const m = String(inv.notes || '').match(/Lab Order #(\d+)/);
-          if (m && m[1]) linkedInvoicesMap.set(m[1], inv);
+          const markers = String(inv.notes || '').matchAll(/(?:Clinical|Lab) Order #(\d+)/g);
+          for (const m of markers) {
+            if (m && m[1]) linkedInvoicesMap.set(m[1], inv);
+          }
         });
 
         const invoiceIds = Array.from(new Set((Array.isArray(invRows) ? invRows : []).map((inv) => String(inv.invoice_id || '')).filter(Boolean)));
@@ -581,7 +597,8 @@ router.post('/', async (req, res) => {
     const createdId = Array.isArray(inserted) ? inserted[0]?.id : null;
     if (!createdId) return res.status(500).json({ message: 'Create failed' });
 
-    // Auto-add priced clinical orders to the patient's Draft invoice (cashier can see it immediately).
+    // Auto-add priced clinical orders to a Ready invoice so the cashier sees
+    // every onsite clinical service immediately.
     try {
       const pricingForBill = resolveClinicalServicePricing({ kind, service });
       const unitPrice = Number(pricingForBill?.unitPrice || 0);
@@ -593,7 +610,7 @@ router.post('/', async (req, res) => {
 
         await prisma.$transaction(async (tx) => {
           const open = await tx.billing_invoices.findFirst({
-            where: { patient_id: patientUuid, status: { in: ['Draft', 'Ready'] } },
+            where: { patient_id: patientUuid, notes: { contains: marker } },
             orderBy: { created_at: 'desc' }
           }).catch(() => null);
 
@@ -603,8 +620,8 @@ router.post('/', async (req, res) => {
               data: {
                 patient_id: patientUuid,
                 appointment_id: null,
-                status: 'Draft',
-                notes: 'Walk-in charges',
+                status: 'Ready',
+                notes: `Onsite clinical services • ${marker}`,
                 created_by: actorFromHeaders.actorEmail || null,
                 total_amount: '0.00'
               }
@@ -628,9 +645,11 @@ router.post('/', async (req, res) => {
 
             const prevTotal = Number(inv.total_amount || 0);
             const nextTotal = toMoney(prevTotal + unitPrice);
+            const existingNotes = String(inv.notes || '').trim();
+            const nextNotes = existingNotes.includes(marker) ? existingNotes : [existingNotes, marker].filter(Boolean).join(' • ');
             await tx.billing_invoices.update({
               where: { id: inv.id },
-              data: { total_amount: nextTotal, updated_at: new Date() }
+              data: { status: 'Ready', notes: nextNotes, total_amount: nextTotal, updated_at: new Date() }
             });
           }
         });
@@ -777,13 +796,15 @@ router.patch('/:id', async (req, res) => {
         let hmoLoaAmt = 0;
         let hmoApplied = false;
         try {
-          const marker = `%Lab Order #${orderIdBigInt}%`;
+          const marker = `%Clinical Order #${orderIdBigInt}%`;
+          const legacyMarker = `%Lab Order #${orderIdBigInt}%`;
           const invLookup = await prisma.$queryRawUnsafe(
             `SELECT i.id::text AS inv_id, c.philhealth_deduction, c.loa_approved_amount, c.hmo_provider, c.hmo_loa_number, c.status AS claim_status
              FROM public.billing_invoices i
              LEFT JOIN public.billing_hmo_claims c ON c.invoice_id = i.id
-             WHERE i.notes ILIKE $1 LIMIT 1`,
-            marker
+             WHERE i.notes ILIKE $1 OR i.notes ILIKE $2 LIMIT 1`,
+            marker,
+            legacyMarker
           ).catch(() => []);
           const f = Array.isArray(invLookup) && invLookup.length ? invLookup[0] : null;
           if (f) {
