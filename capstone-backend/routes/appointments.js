@@ -1086,6 +1086,14 @@ function getJaasConfig() {
     return { appId, keyId, privateKey };
 }
 
+function toClientRoomId(roomId) {
+    const raw = String(roomId || '').trim().replace(/^\/+|\/+$/g, '');
+    if (!raw) return '';
+    const jaas = getJaasConfig();
+    if (!jaas) return raw;
+    return raw.startsWith(`${jaas.appId}/`) ? raw : `${jaas.appId}/${raw}`;
+}
+
 function encodeJwtPart(value) {
     return Buffer.from(JSON.stringify(value)).toString('base64url');
 }
@@ -1144,8 +1152,10 @@ function buildJitsiUrl(roomId, displayName, options = {}) {
 
     const jaas = getJaasConfig();
     const base = getJitsiBaseUrl().replace(/\/+$/, '');
-    const safeRoom = encodeURIComponent(rawRoom);
-    const roomPath = jaas ? `${encodeURIComponent(jaas.appId)}/${safeRoom}` : safeRoom;
+    const roomPath = (jaas ? toClientRoomId(rawRoom) : rawRoom)
+        .split('/')
+        .map((part) => encodeURIComponent(part))
+        .join('/');
     const jwt = createJaasJwt({
         roomId: rawRoom,
         displayName: name,
@@ -1518,7 +1528,7 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
             doctorUuid: apt.doctor_uuid || null,
             patientId: apt.patient_id || null,
             consultationMode: apt.consultation_mode || 'onsite',
-            meetingRoomId: apt.meeting_room_id || null,
+            meetingRoomId: apt.meeting_room_id ? toClientRoomId(apt.meeting_room_id) : null,
             meetingStartedAt: apt.meeting_started_at || null,
             meetingEndedAt: apt.meeting_ended_at || null,
             meetingExpiresAt: apt.meeting_expires_at || null,
@@ -1592,7 +1602,7 @@ router.get('/mine', requireRole(['patient']), async (req, res) => {
             symptomsStart: apt.symptoms_start,
             doctor: apt.doctor_id,
             consultationMode: apt.consultation_mode || 'onsite',
-            meetingRoomId: apt.meeting_room_id || null,
+            meetingRoomId: apt.meeting_room_id ? toClientRoomId(apt.meeting_room_id) : null,
             meetingStartedAt: apt.meeting_started_at || null,
             meetingEndedAt: apt.meeting_ended_at || null,
             meetingExpiresAt: apt.meeting_expires_at || null,
@@ -2708,7 +2718,7 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             });
             // #endregion
             await logAppointmentActivity(req, resolvedAppointmentIdRaw, 'Video Call Started', 'Doctor started the video consultation.');
-            return res.json({ roomId: updated.meeting_room_id, url, startedAt: updated.meeting_started_at });
+            return res.json({ roomId: toClientRoomId(updated.meeting_room_id), canonicalRoomId: updated.meeting_room_id, url, startedAt: updated.meeting_started_at });
         }
 
         if (!apt.meeting_started_at) {
@@ -2737,7 +2747,7 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             });
             // #endregion
             await logAppointmentActivity(req, resolvedAppointmentIdRaw, 'Video Call Started', 'Doctor started the video consultation.');
-            return res.json({ roomId: updated.meeting_room_id, url, startedAt: updated.meeting_started_at });
+            return res.json({ roomId: toClientRoomId(updated.meeting_room_id), canonicalRoomId: updated.meeting_room_id, url, startedAt: updated.meeting_started_at });
         }
 
         const url = buildJitsiUrl(apt.meeting_room_id, doctorName, {
@@ -2759,7 +2769,7 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         });
         // #endregion
         await logAppointmentActivity(req, resolvedAppointmentIdRaw, 'Video Call Started', 'Doctor started the video consultation.');
-        res.json({ roomId: apt.meeting_room_id, url, startedAt: apt.meeting_started_at });
+        res.json({ roomId: toClientRoomId(apt.meeting_room_id), canonicalRoomId: apt.meeting_room_id, url, startedAt: apt.meeting_started_at });
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
@@ -2861,7 +2871,7 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therap
                 data: { appointmentId: idRaw, role: 'doctor', roomId, url, name: name || null }
             });
             // #endregion
-            return res.json({ roomId, url, startedAt });
+            return res.json({ roomId: toClientRoomId(roomId), canonicalRoomId: roomId, url, startedAt });
         }
 
         if (role === 'patient') {
@@ -2889,7 +2899,7 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therap
                 data: { appointmentId: idRaw, role: 'patient', roomId, url, email: email || null }
             });
             // #endregion
-            return res.json({ roomId, url, startedAt });
+            return res.json({ roomId: toClientRoomId(roomId), canonicalRoomId: roomId, url, startedAt });
         }
 
         res.status(403).json({ message: 'Forbidden' });
