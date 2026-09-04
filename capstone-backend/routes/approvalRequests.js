@@ -689,14 +689,22 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   }
 
   if (consultationMode === 'video') {
-    // Persist the canonical secure room during approval, before the patient can
-    // load/cache an empty-room fallback. Preserve any room already supplied by
-    // an older client; otherwise both clients receive this exact stored value.
+    // Establish a fresh appointment-owned room before the approved appointment
+    // becomes visible to the patient. Reset lifecycle fields as legacy/reused
+    // appointment rows can retain an expired or ended call; leaving those values
+    // behind would make the web start endpoint rotate the room after the app had
+    // already loaded it.
     const approvalRoomId = `apt-${String(appt.id)}-${crypto.randomBytes(5).toString('base64url')}`;
-    await prisma.appointments.updateMany({
-      where: { id: BigInt(appt.id), meeting_room_id: null },
-      data: { meeting_room_id: approvalRoomId, meeting_created_at: new Date() }
-    }).catch((err) => console.error('[Video Approval] Failed to create canonical meeting room:', err?.message));
+    await prisma.appointments.update({
+      where: { id: BigInt(appt.id) },
+      data: {
+        meeting_room_id: approvalRoomId,
+        meeting_created_at: new Date(),
+        meeting_started_at: null,
+        meeting_ended_at: null,
+        meeting_expires_at: null
+      }
+    });
     if (String(requestRow.payment_status || '').toLowerCase() === 'paid') {
       await recordVideoConsultationPayment(prisma, {
         appointmentId: BigInt(appt.id),

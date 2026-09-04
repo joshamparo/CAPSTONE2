@@ -2674,7 +2674,7 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         const currentRoomId = String(apt.meeting_room_id || '').trim();
         const roomNeedsUpgrade = currentRoomId.toLowerCase().startsWith('pascualinga-')
             || /^apt-\d+$/i.test(currentRoomId);
-        if (!currentRoomId || apt.meeting_ended_at || existingRoomExpired || roomNeedsUpgrade) {
+        if (!currentRoomId || roomNeedsUpgrade) {
             // Persist one appointment-owned room before returning it. Both doctor
             // and patient subsequently resolve this same room through this API.
             const roomId = makeRoomId(resolvedAppointmentIdRaw);
@@ -2721,12 +2721,20 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             return res.json({ roomId: toClientRoomId(updated.meeting_room_id), canonicalRoomId: updated.meeting_room_id, url, startedAt: updated.meeting_started_at });
         }
 
-        if (!apt.meeting_started_at) {
+        // Once a secure room has been exposed to either client it is immutable
+        // for the appointment. Restarting an ended/expired session reactivates
+        // that same room so a patient that loaded the appointment before the PT
+        // clicked Start can never be stranded in a different conference.
+        if (!apt.meeting_started_at || apt.meeting_ended_at || existingRoomExpired) {
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
             const updated = await prisma.appointments.update({
                 where: { id: resolvedAppointmentId },
-                data: { meeting_started_at: now, meeting_expires_at: expiresAt }
+                data: {
+                    meeting_started_at: now,
+                    meeting_ended_at: null,
+                    meeting_expires_at: expiresAt
+                }
             });
             const url = buildJitsiUrl(updated.meeting_room_id, doctorName, {
                 moderator: true,
