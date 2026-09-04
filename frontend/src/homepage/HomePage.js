@@ -2031,26 +2031,28 @@ function HomePage() {
             </p>
           </div>
 
-          {/* Quick Links */}
-          <div className="footer-links-col">
-            <h3 className="footer-title">Quick Links</h3>
-            <ul className="footer-links-list">
-              <li><a href="#about" className="footer-link">About Us</a></li>
-              <li><a href="#services" className="footer-link">Our Services</a></li>
-              <li><a href="#facilities" className="footer-link">Facilities</a></li>
-              <li><a href="#contact" className="footer-link">Contact Us</a></li>
-              <li><Link to="/login" className="footer-link">Staff Login</Link></li>
-            </ul>
-          </div>
+          <div className="footer-nav-groups">
+            {/* Quick Links */}
+            <nav className="footer-links-col" aria-label="Footer quick links">
+              <h3 className="footer-title">Quick Links</h3>
+              <ul className="footer-links-list">
+                <li><a href="#about" className="footer-link">About Us</a></li>
+                <li><a href="#services" className="footer-link">Our Services</a></li>
+                <li><a href="#facilities" className="footer-link">Facilities</a></li>
+                <li><a href="#contact" className="footer-link">Contact Us</a></li>
+                <li><Link to="/login" className="footer-link">Staff Login</Link></li>
+              </ul>
+            </nav>
 
-          {/* Legal */}
-          <div className="footer-links-col">
-            <h3 className="footer-title">Legal</h3>
-            <ul className="footer-links-list">
-              <li><a href="#privacy" className="footer-link">Privacy Policy</a></li>
-              <li><a href="#terms" className="footer-link">Terms of Service</a></li>
-              <li><a href="#patient-rights" className="footer-link">Patient Rights</a></li>
-            </ul>
+            {/* Legal */}
+            <nav className="footer-links-col" aria-label="Legal information">
+              <h3 className="footer-title">Legal</h3>
+              <ul className="footer-links-list">
+                <li><a href="#privacy" className="footer-link">Privacy Policy</a></li>
+                <li><a href="#terms" className="footer-link">Terms of Service</a></li>
+                <li><a href="#patient-rights" className="footer-link">Patient Rights</a></li>
+              </ul>
+            </nav>
           </div>
 
         </div>
