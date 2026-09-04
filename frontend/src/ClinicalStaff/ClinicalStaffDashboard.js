@@ -832,6 +832,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
   const passwordCriteria = {
     length: profileForm.newPassword.length >= 11,
+    upper: /[A-Z]/.test(profileForm.newPassword),
+    lower: /[a-z]/.test(profileForm.newPassword),
     special: /[^A-Za-z0-9]/.test(profileForm.newPassword),
     number: /\d/.test(profileForm.newPassword)
   };
@@ -851,13 +853,16 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     const newPassword = String(profileForm.newPassword || '');
     const confirmPassword = String(profileForm.confirmPassword || '');
     const nextErrors = {};
-    const namePattern = /^[A-Za-zÑñ][A-Za-zÑñ' .-]*$/;
+    const namePattern = /^\p{L}[\p{L}' .-]*$/u;
 
     if (firstName.length < 2) nextErrors.firstName = 'First name is required (at least 2 characters).';
+    else if (firstName.length > 80) nextErrors.firstName = 'First name must be 80 characters or fewer.';
     else if (!namePattern.test(firstName)) nextErrors.firstName = 'Enter a valid first name.';
     if (lastName.length < 2) nextErrors.lastName = 'Last name is required (at least 2 characters).';
+    else if (lastName.length > 80) nextErrors.lastName = 'Last name must be 80 characters or fewer.';
     else if (!namePattern.test(lastName)) nextErrors.lastName = 'Enter a valid last name.';
     if (!email) nextErrors.email = 'Email address is required.';
+    else if (email.length > 254) nextErrors.email = 'Email address must be 254 characters or fewer.';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) nextErrors.email = 'Enter a valid email address.';
 
     const originalFirstName = String(user.firstName || user.first_name || '').trim();
@@ -870,7 +875,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     if ((profileChanged || passwordStarted) && !currentPassword) nextErrors.currentPassword = 'Current password is required to save changes.';
     if (newPassword || confirmPassword) {
       if (!newPassword) nextErrors.newPassword = 'New password is required.';
-      else if (!passwordCriteria.length || !passwordCriteria.special || !passwordCriteria.number) nextErrors.newPassword = 'Use at least 11 characters, one number, and one special character.';
+      else if (!passwordCriteria.length || !passwordCriteria.upper || !passwordCriteria.lower || !passwordCriteria.special || !passwordCriteria.number) nextErrors.newPassword = 'Use at least 11 characters with uppercase, lowercase, number, and special characters.';
+      else if (newPassword === currentPassword) nextErrors.newPassword = 'New password must be different from the current password.';
       if (!confirmPassword) nextErrors.confirmPassword = 'Please confirm the new password.';
       else if (newPassword !== confirmPassword) nextErrors.confirmPassword = 'Passwords do not match.';
     }
@@ -900,7 +906,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
         first_name: saved.first_name || saved.firstName || firstName,
         lastName: saved.last_name || saved.lastName || lastName,
         last_name: saved.last_name || saved.lastName || lastName,
-        email: saved.email || email
+        email: saved.email || email,
+        name: `${saved.first_name || saved.firstName || firstName} ${saved.last_name || saved.lastName || lastName}`.trim()
       };
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
       setUser(updatedUser);
@@ -917,8 +924,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setProfileMessage({ type: 'error', text: 'Please select an image file.' });
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(String(file.type || '').toLowerCase())) {
+      setProfileMessage({ type: 'error', text: 'Please select a JPG, PNG, or WebP image.' });
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
@@ -936,10 +943,11 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       const data = await fetchJson('/api/staff/avatar', {
         apiBase: API_BASE,
         method: 'POST',
-        headers: { 'x-user-role': role, 'x-user-email': user.email || '' },
+        headers: buildAuthHeaders(user),
         body: formData
       });
       const avatarUrl = String(data?.avatarUrl || '').trim();
+      if (!avatarUrl) throw new Error('The server did not return the uploaded profile picture.');
       const updatedUser = { ...user, avatarUrl, avatar_url: avatarUrl, profilePicture: avatarUrl };
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
       setUser(updatedUser);
@@ -1022,7 +1030,6 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
               ) : null}
               <div>
                 <div className="cs-title">{cfg.label}</div>
-                <div className="cs-subtitle">Connected to Supabase via the backend API</div>
               </div>
             </div>
           </div>
@@ -1599,7 +1606,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <div className="input-wrapper-relative">
                       <User size={18} className="absolute-icon-left text-slate-400" />
                       <input 
-                        type="text" value={profileForm.firstName}
+                        type="text" value={profileForm.firstName} maxLength={80} autoComplete="given-name" required
                         onChange={(e) => updateProfileField('firstName', e.target.value)}
                         className={`profile-input input-with-icon-padding ${profileErrors.firstName ? 'field-error' : ''}`}
                       />
@@ -1611,7 +1618,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <label>Last Name <span aria-hidden>*</span></label>
                     <div className="input-wrapper-relative">
                       <User size={18} className="absolute-icon-left text-slate-400" />
-                      <input type="text" value={profileForm.lastName} onChange={(e) => updateProfileField('lastName', e.target.value)} className={`profile-input input-with-icon-padding ${profileErrors.lastName ? 'field-error' : ''}`} />
+                      <input type="text" value={profileForm.lastName} maxLength={80} autoComplete="family-name" required onChange={(e) => updateProfileField('lastName', e.target.value)} className={`profile-input input-with-icon-padding ${profileErrors.lastName ? 'field-error' : ''}`} />
                     </div>
                     {profileErrors.lastName ? <div className="profile-field-error">{profileErrors.lastName}</div> : null}
                   </div>
@@ -1620,7 +1627,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <label>Email Address <span aria-hidden>*</span></label>
                     <div className="input-wrapper-relative">
                       <Mail size={18} className="absolute-icon-left text-slate-400" />
-                      <input type="email" value={profileForm.email} onChange={(e) => updateProfileField('email', e.target.value)} className={`profile-input input-with-icon-padding ${profileErrors.email ? 'field-error' : ''}`} />
+                      <input type="email" value={profileForm.email} maxLength={254} autoComplete="email" required onChange={(e) => updateProfileField('email', e.target.value)} className={`profile-input input-with-icon-padding ${profileErrors.email ? 'field-error' : ''}`} />
                     </div>
                     {profileErrors.email ? <div className="profile-field-error">{profileErrors.email}</div> : null}
                   </div>
@@ -1651,6 +1658,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                         onChange={(e) => updateProfileField('currentPassword', e.target.value)}
                         className={`profile-input input-with-icon-padding ${profileErrors.currentPassword ? 'field-error' : ''}`}
                         placeholder="Enter current password"
+                        autoComplete="current-password" maxLength={128}
                       />
                       <button type="button" className="toggle-password-btn" onClick={() => setShowPasswords((previous) => ({ ...previous, current: !previous.current }))} aria-label="Toggle current password visibility">
                         {showPasswords.current ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -1668,6 +1676,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                         onChange={(e) => updateProfileField('newPassword', e.target.value)}
                         className={`profile-input input-with-icon-padding ${profileErrors.newPassword ? 'field-error' : ''}`}
                         placeholder="Enter new password"
+                        autoComplete="new-password" maxLength={128}
                       />
                       <button type="button" className="toggle-password-btn" onClick={() => setShowPasswords((previous) => ({ ...previous, next: !previous.next }))} aria-label="Toggle new password visibility">
                         {showPasswords.next ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -1679,6 +1688,14 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                       <div className={`checklist-item ${passwordCriteria.length ? 'valid' : ''}`}>
                         {passwordCriteria.length ? <Check size={14} /> : <X size={14} />}
                         <span>At least 11 characters</span>
+                      </div>
+                      <div className={`checklist-item ${passwordCriteria.upper ? 'valid' : ''}`}>
+                        {passwordCriteria.upper ? <Check size={14} /> : <X size={14} />}
+                        <span>Contains an uppercase letter</span>
+                      </div>
+                      <div className={`checklist-item ${passwordCriteria.lower ? 'valid' : ''}`}>
+                        {passwordCriteria.lower ? <Check size={14} /> : <X size={14} />}
+                        <span>Contains a lowercase letter</span>
                       </div>
                       <div className={`checklist-item ${passwordCriteria.special ? 'valid' : ''}`}>
                         {passwordCriteria.special ? <Check size={14} /> : <X size={14} />}
@@ -1700,6 +1717,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                         onChange={(e) => updateProfileField('confirmPassword', e.target.value)}
                         className={`profile-input input-with-icon-padding ${profileErrors.confirmPassword ? 'field-error' : ''}`}
                         placeholder="Confirm new password"
+                        autoComplete="new-password" maxLength={128}
                       />
                       <button type="button" className="toggle-password-btn" onClick={() => setShowPasswords((previous) => ({ ...previous, confirm: !previous.confirm }))} aria-label="Toggle password confirmation visibility">
                         {showPasswords.confirm ? <EyeOff size={20} /> : <Eye size={20} />}

@@ -689,6 +689,10 @@ router.post('/avatar', requireRole(STAFF_ACCOUNT_TYPES), upload.single('avatar')
 
         const requesterRole = normalizeRole(req.headers['x-user-role'] || '');
         const requesterEmail = normalizeEmail(req.headers['x-user-email'] || '');
+        const requesterId = String(req.auth?.id || '').trim();
+        if (requesterRole !== 'admin' && (!requesterId || requesterId !== String(target.id))) {
+            return res.status(403).json({ message: 'You can only update your own profile photo.' });
+        }
         if (requesterRole !== 'admin' && (!requesterEmail || requesterEmail !== normalizeEmail(target.email || ''))) {
             return res.status(403).json({ message: 'You can only update your own profile photo.' });
         }
@@ -757,7 +761,7 @@ router.post('/', requireRole(['admin']), async (req, res) => {
         const cleanStr = (v) => String(v || "").trim();
         const isValidPHPhone = (v) => /^(\+?63\s?|0)9\d{9}$/.test(String(cleanStr(v)).replace(/[\s\-()]/g, ''));
         const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanStr(v));
-        const isValidName = (v) => { const s = cleanStr(v); return !!s && /^[A-Za-zÑñ][A-Za-zÑñ' .\-]*$/.test(s); };
+        const isValidName = (v) => { const s = cleanStr(v); return !!s && /^\p{L}[\p{L}' .\-]*$/u.test(s); };
 
         const firstNameClean = cleanStr(firstName);
         const lastNameClean = cleanStr(lastName);
@@ -2358,12 +2362,15 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
 
         if (model !== 'accounts') {
             if (!firstNameClean || firstNameClean.length < 2) bodyErrors.push("First Name is required (at least 2 characters).");
+            else if (firstNameClean.length > 80) bodyErrors.push("First Name must be 80 characters or fewer.");
             else if (!isValidName(firstNameClean)) bodyErrors.push("First Name contains invalid characters.");
             if (!lastNameClean || lastNameClean.length < 2) bodyErrors.push("Last Name is required (at least 2 characters).");
+            else if (lastNameClean.length > 80) bodyErrors.push("Last Name must be 80 characters or fewer.");
             else if (!isValidName(lastNameClean)) bodyErrors.push("Last Name contains invalid characters.");
             if (middleNameClean && !isValidName(middleNameClean)) bodyErrors.push("Middle Name contains invalid characters.");
         }
         if (!emailClean) bodyErrors.push("Email is required.");
+        else if (emailClean.length > 254) bodyErrors.push("Email must be 254 characters or fewer.");
         else if (!isValidEmail(emailClean)) bodyErrors.push("Invalid email address format.");
 
         if (model === 'accounts') {
@@ -2457,8 +2464,12 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             const pwErrors = [];
             // Validate password strength (11 chars, special char, number)
             if (trimmedPassword.length < 11) pwErrors.push("11 characters");
+            if (trimmedPassword.length > 128) pwErrors.push("no more than 128 characters");
+            if (!/[A-Z]/.test(trimmedPassword)) pwErrors.push("uppercase letter");
+            if (!/[a-z]/.test(trimmedPassword)) pwErrors.push("lowercase letter");
             if (!/[^A-Za-z0-9]/.test(trimmedPassword)) pwErrors.push("special character");
             if (!/[0-9]/.test(trimmedPassword)) pwErrors.push("number");
+            if (trimmedPassword === providedCurrentPassword) pwErrors.push("a value different from the current password");
             if (pwErrors.length > 0) {
                  return res.status(400).json({ message: `Password must contain at least: ${pwErrors.join(", ")}.` });
             }
@@ -2534,7 +2545,13 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         router._staffListCache = null;
         
         const { password: _password, reset_password_token: _resetToken, reset_password_expires: _resetExpiry, ...safeUpdatedUser } = updatedUser;
-        const resUser = { ...safeUpdatedUser, id: updatedUser.id ? updatedUser.id.toString() : undefined };
+        const sessionToken = createSessionToken({
+            id: updatedUser.id,
+            email: updatedUser.email,
+            role: originalRole,
+            sessionVersion: updatedUser.session_version
+        });
+        const resUser = { ...safeUpdatedUser, id: updatedUser.id ? updatedUser.id.toString() : undefined, sessionToken };
         if (resUser.contact_number) resUser.contact_number = resUser.contact_number.toString();
         res.json(resUser);
     } catch (err) {
