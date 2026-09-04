@@ -124,6 +124,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const [videoAppointments, setVideoAppointments] = useState([]);
   const [videoAppointmentsLoading, setVideoAppointmentsLoading] = useState(false);
   const [videoAppointmentsError, setVideoAppointmentsError] = useState('');
+  const [videoActionId, setVideoActionId] = useState('');
   const [videoMeeting, setVideoMeeting] = useState(null);
   const [profileForm, setProfileForm] = useState(() => ({
     firstName: user.firstName || user.first_name || '',
@@ -317,6 +318,9 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
   const startVideoConsultation = async (appointment) => {
     if (!appointment?.id) return;
+    const appointmentId = String(appointment.id);
+    if (videoActionId === appointmentId) return;
+    setVideoActionId(appointmentId);
     setVideoAppointmentsError('');
     try {
       const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/start`, {
@@ -332,6 +336,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       await refreshVideoAppointments();
     } catch (e) {
       setVideoAppointmentsError(String(e?.message || 'Unable to start the video consultation.'));
+    } finally {
+      setVideoActionId('');
     }
   };
 
@@ -359,12 +365,18 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
   const filteredPatients = useMemo(() => {
     const q = String(patientSearch || '').trim().toLowerCase();
-    if (!q) return patients;
-    return (patients || []).filter((p) => {
-      const name = `${p.first_name || p.firstName || ''} ${p.last_name || p.lastName || ''}`.toLowerCase();
+    const list = Array.isArray(patients) ? patients : [];
+    if (!q) return list;
+    return list.map((p, index) => {
+      const firstName = String(p.first_name || p.firstName || '').trim().toLowerCase();
+      const lastName = String(p.last_name || p.lastName || '').trim().toLowerCase();
+      const name = `${firstName} ${lastName}`.trim();
       const email = String(p.email || '').toLowerCase();
-      return name.includes(q) || email.includes(q) || String(p.id || p._id || '').toLowerCase().includes(q);
-    });
+      const id = String(p.id || p._id || '').toLowerCase();
+      if (!name.includes(q) && !email.includes(q) && !id.includes(q)) return null;
+      const rank = firstName.startsWith(q) ? 0 : lastName.startsWith(q) ? 1 : name.startsWith(q) ? 2 : name.includes(q) ? 3 : email.startsWith(q) ? 4 : 5;
+      return { p, rank, index, name };
+    }).filter(Boolean).sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name) || a.index - b.index).map((entry) => entry.p);
   }, [patients, patientSearch]);
 
   const metrics = useMemo(() => {
@@ -473,6 +485,10 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     const start = (p - 1) * CLINICAL_PAGE_SIZE;
     return { items: list.slice(start, start + CLINICAL_PAGE_SIZE), page: p, totalPages, total };
   }, [filteredPatients, patientsPage]);
+
+  const selectedApprovalIsOpen = selectedApproval
+    ? /^(pending|pending approval|suggested)$/i.test(String(selectedApproval.status || 'Pending').trim().replace(/[\s_-]+/g, ' '))
+    : false;
 
   const openOrder = async (o) => {
     setViewingOrder(o);
@@ -982,10 +998,10 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
         <nav className="cs-nav">
           <TabButton id="dashboard" icon={<LayoutDashboard size={18} />} label="Dashboard" />
           <TabButton id="approvals" icon={<ClipboardList size={18} />} label="Approvals" />
-          {!isEcgOperator ? <TabButton id="appointments" icon={<Calendar size={18} />} label="Appointments" /> : null}
+          {!isEcgOperator && !isPhysicalTherapist ? <TabButton id="appointments" icon={<Calendar size={18} />} label="Appointments" /> : null}
           {isPhysicalTherapist ? <TabButton id="video" icon={<Video size={18} />} label="Video Consultations" /> : null}
           {!isEcgOperator ? <TabButton id="patients" icon={<UserRound size={18} />} label="Patient Records" /> : null}
-          <TabButton id="orders" icon={<ClipboardList size={18} />} label="Medical Orders" />
+          {!isPhysicalTherapist ? <TabButton id="orders" icon={<ClipboardList size={18} />} label="Medical Orders" /> : null}
         </nav>
 
         <div className="cs-sidebar-footer">
@@ -1200,12 +1216,11 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
               {approvalsError ? <span className="cs-muted">{approvalsError}</span> : null}
             </div>
 
-            <div className="cs-two-col">
+            <div className="cs-two-col cs-approval-layout">
               <div className="cs-card" style={{ boxShadow: 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: 12, flexWrap: 'wrap' }}>
                   <div className="cs-card-title" style={{ margin: 0 }}>Approval Inbox</div>
-                  {paginatedApprovals.totalPages > 1 ? (
-                    <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+                  <div className="cs-pagination" aria-label="Approval pagination">
                       <button
                         type="button"
                         className="cs-btn secondary"
@@ -1215,6 +1230,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                       >
                         <ChevronLeft size={18} />
                       </button>
+                      <span>Page {paginatedApprovals.page} of {paginatedApprovals.totalPages}</span>
                       <button
                         type="button"
                         className="cs-btn secondary"
@@ -1224,8 +1240,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                       >
                         <ChevronRight size={18} />
                       </button>
-                    </div>
-                  ) : null}
+                  </div>
                 </div>
                 {approvalsLoading ? (
                   <div className="cs-muted">Loading…</div>
@@ -1259,7 +1274,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                 )}
               </div>
 
-              <div className="cs-card" style={{ boxShadow: 'none' }}>
+              <div className="cs-card cs-approval-review" style={{ boxShadow: 'none' }}>
                 <div className="cs-card-title">Review</div>
                 {!selectedApproval ? (
                   <div className="cs-muted">Select a request to review.</div>
@@ -1283,7 +1298,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
                     <div className="cs-field">
                       <div className="cs-field-label">Note (optional)</div>
-                      <textarea className="cs-input" rows={3} value={approvalNote} onChange={(e) => setApprovalNote(e.target.value)} />
+                      <textarea className="cs-input" rows={3} maxLength={1000} value={approvalNote} onChange={(e) => setApprovalNote(e.target.value)} placeholder="Add an optional review note" />
                     </div>
 
                     {approvalActionError ? (
@@ -1298,11 +1313,11 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                         <XCircle size={16} />
                         Close
                       </button>
-                      <button type="button" className="cs-btn secondary" onClick={() => applyApproval('Rejected')} disabled={approvalActionLoading}>
+                      <button type="button" className="cs-btn secondary" onClick={() => applyApproval('Rejected')} disabled={approvalActionLoading || !selectedApprovalIsOpen}>
                         <XCircle size={16} />
                         Reject
                       </button>
-                      <button type="button" className="cs-btn" onClick={() => applyApproval('Approved')} disabled={approvalActionLoading}>
+                      <button type="button" className="cs-btn" onClick={() => applyApproval('Approved')} disabled={approvalActionLoading || !selectedApprovalIsOpen}>
                         <CheckCircle2 size={16} />
                         Approve
                       </button>
@@ -1386,7 +1401,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                         <td>{scheduleLabel || '—'}</td>
                         <td>{appointment.reason || appointment.mainConcern || 'Physical Therapy consultation'}</td>
                         <td><span className={statusBadgeClass(status)}>{status}</span></td>
-                        <td><button type="button" className="cs-btn" disabled={actionUnavailable} title={actionUnavailable ? joinWindow.reason : actionLabel} onClick={() => startVideoConsultation(appointment)}><Video size={16} /> {actionLabel}</button></td>
+                        <td><button type="button" className="cs-btn" disabled={actionUnavailable || videoActionId === String(appointment.id)} title={actionUnavailable ? joinWindow.reason : actionLabel} onClick={() => startVideoConsultation(appointment)}><Video size={16} /> {videoActionId === String(appointment.id) ? 'Opening…' : actionLabel}</button></td>
                       </tr>
                     );
                   })}
@@ -1400,7 +1415,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
           <div className="cs-card">
             <div className="cs-card-title">Patient Records</div>
             <div className="cs-toolbar" style={{ marginBottom: 12 }}>
-              <input className="cs-input" value={patientSearch} onChange={(e) => setPatientSearch(e.target.value)} placeholder="Search patient name/email/id" />
+              <input className="cs-input" type="search" maxLength={120} autoComplete="off" value={patientSearch} onChange={(e) => setPatientSearch(e.target.value)} placeholder="Search patient name, email, or ID" aria-label="Search patient records" />
               <button type="button" className="cs-btn secondary" onClick={refreshPatients} disabled={patientsLoading}>
                 Refresh
               </button>
@@ -1410,9 +1425,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
             <div className="cs-two-col">
               <div className="cs-card" style={{ boxShadow: 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: 12, flexWrap: 'wrap' }}>
-                  <div className="cs-card-title" style={{ margin: 0 }}>Patients</div>
-                  {paginatedPatients.totalPages > 1 ? (
-                    <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+                  <div><div className="cs-card-title" style={{ margin: 0 }}>Patients</div><div className="cs-muted">{paginatedPatients.total} matching record{paginatedPatients.total === 1 ? '' : 's'}</div></div>
+                  <div className="cs-pagination" aria-label="Patient pagination">
                       <button
                         type="button"
                         className="cs-btn secondary"
@@ -1422,6 +1436,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                       >
                         <ChevronLeft size={18} />
                       </button>
+                      <span>Page {paginatedPatients.page} of {paginatedPatients.totalPages}</span>
                       <button
                         type="button"
                         className="cs-btn secondary"
@@ -1431,8 +1446,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                       >
                         <ChevronRight size={18} />
                       </button>
-                    </div>
-                  ) : null}
+                  </div>
                 </div>
                 {patientsLoading ? (
                   <div className="cs-muted">Loading…</div>
