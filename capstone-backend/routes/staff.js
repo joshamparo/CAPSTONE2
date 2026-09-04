@@ -511,7 +511,7 @@ router.post('/login', loginRateLimit, async (req, res) => {
         await ensureLoginOtpSchema();
         const challengeId = crypto.randomUUID();
         const otp = secureOtp();
-        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+        const expiresAt = new Date(Date.now() + 60 * 1000);
         const resendAfter = new Date(Date.now() + 60 * 1000);
         const role = String(user.account_type || user.roles || (modelType === 'doctors' ? 'doctor' : modelType === 'nurses' ? 'nurse' : 'staff')).trim().toLowerCase();
         await prisma.$executeRawUnsafe(
@@ -531,7 +531,7 @@ router.post('/login', loginRateLimit, async (req, res) => {
             console.error('[OTP] Delivery failed:', mailError?.message || mailError);
             return res.status(502).json({ message: 'Unable to send the verification code right now. Please try again.' });
         }
-        return res.json({ otpRequired: true, challengeId, email, role, expiresInSeconds: 300, resendAfterSeconds: 60 });
+        return res.json({ otpRequired: true, challengeId, email, role, expiresInSeconds: 60, resendAfterSeconds: 60 });
         
     } catch (err) {
         res.status(500).json({ message: "Server Error" });
@@ -1126,14 +1126,14 @@ router.post('/login/otp/resend', otpResendRateLimit, async (req, res) => {
         const waitSeconds = Math.ceil((new Date(challenge.resend_after).getTime() - Date.now()) / 1000);
         if (waitSeconds > 0) return res.status(429).json({ message: `Please wait ${waitSeconds} seconds before requesting another code.`, retryAfterSeconds: waitSeconds });
         const otp = secureOtp();
-        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+        const expiresAt = new Date(Date.now() + 60 * 1000);
         await deliverLoginOtp(challenge.email, otp, expiresAt);
         await prisma.$executeRawUnsafe(
             `UPDATE public.login_otp_challenges SET otp_hash = $2, attempts = 0, expires_at = $3, resend_after = $4
              WHERE id = $1::uuid AND consumed_at IS NULL`,
             challengeId, otpHash(challengeId, otp), expiresAt, new Date(Date.now() + 60 * 1000)
         );
-        return res.json({ success: true, expiresInSeconds: 300, resendAfterSeconds: 60 });
+        return res.json({ success: true, expiresInSeconds: 60, resendAfterSeconds: 60 });
     } catch (error) {
         console.error('[OTP] Resend failed:', error?.message || error);
         return res.status(502).json({ message: 'Unable to resend the verification code right now. Please try again.' });

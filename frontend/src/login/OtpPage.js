@@ -16,7 +16,7 @@ const OtpPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [resendTimer, setResendTimer] = useState(60);
-  const [entryTimer, setEntryTimer] = useState(300);
+  const [entryTimer, setEntryTimer] = useState(60);
   const [submitting, setSubmitting] = useState(false);
   const inputRefs = useRef([]);
   const navigate = useNavigate();
@@ -95,7 +95,7 @@ const OtpPage = () => {
         return;
       }
       clearCode();
-      setEntryTimer(Number(data.expiresInSeconds) || 300);
+      setEntryTimer(Number(data.expiresInSeconds) || 60);
       setResendTimer(Number(data.resendAfterSeconds) || 60);
       setSuccess(`New code sent to ${displayEmail}`);
     } catch (_) {
