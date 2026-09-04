@@ -1056,9 +1056,23 @@ function HomePage() {
           border: 1px solid #334155;
           transition: transform 0.3s, border-color 0.3s;
         }
-        .mvv-card:hover {
+        .mvv-card:hover,
+        .mvv-card:focus-within {
           transform: translateY(-5px);
           border-color: #ea580c;
+          background: #1e293b;
+          color: #f8fafc;
+        }
+        .mvv-card:hover .mvv-text,
+        .mvv-card:focus-within .mvv-text,
+        .mvv-card:hover .mvv-pill,
+        .mvv-card:focus-within .mvv-pill {
+          color: #f8fafc;
+        }
+        .mvv-card:hover .mvv-pill,
+        .mvv-card:focus-within .mvv-pill {
+          background: rgba(255,255,255,0.08);
+          border-color: rgba(255,255,255,0.16);
         }
         .mvv-badge {
           display: inline-flex;
@@ -1306,6 +1320,18 @@ function HomePage() {
             background: rgba(248, 250, 252, 0.9);
             border: 1px solid rgba(226, 232, 240, 0.9);
           }
+          .main-nav a.nav-btn-primary {
+            background: #ea580c;
+            border-color: #ea580c;
+            color: #ffffff !important;
+          }
+          .main-nav a.nav-btn-primary:hover,
+          .main-nav a.nav-btn-primary:focus-visible,
+          .main-nav a.nav-btn-primary:active {
+            background: #c2410c;
+            border-color: #c2410c;
+            color: #ffffff !important;
+          }
           .user-greeting-wrapper {
             flex-direction: column;
             align-items: stretch;
@@ -1427,8 +1453,8 @@ function HomePage() {
 
           .contact-map {
             min-height: 0;
-            height: auto;
-            aspect-ratio: 16 / 10;
+            height: clamp(360px, 112vw, 440px);
+            aspect-ratio: auto;
             border-width: 4px;
           }
           .contact-map-badge {
@@ -1491,7 +1517,15 @@ function HomePage() {
           }
 
           .contact-map {
-            aspect-ratio: 16 / 9;
+            height: 390px;
+            aspect-ratio: auto;
+          }
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+          .mvv-card:hover {
+            transform: none;
+            background: #1e293b;
           }
         }
       `}</style>

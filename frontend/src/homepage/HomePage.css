@@ -1013,9 +1013,14 @@ html {
 
 .mvv-card:hover {
   transform: translateY(-10px);
-  background: rgba(255, 255, 255, 0.95);
+  background: #1e293b;
   box-shadow: 0 25px 50px rgba(15, 23, 42, 0.1);
   border-color: var(--hospital-orange);
+}
+
+.mvv-card:hover .mvv-text,
+.mvv-card:hover .mvv-pill {
+  color: #f8fafc;
 }
 
 .mvv-top {
