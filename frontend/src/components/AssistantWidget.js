@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, MessageCircleMore, Send, ShieldCheck, X } from 'lucide-react';
+import { Bot, MessageCircleMore, RefreshCw, Send, ShieldCheck, Square, X } from 'lucide-react';
 import { API_BASE, buildAuthHeaders, getCurrentUser } from '../utils/api';
 import './AssistantWidget.css';
 
@@ -138,7 +138,11 @@ export default function AssistantWidget({ pathname = '/' }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showQuickQuestions, setShowQuickQuestions] = useState(true);
+  const [suggestedQuestions, setSuggestedQuestions] = useState([]);
+  const [lastFailedMessage, setLastFailedMessage] = useState('');
   const messagesRef = useRef(null);
+  const requestControllerRef = useRef(null);
+  const requestSequenceRef = useRef(0);
 
   const role = useMemo(() => getAssistantRole(), [pathname]);
   const meta = useMemo(() => getPanelMeta(pathname), [pathname]);
@@ -155,12 +159,18 @@ export default function AssistantWidget({ pathname = '/' }) {
   ]);
 
   useEffect(() => {
+    requestSequenceRef.current += 1;
+    requestControllerRef.current?.abort();
     setMessages(buildWelcomeMessages());
     setError('');
     setLoading(false);
     setDraft('');
     setShowQuickQuestions(true);
+    setSuggestedQuestions([]);
+    setLastFailedMessage('');
   }, [role, pathname]);
+
+  useEffect(() => () => requestControllerRef.current?.abort(), []);
 
   useEffect(() => {
     if (!messagesRef.current) return;
@@ -185,7 +195,13 @@ export default function AssistantWidget({ pathname = '/' }) {
     setDraft('');
     setLoading(true);
     setError('');
+    setLastFailedMessage('');
+    setSuggestedQuestions([]);
 
+    const requestSequence = ++requestSequenceRef.current;
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
     try {
       const headers = {
         'Content-Type': 'application/json',
@@ -205,6 +221,7 @@ export default function AssistantWidget({ pathname = '/' }) {
       const res = await fetch(`${API_BASE}/api/assistant/chat`, {
         method: 'POST',
         headers,
+        signal: controller.signal,
         body: JSON.stringify({
           role,
           pathname,
@@ -217,6 +234,7 @@ export default function AssistantWidget({ pathname = '/' }) {
       });
 
       const data = await res.json().catch(() => null);
+      if (requestSequence !== requestSequenceRef.current) return;
       if (!res.ok) {
         throw new Error(data?.message || 'Unable to contact the assistant right now.');
       }
@@ -236,19 +254,34 @@ export default function AssistantWidget({ pathname = '/' }) {
                 : undefined
         }
       ]);
+      setSuggestedQuestions(
+        Array.isArray(data?.suggestions)
+          ? data.suggestions.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 5)
+          : []
+      );
     } catch (err) {
-      setError(String(err?.message || 'Unable to contact the assistant right now.'));
+      if (requestSequence !== requestSequenceRef.current) return;
+      const timedOut = err?.name === 'AbortError';
+      const safeError = timedOut
+        ? 'The request took too long. You can retry your question.'
+        : String(err?.message || 'Unable to contact the assistant right now.');
+      setError(safeError);
+      setLastFailedMessage(content);
       setMessages((prev) => [
         ...prev,
         {
           id: `assistant-error-${Date.now()}`,
           role: 'assistant',
-          content: 'I’m having trouble responding right now. Please try again in a moment or ask a simpler hospital or workflow question.',
+          content: timedOut
+            ? 'The response timed out. Your question was kept so you can retry it.'
+            : 'I’m having trouble responding right now. Please try again in a moment.',
           meta: 'Temporary issue'
         }
       ]);
     } finally {
-      setLoading(false);
+      window.clearTimeout(timeout);
+      if (requestControllerRef.current === controller) requestControllerRef.current = null;
+      if (requestSequence === requestSequenceRef.current) setLoading(false);
     }
   };
 
@@ -265,13 +298,19 @@ export default function AssistantWidget({ pathname = '/' }) {
   };
 
   const reopenFreshChat = () => {
+    requestSequenceRef.current += 1;
+    requestControllerRef.current?.abort();
     setMessages(buildWelcomeMessages());
     setDraft('');
     setError('');
     setLoading(false);
     setShowQuickQuestions(true);
+    setSuggestedQuestions([]);
+    setLastFailedMessage('');
     setIsOpen(true);
   };
+
+  const displayedQuestions = showQuickQuestions ? quickQuestions : suggestedQuestions;
 
   const pageClass = useMemo(() => {
     const currentPath = String(pathname || '').trim();
@@ -295,9 +334,19 @@ export default function AssistantWidget({ pathname = '/' }) {
                 <h2 className="assistant-widget-title">{meta.title}</h2>
                 <p className="assistant-widget-subtitle">{meta.subtitle}</p>
               </div>
-              <button type="button" className="assistant-widget-close" onClick={() => setIsOpen(false)} aria-label="Close assistant">
-                <X size={18} />
-              </button>
+              <div className="assistant-widget-header-actions">
+                <button type="button" className="assistant-widget-header-button" onClick={reopenFreshChat} aria-label="Start a new conversation" title="New conversation">
+                  <RefreshCw size={17} />
+                </button>
+                {loading ? (
+                  <button type="button" className="assistant-widget-header-button" onClick={() => requestControllerRef.current?.abort()} aria-label="Stop generating response" title="Stop response">
+                    <Square size={16} />
+                  </button>
+                ) : null}
+                <button type="button" className="assistant-widget-close" onClick={() => setIsOpen(false)} aria-label="Close assistant">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
             <div className="assistant-widget-status">
               <span className="assistant-widget-status-dot" />
@@ -325,11 +374,11 @@ export default function AssistantWidget({ pathname = '/' }) {
               ) : null}
             </div>
 
-            {showQuickQuestions ? (
+            {displayedQuestions.length ? (
               <div className="assistant-widget-quick">
-                <span className="assistant-widget-quick-label">Quick questions</span>
+                <span className="assistant-widget-quick-label">{showQuickQuestions ? 'Quick questions' : 'You may also ask'}</span>
                 <div className="assistant-widget-quick-grid">
-                  {quickQuestions.map((question) => (
+                  {displayedQuestions.map((question) => (
                     <button
                       key={question}
                       type="button"
@@ -353,13 +402,21 @@ export default function AssistantWidget({ pathname = '/' }) {
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={loading}
+                  maxLength={1000}
+                  aria-describedby="assistant-privacy-note"
                 />
                 <button type="submit" className="assistant-widget-send" disabled={loading || !String(draft || '').trim()} aria-label="Send message">
                   <Send size={18} />
                 </button>
               </div>
-              <div className="assistant-widget-footer-note">
-                {error || 'The assistant answers hospital information and role-appropriate workflow questions only. It does not provide diagnosis or prescription advice.'}
+              {lastFailedMessage && !loading ? (
+                <button type="button" className="assistant-widget-retry" onClick={() => sendMessage(lastFailedMessage)}>
+                  <RefreshCw size={14} /> Retry last question
+                </button>
+              ) : null}
+              <div id="assistant-privacy-note" className="assistant-widget-footer-note">
+                {error || 'Do not enter patient names, IDs, results, or other private health information. This assistant does not provide diagnosis or prescriptions.'}
+                <span className="assistant-widget-character-count">{draft.length}/1000</span>
               </div>
             </form>
           </div>

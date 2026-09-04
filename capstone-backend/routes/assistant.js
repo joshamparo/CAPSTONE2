@@ -1,9 +1,10 @@
 const express = require('express');
+const { verifySessionToken } = require('../utils/sessionToken');
 
 const router = express.Router();
 
 const OPENAI_API_KEY = String(process.env.OPENAI_API_KEY || '').trim();
-const OPENAI_MODEL = String(process.env.OPENAI_ASSISTANT_MODEL || 'gpt-5-mini').trim();
+const OPENAI_MODEL = String(process.env.OPENAI_ASSISTANT_MODEL || process.env.OPENAI_MODEL || 'gpt-5-mini').trim();
 const OPENAI_TIMEOUT_MS = Math.max(3000, Math.trunc(Number(process.env.OPENAI_TIMEOUT_MS || 12000)));
 
 // Lightweight in-memory rate limiter for `/api/assistant/chat`.
@@ -11,6 +12,9 @@ const OPENAI_TIMEOUT_MS = Math.max(3000, Math.trunc(Number(process.env.OPENAI_TI
 const ASSISTANT_RATE_LIMIT_WINDOW_MS = Math.max(5000, Math.trunc(Number(process.env.ASSISTANT_RATE_LIMIT_WINDOW_MS || 15_000)));
 const ASSISTANT_RATE_LIMIT_MAX = Math.max(1, Math.trunc(Number(process.env.ASSISTANT_RATE_LIMIT_MAX || 8)));
 const assistantRateState = new Map(); // key -> { count, resetAt }
+const ASSISTANT_ROLES = new Set(['admin', 'doctor', 'nurse', 'pharmacist', 'cashier', 'doctor_secretary', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'staff']);
+const MAX_MESSAGE_CHARS = 1000;
+const MAX_CONVERSATION_CHARS = 5000;
 
 const TAGLISH_SLANG_MAP = [
   [/b(g?)ruh?\b/gi, ''],
@@ -664,6 +668,42 @@ function normalizeRole(value) {
   return raw.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'public';
 }
 
+function authenticatedAssistantRole(req) {
+  const match = String(req.headers.authorization || '').trim().match(/^Bearer\s+(.+)$/i);
+  if (!match) return 'public';
+  try {
+    const session = verifySessionToken(match[1]);
+    const role = normalizeRole(session?.role || '');
+    return session && ASSISTANT_ROLES.has(role) ? role : 'public';
+  } catch (_) {
+    return 'public';
+  }
+}
+
+function safeAssistantPath(role, value) {
+  if (role === 'public') return '/';
+  const raw = String(value || '').trim().slice(0, 120);
+  if (!/^\/[a-z0-9/_-]*$/i.test(raw)) return '/';
+  const roleRoots = {
+    admin: '/admin', doctor: '/doctor', nurse: '/nurse', pharmacist: '/pharmacist',
+    cashier: '/cashier', doctor_secretary: '/doctor-secretary', medtech: '/medtech',
+    radiographer: '/radiographer', ecg_operator: '/ecg', physical_therapist: '/pt', staff: '/staff'
+  };
+  const root = roleRoots[role];
+  return root && (raw === root || raw.startsWith(`${root}/`)) ? raw : (root || '/');
+}
+
+function validatedMessages(value) {
+  if (!Array.isArray(value)) return [];
+  if (value.some((message) => String(message?.content || '').trim().length > MAX_MESSAGE_CHARS)) return null;
+  const messages = value.slice(-8).map((message) => ({
+    role: String(message?.role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user',
+    content: String(message?.content || '').trim()
+  })).filter((message) => message.content);
+  const total = messages.reduce((sum, message) => sum + message.content.length, 0);
+  return total <= MAX_CONVERSATION_CHARS ? messages : null;
+}
+
 function roleLabel(role) {
   const map = {
     public: 'Public visitor',
@@ -1110,10 +1150,8 @@ function detectRoleIntent(role, normalized) {
 function knowledgeEntriesForRole(role, pathname) {
   const entries = PUBLIC_KNOWLEDGE.map((item) => ({ ...item, audience: 'public' }));
 
-  // Always include system knowledge so the AI can explain the whole system even to public users
-  SYSTEM_KNOWLEDGE.forEach((item) => entries.push({ ...item, audience: 'internal' }));
-
   if (role !== 'public') {
+    SYSTEM_KNOWLEDGE.forEach((item) => entries.push({ ...item, audience: 'internal' }));
     (ROLE_GUIDES[role] || ROLE_GUIDES.staff || []).forEach((text, index) => {
       entries.push({
         id: `${role}-guide-${index + 1}`,
@@ -1153,7 +1191,7 @@ function bestKnowledgeMatch(role, pathname, text) {
     return {
       id: `price::${first.key}`,
       title: `Price for ${first.name}`,
-      text: `Service name: ${first.name} (category: ${first.category}). Accurate published price in Philippine Pesos: ₱${Number(first.pricePHP).toLocaleString('en-PH')}. ${first.notes ? `Additional notes: ${first.notes}. ` : ''}IMPORTANT: Senior Citizen and PWD 20% discount is mandatorily applied to all services upon presentation of valid ID. PhilHealth and accredited HMO partners may also apply direct coverage at the Cashier / Billing Department. Prices listed here are grounded hospital data and are updated routinely. If exact charge differs on visit due to additional service or complexity, billing department shall provide final official receipt.`
+      text: `Service name: ${first.name} (category: ${first.category}). Current reference price in Philippine Pesos: ₱${Number(first.pricePHP).toLocaleString('en-PH')}. ${first.notes ? `Additional notes: ${first.notes}. ` : ''}IMPORTANT: Senior Citizen and PWD 20% discount is mandatorily applied to all services upon presentation of valid ID. PhilHealth and accredited HMO partners may also apply direct coverage at the Cashier / Billing Department. Prices can change and must be confirmed with the Billing Department. If exact charge differs on visit due to additional service or complexity, billing department shall provide final official receipt.`
     };
   }
   const symptomHit = detectSymptomIntent(normalized);
@@ -1318,11 +1356,11 @@ function gatherContext(role, pathname) {
     const priceHl = PUBLIC_PRICES.filter((p) =>
       ['opd_general','opd_pediatrics','opd_obgyne','opd_derma','lab_cbc','lab_urinalysis','lab_fbs','lab_lipid','lab_ecg','lab_xray_chest','lab_ultra_abd','den_cleaning','den_extract','pkg_annual','pkg_preemp','rm_ward','rm_private','min_circumcise','senior_disc'].includes(p.key)
     ).map((p) => `- ${p.name}: ₱${Number(p.pricePHP).toLocaleString('en-PH')}`);
-    parts.push(`\n[PUBLISHED HOSPITAL PRICE REFERENCE — GROUNDED 100% ACCURATE, USE THESE NUMBERS ONLY]\n${priceHl.join('\n')}\nNote: Senior/PWD 20% discount applies to ALL above upon valid ID. PhilHealth and HMO accepted at Billing.`);
-    parts.push('\n[SAFE SYMPTOM TRIAGE RULES — NURSE-LEVEL SCREENING ONLY, NO PRESCRIPTION. EMERGENCY = RED LVL → 0915 312 7144]\nLevel categories: RED Emergency 911 → YELLOW today/tomorrow OPD → GREEN regular OPD. Special levels: PEDIA_YELLOW for babies, PREGNANCY_YELLOW for buntis. Chatbot never prescribes, only triages then routes to hospital.');
+    parts.push(`\n[PUBLISHED HOSPITAL PRICE REFERENCE — REFERENCE AMOUNTS ONLY]\n${priceHl.join('\n')}\nAlways tell the visitor to confirm the final charge, discount eligibility, PhilHealth, and HMO coverage with Billing.`);
+    parts.push('\n[SYMPTOM SAFETY GUIDANCE — NOT A DIAGNOSIS OR CLINICAL ASSESSMENT]\nRecognized emergency warning signs must be directed to emergency services immediately. For all other symptoms, explain that only a qualified healthcare professional can assess urgency and provide diagnosis or treatment. Never prescribe.');
     parts.push('\n[DEPARTMENT DIRECTORY SHORTCUTS — grounded hospital services]: General Medicine, Pediatrics, OB-Gyne, Dermatology, General Surgery, Orthopedics, ENT, Ophthalmology, Dental, Urology, Anesthesia, Radiology (X-ray/UTZ), Laboratory/Pathology, ER 24/7.');
-    parts.push('\n[APPOINTMENT & WALK-IN GROUND RULES — accurate, no invented booking links]: Public homepage does NOT have 1-click online appointment booking. Correct process: Walk-in only at OPD Mon-Sat 8AM-5PM; or call 0915 312 7144 for queue; surgery schedule via OPD referral only. Emergency: go to ER 24/7 directly.');
-    parts.push('\n[LAB RESULT TURNAROUND REFERENCE — accurate grounded]: CBC/UA/Fecalysis 3-6h; ECG 15-30 mins; X-ray plain 2-4h; Ultrasound report 2-4h; Antigen 20 mins; RT-PCR 24-48h; Hepa/HIV/HbA1c 4-8h; Culture tests 24-48h; Biopsy 5-7 days. Release at Laboratory / Radiology releasing windows + Patient Portal login for those with accounts. NO actual values disclosed via AI chatbot (HIPAA-safe) — only STATUS + TAT.');
+    parts.push('\n[APPOINTMENT & WALK-IN GROUND RULES — reference guidance, no invented booking links]: Public homepage does NOT have 1-click online appointment booking. Correct process: Walk-in only at OPD Mon-Sat 8AM-5PM; or call 0915 312 7144 for queue; surgery schedule via OPD referral only. Emergency: go to ER 24/7 directly.');
+    parts.push('\n[LAB RESULT TURNAROUND REFERENCE — estimates that require hospital confirmation]: CBC/UA/Fecalysis 3-6h; ECG 15-30 mins; X-ray plain 2-4h; Ultrasound report 2-4h; Antigen 20 mins; RT-PCR 24-48h; Hepa/HIV/HbA1c 4-8h; Culture tests 24-48h; Biopsy 5-7 days. Release at Laboratory / Radiology releasing windows + Patient Portal login for those with accounts. NO actual values disclosed via AI chatbot (privacy-safe) — only STATUS + TAT.');
   }
   parts.push(`Page guidance: ${pageGuide(pathname)}`);
   return parts.join('\n');
@@ -1630,7 +1668,7 @@ function localAssistantReply({ role, message, pathname, preferredLanguage = 'eng
       `Hospital location / Saan pumunta?`
     ];
     return {
-      answer: localizeAssistantText(`✅ SERVICE PRICE (Accurate & Grounded 100%):\nService: ${service.name}\n${priceLine}`, effectiveLanguage, role),
+      answer: localizeAssistantText(`✅ SERVICE PRICE (Reference amount — confirm with Billing):\nService: ${service.name}\n${priceLine}`, effectiveLanguage, role),
       source: 'knowledge',
       grounded: true,
       suggestions: nextChips
@@ -1713,7 +1751,7 @@ function localAssistantReply({ role, message, pathname, preferredLanguage = 'eng
   if (role === 'public') {
     return {
       answer: localizeAssistantText(
-        'Makakatulong ako sa mga sumusunod (mga tanong na 100% kayang sagutin ngayon):\n\n🏥 HOSPITAL INFO — Saan hospital, contact number, emergency hotline, services, facilities.\n\n🩺 SYMPTOM TRIAGE — Halimbawa: "May lagnat ang baby ko", "Masakit ang dibdib ko", "Nahihilo ako" — bibigyan kita ng RED/YELLOW/GREEN na guide kung ER agad, OPD today, o regular consult.\n\n💸 PRICE LIST / MGA PRESYO — Lahat ng OPD, lab, xray, ultrasound, dental, packages, rooms. Itanong lang: "Magkano ang CBC?", "Magkano bunot ng ngipin?" etc.\n\n📅 APPOINTMENT / WALK-IN — Paano makakuha ng slot, pila, queue, operating hours.\n\n🔬 LAB / XRAY RESULT — Typical turnaround oras, paano kunin, Patient Portal steps.\n\nItanong mo na ang kahit ano sa mga ito!',
+        'Makakatulong ako sa mga sumusunod (mga hospital-information topic na kaya kong tulungan):\n\n🏥 HOSPITAL INFO — Saan hospital, contact number, emergency hotline, services, facilities.\n\n🩺 SYMPTOM TRIAGE — Halimbawa: "May lagnat ang baby ko", "Masakit ang dibdib ko", "Nahihilo ako" — bibigyan kita ng RED/YELLOW/GREEN na guide kung ER agad, OPD today, o regular consult.\n\n💸 PRICE LIST / MGA PRESYO — Lahat ng OPD, lab, xray, ultrasound, dental, packages, rooms. Itanong lang: "Magkano ang CBC?", "Magkano bunot ng ngipin?" etc.\n\n📅 APPOINTMENT / WALK-IN — Paano makakuha ng slot, pila, queue, operating hours.\n\n🔬 LAB / XRAY RESULT — Typical turnaround oras, paano kunin, Patient Portal steps.\n\nItanong mo na ang kahit ano sa mga ito!',
         effectiveLanguage,
         role
       ),
@@ -1742,6 +1780,8 @@ function buildSystemPrompt({ role, pathname, preferredLanguage }) {
     `Current page: ${String(pathname || '/').trim() || '/'}`,
     'Never answer unrelated general knowledge questions.',
     'Never provide diagnosis, treatment plans, medication recommendations, or prescription advice.',
+    'Never claim that a price, schedule, availability, or turnaround time is guaranteed. Ask the user to confirm changeable information with hospital staff.',
+    'Do not request, repeat, or retain patient names, IDs, addresses, laboratory values, or other private health information.',
     'Never invent workflows or features that are not grounded in the provided context.',
     'If the question is outside scope or the answer is uncertain, say so clearly and redirect politely.',
     'Keep answers concise, professional, and helpful.',
@@ -1841,7 +1881,7 @@ router.post('/chat', async (req, res) => {
       require('crypto').randomUUID();
 
     // Basic per-IP rate limiting (demo-safe; resets per window)
-    const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim() || 'unknown';
+    const ip = String(req.ip || req.socket?.remoteAddress || 'unknown').trim() || 'unknown';
     const key = `${ip}`;
     const now = Date.now();
     const state = assistantRateState.get(key) || { count: 0, resetAt: now + ASSISTANT_RATE_LIMIT_WINDOW_MS };
@@ -1851,6 +1891,11 @@ router.post('/chat', async (req, res) => {
     }
     state.count += 1;
     assistantRateState.set(key, state);
+    if (assistantRateState.size > 5000) {
+      for (const [entryKey, entry] of assistantRateState) {
+        if (entry.resetAt <= now) assistantRateState.delete(entryKey);
+      }
+    }
     if (state.count > ASSISTANT_RATE_LIMIT_MAX) {
       return res.status(429).json({
         requestId,
@@ -1858,10 +1903,10 @@ router.post('/chat', async (req, res) => {
       });
     }
 
-    const rawRole = req.headers['x-user-role'] || req.body?.role || '';
-    const role = normalizeRole(rawRole || 'public');
-    const pathname = String(req.body?.pathname || '/').trim() || '/';
-    const messages = Array.isArray(req.body?.messages) ? req.body.messages.slice(-8) : [];
+    const role = authenticatedAssistantRole(req);
+    const pathname = safeAssistantPath(role, req.body?.pathname);
+    const messages = validatedMessages(req.body?.messages);
+    if (!messages) return res.status(413).json({ requestId, message: 'The conversation is too long. Start a new chat and try again.' });
     const latestUserMessage = [...messages].reverse().find((msg) => String(msg?.role || '').toLowerCase() === 'user');
     const latestText = String(latestUserMessage?.content || '').trim();
     const preferredLanguage = detectPreferredLanguage(latestText);
@@ -1903,8 +1948,7 @@ router.post('/chat', async (req, res) => {
         source: 'fallback',
         grounded: true,
         suggestions: fallback.suggestions || [],
-        latencyMs: Date.now() - startAt,
-        warning: String(openAiError?.message || 'OpenAI unavailable')
+        latencyMs: Date.now() - startAt
       });
     }
   } catch (error) {
