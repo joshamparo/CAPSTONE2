@@ -1071,12 +1071,17 @@ function getJitsiBaseUrl() {
 
 function getJaasConfig() {
     const appId = String(process.env.JAAS_APP_ID || '').trim();
-    const keyId = String(process.env.JAAS_KEY_ID || '').trim();
+    const keyIdRaw = String(process.env.JAAS_KEY_ID || '').trim();
     const privateKey = String(process.env.JAAS_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
-    if (!appId && !keyId && !privateKey) return null;
-    if (!appId || !keyId || !privateKey) {
+    if (!appId && !keyIdRaw && !privateKey) return null;
+    if (!appId || !keyIdRaw || !privateKey) {
         throw new Error('JaaS is partially configured. JAAS_APP_ID, JAAS_KEY_ID, and JAAS_PRIVATE_KEY are all required.');
     }
+    // The JaaS JWT header requires `kid` to be AppID/KeyID. The console may
+    // provide the complete value, while Railway is often configured with only
+    // the short key id. Accept either representation without generating an
+    // unauthenticated token that silently drops the doctor's moderator role.
+    const keyId = keyIdRaw.includes('/') ? keyIdRaw : `${appId}/${keyIdRaw}`;
     return { appId, keyId, privateKey };
 }
 
