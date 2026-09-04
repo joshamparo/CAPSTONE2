@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { User, Lock, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, XCircle } from 'lucide-react';
 import './Login.css';
-import { sendOTPEmail } from '../utils/emailService';
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
@@ -112,6 +111,7 @@ const Login = () => {
     let role = '';
     let isValid = false;
     let credentialFailure = false;
+    let loginChallenge = null;
 
     {
         // Authenticate every account through the backend so protected API
@@ -129,9 +129,9 @@ const Login = () => {
     
           if (res.ok) {
             const data = await res.json();
-            role = (data.account_type || data.accountType || data.roles || '').toLowerCase(); // Ensures routing doesn't break
-            isValid = true;
-            localStorage.setItem('tempUserDetails', JSON.stringify(data));
+            role = String(data.role || '').toLowerCase();
+            loginChallenge = data;
+            isValid = Boolean(data.otpRequired && data.challengeId);
           } else {
             const errorData = await res.json().catch(() => ({}));
             credentialFailure = res.status === 400;
@@ -152,162 +152,17 @@ const Login = () => {
     }
 
     if (isValid) {
-      // Log Admin/Staff Login to Database
-      if (['admin', 'staff', 'cashier', 'doctor_secretary', 'doctor', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist'].includes(role)) {
-        try {
-          // Log to Admin Log (Security Audit)
-          fetch(`${API_BASE}/api/admin-log`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email }),
-          }).catch(err => console.error('Error logging admin login:', err));
-
-        } catch (err) {
-          console.error('Error initiating admin log:', err);
-        }
-      }
-
-      // Successful Login
+      localStorage.setItem('otpChallengeId', loginChallenge.challengeId);
+      localStorage.setItem('tempLoginEmail', loginChallenge.email || email.trim().toLowerCase());
+      localStorage.setItem('tempLoginRole', role);
+      ['generatedOTP', 'tempUserDetails', 'otpEmailFailed', 'displayOtpCode'].forEach((key) => localStorage.removeItem(key));
+      Object.keys(localStorage).filter((key) => key.startsWith('otp_bypass_')).forEach((key) => localStorage.removeItem(key));
       setLoginAttempts(0);
       localStorage.removeItem('loginAttempts');
       localStorage.removeItem('loginLockoutTime');
-
-      let bypassData = null;
-      try {
-        bypassData = JSON.parse(localStorage.getItem(`otp_bypass_${email}`));
-      } catch (e) {
-        console.error("Error parsing bypassData:", e);
-      }
-
-      if (role !== 'doctor' && role !== 'pharmacist' && bypassData && bypassData.expiresAt > Date.now()) {
-          setSuccess("Device recognized. Logging in...");
-          
-          // Set Session Data (Mirrored from OtpPage.js)
-          let userSession = {
-            email: email,
-            role: role,
-            name: email.split('@')[0]
-          };
-          
-          // 1. Check for Backend Details (from Login.js fetch)
-          // Note: If we just logged in via backend, tempUserDetails should be set
-          let tempUser = null;
-          try {
-             tempUser = JSON.parse(localStorage.getItem('tempUserDetails'));
-          } catch(e) {}
-
-          if (tempUser) {
-              // Merge ALL backend details (including _id) into session
-              userSession = { ...userSession, ...tempUser };
-              
-              if (tempUser.first_name || tempUser.firstName) {
-                  userSession.name = tempUser.first_name || tempUser.firstName;
-              }
-              // Make sure to capture correct role from backend
-              if (tempUser.account_type || tempUser.accountType) {
-                  role = tempUser.account_type || tempUser.accountType;
-                  userSession.role = role;
-              }
-              localStorage.removeItem('tempUserDetails');
-          } else {
-             // 2. Fallback to LocalStorage (Legacy/Offline)
-             let users = [];
-             try {
-               users = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
-             } catch (e) {
-               users = [];
-             }
-             const registeredUser = users.find(u => u.email === email);
-             if (registeredUser && registeredUser.firstName) {
-                userSession.name = registeredUser.firstName;
-             }
-             
-             // Ensure admin role is preserved even in fallback
-             if (!role && email === 'pascualgenhospi@gmail.com') {
-                 role = 'admin';
-                 userSession.role = 'admin';
-             }
-          }
-
-          localStorage.setItem('currentUser', JSON.stringify(userSession));
-          // Note: We don't set tempLoginEmail here as we are skipping OTP
-          
-          setTimeout(() => {
-              if (role === 'admin' || role === 'staff') navigate('/admin');
-              else if (role === 'patient') navigate('/patient');
-              else if (role === 'doctor') navigate('/doctor');
-              else if (role === 'nurse') navigate('/nurse');
-              else if (role === 'pharmacist') navigate('/pharmacist');
-              else if (role === 'cashier') navigate('/cashier');
-              else if (role === 'doctor_secretary') navigate('/doctor-secretary');
-              else if (role === 'medtech') navigate('/medtech');
-              else if (role === 'radiographer') navigate('/radiographer');
-              else if (role === 'ecg_operator') navigate('/ecg');
-              else if (role === 'physical_therapist') navigate('/pt');
-              else navigate('/');
-          }, 1500);
-          return;
-      }
-
-      // Generate a Random 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Save OTP to localStorage (encrypted ideally, but plain for now)
-    localStorage.setItem('generatedOTP', otp);
-    localStorage.setItem('tempLoginEmail', email);
-    localStorage.setItem('tempLoginRole', role);
-
-    setSuccess("Verifying credentials... Sending OTP...");
-    
-    // Determine where to send the email
-    let recipientEmail = email;
-    if (role === 'admin' || email === 'pascualgenhospi@gmail.com') {
-        recipientEmail = "pascualgenhospi@gmail.com";
-    }
-
-    // Send Email
-    let emailSent = false;
-    try {
-      console.log(`Attempting to send OTP ${otp} to ${recipientEmail}...`);
-      emailSent = await sendOTPEmail(recipientEmail, otp);
-
-      if (!emailSent) {
-        console.log("OTP Email failed to send. Check console for details.");
-        console.log("Dev OTP:", otp);
-        // Last-resort fallback ONLY if both EmailJS SDK AND backend REST API fail
-        localStorage.setItem('otpEmailFailed', 'true');
-        localStorage.setItem('displayOtpCode', otp);
-        alert(
-          "System Notice: We couldn't deliver the OTP to your email right now.\n\n" +
-          "Please check your internet connection or try again in a moment.\n" +
-          "Your one-time passcode is shown on the next screen for verification."
-        );
-      } else {
-        console.log("OTP Email sent successfully to " + recipientEmail);
-        // Ensure no stale fallback leaks to the OTP page when email actually sends
-        localStorage.removeItem('otpEmailFailed');
-        localStorage.removeItem('displayOtpCode');
-      }
-    } catch (error) {
-      console.error("Error sending OTP:", error);
-      console.log("Dev OTP:", otp);
-      localStorage.setItem('otpEmailFailed', 'true');
-      localStorage.setItem('displayOtpCode', otp);
-      alert(
-        "System Notice: Server connection interrupted during email send.\n\n" +
-        "Your one-time passcode is shown on the next screen so you can still proceed."
-      );
-    }
-
-      // Always redirect to OTP page, regardless of email success/failure
-      // (User requested to remove local notification but keep the page flow)
-      setSuccess("Redirecting to verification...");
-      setTimeout(() => {
-        navigate('/otp');
-      }, 1500);
-
+      setSuccess('Verification code sent. Redirecting...');
+      setTimeout(() => navigate('/otp'), 500);
+      return;
     } else if (credentialFailure) {
       // Failed Login
       const newAttempts = loginAttempts + 1;

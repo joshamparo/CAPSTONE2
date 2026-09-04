@@ -13,6 +13,8 @@ const { createRateLimiter } = require('../utils/rateLimit');
 const { sendRecoveryEmail } = require('../utils/recoveryMailer');
 const { sendStaffInvitationEmail } = require('../utils/staffInvitationMailer');
 const { selectCanonicalAccount } = require('../utils/accountMatch');
+const { sendEmail } = require('../utils/mailer');
+const { otpEmail } = require('../utils/emailTemplates');
 
 const publicWebOrigin = () => String(process.env.PUBLIC_WEB_ORIGIN || 'https://pascualinga.com').replace(/\/+$/, '');
 
@@ -331,6 +333,8 @@ async function findAllUsersByEmail(email) {
 const emailRateKey = (req) => normalizeEmail(req.body?.email || '');
 const tokenRateKey = (req) => hashResetToken(req.body?.token || '').slice(0, 16);
 const loginRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 8, key: emailRateKey });
+const otpVerifyRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, key: (req) => String(req.body?.challengeId || req.ip || '') });
+const otpResendRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 6, key: (req) => String(req.body?.challengeId || req.ip || '') });
 const recoveryRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 4, key: emailRateKey });
 const tokenVerifyRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30, key: tokenRateKey });
 const passwordResetRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 8, key: tokenRateKey });
@@ -372,6 +376,76 @@ function inferDisplayNameFromUser(found, emailFallback) {
     const email = String(u.email || emailFallback || '').trim();
     if (email) return email.split('@')[0];
     return 'User';
+}
+
+let loginOtpSchemaPromise = null;
+function ensureLoginOtpSchema() {
+    if (!loginOtpSchemaPromise) {
+        loginOtpSchemaPromise = (async () => {
+            await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS public.login_otp_challenges (
+                id UUID PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                user_model TEXT NOT NULL,
+                email TEXT NOT NULL,
+                role TEXT NOT NULL,
+                otp_hash TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                expires_at TIMESTAMPTZ NOT NULL,
+                resend_after TIMESTAMPTZ NOT NULL,
+                consumed_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )`);
+            await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS login_otp_challenges_lookup_idx
+                ON public.login_otp_challenges (id, consumed_at, expires_at)`);
+        })().catch((error) => {
+            loginOtpSchemaPromise = null;
+            throw error;
+        });
+    }
+    return loginOtpSchemaPromise;
+}
+
+ensureLoginOtpSchema().catch((error) => console.error('[OTP] Schema setup failed:', error?.message || error));
+
+function otpHash(challengeId, otp) {
+    const secret = String(process.env.SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.DATABASE_URL || '').trim();
+    if (!secret) throw new Error('SESSION_SECRET is not configured.');
+    return crypto.createHmac('sha256', secret).update(`${challengeId}:${otp}`).digest('hex');
+}
+
+function secureOtp() {
+    return String(crypto.randomInt(100000, 1000000));
+}
+
+async function deliverLoginOtp(email, otp, expiresAt) {
+    const expiry = expiresAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    return sendEmail({
+        to: email,
+        subject: 'Your Pascualinga verification code',
+        text: `Your Pascualinga verification code is ${otp}. It expires at ${expiry}. Do not share this code.`,
+        html: otpEmail({ otp, expiresAt: expiry }),
+        templateId: process.env.EMAILJS_TEMPLATE_ID || 'template_x8k19wl',
+        templateParams: { otp_code: otp, otp, code: otp, passcode: otp, time: expiry, expiration_time: expiry, from_name: 'Pascualinga Hospital' }
+    });
+}
+
+async function findUserByModelAndId(model, id) {
+    if (model === 'accounts') return prisma.accounts.findUnique({ where: { id: Number(id) } });
+    if (!['staff', 'nurses', 'doctors'].includes(model) || !isUuid(id)) return null;
+    return prisma[model].findUnique({ where: { id } });
+}
+
+async function authenticatedUserResponse(user, modelType) {
+    const { password: _password, reset_password_token: _resetToken, reset_password_expires: _resetExpiry, ...userData } = user;
+    const avatarUrl = await getAvatarUrl(modelType, user.id).catch(() => null);
+    const role = String(user.account_type || user.roles || (modelType === 'doctors' ? 'doctor' : modelType === 'nurses' ? 'nurse' : 'staff')).trim().toLowerCase();
+    const sessionToken = createSessionToken({ id: user.id, email: user.email, role, sessionVersion: user.session_version });
+    if (modelType !== 'accounts') return { ...userData, avatarUrl, sessionToken };
+    const linkRows = await prisma.$queryRawUnsafe(`SELECT linked_doctor_id FROM accounts WHERE id = $1 LIMIT 1`, user.id).catch(() => null);
+    const linkedDoctorId = Array.isArray(linkRows) && linkRows[0]?.linked_doctor_id ? String(linkRows[0].linked_doctor_id) : null;
+    const firstName = user.name || '';
+    return { id: String(user.id), email: user.email, name: user.name, firstName, first_name: firstName, last_name: '', roles: user.roles,
+        account_type: user.roles || 'staff', linkedDoctorId, linked_doctor_id: linkedDoctorId, avatarUrl, sessionToken };
 }
 
 // LOGIN Route
@@ -433,62 +507,31 @@ router.post('/login', loginRateLimit, async (req, res) => {
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid email or password.' });
         }
-        
-        // Update status to Online
-        if (modelType && modelType !== 'accounts') {
-            try {
-                await setPresenceOnline(modelType, user.id);
-            } catch (err) {
-                console.warn("Skipping status update, field might not exist yet:", err.message);
-            }
-        }
 
-        // Log Activity
+        await ensureLoginOtpSchema();
+        const challengeId = crypto.randomUUID();
+        const otp = secureOtp();
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+        const resendAfter = new Date(Date.now() + 60 * 1000);
+        const role = String(user.account_type || user.roles || (modelType === 'doctors' ? 'doctor' : modelType === 'nurses' ? 'nurse' : 'staff')).trim().toLowerCase();
+        await prisma.$executeRawUnsafe(
+            `UPDATE public.login_otp_challenges SET consumed_at = now() WHERE email = $1 AND consumed_at IS NULL`,
+            email
+        );
+        await prisma.$executeRawUnsafe(
+            `INSERT INTO public.login_otp_challenges
+                (id, user_id, user_model, email, role, otp_hash, expires_at, resend_after)
+             VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)`,
+            challengeId, String(user.id), modelType, email, role, otpHash(challengeId, otp), expiresAt, resendAfter
+        );
         try {
-            await prisma.activity_logs.create({
-                data: {
-                    actor_name: user.first_name || user.last_name ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : (user.name || String(email || '').split('@')[0]),
-                    role: (user.account_type || user.roles) ? String(user.account_type || user.roles).charAt(0).toUpperCase() + String(user.account_type || user.roles).slice(1) : 'Unknown',
-                    action: 'Login',
-                    details: 'User logged in',
-                    target: 'System',
-                }
-            });
-        } catch (logErr) {
-            console.error("Login logging failed:", logErr);
+            await deliverLoginOtp(email, otp, expiresAt);
+        } catch (mailError) {
+            await prisma.$executeRawUnsafe(`DELETE FROM public.login_otp_challenges WHERE id = $1::uuid`, challengeId).catch(() => {});
+            console.error('[OTP] Delivery failed:', mailError?.message || mailError);
+            return res.status(502).json({ message: 'Unable to send the verification code right now. Please try again.' });
         }
-        
-        // Return user info, excluding password
-        const { password: _, ...userData } = user;
-        const avatarUrl = await getAvatarUrl(modelType, user.id).catch(() => null);
-        const authenticatedRole = String(user.account_type || user.roles || (modelType === 'doctors' ? 'doctor' : modelType === 'nurses' ? 'nurse' : 'staff')).trim().toLowerCase();
-        const sessionToken = createSessionToken({ id: user.id, email: user.email, role: authenticatedRole, sessionVersion: user.session_version });
-        
-        if (modelType === 'accounts') {
-            const firstName = user.name || '';
-            const linkRows = await prisma.$queryRawUnsafe(
-                `SELECT linked_doctor_id FROM accounts WHERE id = $1 LIMIT 1`,
-                user.id
-            ).catch(() => null);
-            const linkRow = Array.isArray(linkRows) ? linkRows[0] : null;
-            const linkedDoctorId = linkRow?.linked_doctor_id ? String(linkRow.linked_doctor_id) : null;
-            res.json({
-                id: user.id ? user.id.toString() : undefined,
-                email: user.email,
-                name: user.name,
-                firstName,
-                first_name: firstName,
-                last_name: '',
-                roles: user.roles,
-                account_type: user.roles || 'staff',
-                linkedDoctorId,
-                linked_doctor_id: linkedDoctorId,
-                avatarUrl,
-                sessionToken
-            });
-        } else {
-            res.json({ ...userData, avatarUrl, sessionToken });
-        }
+        return res.json({ otpRequired: true, challengeId, email, role, expiresInSeconds: 300, resendAfterSeconds: 60 });
         
     } catch (err) {
         res.status(500).json({ message: "Server Error" });
@@ -1027,6 +1070,73 @@ router.post('/resend-invitation', requireRole(['admin']), invitationRateLimit, a
     } catch (error) {
         console.error('[Staff invitation] Resend failed:', error?.message || error);
         return res.status(500).json({ message: 'Unable to resend the invitation right now.' });
+    }
+});
+
+router.post('/login/otp/verify', otpVerifyRateLimit, async (req, res) => {
+    try {
+        const challengeId = String(req.body?.challengeId || '').trim();
+        const code = String(req.body?.code || '').trim();
+        if (!isUuid(challengeId) || !/^\d{6}$/.test(code)) return res.status(400).json({ message: 'Enter a valid 6-digit verification code.' });
+        await ensureLoginOtpSchema();
+        const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.login_otp_challenges WHERE id = $1::uuid LIMIT 1`, challengeId);
+        const challenge = Array.isArray(rows) ? rows[0] : null;
+        if (!challenge || challenge.consumed_at) return res.status(400).json({ message: 'This verification request is no longer valid. Please sign in again.' });
+        if (new Date(challenge.expires_at).getTime() <= Date.now()) return res.status(400).json({ message: 'The verification code has expired. Please sign in again.' });
+        if (Number(challenge.attempts) >= 5) return res.status(429).json({ message: 'Too many incorrect attempts. Please sign in again.' });
+        const supplied = Buffer.from(otpHash(challengeId, code), 'hex');
+        const expected = Buffer.from(String(challenge.otp_hash), 'hex');
+        if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+            const updated = await prisma.$queryRawUnsafe(
+                `UPDATE public.login_otp_challenges SET attempts = attempts + 1
+                 WHERE id = $1::uuid AND consumed_at IS NULL RETURNING attempts`, challengeId
+            );
+            const attempts = Number(updated?.[0]?.attempts || 5);
+            return res.status(attempts >= 5 ? 429 : 400).json({ message: attempts >= 5
+                ? 'Too many incorrect attempts. Please sign in again.'
+                : `Invalid verification code. ${5 - attempts} attempt${5 - attempts === 1 ? '' : 's'} remaining.` });
+        }
+        const consumed = await prisma.$queryRawUnsafe(
+            `UPDATE public.login_otp_challenges SET consumed_at = now()
+             WHERE id = $1::uuid AND consumed_at IS NULL AND expires_at > now() AND attempts < 5 RETURNING user_id, user_model`, challengeId
+        );
+        if (!consumed?.[0]) return res.status(400).json({ message: 'This verification request is no longer valid. Please sign in again.' });
+        const user = await findUserByModelAndId(challenge.user_model, challenge.user_id);
+        if (!user || user.is_active === false) return res.status(403).json({ message: 'This account is unavailable. Contact an administrator.' });
+        await setPresenceOnline(challenge.user_model, user.id).catch(() => {});
+        await prisma.activity_logs.create({ data: {
+            actor_name: user.first_name || user.last_name ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : (user.name || challenge.email.split('@')[0]),
+            role: challenge.role.charAt(0).toUpperCase() + challenge.role.slice(1), action: 'Login', details: 'User logged in with OTP', target: 'System'
+        }}).catch((error) => console.error('Login logging failed:', error?.message || error));
+        return res.json(await authenticatedUserResponse(user, challenge.user_model));
+    } catch (error) {
+        console.error('[OTP] Verification failed:', error?.message || error);
+        return res.status(500).json({ message: 'Unable to verify the code right now. Please try again.' });
+    }
+});
+
+router.post('/login/otp/resend', otpResendRateLimit, async (req, res) => {
+    try {
+        const challengeId = String(req.body?.challengeId || '').trim();
+        if (!isUuid(challengeId)) return res.status(400).json({ message: 'Invalid verification request. Please sign in again.' });
+        await ensureLoginOtpSchema();
+        const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.login_otp_challenges WHERE id = $1::uuid LIMIT 1`, challengeId);
+        const challenge = Array.isArray(rows) ? rows[0] : null;
+        if (!challenge || challenge.consumed_at) return res.status(400).json({ message: 'This verification request is no longer valid. Please sign in again.' });
+        const waitSeconds = Math.ceil((new Date(challenge.resend_after).getTime() - Date.now()) / 1000);
+        if (waitSeconds > 0) return res.status(429).json({ message: `Please wait ${waitSeconds} seconds before requesting another code.`, retryAfterSeconds: waitSeconds });
+        const otp = secureOtp();
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+        await deliverLoginOtp(challenge.email, otp, expiresAt);
+        await prisma.$executeRawUnsafe(
+            `UPDATE public.login_otp_challenges SET otp_hash = $2, attempts = 0, expires_at = $3, resend_after = $4
+             WHERE id = $1::uuid AND consumed_at IS NULL`,
+            challengeId, otpHash(challengeId, otp), expiresAt, new Date(Date.now() + 60 * 1000)
+        );
+        return res.json({ success: true, expiresInSeconds: 300, resendAfterSeconds: 60 });
+    } catch (error) {
+        console.error('[OTP] Resend failed:', error?.message || error);
+        return res.status(502).json({ message: 'Unable to resend the verification code right now. Please try again.' });
     }
 });
 

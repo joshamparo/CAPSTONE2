@@ -6,6 +6,9 @@ const { otpEmail, staffWelcomeEmail } = require('../utils/emailTemplates');
 const cleanText = (value, max = 200) => String(value || '').trim().slice(0, max);
 
 router.post('/send-otp', async (req, res) => {
+  return res.status(410).json({ success: false, message: 'Client-supplied OTP delivery has been retired. Sign in through /api/staff/login.' });
+  /* istanbul ignore next -- retained temporarily for old clients; unreachable by design */
+  /*
   const email = cleanText(req.body?.email).toLowerCase();
   const otp = cleanText(req.body?.otp, 8);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^\d{4,8}$/.test(otp)) {
@@ -27,6 +30,7 @@ router.post('/send-otp', async (req, res) => {
     console.error(`[Email] ${configuredProvider()} OTP send failed:`, error?.message || error);
     return res.status(502).json({ success: false, message: 'Unable to send the OTP email right now. Please try again.' });
   }
+  */
 });
 
 router.post('/send-staff-welcome', requireRole(['admin']), async (req, res) => {
