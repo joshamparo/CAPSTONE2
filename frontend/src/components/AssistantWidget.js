@@ -282,7 +282,7 @@ export default function AssistantWidget({ pathname = '/' }) {
   }, [pathname]);
 
   return (
-    <div className={`assistant-widget-root ${pageClass}`.trim()}>
+    <div className={`assistant-widget-root ${pageClass} ${isOpen ? 'assistant-widget-is-open' : ''}`.trim()}>
       {isOpen ? (
         <div className="assistant-widget-panel" role="dialog" aria-label="Pascualinga Assistant">
           <div className="assistant-widget-header">
