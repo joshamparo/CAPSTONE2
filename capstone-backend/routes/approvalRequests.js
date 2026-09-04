@@ -316,10 +316,49 @@ function specializationVariants(value) {
   const variants = [base];
   if (lower.includes('pedi')) variants.push('Pedia', 'Pediatrics');
   if (lower.includes('ortho')) variants.push('Ortho', 'Orthopedics');
-  if (lower.includes('obstetric') || lower.includes('gyne') || lower.includes('obgyn')) variants.push('OB-GYN', 'OBGYN');
+  if (lower.includes('obstetric') || lower.includes('gyne') || lower.includes('obgyn')) {
+    variants.push('OB-GYN', 'OBGYN', 'OB Gyne', 'Obstetrics', 'Gynecology', 'Obstetrics-Gynecology');
+  }
   if (lower.includes('otorhin') || lower.includes('otolaryng') || lower === 'ent') variants.push('ENT');
   if (lower.includes('ophthalm') || lower.includes('optha')) variants.push('Optha', 'Ophthalmology');
   return [...new Set(variants.map((v) => String(v || '').trim().toLowerCase()).filter(Boolean))];
+}
+
+async function syncLegacyVideoAppointmentsForDoctor(doctor) {
+  if (!doctor?.id) return;
+  await prisma.$executeRaw`
+    INSERT INTO appointment_approval_requests (
+      patient_id, patient_name, doctor_name, doctor_id, nurse_name,
+      requested_date, requested_time, service_type, service_category,
+      department_key, service_name, reason, status,
+      paymongo_checkout_session_id, paymongo_payment_id, paymongo_event_id,
+      payment_status, paid_at, amount, currency, created_at, updated_at
+    )
+    SELECT a.patient_id, trim(concat_ws(' ', a.first_name, a.last_name)),
+      COALESCE(NULLIF(a.doctor_id, ''), ${`Dr. ${doctor.name}`}), ${doctor.id}::uuid,
+      'Online Consultation', a.appointment_date, a.appointment_time,
+      COALESCE(NULLIF(a.reason, ''), 'Video Consultation'), 'consultation',
+      ${doctor.specialization || 'Video Consultation'}, ${doctor.specialization || 'Video Consultation'},
+      COALESCE(NULLIF(a.reason, ''), 'Video Consultation'), 'Pending',
+      a.paymongo_checkout_session_id, a.paymongo_payment_id, a.paymongo_event_id,
+      a.payment_status, a.paid_at, a.amount, COALESCE(a.currency, 'PHP'),
+      COALESCE(a.created_at, now()), now()
+    FROM appointments a
+    WHERE a.doctor_uuid = ${doctor.id}::uuid
+      AND (lower(coalesce(a.consultation_mode, '')) = 'video'
+        OR lower(coalesce(a.reason, '')) LIKE '%video consultation%'
+        OR lower(coalesce(a.reason, '')) LIKE '%(online)%')
+      AND lower(regexp_replace(trim(coalesce(a.status, '')), '[\\s_-]+', ' ', 'g'))
+          IN ('pending', 'pending approval', 'awaiting approval')
+      AND NOT EXISTS (
+        SELECT 1 FROM appointment_approval_requests r
+        WHERE r.doctor_id = ${doctor.id}::uuid
+          AND r.requested_date = a.appointment_date
+          AND r.requested_time::time = a.appointment_time::time
+          AND ((r.patient_id IS NOT NULL AND a.patient_id IS NOT NULL AND r.patient_id = a.patient_id)
+            OR lower(trim(coalesce(r.patient_name, ''))) = lower(trim(concat_ws(' ', a.first_name, a.last_name))))
+      )
+  `;
 }
 
 async function resolveSignedDoctor(hdr) {
@@ -551,6 +590,18 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   const patient = await resolvePatientForRequestRow(requestRow);
   const consultationMode = inferConsultationMode(requestRow);
   const modeKey = String(consultationMode || '').trim().toLowerCase() || 'onsite';
+  const legacyAppointment = modeKey === 'video' && patient.patientId
+    ? await prisma.appointments.findFirst({
+        where: {
+          patient_id: patient.patientId,
+          appointment_date: apptDate,
+          appointment_time: apptTime,
+          consultation_mode: 'video',
+          ...(doctorUuid ? { doctor_uuid: doctorUuid } : {})
+        },
+        select: { id: true }
+      }).catch(() => null)
+    : null;
   if (doctorUuid) {
     const dateKey = apptDate.toISOString().slice(0, 10);
     const minutes = timeToMinutesLoose(apptTime);
@@ -575,6 +626,8 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
         AND appointment_date = ${dateKey}::date
         AND appointment_time::time = ${apptTime}::time
         AND lower(coalesce(status, '')) NOT IN ('cancelled', 'canceled', 'rejected', 'declined')
+        AND (${legacyAppointment?.id ? BigInt(legacyAppointment.id) : null}::bigint IS NULL
+          OR id <> ${legacyAppointment?.id ? BigInt(legacyAppointment.id) : null}::bigint)
       LIMIT 1
     `;
     if (Array.isArray(conflicts) && conflicts.length) {
@@ -588,7 +641,7 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
     prisma.patients.update({ where: { id: patient.patientId }, data: { email: effectiveEmail } }).catch(() => {});
   }
 
-  const appt = await prisma.appointments.create({
+  const appt = legacyAppointment || await prisma.appointments.create({
     data: {
       first_name: patient.firstName || null,
       last_name: patient.lastName || null,
@@ -619,6 +672,18 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
       } : {})
     }
   });
+
+  if (legacyAppointment) {
+    await prisma.appointments.update({
+      where: { id: BigInt(legacyAppointment.id) },
+      data: {
+        doctor_id: doctorName,
+        doctor_uuid: doctorUuid || null,
+        consultation_mode: consultationMode,
+        status: 'Confirmed'
+      }
+    });
+  }
 
   if (consultationMode === 'video') {
     await prisma.appointments.update({
@@ -724,6 +789,7 @@ router.get('/inbox', async (req, res) => {
     if (role === 'doctor' && hdr.role !== 'admin') {
       const signedDoctor = await resolveSignedDoctor(hdr);
       await canonicalizeLegacyDoctorAssignments(signedDoctor);
+      await syncLegacyVideoAppointmentsForDoctor(signedDoctor);
       doctorId = signedDoctor.id;
       name = signedDoctor.name;
     }
@@ -829,7 +895,9 @@ router.get('/inbox', async (req, res) => {
       const specLower = specialization.toLowerCase();
       if (specLower.includes('pedi')) specializationVariants.push('Pedia', 'Pediatrics');
       if (specLower.includes('ortho')) specializationVariants.push('Ortho', 'Orthopedics');
-      if (specLower.includes('obstetric') || specLower.includes('gyne') || specLower.includes('obgyn')) specializationVariants.push('OB-GYN', 'OBGYN');
+      if (specLower.includes('obstetric') || specLower.includes('gyne') || specLower.includes('obgyn')) {
+        specializationVariants.push('OB-GYN', 'OBGYN', 'OB Gyne', 'Obstetrics', 'Gynecology', 'Obstetrics-Gynecology');
+      }
       if (specLower.includes('otorhin') || specLower.includes('otolaryng') || specLower === 'ent') specializationVariants.push('ENT');
       if (specLower.includes('ophthalm') || specLower.includes('optha')) specializationVariants.push('Optha', 'Ophthalmology');
       const uniqueVariants = [...new Set(specializationVariants.map((v) => String(v || '').trim()).filter(Boolean))];

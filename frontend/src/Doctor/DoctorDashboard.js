@@ -1885,6 +1885,12 @@ function DoctorDashboard() {
   }, [activeNav, doctorInboxName]);
 
   useEffect(() => {
+    if (activeNav !== 'approval-inbox') return undefined;
+    const timer = setInterval(() => fetchApprovalInbox(), 15000);
+    return () => clearInterval(timer);
+  }, [activeNav, doctorInboxName, currentDoctorUuid]);
+
+  useEffect(() => {
     const lastPage = Math.max(1, Math.ceil(approvalInbox.length / approvalPageSize));
     setApprovalPage((page) => Math.min(Math.max(1, page), lastPage));
   }, [approvalInbox.length]);
