@@ -1060,7 +1060,8 @@ async function autoAssignUnassignedVideoAppointmentsForDate(dateStr) {
 
 function makeRoomId(appointmentId) {
     const raw = String(appointmentId || '').trim();
-    return `apt-${raw}`;
+    const suffix = crypto.randomBytes(5).toString('base64url');
+    return `apt-${raw}-${suffix}`;
 }
 
 function getJitsiBaseUrl() {
@@ -2660,12 +2661,13 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         }
 
         const existingRoomExpired = apt.meeting_expires_at && new Date(apt.meeting_expires_at).getTime() <= Date.now();
-        const expectedRoomId = makeRoomId(resolvedAppointmentIdRaw);
-        const roomUsesLegacyPrefix = String(apt.meeting_room_id || '').toLowerCase().startsWith('pascualinga-');
-        if (!apt.meeting_room_id || apt.meeting_ended_at || existingRoomExpired || roomUsesLegacyPrefix) {
+        const currentRoomId = String(apt.meeting_room_id || '').trim();
+        const roomNeedsUpgrade = currentRoomId.toLowerCase().startsWith('pascualinga-')
+            || /^apt-\d+$/i.test(currentRoomId);
+        if (!currentRoomId || apt.meeting_ended_at || existingRoomExpired || roomNeedsUpgrade) {
             // Persist one appointment-owned room before returning it. Both doctor
             // and patient subsequently resolve this same room through this API.
-            const roomId = expectedRoomId;
+            const roomId = makeRoomId(resolvedAppointmentIdRaw);
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
             const updated = await prisma.appointments.update({

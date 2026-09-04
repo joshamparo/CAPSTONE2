@@ -688,10 +688,9 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   }
 
   if (consultationMode === 'video') {
-    await prisma.appointments.update({
-      where: { id: BigInt(appt.id) },
-      data: { meeting_room_id: `apt-${String(appt.id)}`, meeting_created_at: new Date() }
-    }).catch((err) => console.error('[Video Approval] Failed to create meeting room:', err?.message));
+    // Do not create a short/predictable room during approval. The doctor start
+    // endpoint creates and persists one secure `apt-<id>-<suffix>` room, which
+    // is then returned unchanged to both the web doctor and patient app.
     if (String(requestRow.payment_status || '').toLowerCase() === 'paid') {
       await recordVideoConsultationPayment(prisma, {
         appointmentId: BigInt(appt.id),
