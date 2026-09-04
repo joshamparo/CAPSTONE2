@@ -2,15 +2,17 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { createRateLimiter } = require('../utils/rateLimit');
 
 router.use(requireRole(['admin']));
+const auditWriteRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 120, key: (req) => req.auth?.email || 'admin' });
 
 let activityLogsCache = { key: '', fetchedAt: 0, payload: null, promise: null };
 const ACTIVITY_LOGS_CACHE_MS = 5 * 1000;
 
 // @route   GET api/activity-logs
 // @desc    Get all activity logs sorted by newest
-// @access  Public (should be protected in prod)
+// @access  Admin only
 router.get('/', async (req, res) => {
     try {
         const takeRaw = Number(req.query.take);
@@ -71,20 +73,24 @@ router.get('/', async (req, res) => {
 
 // @route   POST api/activity-logs
 // @desc    Create a new activity log
-// @access  Public
-router.post('/', async (req, res) => {
-    const { actorName, role, action, target, details } = req.body;
+// @access  Admin only; actor identity is derived from the signed session
+router.post('/', auditWriteRateLimit, async (req, res) => {
+    const action = String(req.body?.action || '').trim().slice(0, 100);
+    const target = String(req.body?.target || '').trim().slice(0, 300);
+    const details = String(req.body?.details || '').trim().slice(0, 3000);
+    if (!action || !target) return res.status(400).json({ message: 'Audit action and target are required.' });
 
     try {
         const newLog = await prisma.activity_logs.create({
             data: {
-                actor_name: actorName,
-                role: role,
+                actor_name: req.auth.email,
+                role: 'Admin',
                 action: action,
                 target: target,
                 details: details
             }
         });
+        activityLogsCache = { key: '', fetchedAt: 0, payload: null, promise: null };
 
         // Convert BigInt id to string for JSON serialization
         res.json({

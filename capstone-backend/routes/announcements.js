@@ -1,5 +1,11 @@
 const express = require('express');
 const router = express.Router();
+const { createRateLimiter } = require('../utils/rateLimit');
+const announcementWriteRateLimit = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 40,
+    key: (req) => req.auth?.email || 'admin'
+});
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 
@@ -530,14 +536,14 @@ router.get('/news', async (req, res) => {
 
 // @route   POST api/announcements
 // @desc    Create a new announcement
-router.post('/', requireRole(['admin']), async (req, res) => {
+router.post('/', requireRole(['admin']), announcementWriteRateLimit, async (req, res) => {
     try {
         const cleanStr = (v) => String(v || "").trim();
         const titleRaw = cleanStr(req.body?.title);
         const contentRaw = cleanStr(req.body?.content);
         const priorityRaw = cleanStr(req.body?.priority || 'Normal') || 'Normal';
         const targetRaw = cleanStr(req.body?.target || 'All') || 'All';
-        const authorRaw = cleanStr(req.body?.author || 'Admin') || 'Admin';
+        const authorRaw = cleanStr(req.auth?.email || 'Admin') || 'Admin';
         const pinnedRaw = req.body?.pinned === true;
         const expiresAtRaw = req.body?.expiresAt;
 
@@ -556,9 +562,11 @@ router.post('/', requireRole(['admin']), async (req, res) => {
             'Doctor Secretary', "Doctor's Secretary", 'MedTech', 'Medtechs', 'Radiographer', 'Radiographer (X-ray)',
             'ECG Operator', 'Physical Therapist', 'Office Staff', 'Clinical Staff'
         ]);
-        const target = allowedTargets.has(targetRaw) ? targetRaw : (targetRaw ? targetRaw : 'All');
+        if (!allowedTargets.has(targetRaw)) return res.status(400).json({ message: 'Unsupported announcement target.' });
+        const target = targetRaw;
 
         const parsedExpires = expiresAtRaw ? new Date(expiresAtRaw) : null;
+        if (expiresAtRaw && Number.isNaN(parsedExpires.getTime())) return res.status(400).json({ message: 'Invalid announcement expiry.' });
         const expires_at = parsedExpires && !Number.isNaN(parsedExpires.getTime()) ? parsedExpires : null;
 
         const created = await prisma.announcements.create({
@@ -599,9 +607,10 @@ router.post('/', requireRole(['admin']), async (req, res) => {
 
 // @route   PATCH api/announcements/:id
 // @desc    Update pinned/expiry for an announcement
-router.patch('/:id', requireRole(['admin']), async (req, res) => {
+router.patch('/:id', requireRole(['admin']), announcementWriteRateLimit, async (req, res) => {
     try {
         const { pinned, expiresAt } = req.body || {};
+        if (!/^\d+$/.test(String(req.params.id || ''))) return res.status(400).json({ message: 'Invalid announcement id.' });
         const id = BigInt(req.params.id);
         const hasPinned = typeof pinned === 'boolean';
         const clearExpiry = expiresAt === null;
@@ -623,6 +632,15 @@ router.patch('/:id', requireRole(['admin']), async (req, res) => {
         `;
         const updated = Array.isArray(rows) ? rows[0] : null;
         if (!updated) return res.status(404).json({ msg: 'Announcement not found' });
+        await prisma.activity_logs.create({
+            data: {
+                actor_name: String(req.auth?.email || 'Admin'),
+                role: 'Admin',
+                action: 'Update Announcement',
+                target: String(updated.id),
+                details: `Updated announcement controls: ${updated.title}`.slice(0, 1000)
+            }
+        }).catch(() => {});
         res.json({ ...updated, id: updated.id.toString(), createdAt: updated.created_at, expiresAt: updated.expires_at });
     } catch (err) {
         console.error(err.message);
@@ -632,8 +650,9 @@ router.patch('/:id', requireRole(['admin']), async (req, res) => {
 
 // @route   DELETE api/announcements/:id
 // @desc    Delete an announcement
-router.delete('/:id', requireRole(['admin']), async (req, res) => {
+router.delete('/:id', requireRole(['admin']), announcementWriteRateLimit, async (req, res) => {
     try {
+        if (!/^\d+$/.test(String(req.params.id || ''))) return res.status(400).json({ message: 'Invalid announcement id.' });
         const announcement = await prisma.announcements.findUnique({
             where: { id: BigInt(req.params.id) }
         });
@@ -649,7 +668,7 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
         // Log Activity
         await prisma.activity_logs.create({
             data: {
-                actor_name: 'Admin', // Assuming admin deletes
+                actor_name: String(req.auth?.email || 'Admin'),
                 role: 'Admin',
                 action: 'Delete',
                 target: 'Announcement',

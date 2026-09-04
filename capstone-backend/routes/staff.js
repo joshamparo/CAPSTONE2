@@ -15,6 +15,7 @@ const { sendStaffInvitationEmail } = require('../utils/staffInvitationMailer');
 const { selectCanonicalAccount } = require('../utils/accountMatch');
 const { sendEmail } = require('../utils/mailer');
 const { otpEmail } = require('../utils/emailTemplates');
+const { adminDeactivationBlock } = require('../utils/adminAccountSafety');
 
 const publicWebOrigin = () => String(process.env.PUBLIC_WEB_ORIGIN || 'https://pascualinga.com').replace(/\/+$/, '');
 
@@ -2688,11 +2689,8 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
         }
 
         const actorEmail = normalizeEmail(req.auth?.email || req.headers['x-user-email'] || '');
-        if (email && actorEmail && email === actorEmail) {
-            return res.status(409).json({ message: 'You cannot deactivate your own administrator account.' });
-        }
-
         const targetRole = normalizeRole(result.user.account_type || result.user.roles || '');
+        let activeAdminCount = Number.POSITIVE_INFINITY;
         if (targetRole === 'admin') {
             const adminRows = await prisma.$queryRaw`
                 SELECT COUNT(DISTINCT lower(email))::int AS count
@@ -2703,10 +2701,11 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
                 ) active_admins
                 WHERE email IS NOT NULL
             `;
-            const activeAdminCount = Number(Array.isArray(adminRows) ? adminRows[0]?.count : 0);
-            if (activeAdminCount <= 1) {
-                return res.status(409).json({ message: 'The last active administrator cannot be deactivated.' });
-            }
+            activeAdminCount = Number(Array.isArray(adminRows) ? adminRows[0]?.count : 0);
+        }
+        const safetyBlock = adminDeactivationBlock({ actorEmail, targetEmail: email, targetRole, activeAdminCount });
+        if (safetyBlock) {
+            return res.status(409).json({ message: safetyBlock });
         }
 
         const archivedBy = actorEmail || 'admin';
