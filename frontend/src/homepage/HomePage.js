@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import "./HomePage.css";
 import "../components/AccountHeaderActions.css";
 import SignOutConfirmModal from "../components/SignOutConfirmModal";
-import { Phone, Bone, Stethoscope, MapPin, Mail, Clock, Facebook, MessageCircle, Scissors, Syringe, Baby, Ear, Microscope, Smile, Eye, Scan, Droplet, Sparkles, ShieldCheck, Users, HeartPulse, Building2, BadgeCheck, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import { Phone, Bone, Stethoscope, MapPin, Mail, Clock, Facebook, MessageCircle, Scissors, Syringe, Baby, Ear, Microscope, Smile, Eye, Scan, Droplet, Sparkles, ShieldCheck, Users, HeartPulse, Building2, BadgeCheck, ChevronLeft, ChevronRight, Pause, Play, Menu, X } from "lucide-react";
+import { buildAuthHeaders } from "../utils/api";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const HOSPITAL_LOCATION = {
@@ -178,14 +179,17 @@ function HomePage() {
   const [newsError, setNewsError] = useState('');
   const [newsCursor, setNewsCursor] = useState(0);
   const [newsPaused, setNewsPaused] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     // Check for logged in user
     const storedUser = localStorage.getItem('currentUser');
+    let parsedSession = null;
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
+        parsedSession = parsedUser;
         // Keep the same role fallbacks used by authentication and protected routes.
         const name = parsedUser.first_name ? `${parsedUser.first_name}` : (parsedUser.name || 'Staff');
         setUser({
@@ -199,10 +203,42 @@ function HomePage() {
       }
     }
 
+    const sessionController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    if (parsedSession?.sessionToken && parsedSession?.email) {
+      fetch(`${API_BASE}/api/staff/by-email?email=${encodeURIComponent(parsedSession.email)}`, {
+        headers: buildAuthHeaders(parsedSession),
+        signal: sessionController?.signal
+      }).then((response) => {
+        if (![401, 403, 404].includes(response.status)) return;
+        localStorage.removeItem('currentUser');
+        setUser(null);
+      }).catch(() => {
+        // Preserve the last known session during temporary network outages.
+      });
+    }
+
     const slideInterval = setInterval(() => {
       setCurrentSlide((prev) => (prev === slides.length - 1 ? 0 : prev + 1));
     }, 5000);
-    return () => clearInterval(slideInterval);
+    return () => {
+      clearInterval(slideInterval);
+      sessionController?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    const closeAtDesktopWidth = () => {
+      if (window.innerWidth > 768) setMobileNavOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setMobileNavOpen(false);
+    };
+    window.addEventListener('resize', closeAtDesktopWidth);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('resize', closeAtDesktopWidth);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
   }, []);
 
   useEffect(() => {
@@ -287,17 +323,20 @@ function HomePage() {
   }, [newsCursor, newsItems, newsLoading]);
 
   const handleLogout = async () => {
-    const storedUser = JSON.parse(localStorage.getItem('currentUser'));
-    if (storedUser && storedUser._id) {
+    let storedUser = null;
+    try {
+      storedUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+    } catch (_) {}
+    const userId = storedUser?.id || storedUser?._id;
+    if (storedUser && userId && storedUser.sessionToken) {
         try {
             const role = String(storedUser.account_type || storedUser.accountType || storedUser.role || '').toLowerCase();
-            const email = String(storedUser.email || '').trim();
             await fetch(`${API_BASE}/api/staff/logout`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-user-role': role, ...(email ? { 'x-user-email': email } : {}) },
+                headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(storedUser, role) },
                 body: JSON.stringify({ 
-                    id: storedUser._id, 
-                    accountType: storedUser.account_type || storedUser.accountType
+                    id: userId,
+                    accountType: role
                 })
             });
         } catch (error) {
@@ -307,9 +346,12 @@ function HomePage() {
     localStorage.removeItem('currentUser');
     localStorage.removeItem('tempLoginEmail');
     localStorage.removeItem('tempLoginRole');
+    setMobileNavOpen(false);
     setUser(null);
     navigate('/');
   };
+
+  const closeMobileNav = () => setMobileNavOpen(false);
 
   const handleGoToDashboard = () => {
     const role = String(user?.accountType || user?.account_type || user?.role || user?.roles || '')
@@ -382,6 +424,30 @@ function HomePage() {
         }
         .main-nav a:hover {
           color: #ea580c;
+        }
+        .header-mobile-row {
+          display: flex;
+          align-items: center;
+        }
+        .logo-name {
+          margin: 0;
+          font-size: 1.5rem;
+          color: #ea580c;
+          line-height: 1;
+          font-weight: 900;
+          letter-spacing: -0.02em;
+        }
+        .mobile-menu-toggle {
+          display: none;
+          width: 44px;
+          height: 44px;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid #fed7aa;
+          border-radius: 13px;
+          color: #c2410c;
+          background: #fff7ed;
+          cursor: pointer;
         }
         .user-greeting-wrapper {
           display: flex;
@@ -1140,6 +1206,39 @@ function HomePage() {
           font-size: 0.92rem;
           line-height: 1.45;
         }
+        .public-information-section {
+          padding: 5rem 1.5rem;
+          background: #f8fafc;
+        }
+        .public-information-head {
+          max-width: 760px;
+          margin: 0 auto 2rem;
+          text-align: center;
+        }
+        .public-information-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 1.25rem;
+        }
+        .public-information-card {
+          scroll-margin-top: 100px;
+          padding: 1.5rem;
+          border: 1px solid #e2e8f0;
+          border-radius: 20px;
+          background: #fff;
+          box-shadow: 0 10px 25px rgba(15, 23, 42, 0.05);
+        }
+        .public-information-card h3 {
+          margin: 0 0 0.75rem;
+          color: #172033;
+          font-size: 1.1rem;
+        }
+        .public-information-card p {
+          margin: 0;
+          color: #64748b;
+          font-size: 0.92rem;
+          line-height: 1.65;
+        }
 
         @media (max-width: 992px) {
           .hero-layout,
@@ -1165,8 +1264,13 @@ function HomePage() {
         @media (max-width: 768px) {
           .header-container {
             flex-direction: column;
-            gap: 14px;
+            align-items: stretch;
+            gap: 0;
             padding: 12px 16px;
+          }
+          .header-mobile-row {
+            width: 100%;
+            justify-content: space-between;
           }
           .logo-section {
             gap: 12px;
@@ -1174,7 +1278,7 @@ function HomePage() {
           .logo-img {
             height: 44px;
           }
-          .logo-text h1 {
+          .logo-name {
             font-size: 22px;
           }
           .logo-text span {
@@ -1182,9 +1286,17 @@ function HomePage() {
             text-align-last: auto;
           }
           .main-nav {
+            display: none;
             flex-direction: column;
             width: 100%;
             gap: 12px;
+            padding-top: 14px;
+          }
+          .main-nav.is-open {
+            display: flex;
+          }
+          .mobile-menu-toggle {
+            display: inline-flex;
           }
           .main-nav a {
             width: 100%;
@@ -1336,6 +1448,12 @@ function HomePage() {
           .contact-grid {
             gap: 1.25rem;
           }
+          .public-information-section {
+            padding: 3.5rem 1rem;
+          }
+          .public-information-grid {
+            grid-template-columns: 1fr;
+          }
 
           .contact-card {
             padding: 1.25rem;
@@ -1379,36 +1497,45 @@ function HomePage() {
       `}</style>
       <header className="main-header">
         <div className="header-container">
-          <div className="logo-section">
-            <img src={process.env.PUBLIC_URL + "/images/pgh logo.png"} alt="PGH Logo" className="logo-img" />
-            <div className="logo-text">
-              <h1>PASCUALINGA</h1>
-              <span>Pascual General Hospital</span>
-            </div>
+          <div className="header-mobile-row">
+            <a className="logo-section" href="#top" onClick={closeMobileNav} aria-label="Pascualinga homepage">
+              <img src={process.env.PUBLIC_URL + "/images/pgh logo.png"} alt="" className="logo-img" />
+              <div className="logo-text">
+                <div className="logo-name">PASCUALINGA</div>
+                <span>Pascual General Hospital</span>
+              </div>
+            </a>
+            <button
+              type="button"
+              className="mobile-menu-toggle"
+              aria-label={mobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              aria-expanded={mobileNavOpen}
+              aria-controls="homepage-navigation"
+              onClick={() => setMobileNavOpen((open) => !open)}
+            >
+              {mobileNavOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
           </div>
-          <nav className="main-nav">
-            <a href="#about">About Us</a>
-            <a href="#services">Our Services</a>
-            <a href="#facilities">Facilities</a>
-            <a href="#news">News</a>
-            <a href="#contact">Contact Us</a>
+          <nav id="homepage-navigation" className={`main-nav ${mobileNavOpen ? 'is-open' : ''}`} aria-label="Primary navigation">
+            <a href="#about" onClick={closeMobileNav}>About Us</a>
+            <a href="#services" onClick={closeMobileNav}>Our Services</a>
+            <a href="#facilities" onClick={closeMobileNav}>Facilities</a>
+            <a href="#news" onClick={closeMobileNav}>News</a>
+            <a href="#contact" onClick={closeMobileNav}>Contact Us</a>
             {user ? (
               <div className="user-greeting-wrapper">
                 <span className="nav-user-greeting">
                   Hello, {user.name}
                 </span>
-                <button 
-                  onClick={handleGoToDashboard} 
-                  className="nav-btn-primary"
-                >
+                <button onClick={() => { closeMobileNav(); handleGoToDashboard(); }} className="nav-btn-primary">
                   Dashboard
                 </button>
-                <button onClick={() => setShowLogoutConfirm(true)} className="nav-btn-danger">
+                <button onClick={() => { closeMobileNav(); setShowLogoutConfirm(true); }} className="nav-btn-danger">
                   Logout
                 </button>
               </div>
             ) : (
-              <Link to="/login" className="nav-btn-primary">Staff Login</Link>
+              <Link to="/login" className="nav-btn-primary" onClick={closeMobileNav}>Staff Login</Link>
             )}
           </nav>
         </div>
@@ -1423,6 +1550,7 @@ function HomePage() {
         }}
       />
 
+      <main id="top">
       <section className="hero">
         {slides.map((slide, index) => (
           <div
@@ -1844,6 +1972,30 @@ function HomePage() {
         </div>
       </section>
 
+      <section className="public-information-section page-section" aria-labelledby="public-information-title">
+        <div className="page-shell">
+          <div className="public-information-head reveal-on-scroll">
+            <div className="eyebrow">Public Information</div>
+            <h2 id="public-information-title" className="section-title">Privacy, terms, and patient rights</h2>
+            <p className="section-subtitle">A concise guide for visitors using Pascualinga's public website.</p>
+          </div>
+          <div className="public-information-grid">
+            <article id="privacy" className="public-information-card reveal-on-scroll">
+              <h3>Privacy Policy</h3>
+              <p>Personal and health information submitted through Pascualinga is used only to provide and coordinate authorized hospital services. For privacy questions or data requests, contact the hospital directly.</p>
+            </article>
+            <article id="terms" className="public-information-card reveal-on-scroll reveal-delay-1">
+              <h3>Terms of Service</h3>
+              <p>Public website information is provided for general guidance and does not replace professional medical advice, diagnosis, or emergency care. Contact the hospital for service confirmation.</p>
+            </article>
+            <article id="patient-rights" className="public-information-card reveal-on-scroll reveal-delay-2">
+              <h3>Patient Rights</h3>
+              <p>Patients have the right to respectful care, clear information, privacy, and participation in decisions about their care. Concerns may be raised directly with authorized hospital personnel.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
       {/* Emergency Banner (Moved to bottom) */}
       <section className="emergency-banner-improved page-section">
         <div className="emergency-content-improved reveal-on-scroll">
@@ -1862,6 +2014,7 @@ function HomePage() {
           </div>
         </div>
       </section>
+      </main>
 
       {/* Global Footer */}
       <footer className="global-footer page-section">
