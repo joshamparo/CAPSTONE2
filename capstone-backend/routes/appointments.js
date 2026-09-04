@@ -2670,16 +2670,26 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             const roomId = makeRoomId(resolvedAppointmentIdRaw);
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-            const updated = await prisma.appointments.update({
-                where: { id: resolvedAppointmentId },
-                data: {
-                    meeting_room_id: roomId,
-                    meeting_created_at: now,
-                    meeting_started_at: now,
-                    meeting_ended_at: null,
-                    meeting_expires_at: expiresAt
-                }
-            });
+            // Compare-and-set the room against the value this request read.
+            // If two Start requests race, only the first may replace it; the
+            // loser reloads and returns the exact room chosen by the winner.
+            const claimedRows = await prisma.$queryRaw`
+                UPDATE appointments
+                SET meeting_room_id = ${roomId},
+                    meeting_created_at = ${now},
+                    meeting_started_at = ${now},
+                    meeting_ended_at = NULL,
+                    meeting_expires_at = ${expiresAt},
+                    updated_at = now()
+                WHERE id = ${resolvedAppointmentId}
+                  AND meeting_room_id IS NOT DISTINCT FROM ${currentRoomId || null}
+                RETURNING *
+            `;
+            const claimed = Array.isArray(claimedRows) ? claimedRows[0] : null;
+            const updated = claimed || await prisma.appointments.findUnique({ where: { id: resolvedAppointmentId } });
+            if (!updated?.meeting_room_id) {
+                return res.status(409).json({ message: 'The video room changed while starting. Please try again.' });
+            }
             const url = buildJitsiUrl(updated.meeting_room_id, doctorName, {
                 moderator: true,
                 email: requesterEmail,

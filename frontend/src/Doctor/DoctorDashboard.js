@@ -128,6 +128,7 @@ function DoctorDashboard() {
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [videoMeetingUrl, setVideoMeetingUrl] = useState('');
   const [videoMeetingTitle, setVideoMeetingTitle] = useState('');
+  const videoStartInFlightRef = useRef(new Set());
 
   // Queue State
   const [appointments, setAppointments] = useState([]);
@@ -944,6 +945,9 @@ function DoctorDashboard() {
 
   const startVideoCall = async (apt) => {
     if (!apt?.id) return;
+    const appointmentKey = String(apt.id);
+    if (videoStartInFlightRef.current.has(appointmentKey)) return;
+    videoStartInFlightRef.current.add(appointmentKey);
     try {
       // #region debug-point D:web-start-click
       reportVideoRoomDebug({
@@ -995,6 +999,8 @@ function DoctorDashboard() {
       });
       // #endregion
       setToast({ type: 'error', message: String(e?.message || 'Unable to start call.') });
+    } finally {
+      videoStartInFlightRef.current.delete(appointmentKey);
     }
   };
 
