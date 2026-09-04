@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
@@ -688,9 +689,14 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   }
 
   if (consultationMode === 'video') {
-    // Do not create a short/predictable room during approval. The doctor start
-    // endpoint creates and persists one secure `apt-<id>-<suffix>` room, which
-    // is then returned unchanged to both the web doctor and patient app.
+    // Persist the canonical secure room during approval, before the patient can
+    // load/cache an empty-room fallback. Preserve any room already supplied by
+    // an older client; otherwise both clients receive this exact stored value.
+    const approvalRoomId = `apt-${String(appt.id)}-${crypto.randomBytes(5).toString('base64url')}`;
+    await prisma.appointments.updateMany({
+      where: { id: BigInt(appt.id), meeting_room_id: null },
+      data: { meeting_room_id: approvalRoomId, meeting_created_at: new Date() }
+    }).catch((err) => console.error('[Video Approval] Failed to create canonical meeting room:', err?.message));
     if (String(requestRow.payment_status || '').toLowerCase() === 'paid') {
       await recordVideoConsultationPayment(prisma, {
         appointmentId: BigInt(appt.id),
