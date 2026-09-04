@@ -2679,8 +2679,7 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
                     meeting_created_at = ${now},
                     meeting_started_at = ${now},
                     meeting_ended_at = NULL,
-                    meeting_expires_at = ${expiresAt},
-                    updated_at = now()
+                    meeting_expires_at = ${expiresAt}
                 WHERE id = ${resolvedAppointmentId}
                   AND meeting_room_id IS NOT DISTINCT FROM ${currentRoomId || null}
                 RETURNING *
