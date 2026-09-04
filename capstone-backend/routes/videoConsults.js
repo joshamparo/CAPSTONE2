@@ -155,6 +155,7 @@ function inferSpecializationFromServiceType(serviceType) {
   if (low.includes('physical therapy') || low === 'pt' || low.includes('physiotherapy')) return 'Physical Therapy';
   if (low.includes('ob') || low.includes('ob-gyn') || low.includes('obgyn')) return 'OB-GYN';
   if (low.includes('derma')) return 'Dermatology';
+  if (low.includes('ophthalm') || low.includes('opthalm') || low.includes('optha')) return 'Ophthalmology';
   if (low.includes('cardio')) return 'Cardiology';
   if (low.includes('surg')) return 'Surgery';
   if (low.includes('ortho')) return 'Orthopedics';
@@ -200,6 +201,17 @@ function buildDoctorSpecializationWhere(spec) {
       OR: [
         { specialization: { contains: 'Ortho', mode: 'insensitive' } },
         { department: { contains: 'Ortho', mode: 'insensitive' } }
+      ]
+    };
+  }
+  if (low.includes('ophthalm') || low.includes('opthalm') || low.includes('optha')) {
+    return {
+      OR: [
+        { specialization: { contains: 'Ophthalmology', mode: 'insensitive' } },
+        { specialization: { contains: 'Opthalmology', mode: 'insensitive' } },
+        { specialization: { contains: 'Optha', mode: 'insensitive' } },
+        { department: { contains: 'Ophthalmology', mode: 'insensitive' } },
+        { department: { contains: 'Opthalmology', mode: 'insensitive' } }
       ]
     };
   }

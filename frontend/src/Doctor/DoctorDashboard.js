@@ -866,7 +866,7 @@ function DoctorDashboard() {
     if (compact.includes('surg')) return 'surgery';
     if (compact.includes('medicine') || compact.includes('internal')) return 'medicine';
     if (compact === 'ent' || compact.includes('otolaryng')) return 'otolaryngology';
-    if (compact.includes('ophthalm')) return 'ophthalmology';
+    if (compact.includes('ophthalm') || compact.includes('opthalm') || compact.includes('optha')) return 'ophthalmology';
     if (compact.includes('anesth')) return 'anesthesia';
     if (compact.includes('ortho')) return 'orthopedics';
     if (compact.includes('dental') || compact.includes('dentist')) return 'dental_medicine';

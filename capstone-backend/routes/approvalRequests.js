@@ -320,7 +320,9 @@ function specializationVariants(value) {
     variants.push('OB-GYN', 'OBGYN', 'OB Gyne', 'Obstetrics', 'Gynecology', 'Obstetrics-Gynecology');
   }
   if (lower.includes('otorhin') || lower.includes('otolaryng') || lower === 'ent') variants.push('ENT');
-  if (lower.includes('ophthalm') || lower.includes('optha')) variants.push('Optha', 'Ophthalmology');
+  if (lower.includes('ophthalm') || lower.includes('opthalm') || lower.includes('optha')) {
+    variants.push('Optha', 'Ophthalmology', 'Opthalmology');
+  }
   return [...new Set(variants.map((v) => String(v || '').trim().toLowerCase()).filter(Boolean))];
 }
 
@@ -688,7 +690,7 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   if (consultationMode === 'video') {
     await prisma.appointments.update({
       where: { id: BigInt(appt.id) },
-      data: { meeting_room_id: `pascualinga-${String(appt.id)}`, meeting_created_at: new Date() }
+      data: { meeting_room_id: `apt-${String(appt.id)}`, meeting_created_at: new Date() }
     }).catch((err) => console.error('[Video Approval] Failed to create meeting room:', err?.message));
     if (String(requestRow.payment_status || '').toLowerCase() === 'paid') {
       await recordVideoConsultationPayment(prisma, {
@@ -837,7 +839,9 @@ router.get('/inbox', async (req, res) => {
         if (lower.includes('otolaryngology') && !variants.some((v) => String(v).toLowerCase() === 'ent')) variants.push('ENT');
         if ((lower.includes('obstetrics') || lower.includes('gynecology')) && !variants.some((v) => String(v).toLowerCase() === 'obgyn')) variants.push('OBGYN');
         if (lower.includes('orthopedics') && !variants.some((v) => String(v).toLowerCase() === 'ortho')) variants.push('Ortho');
-        if (lower.includes('ophthalmology') && !variants.some((v) => String(v).toLowerCase() === 'optha')) variants.push('Optha');
+        if ((lower.includes('ophthalmology') || lower.includes('opthalmology')) && !variants.some((v) => String(v).toLowerCase() === 'optha')) {
+          variants.push('Optha', 'Ophthalmology', 'Opthalmology');
+        }
         linkedSpecializationVariants = variants.filter(Boolean);
       }
       doctorSecretaryCtx = { linked, linkedName, linkedSpecialization, linkedSpecializationVariants };
@@ -899,7 +903,9 @@ router.get('/inbox', async (req, res) => {
         specializationVariants.push('OB-GYN', 'OBGYN', 'OB Gyne', 'Obstetrics', 'Gynecology', 'Obstetrics-Gynecology');
       }
       if (specLower.includes('otorhin') || specLower.includes('otolaryng') || specLower === 'ent') specializationVariants.push('ENT');
-      if (specLower.includes('ophthalm') || specLower.includes('optha')) specializationVariants.push('Optha', 'Ophthalmology');
+      if (specLower.includes('ophthalm') || specLower.includes('opthalm') || specLower.includes('optha')) {
+        specializationVariants.push('Optha', 'Ophthalmology', 'Opthalmology');
+      }
       const uniqueVariants = [...new Set(specializationVariants.map((v) => String(v || '').trim()).filter(Boolean))];
 
       const doctorIdIndex = i++;
