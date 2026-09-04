@@ -278,6 +278,36 @@ async function fetchDoctorList({ specialization, department, status }) {
   return unique;
 }
 
+async function resolveVideoProviderById(providerId) {
+  const id = String(providerId || '').trim();
+  if (!id) return null;
+
+  const doctor = await prisma.doctors.findUnique({
+    where: { id },
+    select: { id: true, first_name: true, last_name: true, email: true }
+  }).catch(() => null);
+  if (doctor) {
+    return {
+      id: doctor.id,
+      name: `Dr. ${String(doctor.first_name || '').trim()} ${String(doctor.last_name || '').trim()}`.trim(),
+      providerType: 'doctor'
+    };
+  }
+
+  const therapist = await prisma.staff.findFirst({
+    where: { id, account_type: 'physical_therapist' },
+    select: { id: true, first_name: true, last_name: true, email: true }
+  }).catch(() => null);
+  if (!therapist) return null;
+  return {
+    id: therapist.id,
+    name: `${String(therapist.first_name || '').trim()} ${String(therapist.last_name || '').trim()}`.trim()
+      || therapist.email
+      || 'Physical Therapist',
+    providerType: 'physical_therapist'
+  };
+}
+
 async function getBookedTimesForDoctor(doctorName, dateStr) {
   const day = parseDateOnly(dateStr);
   if (!day) return new Set();
@@ -439,12 +469,10 @@ router.get('/slots', requireRole(['patient']), async (req, res) => {
       let dn = doctorName;
       let docUuid = null;
       if (doctorId) {
-        const doc = await prisma.doctors
-          .findUnique({ where: { id: doctorId }, select: { id: true, first_name: true, last_name: true } })
-          .catch(() => null);
-        if (doc) {
-          docUuid = doc.id;
-          dn = `Dr. ${String(doc.first_name || '').trim()} ${String(doc.last_name || '').trim()}`.trim();
+        const provider = await resolveVideoProviderById(doctorId);
+        if (provider) {
+          docUuid = provider.id;
+          dn = provider.name;
         }
       }
       if (!dn) return res.status(400).json({ message: 'Missing doctorName.' });
@@ -551,11 +579,10 @@ router.post('/holds', requireRole(['patient']), async (req, res) => {
       if (!dn) return res.status(409).json({ message: 'No doctor available for that slot.' });
     } else {
       if (docUuid && !dn) {
-        const doc = await prisma.doctors
-          .findUnique({ where: { id: docUuid }, select: { id: true, first_name: true, last_name: true } })
-          .catch(() => null);
-        if (doc) {
-          dn = `Dr. ${String(doc.first_name || '').trim()} ${String(doc.last_name || '').trim()}`.trim();
+        const provider = await resolveVideoProviderById(docUuid);
+        if (provider) {
+          docUuid = provider.id;
+          dn = provider.name;
         }
       }
       if (!dn) return res.status(400).json({ message: 'Missing doctorName.' });
@@ -828,7 +855,30 @@ async function resolveDoctorUuidFromDoctorName(doctorName) {
       },
       select: { id: true }
     });
-    return fallback?.id || null;
+    if (fallback?.id) return fallback.id;
+
+    // Physical Therapy providers are stored in `staff`, so name-only legacy
+    // holds must resolve through the same provider identity used by the PT web
+    // inbox and appointment queue.
+    const therapists = await prisma.staff.findMany({
+      where: {
+        account_type: 'physical_therapist',
+        OR: [
+          ...(firstToken ? [{ first_name: { contains: firstToken, mode: 'insensitive' } }] : []),
+          ...(lastToken ? [{ last_name: { contains: lastToken, mode: 'insensitive' } }] : []),
+          { email: { equals: dn, mode: 'insensitive' } }
+        ]
+      },
+      select: { id: true, first_name: true, last_name: true, email: true },
+      take: 25
+    }).catch(() => []);
+    for (const therapist of therapists || []) {
+      const full = `${String(therapist.first_name || '').trim()} ${String(therapist.last_name || '').trim()}`.trim();
+      if (normalizeDoctorName(full) === target || String(therapist.email || '').trim().toLowerCase() === dn.toLowerCase()) {
+        return therapist.id;
+      }
+    }
+    return null;
   } catch (_) {
     return null;
   }

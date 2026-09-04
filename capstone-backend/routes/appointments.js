@@ -2842,11 +2842,15 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therap
             return res.status(410).json({ message: 'This video consultation room has ended or expired.' });
         }
 
-        if (role === 'doctor') {
+        if (role === 'doctor' || role === 'physical_therapist') {
             const reqDoctorUuid = String(req.headers['x-doctor-uuid'] || '').trim();
             let isAssigned = false;
-            
-            if (apt.doctor_uuid && reqDoctorUuid && apt.doctor_uuid === reqDoctorUuid) {
+
+            if (role === 'physical_therapist' && apt.doctor_uuid && req.auth?.id
+                && String(apt.doctor_uuid) === String(req.auth.id)
+                && inferSpecializationFromVideoReason(apt.reason) === 'Physical Therapy') {
+                isAssigned = true;
+            } else if (apt.doctor_uuid && reqDoctorUuid && apt.doctor_uuid === reqDoctorUuid) {
                 isAssigned = true;
             } else {
                 const assigned = normalizeAssignee(apt.doctor_id);
@@ -2861,14 +2865,14 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therap
             const url = buildJitsiUrl(roomId, name, {
                 moderator: true,
                 email,
-                userId: reqDoctorUuid || email
+                userId: role === 'physical_therapist' ? (req.auth?.id || email) : (reqDoctorUuid || email)
             });
             // #region debug-point E:join-doctor-response
             reportVideoRoomDebug({
                 hypothesisId: 'E',
                 location: 'appointments.js:join-doctor-response',
                 msg: '[DEBUG] join route returned doctor url',
-                data: { appointmentId: idRaw, role: 'doctor', roomId, url, name: name || null }
+                data: { appointmentId: idRaw, role, roomId, url, name: name || null }
             });
             // #endregion
             return res.json({ roomId: toClientRoomId(roomId), canonicalRoomId: roomId, url, startedAt });
