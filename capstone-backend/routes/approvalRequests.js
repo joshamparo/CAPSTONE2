@@ -953,6 +953,13 @@ router.get('/inbox', async (req, res) => {
     } else
     if ((role === 'nurse' && department) || ROLE_SERVICE_KEYS[role]) {
       const deptNorm = String(department || '').trim().toLowerCase();
+      const routingExpr = `lower(concat_ws(' ',
+        coalesce(r.department_key, ''),
+        coalesce(r.service_category, ''),
+        coalesce(r.service_type, ''),
+        coalesce(r.service_name, ''),
+        coalesce(r.reason, '')
+      ))`;
       const serviceExpr = `
         lower(
           coalesce(
@@ -976,12 +983,29 @@ router.get('/inbox', async (req, res) => {
         return [department];
       })();
 
-      const clause = allowed.map((_, idx) => `${serviceExpr} = lower($${i + idx})`).join(' OR ');
-      where = `
-        WHERE (${clause})
-      `;
-      params.push(...allowed);
-      i += allowed.length;
+      if (role === 'physical_therapist') {
+        const therapistId = isUuid(hdr.id) ? String(hdr.id).toLowerCase() : '';
+        if (!therapistId) {
+          return res.status(403).json({ message: 'Physical therapist account is not linked to a valid staff record.' });
+        }
+        const therapistIdIndex = i++;
+        params.push(therapistId);
+        where = `
+          WHERE (r.doctor_id IS NULL OR r.doctor_id = $${therapistIdIndex}::uuid)
+            AND (
+              ${routingExpr} LIKE '%physical therapy%'
+              OR ${routingExpr} LIKE '%physiotherapy%'
+              OR ${routingExpr} ~ '(^|[^a-z])pt([^a-z]|$)'
+            )
+        `;
+      } else {
+        const clause = allowed.map((_, idx) => `${serviceExpr} = lower($${i + idx})`).join(' OR ');
+        where = `
+          WHERE (${clause})
+        `;
+        params.push(...allowed);
+        i += allowed.length;
+      }
     } else {
       where = `
         WHERE regexp_replace(regexp_replace(lower(coalesce(r.${filterField}, '')), '^(dr\\.?\\s*|nurse\\s*)', ''), '\\s+', ' ', 'g')
