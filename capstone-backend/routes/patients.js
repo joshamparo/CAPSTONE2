@@ -362,17 +362,11 @@ async function enforceClinicalPatientAccess(req, res, patientId) {
         select: { id: true }
     });
     if (!match && getRequesterRole(req) === 'nurse' && req.nurseDepartment === 'ER') {
-        const receptionAppointment = await prisma.appointments.findFirst({
-            where: {
-                patient_id: String(patientId),
-                OR: [
-                    { reason: { startsWith: '[TRIAGE][WALK-IN] ER Consultation' } },
-                    { reason: { startsWith: '[APPOINTMENT][CLINIC]' } }
-                ]
-            },
-            select: { patient_id: true }
+        const receptionPatient = await prisma.patients.findUnique({
+            where: { id: String(patientId) },
+            select: { id: true, clinical_records: true }
         });
-        if (receptionAppointment?.patient_id) match = { id: receptionAppointment.patient_id };
+        if (receptionPatient && getReceptionRouteFromClinicalRecords(receptionPatient.clinical_records)) match = { id: receptionPatient.id };
     }
     if (!match) {
         res.status(403).json({ message: 'This patient is not assigned to your clinical service.' });
@@ -500,6 +494,27 @@ function mergeWalkInClinicalRecords(currentValue, entry) {
         base.erRegistration = entry;
     }
     return base;
+}
+
+function getReceptionRouteFromClinicalRecords(clinicalRecords) {
+    const entries = clinicalRecords && typeof clinicalRecords === 'object' && Array.isArray(clinicalRecords.walkInIntakes)
+        ? clinicalRecords.walkInIntakes
+        : [];
+    const intake = entries.find((entry) => entry && typeof entry === 'object');
+    if (!intake) return null;
+    const type = String(intake.type || '').trim().toLowerCase();
+    const context = `${intake.specialization || ''} ${intake.label || ''} ${intake.mainConcern || ''}`;
+    if (type === 'er_consult') return { route: 'ER', status: 'ER Intake' };
+    if (type === 'onsite_consult') return /physical\s*therapy|physiotherapy|rehab/i.test(context)
+        ? { route: 'PHYSICAL_THERAPY', status: 'Sent to Physical Therapy' }
+        : { route: 'ONSITE', status: 'Awaiting Secretary' };
+    if (type === 'lab') return { route: 'LAB', status: 'Sent to Laboratory' };
+    if (type === 'imaging') return /\becg\b/i.test(context)
+        ? { route: 'ECG', status: 'Sent to ECG' }
+        : { route: 'IMAGING', status: 'Sent to Imaging' };
+    if (type === 'pharmacy') return { route: 'PHARMACY', status: 'Sent to Pharmacy' };
+    if (type === 'admission_eval') return { route: 'ADMISSION', status: 'Admission Evaluation' };
+    return null;
 }
 
 function toPatientResponse(row) {
@@ -861,11 +876,19 @@ router.get('/', async (req, res) => {
         let clinicalScope = clinicalPatientOrderScope(req);
         const receptionRoutes = new Map();
 
-        // Central reception scope. Appointment markers are authoritative, so
-        // ER nurses can see reception-created ER and onsite patients without
-        // exposing unrelated outpatient records. Legacy ER status is normalized
-        // in this response without rewriting stored patient history.
+        // Central reception scope. Intake history is authoritative, so ER nurses
+        // can see reception-created service patients without exposing unrelated
+        // outpatient records. Appointment state enriches ER/onsite routing.
         if (requesterRole === 'nurse' && req.nurseDepartment === 'ER') {
+            const receptionPatients = await prisma.patients.findMany({
+                select: { id: true, clinical_records: true },
+                orderBy: { created_at: 'desc' },
+                take: 2000
+            });
+            receptionPatients.forEach((row) => {
+                const reception = getReceptionRouteFromClinicalRecords(row.clinical_records);
+                if (reception) receptionRoutes.set(row.id, reception);
+            });
             const receptionAppointments = await prisma.appointments.findMany({
                 where: {
                     patient_id: { not: null },
@@ -878,15 +901,20 @@ router.get('/', async (req, res) => {
                 orderBy: { created_at: 'desc' },
                 take: 2000
             });
+            const enrichedAppointmentRoutes = new Set();
             receptionAppointments.forEach((row) => {
-                if (!row.patient_id || receptionRoutes.has(row.patient_id)) return;
+                if (!row.patient_id || enrichedAppointmentRoutes.has(row.patient_id)) return;
                 const onsite = String(row.reason || '').startsWith('[APPOINTMENT][CLINIC]');
+                const existingRoute = receptionRoutes.get(row.patient_id);
+                const appointmentRoute = onsite ? 'ONSITE' : 'ER';
+                if (existingRoute && existingRoute.route !== appointmentRoute) return;
                 receptionRoutes.set(row.patient_id, {
-                    route: onsite ? 'ONSITE' : 'ER',
+                    route: appointmentRoute,
                     status: onsite
                         ? (row.doctor_uuid ? 'Doctor Assigned' : (row.assignment_status === 'PENDING_ASSIGNMENT' ? 'Awaiting Secretary' : (row.status || 'Scheduled')))
                         : (row.status || 'ER Intake')
                 });
+                enrichedAppointmentRoutes.add(row.patient_id);
             });
             if (receptionRoutes.size) {
                 clinicalScope = {
@@ -3180,8 +3208,8 @@ router.post('/audit-access/report', requireRole(['admin', 'nurse']), async (req,
         if (!action) return res.status(400).json({ message: 'Invalid patient record access type.' });
         const patientIds = [...new Set((Array.isArray(req.body?.patientIds) ? req.body.patientIds : [])
             .map((value) => String(value || '').trim()).filter(Boolean))];
-        if (!patientIds.length || patientIds.length > 200) {
-            return res.status(400).json({ message: 'Select between 1 and 200 patient records.' });
+        if (!patientIds.length || patientIds.length > 2000) {
+            return res.status(400).json({ message: 'Select between 1 and 2,000 patient records.' });
         }
         const scope = clinicalPatientOrderScope(req);
         const allowedRows = await prisma.patients.findMany({
@@ -3190,17 +3218,13 @@ router.post('/audit-access/report', requireRole(['admin', 'nurse']), async (req,
         });
         const allowedIds = new Set(allowedRows.map((row) => row.id));
         if (getRequesterRole(req) === 'nurse' && req.nurseDepartment === 'ER' && allowedIds.size < patientIds.length) {
-            const receptionRows = await prisma.appointments.findMany({
-                where: {
-                    patient_id: { in: patientIds },
-                    OR: [
-                        { reason: { startsWith: '[TRIAGE][WALK-IN] ER Consultation' } },
-                        { reason: { startsWith: '[APPOINTMENT][CLINIC]' } }
-                    ]
-                },
-                select: { patient_id: true }
+            const receptionRows = await prisma.patients.findMany({
+                where: { id: { in: patientIds } },
+                select: { id: true, clinical_records: true }
             });
-            receptionRows.forEach((row) => { if (row.patient_id) allowedIds.add(row.patient_id); });
+            receptionRows.forEach((row) => {
+                if (getReceptionRouteFromClinicalRecords(row.clinical_records)) allowedIds.add(row.id);
+            });
         }
         if (allowedIds.size !== patientIds.length) {
             return res.status(403).json({ message: 'One or more patient records are outside your assigned department.' });

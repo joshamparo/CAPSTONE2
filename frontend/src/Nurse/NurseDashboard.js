@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, User, Users, MessageSquare, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Settings, AlertCircle, AlertOctagon, Printer, Search, Eye, BedDouble, Bed, LayoutDashboard, Activity, FileText, Calendar, ClipboardList, ArrowLeft, Stethoscope, UserCheck, Clipboard, Check, FilePenLine, LogIn, Pill, FlaskConical, Package, Clock, CheckCircle, XCircle, X, Plus, Phone, AlertTriangle, Info, MapPin, Copy, Save, Megaphone, RotateCw, Send, Upload, Menu, ShieldAlert, Mail, Briefcase, Key, Shield, EyeOff } from 'lucide-react';
+import { LogOut, User, Users, MessageSquare, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Settings, AlertCircle, AlertOctagon, Printer, Search, Eye, BedDouble, Bed, LayoutDashboard, Activity, FileText, Calendar, ClipboardList, ArrowLeft, Stethoscope, UserCheck, Clipboard, Check, FilePenLine, LogIn, Pill, FlaskConical, Package, Clock, CheckCircle, XCircle, X, Plus, Phone, AlertTriangle, Info, MapPin, Copy, Save, Megaphone, RotateCw, Send, Upload, Download, Menu, ShieldAlert, Mail, Briefcase, Key, Shield, EyeOff } from 'lucide-react';
 import './NurseDashboard.css';
 import '../Admin/AdminDashboard.css'; 
 import { ncrCalabarzonCities, SPECIALIZATION_OPTIONS } from '../utils/constants';
@@ -9,6 +9,11 @@ import { API_BASE, checkBackendHealth, fetchJson } from '../utils/api';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
+
+const RECEPTION_ROUTE_LABELS = {
+  ER: 'ER', ONSITE: 'On-site', LAB: 'Laboratory', ECG: 'ECG', IMAGING: 'Imaging',
+  PHYSICAL_THERAPY: 'Physical Therapy', PHARMACY: 'Pharmacy', ADMISSION: 'Admission'
+};
 import StatusBadge from '../components/StatusBadge';
 import ModalShell from '../components/ModalShell';
 import { buildPatientWatchlist } from './nurseClinicalUtils';
@@ -2962,6 +2967,60 @@ function NurseDashboard() {
   const patientRecordsRangeStart = patientRecordsMatchCount === 0 ? 0 : ((Math.min(patientPage, patientRecordsPageCount) - 1) * itemsPerPage) + 1;
   const patientRecordsRangeEnd = patientRecordsMatchCount === 0 ? 0 : Math.min(patientRecordsMatchCount, patientRecordsRangeStart + pagedPatientsForRecords.length - 1);
 
+  const patientRouteCounts = useMemo(() => {
+    const counts = { ALL: patientsList.length };
+    patientsList.forEach((patient) => {
+      const route = String(patient.receptionRoute || (String(patient.admissionStatus || '').toUpperCase() === 'EMERGENCY' ? 'ER' : 'ONSITE')).toUpperCase();
+      counts[route] = (counts[route] || 0) + 1;
+    });
+    return counts;
+  }, [patientsList]);
+
+  const handleDownloadPatientCsv = async () => {
+    const rows = filteredPatientsForRecords;
+    const patientIds = rows.map((patient) => String(patient?._id || patient?.id || '').trim()).filter(Boolean);
+    if (!patientIds.length) {
+      setSuccessMessage('There are no patient records in the selected filter to download.');
+      setModalType('error');
+      setShowSuccessModal(true);
+      return;
+    }
+    try {
+      await fetchJson('/api/patients/audit-access/report', {
+        apiBase: API_BASE,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ accessType: 'download', patientIds })
+      });
+      const safeCell = (value) => {
+        let text = String(value ?? '').replace(/\r?\n/g, ' ');
+        if (/^[=+\-@]/.test(text)) text = `'${text}`;
+        return `"${text.replace(/"/g, '""')}"`;
+      };
+      const header = ['Patient ID', 'Patient Name', 'Route', 'Routing Status', 'Date of Birth', 'Sex', 'Contact Number', 'Email', 'Ward / Room', 'Attending Doctor'];
+      const dataRows = rows.map((patient) => [
+        patient._id || patient.id,
+        `${patient.firstName || ''} ${patient.middleName || ''} ${patient.lastName || ''}`.replace(/\s+/g, ' ').trim(),
+        patient.receptionRoute || 'On-site', patient.routingStatus || patient.admissionStatus || 'Registered',
+        patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString('en-CA') : '', patient.sex,
+        patient.contactNumber, patient.email, patient.wardNumber || 'Outpatient', patient.attendingDoctor
+      ]);
+      const csv = `\uFEFF${[header, ...dataRows].map((row) => row.map(safeCell).join(',')).join('\r\n')}`;
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `patient-records-${patientRouteFilter.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setSuccessMessage(String(error?.message || 'Unable to authorize this patient records download.'));
+      setModalType('error');
+      setShowSuccessModal(true);
+    }
+  };
+
   useEffect(() => {
     setPatientPage(1);
   }, [patientSearch, patientRouteFilter]);
@@ -3882,7 +3941,7 @@ function NurseDashboard() {
   }, [recentWorkflowActivities, notifications]);
 
   const recentOverviewActivities = useMemo(
-      () => allRecentActivities.slice(0, 5),
+      () => allRecentActivities.slice(0, 3),
       [allRecentActivities]
   );
 
@@ -6419,7 +6478,7 @@ function NurseDashboard() {
                 />
             </div>
         </header>
-        <section className="nurse-content-body">
+        <section className={`nurse-content-body ${view === 'overview' ? 'overview-fit-content' : ''}`}>
             {view === 'appointments' && (
                 <div className="doc-section" style={{ padding: '24px', background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                     <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', flexWrap: 'wrap' }}>
@@ -7697,6 +7756,9 @@ function NurseDashboard() {
                                 <button className="btn-primary-action" onClick={handlePrintPatientRecords}>
                                     <Printer size={18} /> Print Records
                                 </button>
+                                <button className="btn-primary-action" onClick={handleDownloadPatientCsv}>
+                                    <Download size={18} /> Download CSV
+                                </button>
                                 <button className="btn-primary-action" onClick={() => refreshPatientsList()}>
                                     <RotateCw size={18} /> Refresh
                                 </button>
@@ -7775,9 +7837,15 @@ function NurseDashboard() {
                                 <label className="patient-route-filter">
                                   <span className="sr-only">Filter patient records by route</span>
                                   <select value={patientRouteFilter} onChange={(event) => setPatientRouteFilter(event.target.value)}>
-                                    <option value="ALL">All reception patients</option>
-                                    <option value="ER">ER patients</option>
-                                    <option value="ONSITE">On-site patients</option>
+                                    <option value="ALL">All reception patients ({patientRouteCounts.ALL || 0})</option>
+                                    <option value="ER">ER patients ({patientRouteCounts.ER || 0})</option>
+                                    <option value="ONSITE">On-site patients ({patientRouteCounts.ONSITE || 0})</option>
+                                    <option value="LAB">Laboratory ({patientRouteCounts.LAB || 0})</option>
+                                    <option value="ECG">ECG ({patientRouteCounts.ECG || 0})</option>
+                                    <option value="IMAGING">Imaging ({patientRouteCounts.IMAGING || 0})</option>
+                                    <option value="PHYSICAL_THERAPY">Physical Therapy ({patientRouteCounts.PHYSICAL_THERAPY || 0})</option>
+                                    <option value="PHARMACY">Pharmacy ({patientRouteCounts.PHARMACY || 0})</option>
+                                    <option value="ADMISSION">Admission Evaluation ({patientRouteCounts.ADMISSION || 0})</option>
                                   </select>
                                 </label>
                                 </div>
@@ -7849,8 +7917,8 @@ function NurseDashboard() {
                                                         <div style={{fontSize: '0.8rem', color: '#64748b'}}>{patient.sex ? `${patient.sex}` : ''}</div>
                                                     </td>
                                                     <td>
-                                                        <span className={`reception-route-badge ${String(patient.receptionRoute || '').toUpperCase() === 'ER' ? 'er' : 'onsite'}`}>
-                                                          {String(patient.receptionRoute || '').toUpperCase() === 'ER' ? 'ER' : 'On-site'}
+                                                        <span className={`reception-route-badge ${String(patient.receptionRoute || 'ONSITE').toLowerCase()}`}>
+                                                          {RECEPTION_ROUTE_LABELS[String(patient.receptionRoute || 'ONSITE').toUpperCase()] || 'On-site'}
                                                         </span>
                                                     </td>
                                                     <td><span className="routing-status-text">{patient.routingStatus || patient.admissionStatus || 'Registered'}</span></td>
