@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, User, Users, MessageSquare, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Settings, AlertCircle, AlertOctagon, Printer, Search, Eye, BedDouble, Bed, LayoutDashboard, Activity, FileText, Calendar, ClipboardList, ArrowLeft, Stethoscope, UserCheck, Clipboard, Check, Trash2, FilePenLine, LogIn, Pill, FlaskConical, Package, Clock, CheckCircle, XCircle, X, Plus, Phone, AlertTriangle, Info, MapPin, Copy, Save, Megaphone, RotateCw, Send, Upload, Menu, ShieldAlert, Mail, Briefcase, Key, Shield, EyeOff } from 'lucide-react';
+import { LogOut, User, Users, MessageSquare, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Settings, AlertCircle, AlertOctagon, Printer, Search, Eye, BedDouble, Bed, LayoutDashboard, Activity, FileText, Calendar, ClipboardList, ArrowLeft, Stethoscope, UserCheck, Clipboard, Check, FilePenLine, LogIn, Pill, FlaskConical, Package, Clock, CheckCircle, XCircle, X, Plus, Phone, AlertTriangle, Info, MapPin, Copy, Save, Megaphone, RotateCw, Send, Upload, Menu, ShieldAlert, Mail, Briefcase, Key, Shield, EyeOff } from 'lucide-react';
 import './NurseDashboard.css';
 import '../Admin/AdminDashboard.css'; 
 import { ncrCalabarzonCities, SPECIALIZATION_OPTIONS } from '../utils/constants';
@@ -8,7 +8,6 @@ import { supabase } from '../lib/supabaseClient';
 import { API_BASE, checkBackendHealth, fetchJson } from '../utils/api';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import AccountHeaderActions from '../components/AccountHeaderActions';
-import ConfirmModal from '../components/ConfirmModal';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import StatusBadge from '../components/StatusBadge';
 import ModalShell from '../components/ModalShell';
@@ -4533,10 +4532,6 @@ function NurseDashboard() {
   const [editFormData, setEditFormData] = useState({});
   const [updatePatientError, setUpdatePatientError] = useState("");
 
-  // Delete Patient State
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [patientToDelete, setPatientToDelete] = useState(null);
-  const [deleteStatus, setDeleteStatus] = useState(null); // 'deleting', 'success', 'error'
 
   // View Profile State
   const [showViewProfileModal, setShowViewProfileModal] = useState(false);
@@ -5461,59 +5456,6 @@ function NurseDashboard() {
     } catch (error) {
         console.error("Error updating patient:", error);
         setUpdatePatientError("Network error.");
-    }
-  };
-
-  // Delete Handlers
-  const handleDeleteClick = (patient) => {
-    setPatientToDelete(patient);
-    setDeleteStatus(null);
-    setShowDeleteConfirm(true);
-  };
-
-  const confirmDelete = async () => {
-    const delErr = (msg) => {
-      setDeleteStatus('error');
-      setSuccessMessage(msg);
-      setModalType('error');
-      setShowSuccessModal(true);
-    };
-    if (!patientToDelete) {
-      delErr('Select a patient record first before deleting.');
-      return;
-    }
-    const pid = String(patientToDelete._id || patientToDelete.id || '').trim();
-    if (!pid) {
-      delErr('Selected patient is missing an id (cannot delete).');
-      return;
-    }
-    setDeleteStatus('deleting');
-
-    try {
-        const response = await fetch(`${API_BASE}/api/patients/${encodeURIComponent(pid)}`, {
-            method: 'DELETE',
-            headers: { ...getAuthHeaders() }
-        });
-
-        if (response.ok) {
-            setPatientsList(prev => prev.filter(p => String(p._id || p.id || '') !== pid));
-            setDeleteStatus('success');
-            setTimeout(() => {
-                setShowDeleteConfirm(false);
-                setPatientToDelete(null);
-                setDeleteStatus(null);
-                setSuccessMessage("Patient record deleted successfully.");
-                setModalType("success");
-                setShowSuccessModal(true);
-                addActivity('Patient Deleted', `Record for ${patientToDelete.firstName || ''} ${patientToDelete.lastName || ''} removed.`, 'alert');
-            }, 1000);
-        } else {
-          const err = await response.json().catch(() => ({}));
-          delErr(err?.message || 'Failed to delete patient record.');
-        }
-    } catch (error) {
-        console.error("Error deleting patient:", error);
-        delErr('Network error while deleting patient.');
     }
   };
 
@@ -9665,22 +9607,6 @@ function NurseDashboard() {
             </form>
           </div>
         </div>
-      )}
-
-      {showDeleteConfirm && (
-        <ConfirmModal
-          open={showDeleteConfirm}
-          onClose={() => setShowDeleteConfirm(false)}
-          onConfirm={confirmDelete}
-          title="Delete record?"
-          message="This action cannot be undone."
-          cancelLabel="Cancel"
-          confirmLabel={deleteStatus === 'deleting' ? 'Deleting...' : 'Delete'}
-          confirmVariant="danger"
-          confirmDisabled={deleteStatus === 'deleting'}
-          cancelDisabled={deleteStatus === 'deleting'}
-          error={deleteStatus === 'error' ? 'Failed to delete record. Please try again.' : ''}
-        />
       )}
 
       {showViewProfileModal && viewingPatient && (

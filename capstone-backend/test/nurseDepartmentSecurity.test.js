@@ -1,0 +1,17 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
+
+test('nurse department aliases normalize to stable scopes', () => {
+  assert.equal(normalizeNurseDepartment('Emergency Room'), 'ER');
+  assert.equal(normalizeNurseDepartment('Pediatrics'), 'PEDIA');
+  assert.equal(normalizeNurseDepartment('Outpatient Dept'), 'OPD');
+  assert.equal(normalizeNurseDepartment('Video Consultation'), 'VIDEO CONSULTATION');
+  assert.equal(normalizeNurseDepartment('Physical Therapy'), 'PHYSICAL THERAPY');
+  assert.equal(normalizeNurseDepartment('Otolaryngology (ENT)'), 'OTOLARYNGOLOGY (ENT)');
+});
+
+test('empty nurse department does not silently become a default scope', () => {
+  assert.equal(normalizeNurseDepartment(''), '');
+  assert.equal(normalizeNurseDepartment(null), '');
+});

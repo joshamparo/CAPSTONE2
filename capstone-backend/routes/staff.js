@@ -16,6 +16,7 @@ const { selectCanonicalAccount } = require('../utils/accountMatch');
 const { sendEmail } = require('../utils/mailer');
 const { otpEmail } = require('../utils/emailTemplates');
 const { adminDeactivationBlock } = require('../utils/adminAccountSafety');
+const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
 
 const publicWebOrigin = () => String(process.env.PUBLIC_WEB_ORIGIN || 'https://pascualinga.com').replace(/\/+$/, '');
 
@@ -2450,6 +2451,13 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         const profileRequesterEmail = normalizeEmail(req.headers['x-user-email'] || '');
         if (profileRequesterRole !== 'admin' && (!profileRequesterEmail || profileRequesterEmail !== normalizeEmail(user.email || ''))) {
             return res.status(403).json({ message: 'You can only update your own profile.' });
+        }
+        if (profileRequesterRole === 'nurse' && originalRole === 'nurse') {
+            const assignedDepartment = normalizeNurseDepartment(user.specialization || user.department);
+            const requestedDepartment = normalizeNurseDepartment(req.body?.specialization ?? req.body?.department ?? assignedDepartment);
+            if (!assignedDepartment || !requestedDepartment || requestedDepartment !== assignedDepartment) {
+                return res.status(403).json({ message: 'Only an administrator can change a nurse department or specialization.' });
+            }
         }
 
         // ---- Backend update validation (required fields + email/phone format) ----

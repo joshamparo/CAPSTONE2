@@ -8,6 +8,7 @@ const { ensureBillingTablesExist, toMoney, syncHmoDataFromAppointmentToInvoice }
 const { createClient } = require('@supabase/supabase-js');
 const { sendEmail } = require('../utils/mailer');
 const { appointmentEmail } = require('../utils/emailTemplates');
+const { patientUpdateAccess, sanitizePatientUpdateForRole } = require('../utils/patientUpdateAccess');
 
 let _supabaseAdmin = null;
 function getSupabaseAdmin() {
@@ -2826,7 +2827,21 @@ router.put('/:id', async (req, res) => {
         const exists = await prisma.patients.findUnique({ where: { id: patientId }, select: { id: true, admission_status: true, ward_number: true, email: true, contact_number: true } });
         if (!exists) return res.status(404).json({ message: 'Patient not found' });
 
-        const { password, address, emergencyContacts, ...updateData } = req.body || {};
+        const requesterRole = getRequesterRole(req);
+        const access = patientUpdateAccess({
+            role: requesterRole,
+            actorId: req.auth?.id,
+            actorEmail: getRequesterEmail(req),
+            patientId,
+            patientEmail: exists.email
+        });
+        if (!access.allowed && access.reason === 'role') {
+            return res.status(403).json({ message: 'You are not allowed to update patient records.' });
+        }
+        if (!access.allowed) return res.status(403).json({ message: 'You can only update your own patient profile.' });
+
+        const { password, address, emergencyContacts, ...rawUpdateData } = req.body || {};
+        const updateData = sanitizePatientUpdateForRole(requesterRole, rawUpdateData);
 
         const submittedValues = Object.entries(updateData)
             .filter(([key]) => !['_id', 'id', 'createdAt', 'updatedAt'].includes(key))
@@ -2945,6 +2960,16 @@ router.put('/:id', async (req, res) => {
             where: { id: patientId },
             data: prismaData
         });
+
+        await prisma.activity_logs.create({
+            data: {
+                actor_name: getRequesterEmail(req) || 'authenticated-user',
+                role: requesterRole,
+                action: requesterRole === 'patient' ? 'Patient Profile Updated' : 'Patient Record Updated',
+                target: `Patient:${patientId.slice(0, 8)}`,
+                details: `Updated approved ${requesterRole} fields.`
+            }
+        }).catch(() => {});
 
         res.json(updatedPatient);
     } catch (err) {

@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 const { normalizeNurseCalendarMonth, validateNurseCalendarEvent } = require('../utils/nurseCalendar');
 
 const router = express.Router();
@@ -137,9 +138,9 @@ const formatTimeAgo = (rawDate) => {
 };
 
 const actorFromReq = (req) => ({
-  role: normalizeRole(req.headers['x-user-role']),
-  name: String(req.headers['x-user-name'] || '').trim() || 'Nurse',
-  email: String(req.headers['x-user-email'] || '').trim() || null
+  role: req.auth?.role || normalizeRole(req.headers['x-user-role']),
+  name: req.nurseIdentity?.name || req.auth?.email || 'Nurse',
+  email: req.auth?.email || null
 });
 
 async function ensureWorkflowTables() {
@@ -475,6 +476,7 @@ async function loadPendingMedicationRequests(department) {
 }
 
 router.use(requireRole(['nurse', 'admin']));
+router.use(requireNurseDepartment);
 
 router.get('/calendar', async (req, res) => {
   try {
@@ -550,7 +552,7 @@ router.delete('/calendar/:id', async (req, res) => {
 router.get('/summary', async (req, res) => {
   try {
     await ensureWorkflowTables();
-    const department = normalizeDeptId(req.query.department);
+    const department = req.nurseDepartment || normalizeDeptId(req.query.department);
     const shiftLabel = String(req.query.shift || '').trim();
 
     const [latestHandoverRows, taskRows, medLogsRows, medQueue, liveBoard, recentActivities] = await Promise.all([
@@ -631,7 +633,7 @@ router.post('/handover', async (req, res) => {
   try {
     await ensureWorkflowTables();
     const actor = actorFromReq(req);
-    const department = normalizeDeptId(req.body?.department);
+    const department = req.nurseDepartment || normalizeDeptId(req.body?.department);
     const shiftLabel = String(req.body?.shiftLabel || '').trim() || null;
     const noteText = String(req.body?.noteText || '').trim();
     if (!department) return res.status(400).json({ message: 'department is required' });
@@ -683,6 +685,7 @@ router.patch('/handover/:id/acknowledge', async (req, res) => {
     const id = String(req.params.id || '').trim();
     if (!/^\d+$/.test(id)) return res.status(400).json({ message: 'Invalid handover id' });
 
+    const scopeDepartment = req.auth?.role === 'admin' ? '' : req.nurseDepartment;
     const rows = await prisma.$queryRawUnsafe(
       `
         UPDATE public.nurse_handover_notes
@@ -691,14 +694,15 @@ router.patch('/handover/:id/acknowledge', async (req, res) => {
             acknowledged_by_email = $3,
             acknowledged_at = now(),
             updated_at = now()
-        WHERE id = $1::bigint
+        WHERE id = $1::bigint AND ($4::text = '' OR department = $4)
         RETURNING id, department, shift_label, note_text, status, patient_id::text AS patient_id,
                   patient_name, created_by_name, created_by_email, acknowledged_by_name,
                   acknowledged_by_email, acknowledged_at, created_at, updated_at
       `,
       id,
       actor.name,
-      actor.email
+      actor.email,
+      scopeDepartment
     );
 
     if (!Array.isArray(rows) || !rows.length) return res.status(404).json({ message: 'Handover note not found' });
@@ -722,7 +726,7 @@ router.post('/tasks', async (req, res) => {
   try {
     await ensureWorkflowTables();
     const actor = actorFromReq(req);
-    const department = normalizeDeptId(req.body?.department);
+    const department = req.nurseDepartment || normalizeDeptId(req.body?.department);
     const title = String(req.body?.title || '').trim();
     const priorityRaw = String(req.body?.priority || 'routine').trim().toLowerCase();
     const shiftLabel = String(req.body?.shiftLabel || '').trim() || null;
@@ -782,8 +786,9 @@ router.patch('/tasks/:id', async (req, res) => {
     const allowedPriority = new Set(['urgent', 'routine', 'handover']);
     const allowedStatus = new Set(['open', 'in_progress', 'completed', 'blocked', 'cancelled']);
     const updates = [];
-    const values = [id];
-    let index = 2;
+    const scopeDepartment = req.auth?.role === 'admin' ? '' : req.nurseDepartment;
+    const values = [id, scopeDepartment];
+    let index = 3;
     if (req.body?.priority != null) {
       const p = String(req.body.priority || 'routine').trim().toLowerCase();
       if (!allowedPriority.has(p)) return res.status(400).json({ message: `Invalid priority '${p}'. Allowed: urgent, routine, handover.` });
@@ -829,7 +834,7 @@ router.patch('/tasks/:id', async (req, res) => {
     const query = `
       UPDATE public.nurse_tasks
       SET ${updates.join(', ')}
-      WHERE id = $1::bigint
+      WHERE id = $1::bigint AND ($2::text = '' OR department = $2)
       RETURNING id, department, shift_label, title, priority, due_time, patient_id::text AS patient_id,
                 patient_name, status, completed, created_by_name, created_by_email,
                 completed_by_name, completed_by_email, completed_at, created_at, updated_at
@@ -857,12 +862,19 @@ router.delete('/tasks/:id', async (req, res) => {
     await ensureWorkflowTables();
     const id = String(req.params.id || '').trim();
     if (!/^\d+$/.test(id)) return res.status(400).json({ message: 'Invalid task id' });
+    const scopeDepartment = req.auth?.role === 'admin' ? '' : req.nurseDepartment;
     const existingRows = await prisma.$queryRawUnsafe(
-      `SELECT title, department FROM public.nurse_tasks WHERE id = $1::bigint LIMIT 1`,
-      id
+      `SELECT title, department FROM public.nurse_tasks WHERE id = $1::bigint AND ($2::text = '' OR department = $2) LIMIT 1`,
+      id,
+      scopeDepartment
     ).catch(() => []);
-    await prisma.$executeRawUnsafe(`DELETE FROM public.nurse_tasks WHERE id = $1::bigint`, id);
     const taskRow = Array.isArray(existingRows) ? existingRows[0] : null;
+    if (!taskRow) return res.status(404).json({ message: 'Task not found in your assigned department' });
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM public.nurse_tasks WHERE id = $1::bigint AND ($2::text = '' OR department = $2)`,
+      id,
+      scopeDepartment
+    );
     await prisma.activity_logs.create({
       data: {
         actor_name: actorFromReq(req).name,
@@ -882,7 +894,7 @@ router.delete('/tasks/:id', async (req, res) => {
 router.get('/med-admin', async (req, res) => {
   try {
     await ensureWorkflowTables();
-    const department = normalizeDeptId(req.query.department);
+    const department = req.nurseDepartment || normalizeDeptId(req.query.department);
     const [pendingMedicationRequests, medAdminLogs] = await Promise.all([
       loadPendingMedicationRequests(department),
       prisma.$queryRawUnsafe(
@@ -912,7 +924,7 @@ router.post('/med-admin', async (req, res) => {
   try {
     await ensureWorkflowTables();
     const actor = actorFromReq(req);
-    const department = normalizeDeptId(req.body?.department);
+    const department = req.nurseDepartment || normalizeDeptId(req.body?.department);
     const medicationName = String(req.body?.medicationName || '').trim();
     const statusRaw = String(req.body?.status || '').trim().toLowerCase();
     const patientName = String(req.body?.patientName || '').trim();
