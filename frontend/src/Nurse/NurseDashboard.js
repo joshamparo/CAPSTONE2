@@ -3180,6 +3180,9 @@ function NurseDashboard() {
   const [handoverLoading, setHandoverLoading] = useState(false);
   const [handoverSaving, setHandoverSaving] = useState(false);
   const [handoverAcknowledging, setHandoverAcknowledging] = useState(false);
+  const handoverDirtyRef = useRef(false);
+  const handoverBaseRef = useRef({ id: null, updatedAt: null });
+  const [handoverDirty, setHandoverDirty] = useState(false);
   const [taskCounts, setTaskCounts] = useState({ urgent: 0, routine: 0, handover: 0, completed: 0 });
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState("");
@@ -3188,6 +3191,8 @@ function NurseDashboard() {
   const [medAdminLoading, setMedAdminLoading] = useState(false);
   const [medAdminError, setMedAdminError] = useState('');
   const [medAdminActionId, setMedAdminActionId] = useState('');
+  const [medAdminDraft, setMedAdminDraft] = useState(null);
+  const [medAdminReason, setMedAdminReason] = useState('');
   const [liveBoard, setLiveBoard] = useState(null);
   const [recentWorkflowActivities, setRecentWorkflowActivities] = useState([]);
 
@@ -3212,7 +3217,13 @@ function NurseDashboard() {
           });
           const latest = data?.latestHandover || null;
           setHandoverId(latest?.id || null);
-          setShiftNotes(String(latest?.note_text || latest?.noteText || ''));
+          if (!handoverDirtyRef.current) {
+              setShiftNotes(String(latest?.note_text || latest?.noteText || ''));
+              handoverBaseRef.current = {
+                  id: latest?.id || null,
+                  updatedAt: latest?.updated_at || latest?.updatedAt || null
+              };
+          }
           setHandoverHistory(Array.isArray(data?.handoverHistory) ? data.handoverHistory : []);
           setTasks(Array.isArray(data?.tasks) ? data.tasks.map((task) => ({
               id: task.id,
@@ -3341,10 +3352,14 @@ function NurseDashboard() {
               body: JSON.stringify({
                   department: activeDept,
                   shiftLabel: currentShiftLabel,
-                  noteText
+                  noteText,
+                  baseHandoverId: handoverBaseRef.current.id,
+                  baseUpdatedAt: handoverBaseRef.current.updatedAt
               })
           });
           setHandoverId(saved?.id || null);
+          handoverDirtyRef.current = false;
+          setHandoverDirty(false);
           await refreshNurseWorkflow({ silent: true });
           addActivity('Shift Handover', `Updated ${currentShiftLabel} handover notes.`, 'success');
       } catch (error) {
@@ -3371,13 +3386,21 @@ function NurseDashboard() {
         ackErr('Invalid handover id.');
         return;
       }
+      const latestHandover = handoverHistory[0];
+      const expectedUpdatedAt = latestHandover?.updated_at || latestHandover?.updatedAt;
+      if (!expectedUpdatedAt) {
+        ackErr('The handover version is missing. Refresh before acknowledging.');
+        return;
+      }
+      const savedLabel = new Date(expectedUpdatedAt).toLocaleString();
+      if (!window.confirm(`Acknowledge the latest handover saved by ${latestHandover?.created_by_name || 'the previous nurse'} on ${savedLabel}?`)) return;
       setHandoverAcknowledging(true);
       try {
           await fetchJson(`/api/nurse-workflow/handover/${encodeURIComponent(idStr)}/acknowledge`, {
               apiBase: API_BASE,
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-              body: JSON.stringify({})
+              body: JSON.stringify({ expectedUpdatedAt })
           });
           await refreshNurseWorkflow({ silent: true });
       } catch (error) {
@@ -3389,7 +3412,7 @@ function NurseDashboard() {
       }
   };
 
-  const recordMedicationAdministration = async (request, status) => {
+  const recordMedicationAdministration = (request, status) => {
       const medErr = (msg) => {
         setSuccessMessage(msg);
         setModalType('error');
@@ -3421,17 +3444,32 @@ function NurseDashboard() {
         medErr('Patient information is missing from this medication request.');
         return;
       }
-      let note = '';
-      if (statusClean === 'held' || statusClean === 'missed') {
-        const label = statusClean === 'held' ? 'holding' : 'marking as missed';
-        const entered = window.prompt(`Enter the reason for ${label} ${medicationName}:`, '');
-        if (entered === null) return;
-        note = String(entered || '').trim();
-        if (note.length < 3) {
-          medErr(`A reason of at least 3 characters is required when medication is ${statusClean}.`);
-          return;
-        }
-      } else if (!window.confirm(`Confirm ${medicationName} was administered to ${patientName || 'this patient'}?`)) {
+      setMedAdminReason('');
+      setMedAdminDraft({ request, status: statusClean });
+  };
+
+  const reloadLatestHandover = async () => {
+      handoverDirtyRef.current = false;
+      setHandoverDirty(false);
+      await refreshNurseWorkflow();
+  };
+
+  const submitMedicationAdministration = async () => {
+      const request = medAdminDraft?.request;
+      const statusClean = medAdminDraft?.status;
+      if (!request || !statusClean) return;
+      const medErr = (msg) => {
+        setSuccessMessage(msg);
+        setModalType('error');
+        setShowSuccessModal(true);
+      };
+      const requestId = String(request?.requestId || '').trim();
+      const medicationName = String(request?.medicationName || '').trim();
+      const patientId = String(request?.patientId || '').trim();
+      const patientName = String(request?.patientName || '').trim();
+      const note = String(medAdminReason || '').trim();
+      if ((statusClean === 'held' || statusClean === 'missed') && note.length < 3) {
+        medErr(`A reason of at least 3 characters is required when medication is ${statusClean}.`);
         return;
       }
       const quantityRaw = request?.quantity;
@@ -3463,6 +3501,8 @@ function NurseDashboard() {
               })
           });
           await refreshNurseWorkflow({ silent: true });
+          setMedAdminDraft(null);
+          setMedAdminReason('');
           addActivity('Medication Round', `${medicationName} marked as ${statusClean}.`, statusClean === 'administered' ? 'success' : 'alert');
       } catch (error) {
           medErr(String(error?.message || 'Unable to record medication administration.'));
@@ -6990,17 +7030,23 @@ function NurseDashboard() {
                                 className="box-input box-textarea" 
                                 style={{height: '120px', border: '1px solid #cbd5e1', background: '#f8fafc', resize: 'none', borderRadius: '12px', padding: '16px', fontSize: '0.95rem'}}
                                 value={shiftNotes}
-                                onChange={(e) => setShiftNotes(e.target.value)}
+                                onChange={(e) => { handoverDirtyRef.current = true; setHandoverDirty(true); setShiftNotes(e.target.value); }}
                                 placeholder="Write the live shift handover for the next nurse..."
                             />
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginTop: '16px', alignItems: 'center' }}>
                                 <div style={{ fontSize: '0.86rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <Clock size={14} />
-                                    {handoverHistory[0]?.created_by_name ? `Latest by ${handoverHistory[0].created_by_name}` : 'No saved handover yet.'}
+                                    {handoverHistory[0]?.created_by_name
+                                      ? `Latest by ${handoverHistory[0].created_by_name} • ${new Date(handoverHistory[0].updated_at || handoverHistory[0].created_at).toLocaleString()}`
+                                      : 'No saved handover yet.'}
+                                    {handoverDirty ? <span className="handover-unsaved-badge">Unsaved draft</span> : null}
                                 </div>
-                                <button className="btn-gray" type="button" onClick={acknowledgeHandover} disabled={!handoverId || handoverAcknowledging} style={{ padding: '6px 12px' }}>
-                                    <Check size={14} /> {handoverAcknowledging ? 'Acknowledging...' : 'Acknowledge'}
-                                </button>
+                                <div className="handover-footer-actions">
+                                    {handoverDirty ? <button className="btn-gray" type="button" onClick={reloadLatestHandover} disabled={handoverLoading}><RotateCw size={14} /> Reload latest</button> : null}
+                                    <button className="btn-gray" type="button" onClick={acknowledgeHandover} disabled={!handoverId || handoverAcknowledging || handoverHistory[0]?.status === 'acknowledged'} style={{ padding: '6px 12px' }}>
+                                        <Check size={14} /> {handoverAcknowledging ? 'Acknowledging...' : 'Acknowledge'}
+                                    </button>
+                                </div>
                         </div>
                     </div>
                 </div>
@@ -10236,6 +10282,42 @@ function NurseDashboard() {
             <div className="modal-actions-right">
               <button type="button" onClick={() => setAuditModalOpen(false)} className="btn-modal-cancel">
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {medAdminDraft ? (
+        <div className="modal-overlay-fixed" onClick={() => !medAdminActionId && setMedAdminDraft(null)}>
+          <div className="med-safety-modal" role="dialog" aria-modal="true" aria-labelledby="med-safety-title" onClick={(event) => event.stopPropagation()}>
+            <div className="med-safety-header">
+              <div className="med-safety-icon"><Pill size={22} /></div>
+              <div>
+                <h3 id="med-safety-title">Confirm medication update</h3>
+                <p>Review the patient and order before recording.</p>
+              </div>
+              <button type="button" className="btn-close-modal" aria-label="Close" disabled={Boolean(medAdminActionId)} onClick={() => setMedAdminDraft(null)}><X size={20} /></button>
+            </div>
+            <div className="med-safety-body">
+              <div className="med-safety-summary">
+                <div><span>Patient</span><strong>{medAdminDraft.request?.patientName || 'Unknown patient'}</strong></div>
+                <div><span>Medication</span><strong>{medAdminDraft.request?.medicationName || 'Unknown medication'}</strong></div>
+                <div><span>Dosage / instructions</span><strong>{medAdminDraft.request?.dosage || 'Not provided'}</strong></div>
+                <div><span>Quantity</span><strong>{medAdminDraft.request?.quantity || 1}</strong></div>
+                <div><span>Action</span><strong className={`med-action-label ${medAdminDraft.status}`}>{medAdminDraft.status}</strong></div>
+              </div>
+              {(medAdminDraft.status === 'held' || medAdminDraft.status === 'missed') ? (
+                <label className="med-safety-reason">
+                  Reason <span aria-hidden="true">*</span>
+                  <textarea value={medAdminReason} maxLength={1000} onChange={(event) => setMedAdminReason(event.target.value)} placeholder={`Why is this medication being ${medAdminDraft.status}?`} autoFocus />
+                  <small>Required, at least 3 characters.</small>
+                </label>
+              ) : <div className="med-safety-warning"><AlertTriangle size={18} /> This will mark the medication request as completed.</div>}
+            </div>
+            <div className="med-safety-actions">
+              <button type="button" className="btn-modal-cancel" disabled={Boolean(medAdminActionId)} onClick={() => setMedAdminDraft(null)}>Cancel</button>
+              <button type="button" className="btn-modal-submit" disabled={Boolean(medAdminActionId) || ((medAdminDraft.status === 'held' || medAdminDraft.status === 'missed') && medAdminReason.trim().length < 3)} onClick={submitMedicationAdministration}>
+                {medAdminActionId ? 'Recording...' : `Confirm ${medAdminDraft.status}`}
               </button>
             </div>
           </div>

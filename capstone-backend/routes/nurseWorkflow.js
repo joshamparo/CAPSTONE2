@@ -2,6 +2,11 @@ const express = require('express');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+const {
+  validateMedicationAction,
+  medicationTransitionError,
+  isMatchingHandoverVersion
+} = require('../utils/nurseWorkflowSafety');
 const { normalizeNurseCalendarMonth, validateNurseCalendarEvent } = require('../utils/nurseCalendar');
 
 const router = express.Router();
@@ -463,7 +468,7 @@ async function loadPendingMedicationRequests(department) {
         String(row.patient_name || '').trim() ||
         `${String(row.patients?.first_name || '').trim()} ${String(row.patients?.last_name || '').trim()}`.trim();
       const patientDepartment = inferPatientDepartment(row.patients || {});
-      if (department && patientDepartment && patientDepartment !== department) return null;
+      if (department && patientDepartment !== department) return null;
       return {
         requestId: row.id.toString(),
         patientId: row.patient_id ? String(row.patient_id) : '',
@@ -648,6 +653,26 @@ router.post('/handover', async (req, res) => {
     if (noteText.length > 8000) return res.status(400).json({ message: 'noteText is too long (max 8000 characters)' });
     if (shiftLabel && shiftLabel.length > 80) return res.status(400).json({ message: 'shiftLabel is too long (max 80 characters)' });
 
+    const expectedId = String(req.body?.baseHandoverId || '').trim();
+    const expectedUpdatedAt = String(req.body?.baseUpdatedAt || '').trim();
+    const latestRows = await prisma.$queryRawUnsafe(
+      `SELECT id, updated_at FROM public.nurse_handover_notes
+       WHERE department = $1 AND shift_label IS NOT DISTINCT FROM $2
+       ORDER BY created_at DESC, id DESC LIMIT 1`,
+      department,
+      shiftLabel
+    );
+    if (Array.isArray(latestRows) && latestRows.length) {
+      if (!/^\d+$/.test(expectedId) || !expectedUpdatedAt || Number.isNaN(new Date(expectedUpdatedAt).getTime())) {
+        return res.status(409).json({ message: 'A handover already exists for this shift. Refresh and review it before saving.' });
+      }
+      if (!isMatchingHandoverVersion(latestRows[0], expectedId, expectedUpdatedAt)) {
+        return res.status(409).json({ message: 'A newer handover was saved by another nurse. Refresh and review it before saving.' });
+      }
+    } else if (expectedId || expectedUpdatedAt) {
+      return res.status(409).json({ message: 'The handover changed. Refresh before saving.' });
+    }
+
     const rows = await prisma.$queryRawUnsafe(
       `
         INSERT INTO public.nurse_handover_notes
@@ -692,6 +717,10 @@ router.patch('/handover/:id/acknowledge', async (req, res) => {
     if (!/^\d+$/.test(id)) return res.status(400).json({ message: 'Invalid handover id' });
 
     const scopeDepartment = req.auth?.role === 'admin' ? '' : req.nurseDepartment;
+    const expectedUpdatedAt = String(req.body?.expectedUpdatedAt || '').trim();
+    if (!expectedUpdatedAt || Number.isNaN(new Date(expectedUpdatedAt).getTime())) {
+      return res.status(400).json({ message: 'The handover version is required. Refresh and try again.' });
+    }
     const rows = await prisma.$queryRawUnsafe(
       `
         UPDATE public.nurse_handover_notes
@@ -700,7 +729,16 @@ router.patch('/handover/:id/acknowledge', async (req, res) => {
             acknowledged_by_email = $3,
             acknowledged_at = now(),
             updated_at = now()
-        WHERE id = $1::bigint AND ($4::text = '' OR department = $4)
+        WHERE id = $1::bigint
+          AND ($4::text = '' OR department = $4)
+          AND status <> 'acknowledged'
+          AND updated_at = $5::timestamptz
+          AND NOT EXISTS (
+            SELECT 1 FROM public.nurse_handover_notes newer
+            WHERE newer.department = nurse_handover_notes.department
+              AND newer.shift_label IS NOT DISTINCT FROM nurse_handover_notes.shift_label
+              AND (newer.created_at, newer.id) > (nurse_handover_notes.created_at, nurse_handover_notes.id)
+          )
         RETURNING id, department, shift_label, note_text, status, patient_id::text AS patient_id,
                   patient_name, created_by_name, created_by_email, acknowledged_by_name,
                   acknowledged_by_email, acknowledged_at, created_at, updated_at
@@ -708,10 +746,13 @@ router.patch('/handover/:id/acknowledge', async (req, res) => {
       id,
       actor.name,
       actor.email,
-      scopeDepartment
+      scopeDepartment,
+      expectedUpdatedAt
     );
 
-    if (!Array.isArray(rows) || !rows.length) return res.status(404).json({ message: 'Handover note not found' });
+    if (!Array.isArray(rows) || !rows.length) {
+      return res.status(409).json({ message: 'This handover is already acknowledged or no longer the latest version. Refresh and review the current note.' });
+    }
     await prisma.activity_logs.create({
       data: {
         actor_name: actor.name,
@@ -931,20 +972,12 @@ router.post('/med-admin', async (req, res) => {
     await ensureWorkflowTables();
     const actor = actorFromReq(req);
     const department = req.nurseDepartment || normalizeDeptId(req.body?.department);
-    const medicationName = String(req.body?.medicationName || '').trim();
-    const statusRaw = String(req.body?.status || '').trim().toLowerCase();
-    const patientName = String(req.body?.patientName || '').trim();
-    const noteRaw = String(req.body?.note || '').trim();
+    const actionValidation = validateMedicationAction({ status: req.body?.status, note: req.body?.note });
+    if (!actionValidation.ok) return res.status(400).json({ message: actionValidation.message });
+    const status = actionValidation.status;
+    const note = actionValidation.note ? actionValidation.note.slice(0, 1000) : null;
     const quantityRaw = req.body?.quantity;
-    const allowedStatus = new Set(['administered', 'held', 'missed']);
-    const status = allowedStatus.has(statusRaw) ? statusRaw : null;
     if (!department) return res.status(400).json({ message: 'department is required' });
-    if (!medicationName) return res.status(400).json({ message: 'medicationName is required' });
-    if (medicationName.length > 200) return res.status(400).json({ message: 'medicationName is too long (max 200 characters)' });
-    if (!status) return res.status(400).json({ message: `Invalid status '${statusRaw}'. Allowed: administered, held, missed.` });
-    if ((status === 'held' || status === 'missed') && noteRaw.length < 3) {
-      return res.status(400).json({ message: `A reason of at least 3 characters is required when medication is ${status}.` });
-    }
     let quantity = 1;
     if (quantityRaw !== undefined && quantityRaw !== null && String(quantityRaw).trim() !== '') {
       const n = Number(quantityRaw);
@@ -953,8 +986,6 @@ router.post('/med-admin', async (req, res) => {
       }
       quantity = n;
     }
-    const dosage = req.body?.dosage != null ? String(req.body.dosage).slice(0, 200) : null;
-    const note = noteRaw ? noteRaw.slice(0, 1000) : null;
     const requestIdRaw = req.body?.requestId;
     let requestId = null;
     if (requestIdRaw !== undefined && requestIdRaw !== null && String(requestIdRaw).trim() !== '') {
@@ -962,28 +993,51 @@ router.post('/med-admin', async (req, res) => {
       if (!/^\d+$/.test(s)) return res.status(400).json({ message: 'Invalid requestId.' });
       requestId = s;
     }
-    const patientId = req.body?.patientId || null;
     if (!requestId) return res.status(400).json({ message: 'requestId is required' });
-    if (!patientId && !patientName) return res.status(400).json({ message: 'patient information is required' });
 
     const result = await prisma.$transaction(async (tx) => {
-      const duplicateRows = await tx.$queryRawUnsafe(
-        `
-          SELECT id
-          FROM public.nurse_med_admin_logs
-          WHERE medication_request_id = $1::bigint
-            AND status = $2
-          ORDER BY created_at DESC
-          LIMIT 1
-        `,
-        requestId,
-        status
+      await tx.$queryRawUnsafe('SELECT pg_advisory_xact_lock($1::bigint)', requestId);
+      const request = await tx.requests.findUnique({
+        where: { id: BigInt(requestId) },
+        include: { patients: true }
+      });
+      if (!request) {
+        const missingError = new Error('Medication request not found. Refresh the queue.');
+        missingError.code = 'INVALID_MED_REQUEST';
+        throw missingError;
+      }
+      const parsed = parseRequestMessage(request.message);
+      const authoritativeMedication = String(parsed.item || parsed.items?.[0]?.name || '').trim();
+      if (parsed.type !== 'medication' || !authoritativeMedication) {
+        const invalidError = new Error('The selected request is not a valid medication order.');
+        invalidError.code = 'INVALID_MED_REQUEST';
+        throw invalidError;
+      }
+      const requestDepartment = inferPatientDepartment(request.patients || {});
+      if (requestDepartment !== department) {
+        const scopeError = new Error('This medication request belongs to another department.');
+        scopeError.code = 'INVALID_MED_REQUEST';
+        throw scopeError;
+      }
+      if (!['pending', 'approved', 'on hold'].includes(String(request.status || '').trim().toLowerCase())) {
+        const stateError = new Error('This medication request is no longer available for administration.');
+        stateError.code = 'INVALID_MED_REQUEST';
+        throw stateError;
+      }
+      const priorRows = await tx.$queryRawUnsafe(
+        'SELECT status FROM public.nurse_med_admin_logs WHERE medication_request_id = $1::bigint',
+        requestId
       );
-      if (Array.isArray(duplicateRows) && duplicateRows.length) {
-        const duplicateError = new Error(`This medication request is already marked as ${status}.`);
+      const transitionError = medicationTransitionError(priorRows?.map((row) => row.status), status);
+      if (transitionError) {
+        const duplicateError = new Error(transitionError);
         duplicateError.code = 'DUPLICATE_MED_ADMIN';
         throw duplicateError;
       }
+      const patientName = String(request.patient_name || `${request.patients?.first_name || ''} ${request.patients?.last_name || ''}`).trim();
+      const patientId = request.patient_id ? String(request.patient_id) : null;
+      const dosage = parsed.notes ? String(parsed.notes).slice(0, 200) : null;
+      const authoritativeQuantity = Number.isInteger(Number(parsed.quantity)) && Number(parsed.quantity) > 0 ? Math.min(Number(parsed.quantity), 999) : quantity;
       const rows = await tx.$queryRawUnsafe(
         `
           INSERT INTO public.nurse_med_admin_logs
@@ -998,23 +1052,23 @@ router.post('/med-admin', async (req, res) => {
         patientId,
         patientName || null,
         requestId,
-        medicationName,
+        authoritativeMedication,
         dosage,
-        quantity,
+        authoritativeQuantity,
         status,
         note,
         actor.name,
         actor.email
       );
 
-      if (requestId && status === 'administered') {
+      if (status === 'administered') {
         await tx.requests.update({
           where: { id: BigInt(String(requestId)) },
           data: { status: 'Completed' }
-        }).catch(() => {});
+        });
       }
 
-      return Array.isArray(rows) ? rows[0] : null;
+      return { row: Array.isArray(rows) ? rows[0] : null, medicationName: authoritativeMedication, patientName };
     });
 
     await prisma.activity_logs.create({
@@ -1022,15 +1076,18 @@ router.post('/med-admin', async (req, res) => {
         actor_name: actor.name,
         role: actor.role || 'nurse',
         action: 'Medication Round Recorded',
-        target: patientName || department,
-        details: `${medicationName} marked as ${status}`
+        target: result.patientName || department,
+        details: `${result.medicationName} marked as ${status}`
       }
     }).catch(() => null);
 
-    res.status(201).json(serializeRow(result));
+    res.status(201).json(serializeRow(result.row));
   } catch (error) {
     console.error('Error recording medication administration:', error);
     if (error?.code === 'DUPLICATE_MED_ADMIN') {
+      return res.status(409).json({ message: error.message });
+    }
+    if (error?.code === 'INVALID_MED_REQUEST') {
       return res.status(409).json({ message: error.message });
     }
     res.status(500).json({ message: 'Unable to record medication administration' });

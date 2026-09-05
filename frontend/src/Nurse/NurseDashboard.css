@@ -5317,3 +5317,53 @@ body.compact-mode .workspace-queue-item {
   font-weight: 800;
   background: #f8fafc;
 }
+
+.med-safety-modal {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+}
+
+.med-safety-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.med-safety-header h3, .med-safety-header p { margin: 0; }
+.med-safety-header p { margin-top: 3px; color: #64748b; font-size: .875rem; }
+.med-safety-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; color: #c2410c; background: #ffedd5; }
+.med-safety-body { padding: 20px; }
+.med-safety-summary { display: grid; gap: 10px; }
+.med-safety-summary > div { display: flex; justify-content: space-between; gap: 20px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9; }
+.med-safety-summary span { color: #64748b; }
+.med-safety-summary strong { text-align: right; overflow-wrap: anywhere; }
+.med-action-label { text-transform: capitalize; }
+.med-action-label.administered { color: #15803d; }
+.med-action-label.held, .med-action-label.missed { color: #b45309; }
+.med-safety-reason { display: grid; gap: 7px; margin-top: 18px; font-weight: 700; color: #334155; }
+.med-safety-reason textarea { min-height: 100px; resize: vertical; padding: 12px; border: 1px solid #cbd5e1; border-radius: 12px; font: inherit; }
+.med-safety-reason textarea:focus { outline: 3px solid rgba(249, 115, 22, .15); border-color: #f97316; }
+.med-safety-reason small { color: #64748b; font-weight: 500; }
+.med-safety-warning { display: flex; gap: 9px; align-items: center; margin-top: 18px; padding: 12px; border-radius: 12px; color: #9a3412; background: #fff7ed; }
+.med-safety-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc; }
+.handover-unsaved-badge { padding: 3px 7px; border-radius: 999px; color: #9a3412; background: #ffedd5; font-size: .72rem; font-weight: 800; white-space: nowrap; }
+.handover-footer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.handover-footer-actions .btn-gray { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; }
+
+@media (max-width: 560px) {
+  .med-safety-modal { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); border-radius: 16px; }
+  .med-safety-header, .med-safety-body { padding: 16px; }
+  .med-safety-summary > div { flex-direction: column; gap: 4px; }
+  .med-safety-summary strong { text-align: left; }
+  .med-safety-actions { padding: 14px 16px; }
+  .med-safety-actions > button { flex: 1; }
+  .handover-footer-actions { width: 100%; flex-wrap: wrap; }
+  .handover-footer-actions .btn-gray { flex: 1; justify-content: center; }
+}
