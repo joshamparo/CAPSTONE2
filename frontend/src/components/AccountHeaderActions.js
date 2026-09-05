@@ -121,6 +121,9 @@ export default function AccountHeaderActions({
   const name = useMemo(() => getDisplayName(user), [user]);
   const role = useMemo(() => getRoleLabel(user, roleLabel), [user, roleLabel]);
   const letter = useMemo(() => (String(name || 'U').trim()[0] || 'U').toUpperCase(), [name]);
+  const avatarUrl = useMemo(() => String(
+    user?.avatarUrl || user?.profilePicture || user?.profile_picture || user?.avatar_url || ''
+  ).trim(), [user]);
   const canChangePassword = useMemo(() => getRole(user).toLowerCase() !== 'patient', [user]);
   const rawRole = useMemo(() => {
     const direct = canonicalizeRole(getRole(user));
@@ -807,8 +810,8 @@ export default function AccountHeaderActions({
             <span className="aha-profile-role">{role}</span>
           </div>
           <div className="aha-avatar-circle">
-            {user?.avatarUrl || user?.profilePicture || user?.profile_picture || user?.avatar_url ? (
-              <img src={user.avatarUrl || user.profilePicture || user.profile_picture || user.avatar_url} alt="Profile" />
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={`${name} profile`} />
             ) : (
               <span>{letter}</span>
             )}
@@ -819,7 +822,13 @@ export default function AccountHeaderActions({
             <div className="aha-profile-menu" onClick={(e) => e.stopPropagation()}>
               <div className="aha-profile-head">
                 <div className="aha-user-row">
-                  <div className="aha-user-avatar">{letter}</div>
+                  <div className="aha-user-avatar">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt={`${name} profile`} />
+                    ) : (
+                      <span>{letter}</span>
+                    )}
+                  </div>
                   <div>
                     <div className="aha-user-name">{name}</div>
                     <div className="aha-user-role">{role}</div>
