@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
+const { normalizeNurseDepartment, resolveNurseDepartmentScope } = require('../middleware/requireNurseDepartment');
 
 test('nurse department aliases normalize to stable scopes', () => {
   assert.equal(normalizeNurseDepartment('Emergency Room'), 'ER');
@@ -14,4 +14,10 @@ test('nurse department aliases normalize to stable scopes', () => {
 test('empty nurse department does not silently become a default scope', () => {
   assert.equal(normalizeNurseDepartment(''), '');
   assert.equal(normalizeNurseDepartment(null), '');
+});
+
+test('an explicit reception fallback is used only when the stored department is empty', () => {
+  assert.equal(resolveNurseDepartmentScope('', 'ER'), 'ER');
+  assert.equal(resolveNurseDepartmentScope('Pediatrics', 'ER'), 'PEDIA');
+  assert.equal(resolveNurseDepartmentScope('', ''), '');
 });

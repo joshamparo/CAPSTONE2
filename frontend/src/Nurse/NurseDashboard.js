@@ -657,6 +657,7 @@ function NurseDashboard() {
   const [appointmentSlotsError, setAppointmentSlotsError] = useState('');
   const [walkInPatientPage, setWalkInPatientPage] = useState(1);
   const [vitalsPage, setVitalsPage] = useState(1);
+  const [erIntakePage, setErIntakePage] = useState(1);
   const [addPatientData, setAddPatientData] = useState({
     patientMode: "new",
     routeType: "er_consult",
@@ -726,6 +727,22 @@ function NurseDashboard() {
     { value: 'pharmacy', title: 'Pharmacy', hint: 'Record a pharmacy-only walk-in and create the service handoff note.' },
     { value: 'admission_eval', title: 'Admission Evaluation', hint: 'Prepare the case for doctor-led admission review before room assignment.' }
   ];
+
+  const erIntakePageSize = 8;
+  const activeErPatients = useMemo(
+    () => patientsList.filter((patient) => String(patient?.admissionStatus || patient?.admission_status || '').trim().toLowerCase() === 'emergency'),
+    [patientsList]
+  );
+  const erIntakePageCount = Math.max(1, Math.ceil(activeErPatients.length / erIntakePageSize));
+  const currentErIntakePage = Math.min(erIntakePage, erIntakePageCount);
+  const pagedErPatients = useMemo(() => {
+    const start = (currentErIntakePage - 1) * erIntakePageSize;
+    return activeErPatients.slice(start, start + erIntakePageSize);
+  }, [activeErPatients, currentErIntakePage]);
+
+  useEffect(() => {
+    setErIntakePage((page) => Math.min(Math.max(1, page), erIntakePageCount));
+  }, [erIntakePageCount]);
 
   const toMoney = (v) => {
     const n = Number(v);
@@ -6965,6 +6982,15 @@ function NurseDashboard() {
                     <div className="overview-card" style={{ marginTop: '24px' }}>
                         <div className="card-header">
                             <h3>Active ER Patients</h3>
+                            <div className="er-intake-pagination" aria-label="ER intake pages">
+                                <button type="button" className="patient-page-btn" onClick={() => setErIntakePage((page) => Math.max(1, page - 1))} disabled={currentErIntakePage <= 1} aria-label="Previous ER patients page">
+                                    <ChevronLeft size={17} />
+                                </button>
+                                <span>Page {currentErIntakePage} of {erIntakePageCount}</span>
+                                <button type="button" className="patient-page-btn" onClick={() => setErIntakePage((page) => Math.min(erIntakePageCount, page + 1))} disabled={currentErIntakePage >= erIntakePageCount} aria-label="Next ER patients page">
+                                    <ChevronRight size={17} />
+                                </button>
+                            </div>
                         </div>
                         <table className="staff-table" style={{ width: '100%' }}>
                             <thead>
@@ -6977,10 +7003,10 @@ function NurseDashboard() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {patientsList.filter(p => p.admission_status === 'Emergency').length === 0 ? (
+                                {activeErPatients.length === 0 ? (
                                     <tr><td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>No active ER patients.</td></tr>
                                 ) : (
-                                    patientsList.filter(p => p.admission_status === 'Emergency').map(p => {
+                                    pagedErPatients.map(p => {
                                         const triageLevel = p.clinical_records?.erRegistration?.triage?.level || p.triage_level || 4;
                                         return (
                                         <tr key={p.id}>
@@ -6990,10 +7016,10 @@ function NurseDashboard() {
                                                     Level {triageLevel}
                                                 </span>
                                             </td>
-                                            <td><span className="bed-status-label" style={{ color: '#0f172a', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px' }}>{p.admission_status}</span></td>
+                                            <td><span className="bed-status-label" style={{ color: '#0f172a', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px' }}>{p.admissionStatus || p.admission_status}</span></td>
                                             <td style={{ color: '#64748b', fontSize: '0.85rem' }}>{new Date(p.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
                                             <td>
-                                                <button className="btn-gray" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => { setCentralRecordPatientId(p.id); setCentralRecordOpen(true); }}>View Record</button>
+                                                <button className="btn-gray" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => { setCentralRecordPatientId(p._id || p.id); setCentralRecordOpen(true); }}>View Record</button>
                                             </td>
                                         </tr>
                                         );

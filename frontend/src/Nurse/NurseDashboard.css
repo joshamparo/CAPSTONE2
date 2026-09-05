@@ -5318,6 +5318,20 @@ body.compact-mode .workspace-queue-item {
   background: #f8fafc;
 }
 
+.er-intake-pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #475569;
+  font-size: .8rem;
+  font-weight: 800;
+}
+
+@media (max-width: 560px) {
+  .er-intake-view .card-header { align-items: flex-start; gap: 10px; }
+  .er-intake-pagination { width: 100%; justify-content: space-between; }
+}
+
 .med-safety-modal {
   width: min(520px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);

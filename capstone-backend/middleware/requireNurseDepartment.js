@@ -21,6 +21,10 @@ function normalizeNurseDepartment(value) {
   return aliases[compact] || raw.toUpperCase().replace(/\s+/g, ' ');
 }
 
+function resolveNurseDepartmentScope(assignedDepartment, fallbackDepartment) {
+  return normalizeNurseDepartment(assignedDepartment) || normalizeNurseDepartment(fallbackDepartment);
+}
+
 async function requireNurseDepartment(req, res, next) {
   if (req.auth?.role === 'admin') {
     req.nurseDepartment = normalizeNurseDepartment(req.query?.department || req.body?.department);
@@ -33,7 +37,7 @@ async function requireNurseDepartment(req, res, next) {
       where: { email: { equals: email, mode: 'insensitive' }, is_active: true },
       select: { first_name: true, last_name: true, specialization: true, department: true }
     });
-    const assigned = normalizeNurseDepartment(nurse?.specialization || nurse?.department);
+    const assigned = resolveNurseDepartmentScope(nurse?.specialization || nurse?.department, req.nurseDepartmentFallback);
     if (!assigned) return res.status(403).json({ message: 'Your nurse account has no assigned department. Contact an administrator.' });
     const requested = normalizeNurseDepartment(req.query?.department || req.body?.department);
     if (requested && requested !== assigned) {
@@ -55,3 +59,4 @@ async function requireNurseDepartment(req, res, next) {
 
 module.exports = requireNurseDepartment;
 module.exports.normalizeNurseDepartment = normalizeNurseDepartment;
+module.exports.resolveNurseDepartmentScope = resolveNurseDepartmentScope;
