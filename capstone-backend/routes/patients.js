@@ -838,7 +838,34 @@ router.get('/', async (req, res) => {
             ];
         }
 
-        const clinicalScope = clinicalPatientOrderScope(req);
+        let clinicalScope = clinicalPatientOrderScope(req);
+        let legacyErPatientIds = new Set();
+
+        // Compatibility for ER walk-ins created before intake began storing
+        // admission_status="Emergency". The appointment is the authoritative
+        // routing record; expose only active, explicitly tagged ER intakes and
+        // normalize their status in this response without mutating old data.
+        if (requesterRole === 'nurse' && req.nurseDepartment === 'ER') {
+            const legacyErAppointments = await prisma.appointments.findMany({
+                where: {
+                    patient_id: { not: null },
+                    reason: { startsWith: '[TRIAGE][WALK-IN] ER Consultation' },
+                    status: { notIn: ['Cancelled', 'Completed', 'Rejected', 'Discharged'] }
+                },
+                select: { patient_id: true },
+                orderBy: { created_at: 'desc' },
+                take: 500
+            });
+            legacyErPatientIds = new Set(legacyErAppointments.map((row) => row.patient_id).filter(Boolean));
+            if (legacyErPatientIds.size) {
+                clinicalScope = {
+                    OR: [
+                        clinicalScope,
+                        { id: { in: Array.from(legacyErPatientIds) } }
+                    ]
+                };
+            }
+        }
         const scopedWhere = clinicalScope
             ? (Object.keys(where).length ? { AND: [where, clinicalScope] } : clinicalScope)
             : (Object.keys(where).length ? where : undefined);
@@ -848,7 +875,11 @@ router.get('/', async (req, res) => {
             ...(limit ? { take: limit } : {}),
             ...(offset ? { skip: offset } : {})
         });
-        res.json(patients.map(toPatientResponse));
+        res.json(patients.map((patient) => toPatientResponse(
+            legacyErPatientIds.has(patient.id)
+                ? { ...patient, admission_status: 'Emergency' }
+                : patient
+        )));
     } catch (err) {
         res.status(500).json({ message: "Error fetching patients" });
     }

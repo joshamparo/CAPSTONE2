@@ -6890,7 +6890,7 @@ function NurseDashboard() {
                         </div>
                     </div>
 
-                    <div className="nurse-grid-layout" style={{ marginTop: '32px' }}>
+                    <div className="nurse-grid-layout overview-dashboard-grid" style={{ marginTop: '32px' }}>
                         <div className="grid-col col-main">
                             <div className="overview-card">
                                 <div className="card-header">
@@ -6938,9 +6938,9 @@ function NurseDashboard() {
                                 <div className="card-header">
                                     <h3>Ward Overview</h3>
                                 </div>
-                                <div className="ward-summary-list">
+                                <div className="ward-summary-list ward-summary-horizontal">
                                     {(wardRegistry.wards || []).map(ward => (
-                                        <div key={ward.id} style={{ marginBottom: '16px' }}>
+                                        <div key={ward.id} className="ward-summary-item">
                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.85rem' }}>
                                                 <span>{ward.name}</span>
                                                 <span>{ward.occupied} / {ward.totalCapacity}</span>
@@ -6992,7 +6992,8 @@ function NurseDashboard() {
                                 </button>
                             </div>
                         </div>
-                        <table className="staff-table" style={{ width: '100%' }}>
+                        <div className="er-intake-table-wrap">
+                        <table className="staff-table er-intake-table" style={{ width: '100%' }}>
                             <thead>
                                 <tr>
                                     <th>Patient</th>
@@ -7027,6 +7028,7 @@ function NurseDashboard() {
                                 )}
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 </div>
             )}

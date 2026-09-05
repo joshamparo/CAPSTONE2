@@ -487,6 +487,14 @@ async function loadPendingMedicationRequests(department) {
 }
 
 router.use(requireRole(['nurse', 'admin']));
+router.use((req, res, next) => {
+  // The nurse portal is the hospital's ER/reception workspace when a legacy
+  // nurse account has not yet been assigned a department in the database.
+  // Explicit assignments still take precedence inside the authorization
+  // middleware, so this does not broaden access for assigned nurses.
+  if (req.auth?.role === 'nurse') req.nurseDepartmentFallback = 'ER';
+  next();
+});
 router.use(requireNurseDepartment);
 
 router.get('/calendar', async (req, res) => {

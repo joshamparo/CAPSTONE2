@@ -2165,6 +2165,24 @@
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
+
+.overview-dashboard-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ward-summary-horizontal {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.ward-summary-item {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
 .walkin-step-pane::-webkit-scrollbar { width: 0; height: 0; }
 
 .walkin-step-pane .step-content {
@@ -5327,9 +5345,33 @@ body.compact-mode .workspace-queue-item {
   font-weight: 800;
 }
 
+.er-intake-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.er-intake-table {
+  min-width: 720px;
+}
+
+.er-intake-table th:last-child,
+.er-intake-table td:last-child {
+  position: sticky;
+  right: 0;
+  background: #fff;
+  box-shadow: -8px 0 12px -12px rgba(15, 23, 42, 0.45);
+}
+
+.er-intake-table th:last-child {
+  z-index: 2;
+}
+
 @media (max-width: 560px) {
   .er-intake-view .card-header { align-items: flex-start; gap: 10px; }
   .er-intake-pagination { width: 100%; justify-content: space-between; }
+  .ward-summary-horizontal { grid-template-columns: repeat(2, minmax(150px, 1fr)); overflow-x: auto; }
 }
 
 .med-safety-modal {
