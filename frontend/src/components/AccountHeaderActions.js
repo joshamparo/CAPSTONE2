@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, ChevronDown, LayoutGrid, LogOut, RefreshCw, Settings, User } from 'lucide-react';
+import { Bell, ChevronDown, KeyRound, LayoutGrid, LogOut, RefreshCw, Settings, User } from 'lucide-react';
 import ChangePasswordModal from './ChangePasswordModal';
 import SignOutConfirmModal from './SignOutConfirmModal';
 import './AccountHeaderActions.css';
@@ -137,6 +137,7 @@ export default function AccountHeaderActions({
       return '';
     }
   }, [user, roleLabel, role]);
+  const canShowSystemSettings = showSettingsButton && rawRole === 'admin';
   const userEmail = useMemo(() => {
     const direct = String(user?.email || '').trim();
     if (direct) return direct;
@@ -605,7 +606,7 @@ export default function AccountHeaderActions({
         </div>
       ) : null}
       <div className="aha-actions-group">
-        {(showNotificationsButton || showSettingsButton) ? (
+        {(showNotificationsButton || canShowSystemSettings) ? (
           <div className="aha-actions">
             {showNotificationsButton ? (
               <div className="aha-action-slot">
@@ -697,7 +698,7 @@ export default function AccountHeaderActions({
               </div>
             ) : null}
 
-            {showSettingsButton ? (
+            {canShowSystemSettings ? (
               <div className="aha-action-slot">
               <button
                 type="button"
@@ -792,7 +793,7 @@ export default function AccountHeaderActions({
           </div>
         ) : null}
 
-        {(showNotificationsButton || showSettingsButton) ? <div className="aha-sep"></div> : null}
+        {(showNotificationsButton || canShowSystemSettings) ? <div className="aha-sep"></div> : null}
 
         <button
           type="button"
@@ -885,7 +886,7 @@ export default function AccountHeaderActions({
                       setShowPasswordModal(true);
                     }}
                   >
-                    <Settings size={18} />
+                    <KeyRound size={18} />
                     <span className="aha-menu-label">Change Password</span>
                   </button>
                 ) : null}

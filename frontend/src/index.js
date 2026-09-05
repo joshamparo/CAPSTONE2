@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
+import './styles/SharedTables.css';
 import reportWebVitals from './reportWebVitals';
 import { installApiFetchShim } from './utils/api';
 

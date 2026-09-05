@@ -5368,10 +5368,37 @@ body.compact-mode .workspace-queue-item {
   z-index: 2;
 }
 
+.patient-record-filters { display: flex; align-items: center; gap: 10px; flex: 1 1 520px; }
+.patient-route-filter select {
+  min-height: 42px;
+  padding: 0 36px 0 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  color: #334155;
+  font: inherit;
+  font-weight: 700;
+}
+.reception-route-badge {
+  display: inline-flex;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 800;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.reception-route-badge.er { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.routing-status-text { color: #475569; font-weight: 700; font-size: .82rem; }
+
 @media (max-width: 560px) {
   .er-intake-view .card-header { align-items: flex-start; gap: 10px; }
   .er-intake-pagination { width: 100%; justify-content: space-between; }
   .ward-summary-horizontal { grid-template-columns: repeat(2, minmax(150px, 1fr)); overflow-x: auto; }
+  .patient-record-filters { flex-direction: column; align-items: stretch; flex-basis: 100%; }
+  .patient-record-filters .search-input-modern,
+  .patient-route-filter select { width: 100% !important; }
 }
 
 .med-safety-modal {

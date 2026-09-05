@@ -2813,6 +2813,7 @@ function NurseDashboard() {
   };
 
   const [patientSearch, setPatientSearch] = useState("");
+  const [patientRouteFilter, setPatientRouteFilter] = useState("ALL");
   const [patientGenderFilter, setPatientGenderFilter] = useState("All");
   const [patientPage, setPatientPage] = useState(1);
   const itemsPerPage = 8;
@@ -2842,14 +2843,16 @@ function NurseDashboard() {
   const filteredPatientsForRecords = useMemo(() => {
     const search = String(patientSearch || '').trim().toLowerCase();
     const list = Array.isArray(patientsList) ? patientsList : [];
-    if (!search) return list;
     return list.filter((p) => {
+      const route = String(p.receptionRoute || (String(p.admissionStatus || '').toUpperCase() === 'EMERGENCY' ? 'ER' : 'ONSITE')).toUpperCase();
+      if (patientRouteFilter !== 'ALL' && route !== patientRouteFilter) return false;
+      if (!search) return true;
       const fullName = `${String(p.firstName || '')} ${String(p.lastName || '')}`.trim().toLowerCase();
       const id = String(p._id || '').toLowerCase();
       const ward = String(p.wardNumber || '').toLowerCase();
       return fullName.includes(search) || id.includes(search) || ward.includes(search);
     });
-  }, [patientsList, patientSearch]);
+  }, [patientsList, patientSearch, patientRouteFilter]);
 
   const patientRecordsPageCount = useMemo(() => {
     return Math.max(1, Math.ceil(filteredPatientsForRecords.length / itemsPerPage));
@@ -2961,7 +2964,7 @@ function NurseDashboard() {
 
   useEffect(() => {
     setPatientPage(1);
-  }, [patientSearch]);
+  }, [patientSearch, patientRouteFilter]);
 
   // Notifications Data (Moved to top for dependency)
   const [notifications, setNotifications] = useState([]);
@@ -7758,6 +7761,7 @@ function NurseDashboard() {
                                 </footer>
                             </section>
                             <div className="list-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                                <div className="patient-record-filters">
                                 <div className="search-input-modern" style={{ width: '350px' }}>
                                     <Search size={18} className="text-slate-400" />
                                     <input 
@@ -7767,6 +7771,15 @@ function NurseDashboard() {
                                         onChange={(e) => setPatientSearch(e.target.value)}
                                         style={{ width: '100%' }}
                                     />
+                                </div>
+                                <label className="patient-route-filter">
+                                  <span className="sr-only">Filter patient records by route</span>
+                                  <select value={patientRouteFilter} onChange={(event) => setPatientRouteFilter(event.target.value)}>
+                                    <option value="ALL">All reception patients</option>
+                                    <option value="ER">ER patients</option>
+                                    <option value="ONSITE">On-site patients</option>
+                                  </select>
+                                </label>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                   <div className="walkin-results-count" style={{ margin: 0, fontWeight: 600, color: '#64748b' }}>
@@ -7806,9 +7819,9 @@ function NurseDashboard() {
                                         <tr>
                                             <th style={{width: '14%'}}>Patient ID</th>
                                             <th style={{width: '26%'}}>Patient</th>
-                                            <th style={{width: '16%'}}>Ward / Room</th>
-                                            <th style={{width: '22%'}}>Diagnosis</th>
-                                            <th style={{width: '14%'}}>Attending</th>
+                                            <th style={{width: '12%'}}>Route</th>
+                                            <th style={{width: '18%'}}>Routing Status</th>
+                                            <th style={{width: '14%'}}>Ward / Room</th>
                                             <th style={{width: '8%', textAlign: 'center'}}>Actions</th>
                                         </tr>
                                     </thead>
@@ -7836,14 +7849,12 @@ function NurseDashboard() {
                                                         <div style={{fontSize: '0.8rem', color: '#64748b'}}>{patient.sex ? `${patient.sex}` : ''}</div>
                                                     </td>
                                                     <td>
-                                                        {patient.wardNumber ? (
-                                                            <span className="status-badge inpatient">{patient.wardNumber}</span>
-                                                        ) : (
-                                                            <span className="status-badge outpatient">Outpatient</span>
-                                                        )}
+                                                        <span className={`reception-route-badge ${String(patient.receptionRoute || '').toUpperCase() === 'ER' ? 'er' : 'onsite'}`}>
+                                                          {String(patient.receptionRoute || '').toUpperCase() === 'ER' ? 'ER' : 'On-site'}
+                                                        </span>
                                                     </td>
-                                                    <td>{patient.diagnosis || '—'}</td>
-                                                    <td>{patient.attendingDoctor || '—'}</td>
+                                                    <td><span className="routing-status-text">{patient.routingStatus || patient.admissionStatus || 'Registered'}</span></td>
+                                                    <td>{patient.wardNumber || 'Outpatient'}</td>
                                                     <td>
                                                         <div className="action-buttons-wrapper">
                                                             <button
@@ -7864,14 +7875,14 @@ function NurseDashboard() {
                                                             >
                                                                 <FileText size={18} />
                                                             </button>
-                                                            <button
+                                                            {String(patient.receptionRoute || '').toUpperCase() === 'ER' ? <button
                                                                 className="btn-icon-action"
                                                                 title="Doctor Orders (Execute)"
                                                                 onClick={() => openEROrdersForPatient(patient)}
                                                             >
                                                                 <ClipboardList size={18} />
-                                                            </button>
-                                                            <button
+                                                            </button> : null}
+                                                            {String(patient.receptionRoute || '').toUpperCase() === 'ER' ? <button
                                                                 className="btn-icon-action upload"
                                                                 title="Attach Test Result"
                                                                 onClick={() => openUploadForRecord({
@@ -7881,7 +7892,7 @@ function NurseDashboard() {
                                                                 })}
                                                             >
                                                                 <Upload size={18} />
-                                                            </button>
+                                                            </button> : null}
                                                         </div>
                                                     </td>
                                                 </tr>

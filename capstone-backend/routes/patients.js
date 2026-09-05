@@ -357,10 +357,23 @@ async function logNursePatientAccess(req, action, target, details) {
 async function enforceClinicalPatientAccess(req, res, patientId) {
     const scope = clinicalPatientOrderScope(req);
     if (!scope) return true;
-    const match = await prisma.patients.findFirst({
+    let match = await prisma.patients.findFirst({
         where: { id: String(patientId), ...scope },
         select: { id: true }
     });
+    if (!match && getRequesterRole(req) === 'nurse' && req.nurseDepartment === 'ER') {
+        const receptionAppointment = await prisma.appointments.findFirst({
+            where: {
+                patient_id: String(patientId),
+                OR: [
+                    { reason: { startsWith: '[TRIAGE][WALK-IN] ER Consultation' } },
+                    { reason: { startsWith: '[APPOINTMENT][CLINIC]' } }
+                ]
+            },
+            select: { patient_id: true }
+        });
+        if (receptionAppointment?.patient_id) match = { id: receptionAppointment.patient_id };
+    }
     if (!match) {
         res.status(403).json({ message: 'This patient is not assigned to your clinical service.' });
         return false;
@@ -379,6 +392,13 @@ function normalizeWalkInRouteType(value) {
     if (['admission', 'admission_eval', 'admit'].includes(raw)) return 'admission_eval';
     return 'er_consult';
 }
+
+const WALK_IN_ROUTE_INPUTS = new Set([
+    'er', 'er_consult', 'emergency', 'emergency_consult',
+    'consult', 'consultation', 'onsite', 'onsite_consult', 'doctor_consult',
+    'lab', 'laboratory', 'imaging', 'radiology', 'ecg',
+    'pharmacy', 'otc', 'medicine_pickup', 'admission', 'admission_eval', 'admit'
+]);
 
 function getWalkInRouteMeta(routeType) {
     const type = normalizeWalkInRouteType(routeType);
@@ -839,29 +859,40 @@ router.get('/', async (req, res) => {
         }
 
         let clinicalScope = clinicalPatientOrderScope(req);
-        let legacyErPatientIds = new Set();
+        const receptionRoutes = new Map();
 
-        // Compatibility for ER walk-ins created before intake began storing
-        // admission_status="Emergency". The appointment is the authoritative
-        // routing record; expose only active, explicitly tagged ER intakes and
-        // normalize their status in this response without mutating old data.
+        // Central reception scope. Appointment markers are authoritative, so
+        // ER nurses can see reception-created ER and onsite patients without
+        // exposing unrelated outpatient records. Legacy ER status is normalized
+        // in this response without rewriting stored patient history.
         if (requesterRole === 'nurse' && req.nurseDepartment === 'ER') {
-            const legacyErAppointments = await prisma.appointments.findMany({
+            const receptionAppointments = await prisma.appointments.findMany({
                 where: {
                     patient_id: { not: null },
-                    reason: { startsWith: '[TRIAGE][WALK-IN] ER Consultation' },
-                    status: { notIn: ['Cancelled', 'Completed', 'Rejected', 'Discharged'] }
+                    OR: [
+                        { reason: { startsWith: '[TRIAGE][WALK-IN] ER Consultation' } },
+                        { reason: { startsWith: '[APPOINTMENT][CLINIC]' } }
+                    ]
                 },
-                select: { patient_id: true },
+                select: { patient_id: true, reason: true, status: true, assignment_status: true, doctor_uuid: true },
                 orderBy: { created_at: 'desc' },
-                take: 500
+                take: 2000
             });
-            legacyErPatientIds = new Set(legacyErAppointments.map((row) => row.patient_id).filter(Boolean));
-            if (legacyErPatientIds.size) {
+            receptionAppointments.forEach((row) => {
+                if (!row.patient_id || receptionRoutes.has(row.patient_id)) return;
+                const onsite = String(row.reason || '').startsWith('[APPOINTMENT][CLINIC]');
+                receptionRoutes.set(row.patient_id, {
+                    route: onsite ? 'ONSITE' : 'ER',
+                    status: onsite
+                        ? (row.doctor_uuid ? 'Doctor Assigned' : (row.assignment_status === 'PENDING_ASSIGNMENT' ? 'Awaiting Secretary' : (row.status || 'Scheduled')))
+                        : (row.status || 'ER Intake')
+                });
+            });
+            if (receptionRoutes.size) {
                 clinicalScope = {
                     OR: [
                         clinicalScope,
-                        { id: { in: Array.from(legacyErPatientIds) } }
+                        { id: { in: Array.from(receptionRoutes.keys()) } }
                     ]
                 };
             }
@@ -875,11 +906,13 @@ router.get('/', async (req, res) => {
             ...(limit ? { take: limit } : {}),
             ...(offset ? { skip: offset } : {})
         });
-        res.json(patients.map((patient) => toPatientResponse(
-            legacyErPatientIds.has(patient.id)
+        res.json(patients.map((patient) => {
+            const reception = receptionRoutes.get(patient.id);
+            const normalizedPatient = reception?.route === 'ER'
                 ? { ...patient, admission_status: 'Emergency' }
-                : patient
-        )));
+                : patient;
+            return { ...toPatientResponse(normalizedPatient), receptionRoute: reception?.route || null, routingStatus: reception?.status || null };
+        }));
     } catch (err) {
         res.status(500).json({ message: "Error fetching patients" });
     }
@@ -1373,6 +1406,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         ]);
         const payload = req.body || {};
         const routeTypeRaw = String(payload.routeType || '').trim();
+        if (routeTypeRaw && !WALK_IN_ROUTE_INPUTS.has(routeTypeRaw.toLowerCase())) {
+            return res.status(400).json({ message: 'Select a valid walk-in destination.' });
+        }
         const routeMeta = getWalkInRouteMeta(routeTypeRaw);
         const patientMode = String(payload.patientMode || 'new').trim().toLowerCase() === 'existing' ? 'existing' : 'new';
         const now = new Date();
@@ -1523,6 +1559,12 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             return res.status(400).json({ message: 'Email is required so we can send the appointment summary.' });
         }
         if (routeMeta.type === 'onsite_consult') {
+            const selectedSpecialization = String(payload.selectedSpecialization || '').trim();
+            const activeDoctor = await prisma.doctors.findFirst({
+                where: { specialization: { equals: selectedSpecialization, mode: 'insensitive' }, is_active: true },
+                select: { id: true }
+            });
+            if (!activeDoctor) return res.status(400).json({ message: 'Select a clinic specialization with an active doctor.' });
             const preferredDateRaw = String(payload.preferredDate || '').trim();
             const preferredTimeRaw = String(payload.preferredTime || '').trim();
             if (!preferredDateRaw) return res.status(400).json({ message: 'Preferred date is required for an appointment.' });
@@ -3142,10 +3184,25 @@ router.post('/audit-access/report', requireRole(['admin', 'nurse']), async (req,
             return res.status(400).json({ message: 'Select between 1 and 200 patient records.' });
         }
         const scope = clinicalPatientOrderScope(req);
-        const allowedCount = await prisma.patients.count({
-            where: { id: { in: patientIds }, ...(scope || {}) }
+        const allowedRows = await prisma.patients.findMany({
+            where: { id: { in: patientIds }, ...(scope || {}) },
+            select: { id: true }
         });
-        if (allowedCount !== patientIds.length) {
+        const allowedIds = new Set(allowedRows.map((row) => row.id));
+        if (getRequesterRole(req) === 'nurse' && req.nurseDepartment === 'ER' && allowedIds.size < patientIds.length) {
+            const receptionRows = await prisma.appointments.findMany({
+                where: {
+                    patient_id: { in: patientIds },
+                    OR: [
+                        { reason: { startsWith: '[TRIAGE][WALK-IN] ER Consultation' } },
+                        { reason: { startsWith: '[APPOINTMENT][CLINIC]' } }
+                    ]
+                },
+                select: { patient_id: true }
+            });
+            receptionRows.forEach((row) => { if (row.patient_id) allowedIds.add(row.patient_id); });
+        }
+        if (allowedIds.size !== patientIds.length) {
             return res.status(403).json({ message: 'One or more patient records are outside your assigned department.' });
         }
         await logNursePatientAccess(req, action, req.nurseDepartment || 'Nursing', `${patientIds.length} scoped patient record(s).`);
