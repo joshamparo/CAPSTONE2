@@ -6826,7 +6826,7 @@ function NurseDashboard() {
                                 <div className="activity-timeline">
                                     {recentOverviewActivities.length === 0 ? (
                                         <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
-                                            <p>No recent activity recorded.</p>
+                                            <p>{tasksError ? 'Recent activity is temporarily unavailable. Please refresh.' : `No recent activity recorded for ${formatDepartmentLabel(activeDept)}.`}</p>
                                         </div>
                                     ) : (
                                         recentOverviewActivities.map(notif => (
@@ -8508,7 +8508,7 @@ function NurseDashboard() {
                             {allRecentActivities.length === 0 ? (
                                 <div className="nurse-activity-empty">
                                     <Activity size={28} />
-                                    <p>No recent activity recorded.</p>
+                                    <p>{tasksError ? 'Recent activity is temporarily unavailable. Please refresh.' : `No recent activity recorded for ${formatDepartmentLabel(activeDept)}.`}</p>
                                 </div>
                             ) : pagedRecentActivities.map((activity) => (
                                 <div key={activity.id} className={`activity-item nurse-activity-row ${activity.type || 'info'}`}>

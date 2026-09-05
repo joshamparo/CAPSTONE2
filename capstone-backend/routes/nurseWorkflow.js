@@ -382,45 +382,51 @@ async function loadEmergencyLiveBoard() {
 }
 
 async function loadRecentNurseActivities(department) {
-  const logs = await prisma.activity_logs.findMany({
-    orderBy: { timestamp: 'desc' },
-    take: 100
-  }).catch(() => []);
+  const scope = normalizeDeptId(department);
+  const rows = await prisma.$queryRawUnsafe(
+    `
+      SELECT * FROM (
+        SELECT 'task:' || id::text AS id,
+               CASE WHEN completed THEN 'Nurse Task Completed' ELSE 'Nurse Task Created' END AS title,
+               title AS message,
+               CASE WHEN completed THEN 'success' WHEN lower(priority) = 'urgent' THEN 'alert' ELSE 'info' END AS type,
+               COALESCE(completed_at, created_at) AS occurred_at
+        FROM public.nurse_tasks
+        WHERE ($1::text = '' OR department = $1)
 
-  const relevant = (Array.isArray(logs) ? logs : [])
-    .filter((log) => {
-      const action = String(log.action || '').toLowerCase();
-      const details = String(log.details || '').toLowerCase();
-      const role = String(log.role || '').toLowerCase();
-      if (department === 'ER') {
-        return (
-          action.includes('walk-in') ||
-          action.includes('medication') ||
-          action.includes('patient admitted') ||
-          action.includes('handover') ||
-          details.includes('er') ||
-          role === 'nurse'
-        );
-      }
-      return ['nurse', 'doctor', 'admin'].includes(role);
-    })
-    .slice(0, 50)
-    .map((log) => {
-      const action = String(log.action || '').trim() || 'Workflow Update';
-      const details = String(log.details || '').trim();
-      let type = 'info';
-      if (/fail|reject|critical|alert|admitted/i.test(action) || /critical|alert/i.test(details)) type = 'alert';
-      if (/saved|completed|approved|recorded|updated/i.test(action)) type = 'success';
-      return {
-        id: String(log.id),
-        title: action,
-        message: details || String(log.target || '').trim() || action,
-        time: formatTimeAgo(log.timestamp),
-        type
-      };
-    });
+        UNION ALL
 
-  return relevant;
+        SELECT 'handover:' || id::text AS id,
+               CASE WHEN status = 'acknowledged' THEN 'Shift Handover Acknowledged' ELSE 'Shift Handover Saved' END AS title,
+               COALESCE(NULLIF(shift_label, ''), 'Active shift') || ' handover' AS message,
+               'success' AS type,
+               CASE WHEN status = 'acknowledged' THEN COALESCE(acknowledged_at, updated_at, created_at) ELSE created_at END AS occurred_at
+        FROM public.nurse_handover_notes
+        WHERE ($1::text = '' OR department = $1)
+
+        UNION ALL
+
+        SELECT 'med:' || id::text AS id,
+               'Medication Round Recorded' AS title,
+               medication_name || ' marked as ' || status AS message,
+               CASE WHEN status = 'administered' THEN 'success' ELSE 'alert' END AS type,
+               created_at AS occurred_at
+        FROM public.nurse_med_admin_logs
+        WHERE ($1::text = '' OR department = $1)
+      ) scoped_activity
+      ORDER BY occurred_at DESC NULLS LAST
+      LIMIT 50
+    `,
+    scope
+  ).catch(() => []);
+
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    id: String(row.id),
+    title: String(row.title || 'Workflow Update'),
+    message: String(row.message || row.title || 'Workflow updated'),
+    time: formatTimeAgo(row.occurred_at),
+    type: String(row.type || 'info')
+  }));
 }
 
 async function loadPendingMedicationRequests(department) {
