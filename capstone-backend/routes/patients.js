@@ -9,6 +9,8 @@ const { createClient } = require('@supabase/supabase-js');
 const { sendEmail } = require('../utils/mailer');
 const { appointmentEmail } = require('../utils/emailTemplates');
 const { patientUpdateAccess, sanitizePatientUpdateForRole } = require('../utils/patientUpdateAccess');
+const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+const { nursePatientScope } = require('../utils/nursePatientAccess');
 
 let _supabaseAdmin = null;
 function getSupabaseAdmin() {
@@ -231,18 +233,19 @@ async function enforceDoctorAvailability({ doctorId, dateKey, mode = 'onsite', r
 }
 
 router.use(requireRole(['admin', 'nurse', 'doctor', 'pharmacist', 'staff', 'cashier', 'doctor_secretary', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'patient']));
+router.use((req, res, next) => (req.auth?.role === 'nurse' ? requireNurseDepartment(req, res, next) : next()));
 
 function getRequesterRole(req) {
-    return String(req.headers['x-user-role'] || '').trim().toLowerCase();
+    return String(req.auth?.role || '').trim().toLowerCase();
 }
 
 function getRequesterEmail(req) {
-    const raw = String(req.headers['x-user-email'] || '');
+    const raw = String(req.auth?.email || '');
     return normalizeEmail(raw);
 }
 
 function inferRequesterName(req) {
-    const raw = String(req.headers['x-user-name'] || '').trim();
+    const raw = String(req.nurseIdentity?.name || '').trim();
     if (raw) return raw;
     const email = getRequesterEmail(req);
     return email || 'System User';
@@ -321,6 +324,7 @@ const CLINICAL_STAFF_ROLES = new Set(['medtech', 'radiographer', 'ecg_operator',
 
 function clinicalPatientOrderScope(req) {
     const role = getRequesterRole(req);
+    if (role === 'nurse') return nursePatientScope(req.nurseDepartment);
     if (!CLINICAL_STAFF_ROLES.has(role)) return null;
     const email = getRequesterEmail(req);
     return {
@@ -331,6 +335,19 @@ function clinicalPatientOrderScope(req) {
             }
         }
     };
+}
+
+async function logNursePatientAccess(req, action, target, details) {
+    if (getRequesterRole(req) !== 'nurse') return;
+    await prisma.activity_logs.create({
+        data: {
+            actor_name: inferRequesterName(req),
+            role: 'nurse',
+            action,
+            target,
+            details: String(details || '').slice(0, 500)
+        }
+    }).catch(() => null);
 }
 
 async function enforceClinicalPatientAccess(req, res, patientId) {
@@ -1151,9 +1168,10 @@ router.get('/:id/full-record', async (req, res) => {
             walkIns: clinicalSummary.walkInIntakes
         });
 
+        await logNursePatientAccess(req, 'Full Patient Record Viewed', `Patient:${patientId.slice(0, 8)}`, 'Viewed the complete patient record.');
         res.json(serializePayload(payload));
     } catch (err) {
-        res.status(500).json({ message: 'Error fetching full patient record', error: err.message });
+        res.status(500).json({ message: 'Error fetching full patient record' });
     }
 });
 
@@ -1177,9 +1195,10 @@ router.get('/:id', async (req, res) => {
             where: { id: req.params.id }
         });
         if (!patient) return res.status(404).json({ message: "Patient not found" });
+        await logNursePatientAccess(req, 'Patient Record Viewed', `Patient:${String(patient.id).slice(0, 8)}`, 'Viewed patient profile details.');
         res.json(toPatientResponse(patient));
     } catch (err) {
-        res.status(500).json({ message: "Error fetching patient", error: err.message });
+        res.status(500).json({ message: "Error fetching patient" });
     }
 });
 
@@ -2828,6 +2847,7 @@ router.put('/:id', async (req, res) => {
         if (!exists) return res.status(404).json({ message: 'Patient not found' });
 
         const requesterRole = getRequesterRole(req);
+        if (!(await enforceClinicalPatientAccess(req, res, patientId))) return;
         const access = patientUpdateAccess({
             role: requesterRole,
             actorId: req.auth?.id,
@@ -2985,6 +3005,7 @@ router.post('/:id/clinical-records', requireRole(['admin','nurse','doctor']), as
     try {
         const patientId = String(req.params.id || '').trim();
         if (!patientId) return res.status(400).json({ message: 'Patient id is required.' });
+        if (!(await enforceClinicalPatientAccess(req, res, patientId))) return;
         const patient = await prisma.patients.findUnique({ where: { id: patientId }, select: { id: true, first_name: true, last_name: true, clinical_records: true } });
         if (!patient) return res.status(404).json({ message: 'Patient not found.' });
 
@@ -3051,11 +3072,11 @@ router.post('/:id/clinical-records', requireRole(['admin','nurse','doctor']), as
 
         // Activity log (best-effort)
         try {
-            const actor = String(req.headers['x-user-name'] || nurseName || 'Nurse').slice(0, 120);
+            const actor = String(inferRequesterName(req) || nurseName || 'Nurse').slice(0, 120);
             await prisma.activity_logs.create({
                 data: {
                     actor_name: actor,
-                    role: String(req.headers['x-user-role'] || 'Nurse').slice(0, 32),
+                    role: String(getRequesterRole(req) || 'nurse').slice(0, 32),
                     action: 'Clinical Record Added',
                     target: `Patient:${patientId.slice(0, 8)}`,
                     details: `${type} recorded for ${String(updated.first_name || '')} ${String(updated.last_name || '')}`.trim()
@@ -3065,7 +3086,35 @@ router.post('/:id/clinical-records', requireRole(['admin','nurse','doctor']), as
 
         res.json(updated);
     } catch (err) {
-        res.status(500).json({ message: 'Error saving clinical record.', error: String(err.message || '') });
+        res.status(500).json({ message: 'Error saving clinical record.' });
+    }
+});
+
+router.post('/audit-access/report', requireRole(['admin', 'nurse']), async (req, res) => {
+    try {
+        const actionMap = {
+            print: 'Patient Records Printed',
+            download: 'Patient Records Downloaded'
+        };
+        const accessType = String(req.body?.accessType || '').trim().toLowerCase();
+        const action = actionMap[accessType];
+        if (!action) return res.status(400).json({ message: 'Invalid patient record access type.' });
+        const patientIds = [...new Set((Array.isArray(req.body?.patientIds) ? req.body.patientIds : [])
+            .map((value) => String(value || '').trim()).filter(Boolean))];
+        if (!patientIds.length || patientIds.length > 200) {
+            return res.status(400).json({ message: 'Select between 1 and 200 patient records.' });
+        }
+        const scope = clinicalPatientOrderScope(req);
+        const allowedCount = await prisma.patients.count({
+            where: { id: { in: patientIds }, ...(scope || {}) }
+        });
+        if (allowedCount !== patientIds.length) {
+            return res.status(403).json({ message: 'One or more patient records are outside your assigned department.' });
+        }
+        await logNursePatientAccess(req, action, req.nurseDepartment || 'Nursing', `${patientIds.length} scoped patient record(s).`);
+        res.json({ ok: true, audited: patientIds.length });
+    } catch (err) {
+        res.status(500).json({ message: 'Unable to authorize patient report access.' });
     }
 });
 

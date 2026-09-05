@@ -335,7 +335,7 @@ function NurseDashboard() {
       return true;
     });
 
-    return filtered.length ? filtered : list;
+    return ['ER', 'OPD', 'PEDIA', 'MEDICINE'].includes(activeDept) ? filtered : list;
   }, [patientsList, activeDept]);
 
   const departments = [
@@ -2675,10 +2675,32 @@ function NurseDashboard() {
     });
   };
 
-  const handlePrintPatientRecords = () => {
+  const handlePrintPatientRecords = async () => {
+    const patientIds = patientsList.map((patient) => String(patient?._id || patient?.id || '').trim()).filter(Boolean);
+    if (!patientIds.length) {
+      setSuccessMessage('There are no authorized patient records to print.');
+      setModalType('error');
+      setShowSuccessModal(true);
+      return;
+    }
     const printWindow = window.open('', '_blank', 'width=1200,height=800');
     if (!printWindow) {
       setSuccessMessage('The print window was blocked. Please allow pop-ups for this site and try again.');
+      setModalType('error');
+      setShowSuccessModal(true);
+      return;
+    }
+    printWindow.document.write('<!doctype html><title>Preparing secure report...</title><p style="font:16px sans-serif;padding:24px">Authorizing patient report...</p>');
+    try {
+      await fetchJson('/api/patients/audit-access/report', {
+        apiBase: API_BASE,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ accessType: 'print', patientIds })
+      });
+    } catch (error) {
+      printWindow.close();
+      setSuccessMessage(String(error?.message || 'Unable to authorize this patient report.'));
       setModalType('error');
       setShowSuccessModal(true);
       return;
@@ -2712,11 +2734,6 @@ function NurseDashboard() {
               <span>Sex: ${escapePrintText(patient.sex || 'Not recorded')} | Blood: ${escapePrintText(patient.bloodType || 'Not recorded')}</span>
             </td>
             <td>
-              <span>${escapePrintText(patient.contactNumber || 'No contact number')}</span>
-              <span>${escapePrintText(patient.email || 'No email address')}</span>
-              <span>${escapePrintText(patient.address || 'No address recorded')}</span>
-            </td>
-            <td>
               <strong>${escapePrintText(patient.diagnosis || 'No diagnosis recorded')}</strong>
               <span>Allergies: ${escapePrintText(patient.allergies || 'None recorded')}</span>
               <span>Status: ${escapePrintText(patient.admissionStatus || 'Not recorded')}</span>
@@ -2727,7 +2744,7 @@ function NurseDashboard() {
               <span>Admitted: ${escapePrintText(displayDate(patient.admissionDate, 'N/A'))}</span>
             </td>
           </tr>`).join('')
-      : '<tr><td colspan="5" class="empty">No patient records are currently available.</td></tr>';
+      : '<tr><td colspan="4" class="empty">No patient records are currently available.</td></tr>';
 
     printWindow.document.open();
     printWindow.document.write(`<!doctype html>
@@ -2751,7 +2768,7 @@ function NurseDashboard() {
         tr { break-inside: avoid; }
         th, td { padding: 7px; border: 1px solid #cbd5e1; vertical-align: top; overflow-wrap: anywhere; }
         th { background: #f1f5f9; color: #334155; text-align: left; text-transform: uppercase; print-color-adjust: exact; }
-        th:first-child { width: 13%; } th:nth-child(2) { width: 21%; } th:nth-child(3) { width: 23%; } th:nth-child(4) { width: 23%; } th:nth-child(5) { width: 20%; }
+        th:first-child { width: 15%; } th:nth-child(2) { width: 28%; } th:nth-child(3) { width: 30%; } th:nth-child(4) { width: 27%; }
         td strong, td span { display: block; line-height: 1.35; }
         td span { margin-top: 2px; color: #475569; }
         .empty { padding: 28px; color: #64748b; text-align: center; }
@@ -2766,7 +2783,7 @@ function NurseDashboard() {
         <main class="report">
           <header><img src="${escapePrintText(logoUrl)}" alt=""><div><div class="hospital">Pascual General Hospital</div><div class="system">Pascualinga Medical Link</div><h1>Patient Records Master List</h1></div></header>
           <div class="meta"><span><strong>Generated:</strong> ${escapePrintText(new Date().toLocaleString())}</span><span><strong>Prepared by:</strong> ${escapePrintText(preparedBy)}</span><span><strong>Total records:</strong> ${patientsList.length}</span></div>
-          <table><thead><tr><th>Patient ID</th><th>Patient / Demographics</th><th>Contact Information</th><th>Clinical Information</th><th>Location / Attending</th></tr></thead><tbody>${rows}</tbody></table>
+          <table><thead><tr><th>Patient ID</th><th>Patient / Demographics</th><th>Clinical Information</th><th>Location / Attending</th></tr></thead><tbody>${rows}</tbody></table>
           <footer>Confidential medical information — for authorized hospital use only.</footer>
         </main>
         <script>
