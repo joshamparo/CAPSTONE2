@@ -841,7 +841,7 @@ export default function AccountHeaderActions({
                   <div className="aha-menu-item static">
                     <LayoutGrid size={18} />
                     <span className="aha-menu-label">Department</span>
-                    <select
+                    {onDepartmentChange ? <select
                       className="aha-select"
                       value={departmentValue ?? ''}
                       disabled={!onDepartmentChange}
@@ -856,7 +856,7 @@ export default function AccountHeaderActions({
                         : (
                             <option value={departmentValue ?? ''}>{departmentValue ?? '—'}</option>
                           )}
-                    </select>
+                    </select> : <span className="aha-department-badge">{departmentValue ?? '—'}</span>}
                   </div>
                 ) : null}
 

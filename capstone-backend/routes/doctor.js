@@ -3,6 +3,48 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+
+const NURSE_DOCTOR_SPECIALTY_ALIASES = {
+  ER: ['ER', 'Emergency Medicine'],
+  OPD: ['OPD', 'Outpatient', 'Medicine'],
+  PEDIA: ['PEDIA', 'Pediatrics'],
+  MEDICINE: ['Medicine', 'Internal Medicine'],
+  LABORATORY: ['Laboratory', 'Pathology'],
+  PATHOLOGY: ['Pathology', 'Laboratory'],
+  ECG: ['ECG', 'Cardiology'],
+  RADIOLOGY: ['Radiology'],
+  'PHYSICAL THERAPY': ['Physical Therapy', 'Rehabilitation Medicine'],
+  'DENTAL CLINIC': ['Dental Clinic', 'Dental Medicine'],
+  'SURGERY (MINOR)': ['Surgery', 'Minor Surgery'],
+  ANESTHESIA: ['Anesthesia', 'Anesthesiology'],
+  'OTOLARYNGOLOGY (ENT)': ['Otolaryngology', 'ENT'],
+  ORTHOPEDICS: ['Orthopedics'],
+  'VIDEO CONSULTATION': ['Video Consultation']
+};
+
+router.get('/linked-nurse-doctors', requireRole(['nurse']), requireNurseDepartment, async (req, res) => {
+  try {
+    const department = String(req.nurseDepartment || '').trim().toUpperCase();
+    const aliases = NURSE_DOCTOR_SPECIALTY_ALIASES[department] || [department];
+    const matches = aliases.flatMap((value) => [
+      { specialization: { equals: value, mode: 'insensitive' } },
+      { department: { equals: value, mode: 'insensitive' } }
+    ]);
+    const doctors = await prisma.doctors.findMany({
+      where: { is_active: true, OR: matches },
+      select: { id: true, first_name: true, middle_name: true, last_name: true, specialization: true, department: true },
+      orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }]
+    });
+    res.json(doctors.map((doctor) => ({
+      id: doctor.id,
+      name: `${doctor.first_name || ''} ${doctor.middle_name || ''} ${doctor.last_name || ''}`.replace(/\s+/g, ' ').trim(),
+      specialization: doctor.specialization || doctor.department || department
+    })));
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to load doctors linked to this nurse specialization.' });
+  }
+});
 
 router.get('/specializations', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'cashier', 'staff', 'patient']), async (_req, res) => {
   try {

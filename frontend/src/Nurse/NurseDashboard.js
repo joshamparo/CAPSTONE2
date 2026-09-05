@@ -489,8 +489,40 @@ function NurseDashboard() {
     return fallback;
   }, [user.specialization, user.departmentLabel, activeDept]);
 
+  const nurseCapabilities = useMemo(() => {
+    const shared = { overview: true, patients: true, appointments: true, orders: true, schedules: true };
+    const byType = {
+      emergency: { ...shared, reception: true, erIntake: true, vitals: true, wards: true },
+      pedia: { ...shared, vitals: true, wards: true },
+      bedside: { ...shared, vitals: true, wards: true },
+      clinic: { ...shared, vitals: true },
+      diagnostic: { ...shared },
+      imaging: { ...shared },
+      remote: { ...shared },
+      procedure: { ...shared, vitals: true, wards: true },
+      general: { ...shared, vitals: true }
+    };
+    return byType[nurseWorkspace.type] || byType.general;
+  }, [nurseWorkspace.type]);
+
+  const allowedNurseViews = useMemo(() => {
+    const allowed = new Set(['overview', 'patients', 'profile']);
+    if (nurseCapabilities.appointments) allowed.add('appointments');
+    if (nurseCapabilities.vitals) allowed.add('vitals');
+    if (nurseCapabilities.erIntake) allowed.add('er-intake');
+    if (nurseCapabilities.orders) allowed.add('orders');
+    if (nurseCapabilities.wards) { allowed.add('ward-management'); allowed.add('inpatients'); }
+    if (nurseCapabilities.schedules) ['tasks', 'calendar', 'shifts', 'schedules'].forEach((item) => allowed.add(item));
+    return allowed;
+  }, [nurseCapabilities]);
+
+  useEffect(() => {
+    if (!allowedNurseViews.has(view)) setView('overview');
+  }, [allowedNurseViews, view]);
+
   // Appointment State
   const [appointments, setAppointments] = useState([]);
+  const [linkedSpecialtyDoctors, setLinkedSpecialtyDoctors] = useState([]);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointmentsError, setAppointmentsError] = useState('');
   const [selectedAppointment, setSelectedAppointment] = useState(null);
@@ -2070,10 +2102,28 @@ function NurseDashboard() {
     });
   }, [filteredAppointments]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadLinkedDoctors = async () => {
+      try {
+        const data = await fetchJson('/api/doctor/linked-nurse-doctors', {
+          apiBase: API_BASE,
+          headers: { ...getAuthHeaders() },
+          timeoutMs: 15000
+        });
+        if (!cancelled) setLinkedSpecialtyDoctors(Array.isArray(data) ? data : []);
+      } catch (_) {
+        if (!cancelled) setLinkedSpecialtyDoctors([]);
+      }
+    };
+    loadLinkedDoctors();
+    return () => { cancelled = true; };
+  }, [activeDept, API_BASE]);
+
   const careTeamDoctors = useMemo(() => {
     const names = new Set();
-    deptPatients.forEach((patient) => {
-      const name = String(patient?.attendingDoctor || '').trim();
+    linkedSpecialtyDoctors.forEach((doctor) => {
+      const name = String(doctor?.name || '').trim();
       if (name) names.add(name);
     });
     appointments.forEach((apt) => {
@@ -2081,7 +2131,7 @@ function NurseDashboard() {
       if (name) names.add(name);
     });
     return Array.from(names);
-  }, [deptPatients, appointments]);
+  }, [linkedSpecialtyDoctors, appointments]);
 
   const doctorCoverageLabel = useMemo(() => {
     if (careTeamDoctors.length === 0) return 'No linked doctors yet';
@@ -6256,43 +6306,43 @@ function NurseDashboard() {
             <span>Patient Records</span>
           </button>
 
-          <button className={`nurse-nav-item ${view === 'appointments' ? 'active' : ''}`} onClick={() => setView('appointments')}>
+          {nurseCapabilities.appointments ? <button className={`nurse-nav-item ${view === 'appointments' ? 'active' : ''}`} onClick={() => setView('appointments')}>
             <Calendar size={20} />
             <span>Appointments</span>
-          </button>
+          </button> : null}
 
           <div className="sidebar-section-label">CLINICAL STATIONS</div>      
-            <button className={`nurse-nav-item ${view === 'vitals' ? 'active' : ''}`} onClick={() => setView('vitals')}>
+            {nurseCapabilities.vitals ? <button className={`nurse-nav-item ${view === 'vitals' ? 'active' : ''}`} onClick={() => setView('vitals')}>
               <Activity size={20} />
-              <span>Vitals Monitoring</span>
-            </button>
-            <button className={`nurse-nav-item ${view === 'er-intake' ?
+              <span>{nurseWorkspace.type === 'clinic' ? 'Clinic Vitals & Rooming' : 'Vitals Monitoring'}</span>
+            </button> : null}
+            {nurseCapabilities.erIntake ? <button className={`nurse-nav-item ${view === 'er-intake' ?
 'active' : ''}`} onClick={() => setView('er-intake')}>
               <AlertCircle size={20} />
               <span>ER Intake</span>
-            </button>
+            </button> : null}
 
-          <button className={`nurse-nav-item ${view === 'orders' ? 'active' : ''}`} onClick={() => setView('orders')}>
+          {nurseCapabilities.orders ? <button className={`nurse-nav-item ${view === 'orders' ? 'active' : ''}`} onClick={() => setView('orders')}>
             <FileText size={20} />
             <span>Orders Management</span>
-          </button>
+          </button> : null}
 
-          <div className="sidebar-section-label">INPATIENT CARE</div>
-          <button className={`nurse-nav-item ${view === 'ward-management' ? 'active' : ''}`} onClick={() => setView('ward-management')}>
+          {nurseCapabilities.wards ? <div className="sidebar-section-label">INPATIENT CARE</div> : null}
+          {nurseCapabilities.wards ? <button className={`nurse-nav-item ${view === 'ward-management' ? 'active' : ''}`} onClick={() => setView('ward-management')}>
             <BedDouble size={20} />
             <span>Ward Management</span>
-          </button>
+          </button> : null}
 
           {/* Schedules Dropdown */}
-          <button className={`nurse-nav-item ${['schedules', 'tasks', 'calendar', 'shifts'].includes(view) ? 'active' : ''}`} onClick={() => setIsSchedulesOpen(!isSchedulesOpen)}>
+          {nurseCapabilities.schedules ? <button className={`nurse-nav-item ${['schedules', 'tasks', 'calendar', 'shifts'].includes(view) ? 'active' : ''}`} onClick={() => setIsSchedulesOpen(!isSchedulesOpen)}>
             <div style={{display: 'flex', alignItems: 'center', gap: '12px', flex: 1}}>
                 <Clock size={20} />
                 <span>Schedules</span>
             </div>
             {isSchedulesOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
+          </button> : null}
           
-          {isSchedulesOpen && (
+          {nurseCapabilities.schedules && isSchedulesOpen && (
             <div className="nurse-nav-sub-menu" style={{paddingLeft: isSidebarCollapsed ? '0' : '16px'}}>
               <button className={`nurse-nav-item sub-item ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')} style={{fontSize: '0.9rem'}}>
                   <ClipboardList size={18} />
@@ -6470,10 +6520,9 @@ function NurseDashboard() {
                   onOpenNotification={(notification) => {
                     const type = String(notification?.type || '').toLowerCase();
                     if (type.includes('appointment') || type.includes('approval')) setView('appointments');
-                    else if (type.includes('lab') || type.includes('result') || type.includes('order')) setView('medical-orders');
-                    else if (type.includes('medicine') || type.includes('prescription')) setView('medicine-requests');
-                    else if (type.includes('message')) setView('communication');
-                    else setView('dashboard');
+                    else if (type.includes('lab') || type.includes('result') || type.includes('order')) setView('orders');
+                    else if (type.includes('medicine') || type.includes('prescription') || type.includes('message')) setView('tasks');
+                    else setView('overview');
                   }}
                 />
             </div>
@@ -6910,44 +6959,37 @@ function NurseDashboard() {
                         </div>
 
                         <div className="dashboard-stats-row">
-                            <div className="stat-card-large">
-                                <div className="stat-icon-large tone-blue"><Users size={24} /></div>
+                            {workspaceStats.slice(0, 3).map((card) => (
+                              <div className="stat-card-large" key={card.label}>
+                                <div className={`stat-icon-large ${card.tone}`}>{card.icon}</div>
                                 <div className="stat-content-large">
-                                    <span className="stat-value-large">{patientsList.length}</span>
-                                    <span className="stat-label-large">Total Active Patients</span>
+                                  <span className="stat-value-large">{card.value}</span>
+                                  <span className="stat-label-large">{card.label}</span>
+                                  <span className="stat-detail-large">{card.detail}</span>
                                 </div>
-                            </div>
-                            <div className="stat-card-large">
-                                <div className="stat-icon-large tone-orange"><LogIn size={24} /></div>
-                                <div className="stat-content-large">
-                                    <span className="stat-value-large">{patientsList.filter(p => p.admission_status === 'Admission Requested').length}</span>
-                                    <span className="stat-label-large">Pending Admissions</span>
-                                </div>
-                            </div>
-                            <div className="stat-card-large">
-                                <div className="stat-icon-large tone-red"><BedDouble size={24} /></div>
-                                <div className="stat-content-large">
-                                    <span className="stat-value-large">{wardRegistry.totals?.occupied || 0} / {wardRegistry.totals?.totalRooms || 0}</span>
-                                    <span className="stat-label-large">Occupied Beds</span>
-                                </div>
-                            </div>
+                              </div>
+                            ))}
                         </div>
 
                         <div className="quick-actions-section" style={{ marginTop: '24px' }}>
                             <h3>Quick Actions</h3>
-                            <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
-                                <button className="btn-orange" onClick={() => { setAddPatientData(prev => ({ ...prev, routeType: 'er_consult' })); setShowAddPatientModal(true); }}>
+                            <div className="nurse-quick-action-row">
+                                {nurseCapabilities.reception ? <button className="btn-orange" onClick={() => { setAddPatientData(prev => ({ ...prev, routeType: 'er_consult' })); setShowAddPatientModal(true); }}>
                                     <Plus size={18} />
                                     <span>Register Walk-In</span>
-                                </button>
-                                <button className="btn-gray" onClick={() => setView('er-intake')}>
+                                </button> : null}
+                                {nurseCapabilities.erIntake ? <button className="btn-gray" onClick={() => setView('er-intake')}>
                                     <AlertTriangle size={18} />
                                     <span>Emergency Triage</span>
-                                </button>
-                                <button className="btn-gray" onClick={() => setView('ward-management')}>
+                                </button> : null}
+                                {!nurseCapabilities.reception && nurseCapabilities.appointments ? <button className="btn-orange" onClick={() => setView('appointments')}><Calendar size={18} /><span>View Appointments</span></button> : null}
+                                {!nurseCapabilities.reception ? <button className="btn-gray" onClick={() => setView('patients')}><Users size={18} /><span>Patient Records</span></button> : null}
+                                {nurseCapabilities.vitals && !nurseCapabilities.erIntake ? <button className="btn-gray" onClick={() => setView('vitals')}><Activity size={18} /><span>{nurseWorkspace.type === 'clinic' ? 'Clinic Vitals' : 'Record Vitals'}</span></button> : null}
+                                {nurseCapabilities.wards ? <button className="btn-gray" onClick={() => setView('ward-management')}>
                                     <BedDouble size={18} />
                                     <span>Manage Wards</span>
-                                </button>
+                                </button> : null}
+                                {!nurseCapabilities.vitals && nurseCapabilities.orders ? <button className="btn-gray" onClick={() => setView('orders')}><FileText size={18} /><span>View Orders</span></button> : null}
                             </div>
                         </div>
                     </div>
@@ -6998,9 +7040,9 @@ function NurseDashboard() {
                         <div className="grid-col col-side">
                             <div className="overview-card">
                                 <div className="card-header">
-                                    <h3>Ward Overview</h3>
+                                    <h3>{nurseCapabilities.wards ? 'Ward Overview' : 'Department Focus'}</h3>
                                 </div>
-                                <div className="ward-summary-list ward-summary-horizontal">
+                                {nurseCapabilities.wards ? <><div className="ward-summary-list ward-summary-horizontal">
                                     {(wardRegistry.wards || []).map(ward => (
                                         <div key={ward.id} className="ward-summary-item">
                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.85rem' }}>
@@ -7019,7 +7061,14 @@ function NurseDashboard() {
                                 </div>
                                 <button className="btn-gray full-width" style={{ marginTop: '12px' }} onClick={() => setView('ward-management')}>
                                     Full Bed Map
-                                </button>
+                                </button></> : <div className="department-focus-list">
+                                  {workspaceFocusCards.map((item) => (
+                                    <div className="department-focus-item" key={item.title}>
+                                      <div><strong>{item.title}</strong><p>{item.caption}</p></div>
+                                      <span>{item.value}</span>
+                                    </div>
+                                  ))}
+                                </div>}
                             </div>
                         </div>
                     </div>
