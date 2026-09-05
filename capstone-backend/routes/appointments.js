@@ -3,6 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { newAppointmentRouting, canAssignOnsiteAppointment, doctorAppointmentScope } = require('../utils/appointmentRouting');
 const { createClient } = require('@supabase/supabase-js');
 const { ensureBillingTablesExist, toMoney } = require('../utils/billingLedger');
 const { sendEmail } = require('../utils/mailer');
@@ -835,9 +836,7 @@ function inferName(req) {
 }
 
 function inferActorLabel(req) {
-    const name = inferName(req);
-    if (name) return name;
-    const email = inferEmail(req);
+    const email = String(req.auth?.email || inferEmail(req) || '').trim().toLowerCase();
     return email || 'User';
 }
 
@@ -1439,6 +1438,11 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
             ];
         }
 
+        if (role === 'doctor') {
+            const doctorScope = doctorAppointmentScope(req.auth?.id);
+            where.AND = [...(Array.isArray(where.AND) ? where.AND : []), ...doctorScope.AND];
+        }
+
         const query = String(q || '').trim();
         if (query) {
             where.OR = [
@@ -1963,6 +1967,7 @@ router.post('/', async (req, res) => {
             if (hasOverlap) return res.status(409).json({ message: 'Patient already has an appointment at the selected date/time.' });
         }
 
+        const routing = newAppointmentRouting(resolvedMode, doctorUuid);
         const newAppointment = await prisma.appointments.create({
             data: {
                 first_name: firstName,
@@ -1986,18 +1991,13 @@ router.post('/', async (req, res) => {
                 emergency_relation: emergencyRelation,
                 emergency_phone: emergencyPhone,
                 doctor_id: doctorLabel,
-                doctor_uuid: doctorUuid,
+                doctor_uuid: routing.doctorUuid,
                 status: normalizeAppointmentStatus(status || 'Pending'),
                 patient_id: patientId ? String(patientId) : null,
                 consultation_mode: resolvedMode,
                 triage_status: resolvedMode === 'onsite' ? 'Unassessed' : 'Unassessed',
-                assignment_status: (() => {
-                    const raw = String(assignmentStatus || '').trim().toUpperCase();
-                    if (raw === 'ASSIGNED' || raw === 'PENDING_ASSIGNMENT') return raw;
-                    if (resolvedMode !== 'onsite') return 'ASSIGNED';
-                    return doctorUuid ? 'ASSIGNED' : 'PENDING_ASSIGNMENT';
-                })(),
-                assigned_at: doctorUuid ? new Date() : null,
+                assignment_status: routing.assignmentStatus,
+                assigned_at: routing.assignedAt,
                 assigned_by: null
             }
         });
@@ -2161,6 +2161,12 @@ router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary'
         });
         if (!existing) return res.status(404).json({ message: 'Appointment not found' });
 
+        const existingMode = String(existing.consultation_mode || 'onsite').trim().toLowerCase();
+        const assignmentRequested = doctor !== undefined || preferredDoctor !== undefined || doctorId !== undefined || assignmentStatus !== undefined || assignedBy !== undefined;
+        if (existingMode === 'onsite' && assignmentRequested && !canAssignOnsiteAppointment(role)) {
+            return res.status(403).json({ message: 'Onsite appointments must be assigned by the linked doctor secretary.' });
+        }
+
         // A secretary may only operate the queue of the doctor linked to that
         // account. Unassigned records may only be assigned to that same doctor.
         if (role === 'doctor_secretary') {
@@ -2214,14 +2220,19 @@ router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary'
             dataToUpdate.doctor_uuid = doctorIdRaw;
             dataToUpdate.assignment_status = 'ASSIGNED';
             dataToUpdate.assigned_at = new Date();
+            dataToUpdate.assigned_by = inferActorLabel(req);
         }
 
         if (assignmentStatus !== undefined) {
             const raw = String(assignmentStatus || '').trim().toUpperCase();
             if (raw === 'ASSIGNED' || raw === 'PENDING_ASSIGNMENT') dataToUpdate.assignment_status = raw;
         }
-        if (assignedBy !== undefined) {
-            dataToUpdate.assigned_by = assignedBy ? String(assignedBy).trim() : null;
+        if (assignedBy !== undefined && role === 'admin' && !dataToUpdate.assigned_by) {
+            dataToUpdate.assigned_by = assignedBy ? String(assignedBy).trim().slice(0, 160) : null;
+        }
+
+        if (existingMode === 'onsite' && dataToUpdate.assignment_status === 'ASSIGNED' && !(dataToUpdate.doctor_uuid || existing.doctor_uuid)) {
+            return res.status(400).json({ message: 'Assign a valid doctor before marking an onsite appointment as assigned.' });
         }
 
         const requestedTimeRaw = String(appointmentTime || time || '').trim();
