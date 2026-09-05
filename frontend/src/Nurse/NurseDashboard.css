@@ -2201,6 +2201,16 @@
 .department-focus-item p { margin: 3px 0 0; color: #64748b; font-size: .72rem; line-height: 1.3; }
 .department-focus-item > span { color: #ea580c; font-size: 1.15rem; font-weight: 900; }
 
+.admin-profile-form .profile-input.profile-input-error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, .1);
+}
+
+.admin-profile-form .btn-neutral-large:disabled {
+  cursor: not-allowed;
+  opacity: .65;
+}
+
 .overview-dashboard-grid {
   grid-template-columns: minmax(0, 1.3fr) minmax(300px, .7fr);
 }

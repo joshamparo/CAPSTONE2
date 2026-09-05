@@ -5014,6 +5014,7 @@ function NurseDashboard() {
   });
   const [profileErrors, setProfileErrors] = useState({});
   const [formError, setFormError] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
   const nurseAvatarInputRef = React.useRef(null);
   const [pendingNurseAvatarFile, setPendingNurseAvatarFile] = useState(null);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -5028,10 +5029,6 @@ function NurseDashboard() {
       hasNumber: /[0-9]/.test(pw),
     };
   }, [profileData.newPassword]);
-
-
-
-  const [isFormValid, setIsFormValid] = useState(false);
 
   React.useEffect(() => {
     try {
@@ -5056,8 +5053,8 @@ function NurseDashboard() {
                 firstName: currentUser.firstName || currentUser.first_name || '',
                 lastName: currentUser.lastName || currentUser.last_name || '',
                 middleName: currentUser.middleName || currentUser.middle_name || '',
-                email: currentUser.email || 'nurse@hospital.com', // fallback
-                phone: currentUser.phone || '09123456789', // fallback
+                email: currentUser.email || '',
+                phone: currentUser.phone || currentUser.contact_number || '',
                 department: formatDepartmentLabel(currentUser.department || currentUser.dept || specialization || activeDept) || '',
                 profilePicture: currentUser.avatarUrl || currentUser.avatar_url || currentUser.profilePicture || ''
             }));
@@ -5066,21 +5063,6 @@ function NurseDashboard() {
         // ignore
     }
   }, [activeDept]);
-
-  React.useEffect(() => {
-    // Validation Logic
-    const isValid = () => {
-        if (!profileData.username || !profileData.email || !profileData.phone) return false;
-        
-        if (profileData.newPassword) {
-            if (profileData.newPassword.length < 6) return false;
-            if (profileData.newPassword !== profileData.confirmPassword) return false;
-            if (!profileData.currentPassword) return false;
-        }
-        return true;
-    };
-    setIsFormValid(isValid());
-  }, [profileData]);
 
   React.useEffect(() => {
     if (!user?.name) return;
@@ -5141,14 +5123,17 @@ function NurseDashboard() {
   const handleNurseAvatarPick = (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
-    if (!f.type.startsWith('image/')) {
-      setFormError('Please select a valid image file.');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(String(f.type || '').toLowerCase())) {
+      setFormError('Profile photo must be a JPG, PNG, or WebP image.');
+      e.target.value = '';
       return;
     }
     if (f.size > 5 * 1024 * 1024) {
-      setFormError('Avatar image must be less than 5MB.');
+      setFormError('Profile photo must be 5 MB or smaller.');
+      e.target.value = '';
       return;
     }
+    setFormError('');
     setPendingNurseAvatarFile(f);
     const reader = new FileReader();
     reader.onload = (ev) => setProfileData(prev => ({ ...prev, profilePicture: String(ev.target?.result || '') }));
@@ -5157,73 +5142,68 @@ function NurseDashboard() {
 
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
-    
     const errors = {};
     const fName = String(profileData.firstName || '').trim();
+    const mName = String(profileData.middleName || '').trim();
     const lName = String(profileData.lastName || '').trim();
-    if (!fName) errors.firstName = "First Name is required";
-    if (!lName) errors.lastName = "Last Name is required";
-    if (!profileData.email) errors.email = "Email is required";
-    if (!profileData.phone) errors.phone = "Phone is required";
+    const email = String(profileData.email || '').trim().toLowerCase();
+    const phone = String(profileData.phone || '').trim();
+    const validName = (value) => /^\p{L}[\p{L}' .-]*$/u.test(value);
+    if (fName.length < 2 || !validName(fName)) errors.firstName = true;
+    if (mName && !validName(mName)) errors.middleName = true;
+    if (lName.length < 2 || !validName(lName)) errors.lastName = true;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) errors.email = true;
+    if (!/^(\+?63\s?|0)9\d{9}$/.test(phone.replace(/[\s\-()]/g, ''))) errors.phone = true;
     
     const { currentPassword, newPassword, confirmPassword } = profileData;
     const isChangingPassword = Boolean(currentPassword || newPassword || confirmPassword);
 
     // Only validate new password if user is trying to change it
     if (isChangingPassword) {
-      if (!currentPassword) errors.currentPassword = "Current password is required to change profile settings";
+      if (!currentPassword) errors.currentPassword = true;
       const pwClean = String(newPassword || '');
       if (pwClean || confirmPassword) {
-        if (pwClean.length < 11) errors.newPassword = "Password must be at least 11 characters";
-        if (!/[^A-Za-z0-9]/.test(pwClean)) errors.newPassword = errors.newPassword || "Password must contain at least one special character";
-        if (!/[0-9]/.test(pwClean)) errors.newPassword = errors.newPassword || "Password must contain at least one number";
-        if (pwClean !== String(confirmPassword || '')) errors.confirmPassword = "Passwords do not match";
+        if (pwClean.length < 11 || !/[A-Z]/.test(pwClean) || !/[a-z]/.test(pwClean) || !/[^A-Za-z0-9]/.test(pwClean) || !/[0-9]/.test(pwClean)) errors.newPassword = true;
+        if (pwClean !== String(confirmPassword || '')) errors.confirmPassword = true;
       }
     } else if (!currentPassword) {
-      errors.currentPassword = "Current password is required to save profile changes";
+      errors.currentPassword = true;
     }
     
     setProfileErrors(errors);
     
     if (Object.keys(errors).length > 0) {
-        setFormError("Please correct the errors above.");
+        const message = errors.firstName || errors.middleName || errors.lastName
+          ? 'Enter valid first, middle, and last names using letters only.'
+          : errors.email
+            ? 'Enter a valid email address.'
+            : errors.phone
+              ? 'Enter a valid Philippine mobile number (09XXXXXXXXX or +639XXXXXXXXX).'
+              : errors.currentPassword
+                ? 'Enter your current password to save profile changes.'
+                : errors.confirmPassword
+                  ? 'The new passwords do not match.'
+                  : 'New password must have at least 11 characters, uppercase, lowercase, a number, and a special character.';
+        setFormError(message);
         return;
     }
 
     try {
+        setSavingProfile(true);
+        setFormError('');
         const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-        if (!currentUser || !currentUser._id) {
+        const userId = currentUser?._id || currentUser?.id;
+        if (!currentUser || !userId) {
             setFormError("Session expired. Please login again.");
             return;
-        }
-
-        const userId = currentUser._id;
-        let savedAvatarUrl = profileData.profilePicture || currentUser.avatarUrl || currentUser.avatar_url || currentUser.profilePicture || '';
-        if (pendingNurseAvatarFile) {
-          const fd = new FormData();
-          fd.append('avatar', pendingNurseAvatarFile);
-          fd.append('accountType', 'nurse');
-          fd.append('userId', String(userId));
-          try {
-            const avatarData = await fetchJson(`/api/staff/avatar`, {
-              apiBase: API_BASE,
-              method: 'POST',
-              headers: { ...getAuthHeaders() },
-              body: fd
-            });
-            savedAvatarUrl = avatarData?.avatarUrl || savedAvatarUrl;
-          } catch (avatarErr) {
-            console.warn('Avatar upload failed, proceeding without new avatar:', avatarErr);
-          }
         }
 
         const payload = {
             firstName: fName,
             lastName: lName,
-            middleName: String(profileData.middleName || '').trim(),
-            email: profileData.email,
-            phone: profileData.phone,
-            department: String(profileData.department || '').trim(),
+            middleName: mName,
+            email,
+            phone,
             currentPassword: profileData.currentPassword,
             requiresPasswordAuth: true
         };
@@ -5239,15 +5219,47 @@ function NurseDashboard() {
             body: JSON.stringify(payload)
         });
 
-        const resolvedUser = currentUser;
-        const updatedUser = { ...resolvedUser, email: data.email, phone: data.phone, avatarUrl: savedAvatarUrl || resolvedUser.avatarUrl || '', firstName: fName, lastName: lName, middleName: payload.middleName, department: payload.department };
+        // The backend rotates the signed session when account details or the
+        // password change. Persist it before a possible avatar upload so the
+        // second authenticated request cannot use a stale token.
+        const refreshedSessionUser = {
+          ...currentUser,
+          sessionToken: data.sessionToken || currentUser.sessionToken,
+          email: data.email || email,
+          phone: data.phone || phone,
+          firstName: fName,
+          lastName: lName,
+          middleName: mName
+        };
+        localStorage.setItem('currentUser', JSON.stringify(refreshedSessionUser));
+
+        let savedAvatarUrl = currentUser.avatarUrl || currentUser.avatar_url || currentUser.profilePicture || '';
+        if (pendingNurseAvatarFile) {
+          const fd = new FormData();
+          fd.append('avatar', pendingNurseAvatarFile);
+          fd.append('id', String(userId));
+          fd.append('email', email);
+          fd.append('accountType', 'nurse');
+          const avatarData = await fetchJson(`/api/staff/avatar`, {
+            apiBase: API_BASE,
+            method: 'POST',
+            headers: { ...getAuthHeaders() },
+            body: fd
+          });
+          savedAvatarUrl = avatarData?.avatarUrl || savedAvatarUrl;
+        }
+
+        const resolvedUser = refreshedSessionUser;
+        const assignedDepartment = resolvedUser.department || resolvedUser.specialization || profileData.department;
+        const updatedUser = { ...resolvedUser, email: data.email || email, phone: data.phone || phone, avatarUrl: savedAvatarUrl || resolvedUser.avatarUrl || '', avatar_url: savedAvatarUrl || resolvedUser.avatar_url || '', firstName: fName, lastName: lName, middleName: mName, department: assignedDepartment };
         const displayName = `${fName} ${lName}`.trim();
         updatedUser.name = displayName;
 
         localStorage.setItem('currentUser', JSON.stringify(updatedUser));
         
-        setUser(prev => ({ ...prev, name: displayName, email: data.email || profileData.email, departmentLabel: formatDepartmentLabel(payload.department || prev.departmentLabel || '') || prev.departmentLabel }));
-        
+        setUser(prev => ({ ...prev, name: displayName, email: data.email || email }));
+
+        setModalType('success');
         setSuccessMessage("Profile updated successfully!");
         setShowSuccessModal(true);
         setFormError("");
@@ -5261,12 +5273,15 @@ function NurseDashboard() {
             profilePicture: savedAvatarUrl || prev.profilePicture,
             firstName: fName,
             lastName: lName,
-            middleName: payload.middleName,
-            department: payload.department
+            middleName: mName,
+            email: data.email || email,
+            phone: data.phone || phone
         }));
     } catch (error) {
         console.error("Update error:", error);
         setFormError(error?.message || "Network error. Please try again.");
+    } finally {
+        setSavingProfile(false);
     }
   };
 
@@ -7794,14 +7809,6 @@ function NurseDashboard() {
                                 <p className="page-subtitle">All registered patients and patient test results</p>
                             </div>
                             <div style={{display: 'flex', gap: '12px'}}>
-                                <button className="btn-primary-action" onClick={() => {
-                                  setAddPatientStep(1);
-                                  setAddPatientError("");
-                                  setHmoCallResult(null);
-                                  setShowAddPatientModal(true);
-                                }}>
-                                    <Plus size={18} /> Add Patient
-                                </button>
                                 <button className="btn-primary-action" onClick={handlePrintPatientRecords}>
                                     <Printer size={18} /> Print Records
                                 </button>
@@ -9062,7 +9069,7 @@ function NurseDashboard() {
                       <input
                         ref={nurseAvatarInputRef}
                         type="file"
-                        accept="image/*"
+                        accept="image/jpeg,image/png,image/webp"
                         style={{ display: 'none' }}
                         onChange={handleNurseAvatarPick}
                       />
@@ -9094,13 +9101,11 @@ function NurseDashboard() {
                                 name="firstName"
                                 value={profileData.firstName}
                                 onChange={handleInputChange}
-                                className="profile-input input-with-icon-padding"
+                                className={`profile-input input-with-icon-padding ${profileErrors.firstName ? 'profile-input-error' : ''}`}
+                                aria-invalid={Boolean(profileErrors.firstName)}
                                 placeholder="e.g. Maria"
                               />
                             </div>
-                            {profileErrors.firstName && (
-                              <p className="field-notice-error">{profileErrors.firstName}</p>
-                            )}
                           </div>
 
                           <div className="profile-input-group">
@@ -9112,7 +9117,8 @@ function NurseDashboard() {
                                 name="middleName"
                                 value={profileData.middleName}
                                 onChange={handleInputChange}
-                                className="profile-input input-with-icon-padding"
+                                className={`profile-input input-with-icon-padding ${profileErrors.middleName ? 'profile-input-error' : ''}`}
+                                aria-invalid={Boolean(profileErrors.middleName)}
                                 placeholder="e.g. Santos"
                               />
                             </div>
@@ -9127,13 +9133,11 @@ function NurseDashboard() {
                                 name="lastName"
                                 value={profileData.lastName}
                                 onChange={handleInputChange}
-                                className="profile-input input-with-icon-padding"
+                                className={`profile-input input-with-icon-padding ${profileErrors.lastName ? 'profile-input-error' : ''}`}
+                                aria-invalid={Boolean(profileErrors.lastName)}
                                 placeholder="e.g. Reyes"
                               />
                             </div>
-                            {profileErrors.lastName && (
-                              <p className="field-notice-error">{profileErrors.lastName}</p>
-                            )}
                           </div>
                           
                           <div className="profile-input-group">
@@ -9144,14 +9148,11 @@ function NurseDashboard() {
                                 type="email" 
                                 name="email"
                                 value={profileData.email}
-                                onChange={handleInputChange}
-                                className="profile-input input-with-icon-padding"
+                                readOnly
+                                className="profile-input input-with-icon-padding input-disabled-bg"
                                 placeholder="nurse@hospital.com"
                               />
                             </div>
-                            {profileErrors.email && (
-                              <p className="field-notice-error">{profileErrors.email}</p>
-                            )}
                           </div>
 
                           <div className="profile-input-group">
@@ -9162,8 +9163,8 @@ function NurseDashboard() {
                                 type="text" 
                                 name="department"
                                 value={profileData.department}
-                                onChange={handleInputChange}
-                                className="profile-input input-with-icon-padding"
+                                readOnly
+                                className="profile-input input-with-icon-padding input-disabled-bg"
                                 placeholder="e.g. ER Nurse, Ward, OPD"
                               />
                             </div>
@@ -9178,13 +9179,11 @@ function NurseDashboard() {
                                 name="phone"
                                 value={profileData.phone}
                                 onChange={handleInputChange}
-                                className="profile-input input-with-icon-padding"
+                                className={`profile-input input-with-icon-padding ${profileErrors.phone ? 'profile-input-error' : ''}`}
+                                aria-invalid={Boolean(profileErrors.phone)}
                                 placeholder="+63 900 000 0000"
                               />
                             </div>
-                            {profileErrors.phone && (
-                              <p className="field-notice-error">{profileErrors.phone}</p>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -9205,7 +9204,8 @@ function NurseDashboard() {
                                 name="currentPassword"
                                 value={profileData.currentPassword}
                                 onChange={handleInputChange}
-                                className="profile-input input-with-icon-padding"
+                                className={`profile-input input-with-icon-padding ${profileErrors.currentPassword ? 'profile-input-error' : ''}`}
+                                aria-invalid={Boolean(profileErrors.currentPassword)}
                                 placeholder="Enter current password to save changes"
                               />
                               <button 
@@ -9216,9 +9216,6 @@ function NurseDashboard() {
                                 {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                               </button>
                             </div>
-                            {profileErrors.currentPassword && (
-                              <p className="field-notice-error">{profileErrors.currentPassword}</p>
-                            )}
                           </div>
 
                           <div className="profile-input-group">
@@ -9230,7 +9227,8 @@ function NurseDashboard() {
                                 name="newPassword"
                                 value={profileData.newPassword}
                                 onChange={handleInputChange}
-                                className="profile-input input-with-icon-padding"
+                                className={`profile-input input-with-icon-padding ${profileErrors.newPassword ? 'profile-input-error' : ''}`}
+                                aria-invalid={Boolean(profileErrors.newPassword)}
                                 placeholder="Leave blank to keep current"
                               />
                               <button 
@@ -9256,9 +9254,6 @@ function NurseDashboard() {
                                 <span>Contains numbers</span>
                               </div>
                             </div>
-                            {profileErrors.newPassword && (
-                              <p className="field-notice-error">{profileErrors.newPassword}</p>
-                            )}
                           </div>
 
                           <div className="profile-input-group">
@@ -9270,7 +9265,8 @@ function NurseDashboard() {
                                 name="confirmPassword"
                                 value={profileData.confirmPassword}
                                 onChange={handleInputChange}
-                                className="profile-input input-with-icon-padding"
+                                className={`profile-input input-with-icon-padding ${profileErrors.confirmPassword ? 'profile-input-error' : ''}`}
+                                aria-invalid={Boolean(profileErrors.confirmPassword)}
                                 placeholder="Confirm new password"
                               />
                               <button 
@@ -9286,9 +9282,6 @@ function NurseDashboard() {
                                 {profileData.newPassword === profileData.confirmPassword ? 'Passwords match' : 'Passwords do not match'}
                               </p>
                             )}
-                            {profileErrors.confirmPassword && (
-                              <p className="field-notice-error">{profileErrors.confirmPassword}</p>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -9298,9 +9291,9 @@ function NurseDashboard() {
                       {formError && (
                         <p className="form-notice-error form-notice-error-text">{formError}</p>
                       )}
-                      <button type="submit" className="btn-neutral-large flex-center-gap-8">
+                      <button type="submit" className="btn-neutral-large flex-center-gap-8" disabled={savingProfile}>
                         <Save size={18} />
-                        Save Changes
+                        {savingProfile ? 'Saving…' : 'Save Changes'}
                       </button>
                     </div>
                   </form>
@@ -10864,7 +10857,7 @@ function NurseDashboard() {
         </ModalShell>
       )}
 
-      {showAddPatientModal && (
+      {showAddPatientModal && nurseCapabilities.reception && (
         <div className="modal-overlay-fixed">
           <div className="view-profile-card walkin-intake-modal">
             <div className="view-profile-header walkin-header">
