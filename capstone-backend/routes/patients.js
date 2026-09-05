@@ -10,7 +10,7 @@ const { sendEmail } = require('../utils/mailer');
 const { appointmentEmail } = require('../utils/emailTemplates');
 const { patientUpdateAccess, sanitizePatientUpdateForRole } = require('../utils/patientUpdateAccess');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
-const { nursePatientScope } = require('../utils/nursePatientAccess');
+const { nursePatientScope, isCentralIntakeRequest } = require('../utils/nursePatientAccess');
 
 let _supabaseAdmin = null;
 function getSupabaseAdmin() {
@@ -233,7 +233,10 @@ async function enforceDoctorAvailability({ doctorId, dateKey, mode = 'onsite', r
 }
 
 router.use(requireRole(['admin', 'nurse', 'doctor', 'pharmacist', 'staff', 'cashier', 'doctor_secretary', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'patient']));
-router.use((req, res, next) => (req.auth?.role === 'nurse' ? requireNurseDepartment(req, res, next) : next()));
+router.use((req, res, next) => {
+    if (req.auth?.role !== 'nurse' || isCentralIntakeRequest(req.method, req.path)) return next();
+    return requireNurseDepartment(req, res, next);
+});
 
 function getRequesterRole(req) {
     return String(req.auth?.role || '').trim().toLowerCase();

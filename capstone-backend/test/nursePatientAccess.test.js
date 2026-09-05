@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { nursePatientScope } = require('../utils/nursePatientAccess');
+const { nursePatientScope, isCentralIntakeRequest } = require('../utils/nursePatientAccess');
 
 test('core nurse departments produce restrictive patient scopes', () => {
   assert.ok(nursePatientScope('ER').OR);
@@ -17,4 +17,11 @@ test('clinical nurse departments scope patients through assigned orders', () => 
 test('unknown nurse departments fail closed', () => {
   assert.equal(nursePatientScope('unknown').id, '__no_department_patient_match__');
   assert.equal(nursePatientScope('').id, '__no_department_patient_match__');
+});
+
+test('central nurse reception intake does not require a clinical department assignment', () => {
+  assert.equal(isCentralIntakeRequest('POST', '/walk-in-intake'), true);
+  assert.equal(isCentralIntakeRequest('POST', '/er-registration'), true);
+  assert.equal(isCentralIntakeRequest('GET', '/'), false);
+  assert.equal(isCentralIntakeRequest('POST', '/audit-access/report'), false);
 });

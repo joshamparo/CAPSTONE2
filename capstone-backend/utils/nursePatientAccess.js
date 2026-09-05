@@ -5,6 +5,11 @@ const CLINICAL_DEPARTMENT_ROLES = {
   'PHYSICAL THERAPY': 'physical_therapist'
 };
 
+function isCentralIntakeRequest(method, path) {
+  if (String(method || '').trim().toUpperCase() !== 'POST') return false;
+  return ['/walk-in-intake', '/er-registration'].includes(String(path || '').trim().toLowerCase());
+}
+
 function nursePatientScope(department, now = new Date()) {
   const dept = String(department || '').trim().toUpperCase();
   if (dept === 'ER') return { OR: [{ admission_status: { equals: 'Emergency', mode: 'insensitive' } }, { ward_number: { startsWith: 'E', mode: 'insensitive' } }] };
@@ -20,4 +25,4 @@ function nursePatientScope(department, now = new Date()) {
   return { id: '__no_department_patient_match__' };
 }
 
-module.exports = { nursePatientScope, CLINICAL_DEPARTMENT_ROLES };
+module.exports = { nursePatientScope, CLINICAL_DEPARTMENT_ROLES, isCentralIntakeRequest };
