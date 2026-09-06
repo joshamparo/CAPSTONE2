@@ -5,7 +5,7 @@ function normalizeNurseDepartment(value) {
   if (!raw) return '';
   const compact = raw.toUpperCase().replace(/[^A-Z0-9]+/g, '');
   const aliases = {
-    EMERGENCY: 'ER', EMERGENCYROOM: 'ER', ER: 'ER',
+    EMERGENCY: 'ER', EMERGENCYROOM: 'ER', EMERGENCYNURSING: 'ER', ERNURSING: 'ER', ER: 'ER',
     OUTPATIENT: 'OPD', OUTPATIENTDEPARTMENT: 'OPD', OUTPATIENTDEPT: 'OPD', OPD: 'OPD',
     PEDIATRIC: 'PEDIA', PEDIATRICS: 'PEDIA', PEDIA: 'PEDIA',
     INTERNALMEDICINE: 'MEDICINE', MEDICINE: 'MEDICINE',
@@ -31,13 +31,20 @@ async function requireNurseDepartment(req, res, next) {
     return next();
   }
   const email = String(req.auth?.email || '').trim().toLowerCase();
-  if (!email) return res.status(401).json({ message: 'Authenticated nurse email is required.' });
+  const nurseId = String(req.auth?.id || '').trim();
+  if (!email && !nurseId) return res.status(401).json({ message: 'Authenticated nurse identity is required.' });
   try {
     const nurse = await prisma.nurses.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' }, is_active: true },
+      where: {
+        is_active: true,
+        OR: [
+          ...(email ? [{ email: { equals: email, mode: 'insensitive' } }] : []),
+          ...(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(nurseId) ? [{ id: nurseId }] : [])
+        ]
+      },
       select: { first_name: true, last_name: true, specialization: true, department: true }
     });
-    const assigned = resolveNurseDepartmentScope(nurse?.specialization || nurse?.department, req.nurseDepartmentFallback);
+    const assigned = resolveNurseDepartmentScope(nurse?.department, nurse?.specialization || req.nurseDepartmentFallback);
     if (!assigned) return res.status(403).json({ message: 'Your nurse account has no assigned department. Contact an administrator.' });
     const requested = normalizeNurseDepartment(req.query?.department || req.body?.department);
     if (requested && requested !== assigned) {

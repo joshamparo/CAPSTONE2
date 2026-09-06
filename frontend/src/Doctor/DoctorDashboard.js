@@ -134,6 +134,7 @@ function DoctorDashboard() {
   const [appointments, setAppointments] = useState([]);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointmentsError, setAppointmentsError] = useState('');
+  const [completingAppointmentId, setCompletingAppointmentId] = useState('');
   const [queueFilter, setQueueFilter] = useState('all'); // all | video
   const [queueScope, setQueueScope] = useState('mine'); // mine | specialization
   const [queueDateMode, setQueueDateMode] = useState('upcoming'); // upcoming | date
@@ -1635,9 +1636,44 @@ function DoctorDashboard() {
       setOrderForm({ kind: 'Laboratory', service: '', notes: '', priority: 'Routine', assignedRole: defaultAssignedRoleForKind('Laboratory') });
       fetchEROrders(selectedPatient._id).catch(() => {});
     } catch (err) {
-      setToast({ type: 'error', message: String(err?.message || 'Failed to save order') });
+      const message = String(err?.message || 'Failed to save order');
+      if (/pending (admission|transfer) request already exists/i.test(message)) {
+        setToast({ type: 'success', message: 'This request is already pending with the ER head nurse.' });
+        setOrderModalOpen(false);
+        fetchEROrders(selectedPatient._id).catch(() => {});
+      } else {
+        setToast({ type: 'error', message });
+      }
     } finally {
       setSavingOrder(false);
+    }
+  };
+
+  const completePatientAppointment = async (appointment) => {
+    const appointmentId = String(appointment?.id || '').trim();
+    if (!/^\d+$/.test(appointmentId)) {
+      setToast({ type: 'error', message: 'This patient appointment has an invalid reference.' });
+      return;
+    }
+    const patientName = `${appointment?.firstName || ''} ${appointment?.lastName || ''}`.trim() || 'this patient';
+    if (!window.confirm(`Mark ${patientName} as done? The patient will see that this consultation is completed.`)) return;
+    setCompletingAppointmentId(appointmentId);
+    try {
+      await fetchJson(`/api/appointments/${encodeURIComponent(appointmentId)}/complete`, {
+        apiBase: API_BASE,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({})
+      });
+      setToast({ type: 'success', message: `${patientName} is marked done. The patient status is now Completed.` });
+      const selectedId = String(selectedPatient?._id || '').trim();
+      const appointmentPatientId = String(appointment?.patientId || appointment?.patient_id || '').trim();
+      if (selectedId && appointmentPatientId && selectedId === appointmentPatientId) setSelectedPatient(null);
+      await fetchAppointments();
+    } catch (error) {
+      setToast({ type: 'error', message: String(error?.message || 'Unable to complete this patient appointment.') });
+    } finally {
+      setCompletingAppointmentId('');
     }
   };
 
@@ -3540,6 +3576,34 @@ function DoctorDashboard() {
                         >
                           <Video size={16} />
                           <span style={{ fontSize: 12, fontWeight: 800 }}>{label}</span>
+                        </button>
+                      );
+                    })()}
+                    {(() => {
+                      const target = normalizeAssignee(doctorInboxName || doctorName);
+                      const assignedName = normalizeAssignee(apt.doctor || apt.preferredDoctor);
+                      const assignedUuid = String(apt.doctorUuid || apt.doctor_uuid || '').trim();
+                      const isMine = Boolean(
+                        (currentDoctorUuid && assignedUuid && currentDoctorUuid === assignedUuid) ||
+                        (target && assignedName && target === assignedName)
+                      );
+                      if (!isMine) return null;
+                      const completing = completingAppointmentId === String(apt.id);
+                      return (
+                        <button
+                          type="button"
+                          className="doc-icon-btn"
+                          title="Finish this consultation and notify the patient"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            completePatientAppointment(apt);
+                          }}
+                          disabled={completing}
+                          style={{ padding: '6px 8px', display: 'inline-flex', alignItems: 'center', gap: 6, color: '#15803d' }}
+                        >
+                          <CheckCircle2 size={16} />
+                          <span style={{ fontSize: 12, fontWeight: 800 }}>{completing ? 'Finishing…' : 'Done Patient'}</span>
                         </button>
                       );
                     })()}

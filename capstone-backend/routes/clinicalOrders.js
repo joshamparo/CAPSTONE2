@@ -739,7 +739,9 @@ router.post('/', async (req, res) => {
         (order_id, actor_name, actor_role, action, from_status, to_status, note)
       VALUES
         (${BigInt(createdId)}, ${actorNameFinal}, ${actorRoleFinal}, 'Create', NULL, ${st}, ${notes || null})
-    `;
+    `.catch((eventError) => {
+      console.error('[clinical-orders] Unable to write create event:', eventError?.message || eventError);
+    });
 
     if (scheduledAt && assignedRole) {
       await upsertScheduleForOrder({
@@ -786,15 +788,26 @@ router.post('/', async (req, res) => {
       FROM public.clinical_orders
       WHERE id = ${BigInt(createdId)}
       LIMIT 1
-    `;
+    `.catch((readError) => {
+      console.error('[clinical-orders] Unable to reload created order:', readError?.message || readError);
+      return [];
+    });
 
-    res.status(201).json(enrichClinicalOrder(Array.isArray(rows) ? rows[0] : null));
+    const created = Array.isArray(rows) ? rows[0] : null;
+    res.status(201).json(enrichClinicalOrder(created || {
+      id: String(createdId), patientId: patientUuid, patientName: patientName || null,
+      kind: kind || null, service: service || null, priority: pr, status: st,
+      notes: notes || null, orderedByName: orderedByNameFinal,
+      orderedByRole: orderedByRoleFinal, assignedRole: assignedRole ? roleNorm : null,
+      assignedTo: assignedToFinal
+    }));
   } catch (err) {
     const msg = String(err && err.message ? err.message : '');
     if (msg.includes('clinical_orders') && msg.includes('does not exist')) {
       return res.status(500).json({ message: 'clinical_orders table is missing. Run prisma/manual_migration_clinical_orders.sql on Supabase.' });
     }
-    res.status(400).json({ message: msg || 'Bad request' });
+    console.error('[clinical-orders] Create failed:', msg || err);
+    res.status(500).json({ message: 'Unable to submit the clinical order. Refresh and check Pending Orders before trying again.' });
   }
 });
 

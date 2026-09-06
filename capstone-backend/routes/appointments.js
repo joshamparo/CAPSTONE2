@@ -2942,6 +2942,19 @@ router.post('/:id/complete', requireRole(['admin', 'nurse', 'doctor']), async (r
         const apt = await prisma.appointments.findUnique({ where: { id } }).catch(() => null);
         if (!apt) return res.status(404).json({ message: 'Appointment not found.' });
 
+        const requesterRole = inferRole(req);
+        if (requesterRole === 'doctor') {
+            const requesterUuid = String(req.auth?.id || req.headers['x-doctor-uuid'] || '').trim();
+            const requesterName = normalizeAssignee(inferName(req));
+            const assignedUuid = String(apt.doctor_uuid || '').trim();
+            const assignedName = normalizeAssignee(apt.doctor_id);
+            const ownsAppointment = Boolean(
+                (requesterUuid && assignedUuid && requesterUuid === assignedUuid) ||
+                (requesterName && assignedName && requesterName === assignedName)
+            );
+            if (!ownsAppointment) return res.status(403).json({ message: 'This appointment is assigned to another doctor.' });
+        }
+
         const currentStatus = String(apt.status || '').trim().toLowerCase();
         if (currentStatus.includes('cancel') || currentStatus.includes('reject')) {
             return res.status(400).json({ message: 'Cancelled appointments cannot be completed.' });

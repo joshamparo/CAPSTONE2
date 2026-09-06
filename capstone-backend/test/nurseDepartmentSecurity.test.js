@@ -4,6 +4,8 @@ const { normalizeNurseDepartment, resolveNurseDepartmentScope } = require('../mi
 
 test('nurse department aliases normalize to stable scopes', () => {
   assert.equal(normalizeNurseDepartment('Emergency Room'), 'ER');
+  assert.equal(normalizeNurseDepartment('Emergency Nursing'), 'ER');
+  assert.equal(normalizeNurseDepartment('ER Nursing'), 'ER');
   assert.equal(normalizeNurseDepartment('Pediatrics'), 'PEDIA');
   assert.equal(normalizeNurseDepartment('Outpatient Dept'), 'OPD');
   assert.equal(normalizeNurseDepartment('Video Consultation'), 'VIDEO CONSULTATION');
