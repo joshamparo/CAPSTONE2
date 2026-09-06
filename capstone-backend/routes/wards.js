@@ -59,6 +59,17 @@ function canAutoAssignRoom(status) {
   return normalized === 'available';
 }
 
+function roomMutationFailure(err, fallbackMessage) {
+  const detail = String(err?.message || '');
+  const databaseCode = String(err?.meta?.code || err?.code || '');
+  if (err?.status) return { status: Number(err.status), message: detail || fallbackMessage };
+  if (databaseCode === '23505' || databaseCode === 'P2002' || /duplicate key/i.test(detail)) {
+    return { status: 409, message: 'Room code already exists.' };
+  }
+  console.error('[Ward room mutation] Failed:', databaseCode || 'database_error', detail);
+  return { status: 500, message: fallbackMessage };
+}
+
 async function ensureWardRoomsTable() {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS public.ward_rooms (
@@ -377,6 +388,12 @@ function validateRoomPayload(body) {
     throw err;
   }
 
+  if (wardId && !/^\d+$/.test(wardId)) {
+    const err = new Error('Ward selection is invalid.');
+    err.status = 400;
+    throw err;
+  }
+
   if (!MANUAL_ROOM_STATUSES.has(normalizeText(status))) {
     const err = new Error('Invalid room status.');
     err.status = 400;
@@ -466,34 +483,34 @@ router.post('/rooms', requireRole(['admin']), async (req, res) => {
     await ensureWardExists(payload.wardName);
 
     const columns = ['room_code', 'ward_name', 'status', 'note', 'updated_at'];
-    const values = [
-      payload.roomCode.replace(/'/g, "''"),
-      payload.wardName.replace(/'/g, "''"),
-      payload.status.replace(/'/g, "''"),
-      (payload.note || '').replace(/'/g, "''"),
-      'NOW()'
-    ];
+    const parameters = [payload.roomCode, payload.wardName, payload.status, payload.note || ''];
+    const values = ['$1', '$2', '$3', '$4', 'NOW()'];
+    const addParameter = (column, value) => {
+      columns.push(column);
+      parameters.push(value);
+      values.push(`$${parameters.length}`);
+    };
 
-    if (payload.wardId) { columns.push('ward_id'); values.push(`${BigInt(payload.wardId)}`); }
-    if (payload.roomType) { columns.push('room_type'); values.push(`'${payload.roomType.replace(/'/g, "''")}'`); }
-    if (payload.bedCount !== null && payload.bedCount !== undefined) { columns.push('bed_count'); values.push(`${Number(payload.bedCount)}`); }
-    if (payload.capacity !== null && payload.capacity !== undefined) { columns.push('capacity'); values.push(`${Number(payload.capacity)}`); }
+    if (payload.wardId) addParameter('ward_id', BigInt(payload.wardId));
+    if (payload.roomType) addParameter('room_type', payload.roomType);
+    if (payload.bedCount !== null && payload.bedCount !== undefined) addParameter('bed_count', Number(payload.bedCount));
+    if (payload.capacity !== null && payload.capacity !== undefined) addParameter('capacity', Number(payload.capacity));
 
     await prisma.$executeRawUnsafe(
       `
         INSERT INTO public.ward_rooms (${columns.join(', ')})
         VALUES (${values.join(', ')})
-      `
+      `,
+      ...parameters
     );
 
+    buildWardRegistry._cache.payload = null;
     const registry = await buildWardRegistry();
     const created = registry.rooms.find((room) => normalizeText(room.roomCode) === normalizeText(payload.roomCode));
     res.status(201).json(created || registry);
   } catch (err) {
-    const message = /duplicate key/i.test(String(err?.message || ''))
-      ? 'Room code already exists.'
-      : (err.message || 'Failed to create room.');
-    res.status(err.status || 400).json({ message });
+    const failure = roomMutationFailure(err, 'Unable to create the room right now. Please try again.');
+    res.status(failure.status).json({ message: failure.message });
   }
 });
 
@@ -501,7 +518,7 @@ router.patch('/rooms/:id', requireRole(['admin']), async (req, res) => {
   try {
     await ensureWardRoomsTable();
     const roomId = String(req.params.id || '').trim();
-    if (!roomId) return res.status(400).json({ message: 'Room id is required.' });
+    if (!/^\d+$/.test(roomId)) return res.status(400).json({ message: 'A valid room id is required.' });
 
     const registryBefore = await buildWardRegistry();
     const existingRoom = registryBefore.rooms.find((room) => room.id === roomId);
@@ -524,33 +541,39 @@ router.patch('/rooms/:id', requireRole(['admin']), async (req, res) => {
 
     await ensureWardExists(payload.wardName);
 
+    const parameters = [];
     const assignments = [];
-    assignments.push(`room_code = '${payload.roomCode.replace(/'/g, "''")}'`);
-    assignments.push(`ward_name = '${payload.wardName.replace(/'/g, "''")}'`);
-    assignments.push(`status = '${payload.status.replace(/'/g, "''")}'`);
-    assignments.push(`note = '${(payload.note || '').replace(/'/g, "''")}'`);
-    if (payload.wardId) assignments.push(`ward_id = ${BigInt(payload.wardId)}`);
-    if (payload.roomType) assignments.push(`room_type = '${payload.roomType.replace(/'/g, "''")}'`);
-    if (payload.bedCount !== null && payload.bedCount !== undefined) assignments.push(`bed_count = ${Number(payload.bedCount)}`);
-    if (payload.capacity !== null && payload.capacity !== undefined) assignments.push(`capacity = ${Number(payload.capacity)}`);
+    const addAssignment = (column, value) => {
+      parameters.push(value);
+      assignments.push(`${column} = $${parameters.length}`);
+    };
+    addAssignment('room_code', payload.roomCode);
+    addAssignment('ward_name', payload.wardName);
+    addAssignment('status', payload.status);
+    addAssignment('note', payload.note || '');
+    if (payload.wardId) addAssignment('ward_id', BigInt(payload.wardId));
+    if (payload.roomType) addAssignment('room_type', payload.roomType);
+    if (payload.bedCount !== null && payload.bedCount !== undefined) addAssignment('bed_count', Number(payload.bedCount));
+    if (payload.capacity !== null && payload.capacity !== undefined) addAssignment('capacity', Number(payload.capacity));
     assignments.push(`updated_at = NOW()`);
+    parameters.push(BigInt(roomId));
 
     await prisma.$executeRawUnsafe(
       `
         UPDATE public.ward_rooms
         SET ${assignments.join(', ')}
-        WHERE id = ${roomId}::bigint
-      `
+        WHERE id = $${parameters.length}::bigint
+      `,
+      ...parameters
     );
 
+    buildWardRegistry._cache.payload = null;
     const registry = await buildWardRegistry();
     const updated = registry.rooms.find((room) => room.id === roomId || normalizeText(room.roomCode) === normalizeText(payload.roomCode));
     res.json(updated || registry);
   } catch (err) {
-    const message = /duplicate key/i.test(String(err?.message || ''))
-      ? 'Room code already exists.'
-      : (err.message || 'Failed to update room.');
-    res.status(err.status || 400).json({ message });
+    const failure = roomMutationFailure(err, 'Unable to update the room right now. Please try again.');
+    res.status(failure.status).json({ message: failure.message });
   }
 });
 

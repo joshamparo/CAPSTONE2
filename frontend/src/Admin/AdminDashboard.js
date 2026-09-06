@@ -10,6 +10,7 @@ import { checkBackendHealth, fetchJson } from "../utils/api";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const WEB_ORIGIN = String(process.env.REACT_APP_WEB_ORIGIN || '').trim() || 'https://pascualinga.com';
+const ADMIN_MANUAL_ROOM_STATUSES = ['Available', 'Reserved', 'Cleaning', 'Maintenance', 'Inactive'];
 
 function manilaDateKey(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
@@ -1344,8 +1345,8 @@ function AdminDashboard() {
     if (!wardName) errors.push('Ward / Ward Name is required.');
     else if (wardName.length > 64) errors.push('Ward Name must be 64 characters or less.');
     if (!status) errors.push('Room Status is required.');
-    else if (!['Available','Occupied','Dirty','Maintenance','Discharging'].includes(status)) {
-      errors.push('Room Status must be one of: Available, Occupied, Dirty, Maintenance, Discharging.');
+    else if (!ADMIN_MANUAL_ROOM_STATUSES.includes(status)) {
+      errors.push(`Room Status must be one of: ${ADMIN_MANUAL_ROOM_STATUSES.join(', ')}.`);
     }
     if (roomEditor?.bedCount !== undefined && roomEditor?.bedCount !== null && String(roomEditor.bedCount).trim() !== '') {
       if (!Number.isFinite(bedCountRaw) || !Number.isInteger(bedCountRaw) || bedCountRaw < 0) {
@@ -1409,8 +1410,8 @@ function AdminDashboard() {
     else if (roomCode.length > 32) errors.push('Room Code must be 32 characters or less.');
     if (!wardName) errors.push('Ward Name is required.');
     else if (wardName.length > 64) errors.push('Ward Name must be 64 characters or less.');
-    if (!['Available','Occupied','Dirty','Maintenance','Discharging'].includes(status)) {
-      errors.push('Room Status must be one of: Available, Occupied, Dirty, Maintenance, Discharging.');
+    if (!ADMIN_MANUAL_ROOM_STATUSES.includes(status)) {
+      errors.push(`Room Status must be one of: ${ADMIN_MANUAL_ROOM_STATUSES.join(', ')}.`);
     }
     if (roomType && roomType.length > 32) errors.push('Room Type must be 32 characters or less.');
     if (String(newRoomForm?.bedCount ?? '').trim() !== '' && newRoomForm?.bedCount !== undefined && newRoomForm?.bedCount !== null) {
@@ -4084,13 +4085,13 @@ function AdminDashboard() {
 
       const quickActions = [
         { key: 'register-staff', label: 'Register Staff', description: 'Create new staff accounts and assign roles.', icon: <UserPlus size={18} />, onClick: () => setView('register-staff') },
-        { key: 'post-announcement', label: 'Post Announcement', description: 'Publish hospital-wide operational updates.', icon: <Megaphone size={18} />, onClick: () => window.scrollTo({ top: 0, behavior: 'smooth' }) },
+        { key: 'post-announcement', label: 'Post Announcement', description: 'Publish hospital-wide operational updates.', icon: <Megaphone size={18} />, onClick: () => document.getElementById('admin-announcements-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
         { key: 'review-incidents', label: 'Review Incidents', description: 'Open unresolved reports and mark progress.', icon: <AlertCircle size={18} />, onClick: () => setView('incidents') },
         { key: 'open-reports', label: 'Open Reports', description: 'Jump to analytics, reports, and exports.', icon: <ClipboardList size={18} />, onClick: () => setView('reports') }
       ];
 
       const renderAnnouncementsPanel = (extraClassName = '') => (
-        <div className={`dashboard-section-card ${extraClassName}`.trim()}>
+        <div id="admin-announcements-panel" className={`dashboard-section-card ${extraClassName}`.trim()}>
           <div className="dashboard-section-header">
             <h3 className="dashboard-section-title">
               <Megaphone size={20} className="text-orange-600" /> Announcements
