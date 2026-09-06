@@ -4,6 +4,7 @@ const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
 const { createClient } = require('@supabase/supabase-js');
 const { recordVideoConsultationPayment } = require('../utils/billingLedger');
 
@@ -139,6 +140,10 @@ async function ensureTables() {
 ensureTables().catch(() => {});
 
 router.use(requireRole(['doctor', 'nurse', 'admin', 'doctor_secretary', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist']));
+router.use((req, res, next) => {
+  if (req.auth?.role !== 'nurse') return next();
+  return requireNurseDepartment(req, res, next);
+});
 
 function inferRequester(req) {
   const role = String(req.headers['x-user-role'] || '').trim().toLowerCase();
@@ -284,6 +289,33 @@ function requestMatchesClinicalRole(requestRow, role) {
   if (role === 'ecg_operator') return /(^|\s)ecg(\s|$)/.test(routingText) || routingText.includes('electrocardio');
   if (role === 'physical_therapist') return routingText.includes('physical therapy') || routingText.includes('physiotherapy') || /(^|\s)pt(\s|$)/.test(routingText);
   return false;
+}
+
+function requestMatchesNurseDepartment(requestRow, department) {
+  const assigned = normalizeNurseDepartment(department);
+  if (!assigned) return false;
+  const values = [
+    requestRow?.department_key,
+    requestRow?.service_type,
+    parseServiceFromReason(requestRow?.reason).category
+  ];
+  const routedDepartments = new Set(values
+    .map((value) => String(value || '').replace(/^\[[^\]]*\]\s*/i, '').trim())
+    .filter(Boolean)
+    .map(normalizeNurseDepartment));
+  if (routedDepartments.has(assigned)) return true;
+  if (assigned === 'ER') {
+    return ['SURGERY (MINOR)', 'SURGERY'].some((value) => routedDepartments.has(value));
+  }
+  return false;
+}
+
+function requireNurseRequestAccess(req, requestRow) {
+  if (req.auth?.role !== 'nurse') return;
+  if (requestMatchesNurseDepartment(requestRow, req.nurseDepartment)) return;
+  const error = new Error('This approval request is assigned to another nurse specialization.');
+  error.statusCode = 403;
+  throw error;
 }
 
 function inferConsultationMode(reqRow) {
@@ -775,12 +807,7 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   return updated;
 }
 
-const authorizeNurseInboxDepartment = (req, res, next) => {
-  if (String(req.auth?.role || '').trim().toLowerCase() !== 'nurse') return next();
-  return requireNurseDepartment(req, res, next);
-};
-
-router.get('/inbox', authorizeNurseInboxDepartment, async (req, res) => {
+router.get('/inbox', async (req, res) => {
   try {
     const hdr = inferRequester(req);
     const role = String(req.query.role || hdr.role || '').trim().toLowerCase();
@@ -1360,6 +1387,7 @@ router.get('/:id', async (req, res) => {
     `;
     const r = Array.isArray(rows) ? rows[0] : null;
     if (!r) return res.status(404).json({ message: 'Request not found' });
+    requireNurseRequestAccess(req, r);
     if (ROLE_SERVICE_KEYS[hdr.role] && !requestMatchesClinicalRole(r, hdr.role)) {
       return res.status(403).json({ message: 'This request is assigned to another clinical service.' });
     }
@@ -1375,7 +1403,11 @@ router.get('/:id/messages', async (req, res) => {
     const id = BigInt(req.params.id);
     const hdr = inferRequester(req);
     const role = String(req.query.role || hdr.role || '').trim().toLowerCase();
-    const name = String(req.query.name || hdr.name || '').trim();
+    const name = String(
+      req.auth?.role === 'nurse'
+        ? (req.nurseIdentity?.name || '')
+        : (req.query.name || hdr.name || '')
+    ).trim();
 
     if (role !== 'doctor' && role !== 'nurse') return res.status(400).json({ message: 'role must be doctor or nurse' });
     if (!name) return res.status(400).json({ message: 'name is required' });
@@ -1389,6 +1421,7 @@ router.get('/:id/messages', async (req, res) => {
     `;
     let requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
     if (!requestRow) return res.status(404).json({ message: 'Request not found' });
+    requireNurseRequestAccess(req, requestRow);
 
     if (ROLE_SERVICE_KEYS[hdr.role] && !requestMatchesClinicalRole(requestRow, hdr.role)) {
       return res.status(403).json({ message: 'This request is assigned to another clinical service.' });
@@ -1504,9 +1537,12 @@ router.post('/:id/messages', async (req, res) => {
     `;
     let requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
     if (!requestRow) return res.status(404).json({ message: 'Request not found' });
+    requireNurseRequestAccess(req, requestRow);
     if (senderRole === 'doctor' && hdr.role !== 'admin') {
       const signedDoctor = await requireDoctorRequestAccess(requestRow, hdr);
       senderName = signedDoctor.name;
+    } else if (hdr.role === 'nurse') {
+      senderName = req.nurseIdentity?.name || req.nurseIdentity?.email || 'Nurse';
     } else if (hdr.role !== 'admin' && hdr.name) {
       senderName = hdr.name;
     }
@@ -1544,7 +1580,9 @@ router.patch('/:id', async (req, res) => {
     const id = BigInt(idStr);
     const hdr = inferRequester(req);
     const status = String(req.body.status || '').trim();
-    const actor = String(req.body.actor || '').trim();
+    const actor = hdr.role === 'nurse'
+      ? (req.nurseIdentity?.name || req.nurseIdentity?.email || 'Nurse')
+      : String(req.body.actor || '').trim();
     const role = String(req.body.role || hdr.role || 'nurse').trim().toLowerCase();
     const department = String(req.body.department || req.body.serviceType || '').trim();
     const suggestedDate = req.body.suggestedDate ? new Date(req.body.suggestedDate) : null;
@@ -1573,12 +1611,13 @@ router.patch('/:id', async (req, res) => {
     `;
     let requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
     if (!requestRow) return res.status(404).json({ message: 'Request not found' });
+    requireNurseRequestAccess(req, requestRow);
 
     if (ROLE_SERVICE_KEYS[hdr.role] && !requestMatchesClinicalRole(requestRow, hdr.role)) {
       return res.status(403).json({ message: 'This request is assigned to another clinical service.' });
     }
 
-    if (department) {
+    if (department && req.auth?.role !== 'nurse') {
       const reqService = inferServiceKey(requestRow);
       const deptKey = normalizeServiceKey(department);
       if (reqService && deptKey && reqService !== deptKey) {
@@ -1875,7 +1914,7 @@ router.patch('/:id', async (req, res) => {
 
     res.json(serializeRequestRow(updated));
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(Number(err?.statusCode) || 400).json({ message: err.message });
   }
 });
 
@@ -1902,6 +1941,7 @@ router.post('/:id/secretary-finalize', async (req, res) => {
     `;
     const requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
     if (!requestRow) return res.status(404).json({ message: 'Request not found' });
+    requireNurseRequestAccess(req, requestRow);
     const updated = await createAppointmentFromSecretaryApproval({
       id,
       hdr,
@@ -1921,7 +1961,9 @@ router.post('/:id/finalize', async (req, res) => {
     const id = BigInt(req.params.id);
     const hdr = inferRequester(req);
     if (hdr.role && hdr.role !== 'admin' && hdr.role !== 'nurse') return res.status(403).json({ message: 'Forbidden' });
-    const nurseName = String(req.body.nurseName || req.body.actor || '').trim() || null;
+    const nurseName = req.auth?.role === 'nurse'
+      ? (req.nurseIdentity?.name || req.nurseIdentity?.email || 'Nurse')
+      : (String(req.body.nurseName || req.body.actor || '').trim() || null);
     const department = String(req.body.department || req.body.serviceType || '').trim();
 
     const reqRows = await prisma.$queryRaw`
@@ -1932,8 +1974,9 @@ router.post('/:id/finalize', async (req, res) => {
     `;
     const requestRow = Array.isArray(reqRows) ? reqRows[0] : null;
     if (!requestRow) return res.status(404).json({ message: 'Request not found' });
+    requireNurseRequestAccess(req, requestRow);
 
-    if (department) {
+    if (department && req.auth?.role !== 'nurse') {
       const reqService = inferServiceType(requestRow);
       if (reqService && reqService.toLowerCase() !== department.toLowerCase()) {
         return res.status(403).json({ message: 'Forbidden: service type mismatch.' });

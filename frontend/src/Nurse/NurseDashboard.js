@@ -1974,35 +1974,35 @@ function NurseDashboard() {
     setConsultPriorityLoading(true);
     setConsultPriorityError('');
     try {
-      if (!supabase) throw new Error('Supabase is not configured.');
-      const { data, error } = await supabase
-        .from('appointment_approval_requests')
-        .select('id, patient_name, email, requested_date, requested_time, reason, status, suggested_note, created_at, updated_at, doctor_id, doctor_name')
-        .ilike('reason', '[TRIAGE%')
-        .order('created_at', { ascending: false })
-        .limit(400);
-
-      if (error) throw new Error('Unable to load priority queue.');
-
-      const mapped = (Array.isArray(data) ? data : []).map((r) => {
-        const triage = safeJsonParse(r.suggested_note || '{}') || {};
+      const response = await fetch(`${API_BASE}/api/approval-requests/inbox?role=nurse&department=ER&take=200`, {
+        headers: { ...getAuthHeaders() }
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body?.message || 'Unable to load priority queue.');
+      }
+      const data = await response.json();
+      const mapped = (Array.isArray(data) ? data : [])
+        .filter((r) => String(r?.reason || '').trim().startsWith('[TRIAGE'))
+        .map((r) => {
+        const triage = safeJsonParse(r.suggestedNote || '{}') || {};
         const triageLevel = Number(triage?.triage_level ?? triage?.triageLevel ?? 0) || null;
         const priorityScore = Number(triage?.priority_score ?? triage?.priorityScore ?? 0) || 0;
         const priorityLabel = String(triage?.priority_label ?? triage?.priorityLabel ?? '').trim() || null;
         const reasons = Array.isArray(triage?.reasons) ? triage.reasons.filter(Boolean).slice(0, 4) : [];
         return {
           id: String(r.id),
-          patientName: r.patient_name || null,
+          patientName: r.patientName || null,
           email: r.email || null,
-          requestedDate: r.requested_date || null,
-          requestedTime: r.requested_time || null,
+          requestedDate: r.requestedDate || null,
+          requestedTime: r.requestedTime || null,
           reason: r.reason || null,
           cleanReason: stripTriagePrefix(r.reason || ''),
           status: r.status || null,
-          createdAt: r.created_at || null,
-          updatedAt: r.updated_at || null,
-          doctorId: r.doctor_id ? String(r.doctor_id) : null,
-          doctorName: r.doctor_name || null,
+          createdAt: r.createdAt || null,
+          updatedAt: r.updatedAt || null,
+          doctorId: r.doctorId ? String(r.doctorId) : null,
+          doctorName: r.doctorName || null,
           triageLevel,
           priorityScore,
           priorityLabel,
@@ -2297,86 +2297,19 @@ function NurseDashboard() {
     setApprovalThreadLoading(true);
     setApprovalThreadError('');
     try {
-      if (supabase) {
-        const requestId = toDbId(thread.id);
-        if (!requestId) {
-          setApprovalThread(null);
-          setApprovalMessages([]);
-          setApprovalThreadError('Unable to load conversation.');
-          return;
-        }
-
-        const { data: reqRows, error: reqErr } = await supabase
-          .from('appointment_approval_requests')
-          .select('*')
-          .eq('id', requestId)
-          .limit(1);
-
-        if (reqErr) {
-          setApprovalThread(null);
-          setApprovalMessages([]);
-          setApprovalThreadError('Unable to load conversation.');
-          return;
-        }
-
-        const r = Array.isArray(reqRows) ? reqRows[0] : null;
-        const mappedReq = r ? {
-          id: String(r.id),
-          patientId: r.patient_id || null,
-          patientName: r.patient_name || null,
-          doctorName: r.doctor_name || null,
-          nurseName: r.nurse_name || null,
-          requestedDate: r.requested_date || null,
-          requestedTime: r.requested_time || null,
-          serviceType: r.service_type || null,
-          reason: r.reason || null,
-          status: r.status || 'Pending',
-          suggestedDate: r.suggested_date || null,
-          suggestedTime: r.suggested_time || null,
-          suggestedNote: r.suggested_note || null,
-          appointmentId: r.appointment_id !== null && r.appointment_id !== undefined ? String(r.appointment_id) : null,
-          createdAt: r.created_at || null,
-          updatedAt: r.updated_at || null
-        } : null;
-
-        const { data: msgRows, error: msgErr } = await supabase
-          .from('appointment_messages')
-          .select('*')
-          .eq('request_id', requestId)
-          .order('created_at', { ascending: true });
-
-        if (msgErr) {
-          setApprovalThread(mappedReq);
-          setApprovalMessages([]);
-          setApprovalThreadError('Unable to load conversation.');
-          return;
-        }
-
-        const msgs = (Array.isArray(msgRows) ? msgRows : []).map((m) => ({
-          id: String(m.id),
-          requestId: String(m.request_id),
-          senderRole: m.sender_role,
-          senderName: m.sender_name || null,
-          body: m.body,
-          createdAt: m.created_at
-        }));
-
-        setApprovalThread(mappedReq);
-        setApprovalMessages(msgs);
-      } else {
-        const res = await fetch(`${API_BASE}/api/approval-requests/${thread.id}/messages?role=nurse&name=${encodeURIComponent(nurseInboxName)}`, {
-          headers: { ...getAuthHeaders() }
-        });
-        if (!res.ok) {
-          setApprovalThread(null);
-          setApprovalMessages([]);
-          setApprovalThreadError('Unable to load conversation.');
-          return;
-        }
-        const data = await res.json();
-        setApprovalThread(data.request || null);
-        setApprovalMessages(Array.isArray(data.messages) ? data.messages : []);
+      const res = await fetch(`${API_BASE}/api/approval-requests/${thread.id}/messages?role=nurse&name=${encodeURIComponent(nurseInboxName)}`, {
+        headers: { ...getAuthHeaders() }
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setApprovalThread(null);
+        setApprovalMessages([]);
+        setApprovalThreadError(data?.message || 'Unable to load conversation.');
+        return;
       }
+      const data = await res.json();
+      setApprovalThread(data.request || null);
+      setApprovalMessages(Array.isArray(data.messages) ? data.messages : []);
     } catch (_) {
       setApprovalThread(null);
       setApprovalMessages([]);
@@ -2403,44 +2336,18 @@ function NurseDashboard() {
     }
     setApprovalSending(true);
     try {
-      if (supabase) {
-        const requestId = toDbId(selectedApproval.id);
-        if (!requestId) {
-          approvalError('Invalid approval request id.');
-          setApprovalSending(false);
-          return;
-        }
-        const { error } = await supabase
-          .from('appointment_messages')
-          .insert({
-            request_id: requestId,
-            sender_role: 'nurse',
-            sender_name: nurseInboxName,
-            body: text
-          });
-
-        if (error) {
-          approvalError(error.message || 'Failed to send message.');
-          setApprovalSending(false);
-          return;
-        }
+      const res = await fetch(`${API_BASE}/api/approval-requests/${selectedApproval.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ senderRole: 'nurse', body: text })
+      });
+      if (res.ok) {
         setApprovalMessageText('');
         await openApprovalThread(selectedApproval);
         await fetchApprovalInbox();
       } else {
-        const res = await fetch(`${API_BASE}/api/approval-requests/${selectedApproval.id}/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-          body: JSON.stringify({ senderRole: 'nurse', senderName: nurseInboxName, body: text })
-        });
-        if (res.ok) {
-          setApprovalMessageText('');
-          await openApprovalThread(selectedApproval);
-          await fetchApprovalInbox();
-        } else {
-          const data = await res.json().catch(() => ({}));
-          approvalError(data?.message || 'Failed to send message.');
-        }
+        const data = await res.json().catch(() => ({}));
+        approvalError(data?.message || 'Failed to send message.');
       }
     } catch (_) {
       approvalError('Network error while sending message.');
@@ -2473,7 +2380,9 @@ function NurseDashboard() {
     try {
       const departmentParam = String(approvalDepartment || getApprovalServiceType(selectedApproval) || activeDept || '').trim();
 
-      if (supabase) {
+      // Approval decisions must always pass through the authenticated backend.
+      // Keep the legacy branch unreachable while older deployments are phased out.
+      if (false) {
         const requestId = toDbId(selectedApproval.id);
         if (!requestId) return;
         const { data: reqRows, error: reqErr } = await supabase
@@ -2613,7 +2522,7 @@ function NurseDashboard() {
         const res = await fetch(`${API_BASE}/api/approval-requests/${selectedApproval.id}/finalize`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-          body: JSON.stringify({ nurseName: nurseInboxName, department: departmentParam })
+          body: JSON.stringify({ department: departmentParam })
         });
         if (res.ok) {
           setModalType('success');
@@ -2630,14 +2539,15 @@ function NurseDashboard() {
           setSuccessMessage('Appointment Confirmed!');
           setShowSuccessModal(true);
         } else {
-          setSuccessMessage('Unable to confirm appointment.');
+          const data = await res.json().catch(() => ({}));
+          setSuccessMessage(data?.message || 'Unable to confirm appointment.');
           setModalType('error');
           setShowSuccessModal(true);
         }
         return;
       }
 
-      const payload = { status, actor: nurseInboxName, role: 'nurse', department: approvalDepartment || getApprovalServiceType(selectedApproval) || activeDept };
+      const payload = { status, role: 'nurse', department: approvalDepartment || getApprovalServiceType(selectedApproval) || activeDept };
       if (status === 'Suggested') {
         payload.suggestedDate = suggestDate;
         payload.suggestedTime = suggestTime;
@@ -2655,8 +2565,13 @@ function NurseDashboard() {
         await fetchApprovalInbox();
         setSuccessMessage('Status Updated');
         setShowSuccessModal(true);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        approvalError(data?.message || 'Unable to update approval request.');
       }
-    } catch (_) {} finally {
+    } catch (_) {
+      approvalError('Network error while updating approval request.');
+    } finally {
       setApprovalSending(false);
     }
   };
