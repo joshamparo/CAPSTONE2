@@ -1643,6 +1643,72 @@
   animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.bed-assignment-confirm-overlay {
+  z-index: 1100;
+}
+
+.bed-assignment-confirm-card {
+  width: min(100%, 390px);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+  text-align: center;
+  animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bed-assignment-confirm-icon {
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 14px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: #ea580c;
+  background: #fff7ed;
+}
+
+.bed-assignment-confirm-card h3 {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-size: 1.2rem;
+}
+
+.bed-assignment-confirm-card p {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.55;
+}
+
+.bed-assignment-confirm-card p strong {
+  color: #1e293b;
+}
+
+.bed-assignment-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.bed-assignment-confirm-actions .btn-modal-cancel,
+.bed-assignment-confirm-actions .btn-modal-submit {
+  width: 100%;
+  min-height: 44px;
+}
+
+@media (max-width: 420px) {
+  .bed-assignment-confirm-card {
+    padding: 20px 16px;
+    border-radius: 16px;
+  }
+
+  .bed-assignment-confirm-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
 .modal-title-large {
   font-size: 1.5rem;
   font-weight: 700;

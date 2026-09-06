@@ -2785,6 +2785,7 @@ function NurseDashboard() {
   const [wardLoading, setWardLoading] = useState(false);
   const [wardError, setWardError] = useState(null);
   const [assigningPatient, setAssigningPatient] = useState(null);
+  const [bedAssignmentConfirmation, setBedAssignmentConfirmation] = useState(null);
   const [bedAssignmentSaving, setBedAssignmentSaving] = useState(false);
   const bedAssignmentInFlightRef = useRef(false);
   const [collapsedWards, setCollapsedWards] = useState({});
@@ -2830,7 +2831,14 @@ function NurseDashboard() {
     if (bedAssignmentInFlightRef.current) return;
     const patient = patientsList.find((item) => String(item.id || item._id || '') === patientIdClean);
     const patientName = `${patient?.firstName || patient?.first_name || ''} ${patient?.lastName || patient?.last_name || ''}`.trim() || 'this patient';
-    if (!window.confirm(`Assign ${patientName} to bed ${roomCodeClean}?\n\nSelect OK to confirm or Cancel to go back.`)) return;
+    setBedAssignmentConfirmation({ patientId: patientIdClean, patientName, roomCode: roomCodeClean });
+  };
+
+  const confirmBedAssignment = async () => {
+    const pending = bedAssignmentConfirmation;
+    if (!pending || bedAssignmentInFlightRef.current) return;
+    const patientIdClean = String(pending.patientId || '').trim();
+    const roomCodeClean = String(pending.roomCode || '').trim();
     bedAssignmentInFlightRef.current = true;
     setBedAssignmentSaving(true);
     try {
@@ -2841,6 +2849,7 @@ function NurseDashboard() {
         body: JSON.stringify({ patientId: patientIdClean, roomCode: roomCodeClean })
       });
       await Promise.all([fetchWardRegistry(), refreshPatientsList()]);
+      setBedAssignmentConfirmation(null);
       setAssigningPatient(null);
       addActivity('Patient Assigned', `Patient assigned to ${roomCodeClean}`, 'success');
     } catch (err) {
@@ -10435,6 +10444,46 @@ function NurseDashboard() {
               <button type="button" className="btn-modal-cancel" disabled={Boolean(medAdminActionId)} onClick={() => setMedAdminDraft(null)}>Cancel</button>
               <button type="button" className="btn-modal-submit" disabled={Boolean(medAdminActionId) || ((medAdminDraft.status === 'held' || medAdminDraft.status === 'missed') && medAdminReason.trim().length < 3)} onClick={submitMedicationAdministration}>
                 {medAdminActionId ? 'Recording...' : `Confirm ${medAdminDraft.status}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {bedAssignmentConfirmation ? (
+        <div
+          className="modal-overlay-fixed bed-assignment-confirm-overlay"
+          role="presentation"
+          onClick={() => !bedAssignmentSaving && setBedAssignmentConfirmation(null)}
+        >
+          <div
+            className="bed-assignment-confirm-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bed-assignment-confirm-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="bed-assignment-confirm-icon" aria-hidden="true"><Bed size={22} /></div>
+            <h3 id="bed-assignment-confirm-title">Confirm bed assignment</h3>
+            <p>
+              Assign <strong>{bedAssignmentConfirmation.patientName}</strong> to bed{' '}
+              <strong>{bedAssignmentConfirmation.roomCode}</strong>?
+            </p>
+            <div className="bed-assignment-confirm-actions">
+              <button
+                type="button"
+                className="btn-modal-cancel"
+                disabled={bedAssignmentSaving}
+                onClick={() => setBedAssignmentConfirmation(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-modal-submit"
+                disabled={bedAssignmentSaving}
+                onClick={confirmBedAssignment}
+              >
+                {bedAssignmentSaving ? 'Assigning...' : 'Assign Bed'}
               </button>
             </div>
           </div>
