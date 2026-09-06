@@ -866,9 +866,35 @@ router.post('/', requireRole(['admin']), async (req, res) => {
             ]);
             
             if (existingStaff || existingNurse || existingDoctor || existingAccount || existingPatient) {
-                return res.status(400).json({ 
-                    field: "email",
-                    message: `Email "${e}" is already registered.` 
+                const conflicts = [
+                    existingStaff ? { source: 'staff', role: normalizeRole(existingStaff.account_type || 'staff'), active: existingStaff.is_active !== false } : null,
+                    existingNurse ? { source: 'nurses', role: 'nurse', active: existingNurse.is_active !== false } : null,
+                    existingDoctor ? { source: 'doctors', role: 'doctor', active: existingDoctor.is_active !== false } : null,
+                    existingAccount ? { source: 'accounts', role: normalizeRole(existingAccount.roles || 'staff'), active: existingAccount.is_active !== false } : null,
+                    existingPatient ? { source: 'patients', role: 'patient', active: true } : null
+                ].filter(Boolean);
+                const labels = conflicts.map((conflict) => {
+                    if (conflict.source === 'patients') return 'a patient record';
+                    const state = conflict.active ? 'active' : 'deactivated';
+                    const legacy = conflict.source === 'accounts' && !['admin', 'cashier', 'doctor_secretary'].includes(conflict.role) ? 'legacy ' : '';
+                    return `an ${state} ${legacy}${conflict.role || 'staff'} account`;
+                });
+                const uniqueLabels = Array.from(new Set(labels));
+                const where = uniqueLabels.length > 1
+                    ? `${uniqueLabels.slice(0, -1).join(', ')} and ${uniqueLabels[uniqueLabels.length - 1]}`
+                    : uniqueLabels[0];
+                const hasPatient = conflicts.some((conflict) => conflict.source === 'patients');
+                const hasDeactivated = conflicts.some((conflict) => conflict.active === false);
+                const resolution = hasPatient
+                    ? 'Update the patient email first if it is incorrect; patient identities are not deleted from Staff Records.'
+                    : hasDeactivated
+                        ? 'Open Deactivated Staff and reactivate or permanently delete the archived account.'
+                        : 'Open Active Staff and resolve the existing account instead of creating a duplicate.';
+                return res.status(409).json({
+                    field: 'email',
+                    conflictType: hasPatient ? 'patient_email' : 'staff_email',
+                    conflicts,
+                    message: `Email "${e}" is already used by ${where}. ${resolution}`
                 });
             }
         }
@@ -1175,7 +1201,7 @@ router.get('/', requireRole(['admin']), async (req, res) => {
                 prisma.nurses.findMany({ where: { is_active: isActive }, take, skip, orderBy: { id: 'desc' } }).catch(() => []),
                 prisma.doctors.findMany({ where: { is_active: isActive }, take, skip, orderBy: { id: 'desc' } }).catch(() => []),
                 prisma.accounts.findMany({
-                    where: { roles: { in: ['admin', 'cashier', 'doctor_secretary'] }, is_active: isActive },
+                    where: { is_active: isActive },
                     take,
                     skip,
                     orderBy: { id: 'desc' }
@@ -1194,7 +1220,19 @@ router.get('/', requireRole(['admin']), async (req, res) => {
                 return [String(d.id), { id: String(d.id), name, specialization: d.specialization || null }];
             }));
 
-            const formattedAccounts = (Array.isArray(accounts) ? accounts : []).map((acc) => ({
+            const clinicalEmails = new Set(
+                [...(staff || []), ...(nurses || []), ...(doctors || [])]
+                    .map((row) => normalizeEmail(row?.email || ''))
+                    .filter(Boolean)
+            );
+            const formattedAccounts = (Array.isArray(accounts) ? accounts : [])
+              .filter((acc) => {
+                const role = normalizeRole(acc?.roles || '');
+                if (role === 'patient') return false;
+                const email = normalizeEmail(acc?.email || '');
+                return !email || !clinicalEmails.has(email);
+              })
+              .map((acc) => ({
                 ...acc,
                 id: acc.id != null ? acc.id.toString() : acc.id,
                 first_name: acc.name,
@@ -1204,7 +1242,7 @@ router.get('/', requireRole(['admin']), async (req, res) => {
                 linked_doctor_id: acc.linked_doctor_id ? String(acc.linked_doctor_id) : null,
                 linkedDoctorId: acc.linked_doctor_id ? String(acc.linked_doctor_id) : null,
                 linkedDoctor: acc.linked_doctor_id ? (linkedDocMap.get(String(acc.linked_doctor_id)) || null) : null
-            }));
+              }));
 
             const isNotPatient = (u) =>
                 String(u && (u.account_type || u.roles) ? (u.account_type || u.roles) : '')
