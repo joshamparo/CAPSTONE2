@@ -1028,6 +1028,8 @@
 
 .doc-soap-save-actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: flex-end;
   margin-top: 2px;
 }
@@ -1040,7 +1042,13 @@
 }
 
 @media (max-width: 520px) {
+  .doc-soap-save-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
   .doc-soap-save-button {
+    width: 100%;
     min-width: 120px;
   }
 }

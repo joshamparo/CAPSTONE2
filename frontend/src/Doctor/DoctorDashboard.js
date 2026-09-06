@@ -332,21 +332,20 @@ function DoctorDashboard() {
 
   const allowedDoctorNav = useMemo(() => {
     const base = ['dashboard', 'approval-inbox', 'patient-records', 'certificates', 'doctor-chat', 'profile'];
-    const withCare = ['patient-summary'];
     const withLabs = ['labs'];
 
     const spec = doctorSpecKey;
-    if (!spec) return new Set([...base, ...withCare, ...withLabs]);
+    if (!spec) return new Set([...base, ...withLabs]);
 
     if (isERDoctor) return new Set([...base]);
     if (spec === 'pediatrics') return new Set([...base]);
-    if (spec === 'dermatology') return new Set([...base, ...withCare]);
+    if (spec === 'dermatology') return new Set([...base]);
 
-    return new Set([...base, ...withCare, ...withLabs]);
+    return new Set([...base, ...withLabs]);
   }, [doctorSpecKey, isERDoctor]);
 
   const defaultDoctorNav = useMemo(() => {
-    const preferred = ['dashboard', 'patient-records', 'certificates', 'doctor-chat', 'patient-summary', 'labs', 'approval-inbox'];
+    const preferred = ['dashboard', 'patient-records', 'certificates', 'doctor-chat', 'labs', 'approval-inbox'];
     for (const k of preferred) {
       if (allowedDoctorNav.has(k)) return k;
     }
@@ -366,7 +365,6 @@ function DoctorDashboard() {
       { key: 'dashboard', label: 'Patients Queue', icon: <User size={20} /> },
       { key: 'doctor-chat', label: 'Doctor Chat', icon: <MessageSquare size={20} /> },
       { key: 'approval-inbox', label: 'Approvals Inbox', icon: <MessageSquare size={20} /> },
-      { key: 'patient-summary', label: 'Patient Summary', icon: <ChevronRight size={20} /> },
       { key: 'patient-records', label: 'Patient Records', icon: <FileText size={20} /> },
       { key: 'labs', label: 'Lab & Imaging', icon: <Search size={20} /> },
       { key: 'certificates', label: 'Certificates', icon: <FileText size={20} /> }
@@ -1439,6 +1437,29 @@ function DoctorDashboard() {
     if (k === 'imaging') return 'radiographer';
     if (k === 'procedure') return 'nurse';
     return 'nurse';
+  };
+
+  const openNurseEndorsement = () => {
+    if (!selectedPatient?._id) {
+      setToast({ type: 'error', message: 'Select a patient before creating a nurse endorsement.' });
+      return;
+    }
+
+    const soapSummary = [
+      noteForm.subjective ? `Subjective: ${String(noteForm.subjective).trim()}` : '',
+      noteForm.objective ? `Objective: ${String(noteForm.objective).trim()}` : '',
+      noteForm.assessment ? `Assessment: ${String(noteForm.assessment).trim()}` : '',
+      noteForm.plan ? `Plan: ${String(noteForm.plan).trim()}` : ''
+    ].filter(Boolean).join('\n');
+
+    setOrderForm({
+      kind: 'Nursing Care',
+      service: 'Doctor endorsement / nursing care instructions',
+      notes: soapSummary,
+      priority: 'Routine',
+      assignedRole: 'nurse'
+    });
+    setOrderModalOpen(true);
   };
 
   const fetchWards = async () => {
@@ -2815,6 +2836,7 @@ function DoctorDashboard() {
               <option value="Laboratory">Laboratory</option>
               <option value="Imaging">Imaging</option>
               <option value="Procedure">Procedure</option>
+              <option value="Nursing Care">Nursing Care / Endorsement</option>
             </select>
           </div>
           <div className="doc-form-group">
@@ -4791,6 +4813,16 @@ function DoctorDashboard() {
                       <button className="doc-primary doc-soap-save-button" type="button" onClick={saveNote} disabled={savingNote}>
                         <Save size={16} />
                         {savingNote ? 'Saving…' : 'Save Note'}
+                      </button>
+                      <button
+                        className="doc-btn doc-soap-save-button"
+                        type="button"
+                        onClick={openNurseEndorsement}
+                        disabled={savingNote}
+                        title="Send actionable care instructions to the matching nurse specialization"
+                      >
+                        <Send size={16} />
+                        Endorse to Nurse
                       </button>
                     </div>
 
