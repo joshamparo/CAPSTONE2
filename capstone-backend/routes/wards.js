@@ -2,6 +2,17 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+
+const authorizeNurseDepartment = (req, res, next) => (
+  req.auth?.role === 'nurse' ? requireNurseDepartment(req, res, next) : next()
+);
+
+const NURSE_WARD_BY_DEPARTMENT = Object.freeze({
+  ER: 'Emergency',
+  PEDIA: 'Pediatrics',
+  MEDICINE: 'General Ward'
+});
 
 
 const DEFAULT_WARD_PLAN = [
@@ -57,6 +68,27 @@ function classifyPatientWard(patient) {
 function canAutoAssignRoom(status) {
   const normalized = normalizeText(status);
   return normalized === 'available';
+}
+
+function nurseWardName(req) {
+  if (req.auth?.role !== 'nurse') return '';
+  return NURSE_WARD_BY_DEPARTMENT[String(req.nurseDepartment || '').trim().toUpperCase()] || '';
+}
+
+function scopeRegistryForRequest(registry, req) {
+  const wardName = nurseWardName(req);
+  if (req.auth?.role !== 'nurse') return registry;
+  if (!wardName) return { wards: [], rooms: [], totals: { totalRooms: 0, occupied: 0, available: 0, reserved: 0, cleaning: 0, maintenance: 0, inactive: 0, overflow: 0 } };
+  const wards = (registry.wards || []).filter((ward) => normalizeText(ward.name) === normalizeText(wardName));
+  const rooms = (registry.rooms || []).filter((room) => normalizeText(room.wardName) === normalizeText(wardName));
+  const totals = wards.reduce((acc, ward) => {
+    acc.totalRooms += Number(ward.totalCapacity || 0);
+    ['occupied', 'available', 'reserved', 'cleaning', 'maintenance', 'inactive', 'overflow'].forEach((key) => {
+      acc[key] += Number(ward[key] || 0);
+    });
+    return acc;
+  }, { totalRooms: 0, occupied: 0, available: 0, reserved: 0, cleaning: 0, maintenance: 0, inactive: 0, overflow: 0 });
+  return { wards, rooms, totals };
 }
 
 function roomMutationFailure(err, fallbackMessage) {
@@ -445,9 +477,9 @@ function validateRoomPayload(body) {
   return { roomCode, wardName, wardId, status, note, roomType, bedCount, capacity };
 }
 
-router.get('/', requireRole(['admin', 'nurse', 'doctor']), async (_req, res) => {
+router.get('/', requireRole(['admin', 'nurse', 'doctor']), authorizeNurseDepartment, async (req, res) => {
   try {
-    const registry = await buildWardRegistry();
+    const registry = scopeRegistryForRequest(await buildWardRegistry(), req);
     res.json(
       registry.wards.map((ward) => ({
         id: ward.id,
@@ -467,10 +499,10 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor']), async (_req, res) => 
   }
 });
 
-router.get('/rooms', requireRole(['admin', 'nurse', 'doctor']), async (_req, res) => {
+router.get('/rooms', requireRole(['admin', 'nurse', 'doctor']), authorizeNurseDepartment, async (req, res) => {
   try {
     const registry = await buildWardRegistry();
-    res.json(registry);
+    res.json(scopeRegistryForRequest(registry, req));
   } catch (err) {
     res.status(500).json({ message: err.message || 'Failed to load room registry.' });
   }
@@ -631,7 +663,7 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
   }
 });
 
-router.post('/assign-patient', requireRole(['admin', 'nurse']), async (req, res) => {
+router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDepartment, async (req, res) => {
   try {
     const { patientId, roomCode } = req.body;
     console.log('[AssignPatient] Payload:', { patientId, roomCode });
@@ -658,6 +690,10 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), async (req, res)
     if (targetRoom.occupied && String(targetRoom.patient?.id || '') !== String(patientId)) {
         console.error('[AssignPatient] Room already occupied:', roomCode, 'by', targetRoom.patient?.name);
         return res.status(409).json({ message: `Room ${roomCode} is already occupied.` });
+    }
+    const allowedWard = nurseWardName(req);
+    if (req.auth?.role === 'nurse' && (!allowedWard || normalizeText(targetRoom.wardName) !== normalizeText(allowedWard))) {
+      return res.status(403).json({ message: 'You can only assign patients to your department ward.' });
     }
 
     await prisma.$transaction(async (tx) => {
@@ -697,7 +733,7 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), async (req, res)
   }
 });
 
-router.post('/discharge-patient', requireRole(['admin', 'nurse']), async (req, res) => {
+router.post('/discharge-patient', requireRole(['admin', 'nurse']), authorizeNurseDepartment, async (req, res) => {
   try {
     const { patientId } = req.body;
     if (!patientId) return res.status(400).json({ message: 'Patient ID is required.' });
@@ -710,6 +746,14 @@ router.post('/discharge-patient', requireRole(['admin', 'nurse']), async (req, r
     });
     if (!existing) return res.status(404).json({ message: 'Patient not found.' });
     const affectedWard = existing.ward_number;
+    if (req.auth?.role === 'nurse') {
+      const allowedWard = nurseWardName(req);
+      const registry = await buildWardRegistry();
+      const patientRoom = (registry.rooms || []).find((room) => normalizeText(room.roomCode) === normalizeText(affectedWard));
+      if (!allowedWard || !patientRoom || normalizeText(patientRoom.wardName) !== normalizeText(allowedWard)) {
+        return res.status(403).json({ message: 'You can only discharge patients from your department ward.' });
+      }
+    }
 
     await prisma.patients.update({
       where: { id: pid },

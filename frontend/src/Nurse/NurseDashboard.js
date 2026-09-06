@@ -481,7 +481,7 @@ function NurseDashboard() {
     const byType = {
       emergency: { ...shared, appointments: true, orders: true, reception: true, erIntake: true, vitals: true, wards: true },
       pedia: { ...shared, appointments: true, orders: true, vitals: true },
-      bedside: { ...shared, orders: true, vitals: true, wards: true },
+      bedside: { ...shared, orders: true, medications: true, vitals: true, wards: true },
       clinic: { ...shared, appointments: true, orders: true, vitals: true },
       diagnostic: { ...shared, appointments: true, orders: true },
       imaging: { ...shared, appointments: true, orders: true },
@@ -496,7 +496,7 @@ function NurseDashboard() {
     const labelsByType = {
       emergency: { patients: 'ER Patient Records', appointments: 'ER Consults', vitals: 'ER Vitals Monitoring', orders: 'ER Orders Management', wards: 'Emergency Room Board' },
       pedia: { patients: 'Pediatric Patients', appointments: 'Pediatric Appointments', vitals: 'Pediatric Vitals', orders: 'Pediatric Orders' },
-      bedside: { patients: 'Assigned Patients', vitals: 'Bedside Vitals', orders: 'Clinical Orders', wards: 'Ward Management' },
+      bedside: { patients: 'Assigned Patients', vitals: 'Bedside Vitals', orders: 'Medication & Clinical Orders', wards: 'Ward Management' },
       clinic: { patients: 'Clinic Patients', appointments: 'Clinic Appointments', vitals: 'Clinic Vitals & Rooming', orders: 'Clinic Orders' },
       diagnostic: { patients: 'Patient Queue', appointments: 'Diagnostic Schedule', orders: 'Diagnostic Orders' },
       imaging: { patients: 'Patient Queue', appointments: 'Exam Schedule', orders: 'Imaging Orders' },
@@ -3959,9 +3959,9 @@ function NurseDashboard() {
                   {
                       icon: <Bed size={32} className="text-blue" />,
                       tone: 'bg-blue-soft',
-                      value: wardOccupancy.filter((bed) => bed.status === 'occupied').length,
-                      label: 'Occupied Spaces',
-                      detail: `${wardOccupancy.filter((bed) => bed.status === 'free').length} available right now`
+                      value: Number(wardRegistry.totals?.occupied || 0),
+                      label: 'Ward Occupancy',
+                      detail: `${Number(wardRegistry.totals?.available || 0)} available in your assigned ward`
                   },
                   {
                       icon: <Activity size={32} className="text-purple" />,
@@ -4086,6 +4086,7 @@ function NurseDashboard() {
       urgentTaskCount,
       currentShiftLabel,
       wardOccupancy,
+      wardRegistry.totals,
       activeCriticalWatch.length,
       recentOrders.length,
       approvalInbox.length,
@@ -6266,7 +6267,7 @@ function NurseDashboard() {
 
       <main className={`nurse-main-content ${isSidebarCollapsed ? 'collapsed' : ''}`}>
         {/* Critical ER Alert Banner */}
-        {patientsList.filter(p => p.triage_level === 1 && p.admission_status === 'Emergency').length > 0 && (
+        {nurseWorkspace.type === 'emergency' && patientsList.filter(p => p.triage_level === 1 && p.admission_status === 'Emergency').length > 0 && (
           <div style={{
             background: '#fee2e2',
             borderBottom: '2px solid #ef4444',
@@ -6911,6 +6912,7 @@ function NurseDashboard() {
                                 </button> : null}
                                 {!nurseCapabilities.reception && nurseCapabilities.appointments ? <button className="btn-orange" onClick={() => setView('appointments')}><Calendar size={18} /><span>{nurseNavLabels.appointments}</span></button> : null}
                                 {!nurseCapabilities.reception ? <button className="btn-gray" onClick={() => setView('patients')}><Users size={18} /><span>{nurseNavLabels.patients}</span></button> : null}
+                                {nurseCapabilities.medications ? <button className="btn-gray" onClick={() => { setActiveOrderTab('medications'); setView('orders'); }}><Pill size={18} /><span>Medication Administration</span></button> : null}
                                 {nurseCapabilities.vitals && !nurseCapabilities.erIntake ? <button className="btn-gray" onClick={() => setView('vitals')}><Activity size={18} /><span>{nurseNavLabels.vitals}</span></button> : null}
                                 {nurseCapabilities.wards ? <button className="btn-gray" onClick={() => setView('ward-management')}>
                                     <BedDouble size={18} />
