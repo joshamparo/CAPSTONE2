@@ -7,6 +7,7 @@ import { supabase } from "../lib/supabaseClient";
 import AccountHeaderActions from "../components/AccountHeaderActions";
 import ConfirmModal from "../components/ConfirmModal";
 import { checkBackendHealth, fetchJson } from "../utils/api";
+import { formatActivityLog } from "../utils/activityLogDisplay";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const WEB_ORIGIN = String(process.env.REACT_APP_WEB_ORIGIN || '').trim() || 'https://pascualinga.com';
@@ -1118,7 +1119,7 @@ function AdminDashboard() {
     try {
         try {
             const logs = await fetchJson(`/api/activity-logs?take=1000`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
-            const mapped = Array.isArray(logs) ? logs.map((l) => ({
+            const mapped = Array.isArray(logs) ? logs.map((l) => formatActivityLog({
               ...l,
               id: String(l.id || l._id || ''),
               actorName: l.actorName || l.actor_name || '',
@@ -1609,7 +1610,7 @@ function AdminDashboard() {
       try {
           setActivityLogsError("");
           const data = await fetchJson(`/api/activity-logs?take=1000`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
-          const mapped = Array.isArray(data) ? data.map((l) => ({
+          const mapped = Array.isArray(data) ? data.map((l) => formatActivityLog({
             ...l,
             id: String(l.id || l._id || ''),
             actorName: l.actorName || l.actor_name || '',
@@ -1641,7 +1642,7 @@ function AdminDashboard() {
         allRows.push(...page);
         if (page.length < 500) break;
       }
-      return allRows.map((l) => ({
+      return allRows.map((l) => formatActivityLog({
         ...l,
         id: String(l.id || l._id || ''),
         actorName: l.actorName || l.actor_name || '',
@@ -8673,7 +8674,7 @@ function AdminDashboard() {
                 const logs = activityLogs
                   .filter((l) => {
                     const actor = String(l.actorName || '').toLowerCase();
-                    const details = String(l.details || '').toLowerCase();
+                    const details = String(l.rawDetails || l.details || '').toLowerCase();
                     return (actor && actor === nameKey) || (emailKey && details.includes(emailKey));
                   })
                   .slice(0, 8);
