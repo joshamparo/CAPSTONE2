@@ -480,8 +480,8 @@ function NurseDashboard() {
     const shared = { overview: true, patients: true, schedules: true };
     const byType = {
       emergency: { ...shared, appointments: true, orders: true, reception: true, erIntake: true, vitals: true, wards: true },
-      pedia: { ...shared, appointments: true, orders: true, vitals: true },
-      bedside: { ...shared, orders: true, medications: true, vitals: true },
+      pedia: { ...shared, appointments: true, orders: true, vitals: true, wards: true },
+      bedside: { ...shared, orders: true, medications: true, vitals: true, wards: true },
       clinic: { ...shared, appointments: true, orders: true, vitals: true },
       diagnostic: { ...shared, appointments: true, orders: true },
       imaging: { ...shared, appointments: true, orders: true },
@@ -491,6 +491,7 @@ function NurseDashboard() {
     };
     return byType[nurseWorkspace.type] || byType.general;
   }, [nurseWorkspace.type]);
+  const canManageHospitalBeds = nurseWorkspace.type === 'emergency';
 
   const nurseNavLabels = useMemo(() => {
     const labelsByType = {
@@ -2784,6 +2785,8 @@ function NurseDashboard() {
   const [wardLoading, setWardLoading] = useState(false);
   const [wardError, setWardError] = useState(null);
   const [assigningPatient, setAssigningPatient] = useState(null);
+  const [bedAssignmentSaving, setBedAssignmentSaving] = useState(false);
+  const bedAssignmentInFlightRef = useRef(false);
   const [collapsedWards, setCollapsedWards] = useState({});
 
   const toggleWardCollapse = (wardId) => {
@@ -2824,6 +2827,12 @@ function NurseDashboard() {
       assignErr('Room code is required to assign patient.');
       return;
     }
+    if (bedAssignmentInFlightRef.current) return;
+    const patient = patientsList.find((item) => String(item.id || item._id || '') === patientIdClean);
+    const patientName = `${patient?.firstName || patient?.first_name || ''} ${patient?.lastName || patient?.last_name || ''}`.trim() || 'this patient';
+    if (!window.confirm(`Assign ${patientName} to bed ${roomCodeClean}?\n\nSelect OK to confirm or Cancel to go back.`)) return;
+    bedAssignmentInFlightRef.current = true;
+    setBedAssignmentSaving(true);
     try {
       await fetchJson('/api/wards/assign-patient', {
         apiBase: API_BASE,
@@ -2831,11 +2840,15 @@ function NurseDashboard() {
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ patientId: patientIdClean, roomCode: roomCodeClean })
       });
-      fetchWardRegistry();
+      await Promise.all([fetchWardRegistry(), refreshPatientsList()]);
       setAssigningPatient(null);
       addActivity('Patient Assigned', `Patient assigned to ${roomCodeClean}`, 'success');
     } catch (err) {
       assignErr(err.message || 'Failed to assign patient.');
+      fetchWardRegistry();
+    } finally {
+      bedAssignmentInFlightRef.current = false;
+      setBedAssignmentSaving(false);
     }
   };
 
@@ -6582,8 +6595,8 @@ function NurseDashboard() {
                         <div className="welcome-banner full-width">
                             <div className="welcome-text">
                                 <div className="workspace-badge workspace-bedside">Inpatient Care</div>
-                                <h1>Ward Management & Bed Assignment</h1>
-                                <p>Monitor bed occupancy and manage patient admissions/transfers across wards.</p>
+                                <h1>{canManageHospitalBeds ? 'Ward Management & Bed Assignment' : `${nurseWorkspace.shortLabel} Ward Overview`}</h1>
+                                <p>{canManageHospitalBeds ? 'Monitor bed occupancy and manage patient admissions/transfers across wards.' : 'Monitor bed occupancy for your assigned department ward.'}</p>
                             </div>
                             <div className="header-actions">
                                 <button className="btn-orange" onClick={fetchWardRegistry} disabled={wardLoading}>
@@ -6618,7 +6631,7 @@ function NurseDashboard() {
                         </div>
                     </div>
 
-                    <div className="ward-grid-layout">
+                    <div className="ward-grid-layout" style={!canManageHospitalBeds ? { gridTemplateColumns: '1fr' } : undefined}>
                         <div className="ward-visual-map">
                             <div className="overview-card">
                                 <div className="card-header">
@@ -6668,7 +6681,7 @@ function NurseDashboard() {
                                                             <div 
                                                                 key={room.id}
                                                                 className={`bed-card ${room.occupied ? 'occupied' : 'available'}`}
-                                                                onClick={() => !room.occupied && setAssigningPatient({ roomCode: room.roomCode })}
+                                                                onClick={() => canManageHospitalBeds && !room.occupied && setAssigningPatient({ roomCode: room.roomCode })}
                                                             >
                                                                 <div className="bed-card-header">
                                                                     <span className="bed-code">{room.roomCode}</span>
@@ -6687,7 +6700,7 @@ function NurseDashboard() {
                                                                                 <p className="patient-status">Admitted</p>
                                                                             </div>
                                                                         </div>
-                                                                        <button 
+                                                                        {canManageHospitalBeds ? <button
                                                                             className="discharge-btn" 
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
@@ -6695,7 +6708,7 @@ function NurseDashboard() {
                                                                             }}
                                                                         >
                                                                             Discharge
-                                                                        </button>
+                                                                        </button> : null}
                                                                     </div>
                                                                 ) : (
                                                                     <span className="bed-status-label">Available</span>
@@ -6711,7 +6724,7 @@ function NurseDashboard() {
                             </div>
                         </div>
 
-                        <div className="ward-sidebar">
+                        {canManageHospitalBeds ? <div className="ward-sidebar">
                             <div className="overview-card">
                                 <div className="card-header">
                                     <h3>Pending Admissions</h3>
@@ -6746,10 +6759,10 @@ function NurseDashboard() {
                                     )}
                                 </div>
                             </div>
-                        </div>
+                        </div> : null}
                     </div>
 
-                    {assigningPatient && (
+                    {canManageHospitalBeds && assigningPatient && (
                         <div className="modal-overlay" onClick={() => { setAssigningPatient(null); setBedSearch(''); }}>
                             <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px', padding: '24px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -6784,7 +6797,9 @@ function NurseDashboard() {
                                     overflowY: 'auto', 
                                     border: '1px solid #e2e8f0', 
                                     borderRadius: '12px',
-                                    background: '#f8fafc'
+                                    background: '#f8fafc',
+                                    pointerEvents: bedAssignmentSaving ? 'none' : 'auto',
+                                    opacity: bedAssignmentSaving ? 0.65 : 1
                                 }}>
                                     {assigningPatient.patientId ? (
                                         // Bed Selection Mode

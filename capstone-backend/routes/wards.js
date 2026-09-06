@@ -84,13 +84,19 @@ function scopeRegistryForRequest(registry, req) {
   const wardName = nurseWardName(req);
   if (req.auth?.role !== 'nurse') return registry;
   if (!wardName) return { wards: [], rooms: [], totals: { totalRooms: 0, occupied: 0, available: 0, reserved: 0, cleaning: 0, maintenance: 0, inactive: 0, overflow: 0 } };
-  // All nurses may see hospital-wide capacity. ER is the head-nurse workspace
-  // and may also see every room; other nurses only receive room-level details
-  // for their own ward.
+  // ER is the hospital-wide head-nurse workspace. Other inpatient nurses see
+  // only the ward and room totals that belong to their department.
   if (String(req.nurseDepartment || '').trim().toUpperCase() === 'ER') return registry;
-  const wards = registry.wards || [];
+  const wards = (registry.wards || []).filter((ward) => normalizeText(ward.name) === normalizeText(wardName));
   const rooms = (registry.rooms || []).filter((room) => normalizeText(room.wardName) === normalizeText(wardName));
-  return { wards, rooms, totals: registry.totals || {} };
+  const totals = wards.reduce((acc, ward) => {
+    acc.totalRooms += Number(ward.totalCapacity || 0);
+    for (const key of ['occupied', 'available', 'reserved', 'cleaning', 'maintenance', 'inactive', 'overflow']) {
+      acc[key] += Number(ward[key] || 0);
+    }
+    return acc;
+  }, { totalRooms: 0, occupied: 0, available: 0, reserved: 0, cleaning: 0, maintenance: 0, inactive: 0, overflow: 0 });
+  return { wards, rooms, totals };
 }
 
 function roomMutationFailure(err, fallbackMessage) {
@@ -699,9 +705,31 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDe
     }
 
     await prisma.$transaction(async (tx) => {
-      // Serialize assignments for this room. This closes the race where two
-      // nurses both see an available room before either update is committed.
-      await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(hashtext($1))`, String(roomCode).trim().toLowerCase());
+      // Lock both the patient and room in a stable order. This prevents two
+      // rapid clicks (or two nurses) from assigning the same patient/bed twice.
+      const lockKeys = [`patient:${patientId}`, `room:${String(roomCode).trim().toLowerCase()}`].sort();
+      for (const lockKey of lockKeys) {
+        await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(hashtext($1))`, lockKey);
+      }
+      const currentPatient = await tx.patients.findUnique({
+        where: { id: patientId },
+        select: { ward_number: true, admission_status: true }
+      });
+      const currentRoom = String(currentPatient?.ward_number || '').trim();
+      if (currentRoom && normalizeText(currentRoom) !== normalizeText(roomCode)) {
+        const pendingTransfer = await tx.$queryRaw`
+          SELECT id FROM public.clinical_orders
+          WHERE patient_id = ${patientId}::uuid
+            AND lower(kind) = 'transfer request'
+            AND lower(status) NOT IN ('completed', 'cancelled', 'rejected')
+          LIMIT 1
+        `;
+        if (!Array.isArray(pendingTransfer) || pendingTransfer.length === 0) {
+          const conflict = new Error(`This patient is already assigned to ${currentRoom}. Use the transfer workflow to change rooms.`);
+          conflict.statusCode = 409;
+          throw conflict;
+        }
+      }
       const occupiedBy = await tx.patients.findFirst({
         where: {
           ward_number: { equals: String(roomCode).trim(), mode: 'insensitive' },
