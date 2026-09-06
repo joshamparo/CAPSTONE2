@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
+const { sendError } = require('../utils/httpErrors');
 
 router.get('/', requireRole(['doctor', 'admin']), async (req, res) => {
   try {
@@ -28,7 +29,7 @@ router.get('/', requireRole(['doctor', 'admin']), async (req, res) => {
 
     res.json(serialized);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err, 'Unable to load medical certificates.');
   }
 });
 

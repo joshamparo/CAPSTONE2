@@ -8,6 +8,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { ensureBillingTablesExist, toMoney } = require('../utils/billingLedger');
 const { sendEmail } = require('../utils/mailer');
 const { appointmentEmail } = require('../utils/emailTemplates');
+const { sendError } = require('../utils/httpErrors');
 
 let supabaseAdmin = null;
 // Retained as a no-op while older trace call sites are phased out. Video
@@ -1390,7 +1391,7 @@ router.get('/debug/video-apts', async (req, res) => {
             holds: holds.map(h => ({...h, id: h.id?.toString(), appointment_id: h.appointment_id?.toString()}))
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        sendError(res, err, 'Unable to load appointments.');
     }
 });
 
@@ -1561,7 +1562,7 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
                 error: msg
             });
         }
-        res.status(500).json({ message: err.message });
+        sendError(res, err, 'Unable to update appointment.');
     }
 });
 
@@ -1623,7 +1624,7 @@ router.get('/mine', requireRole(['patient']), async (req, res) => {
 
         res.json(formatted);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        sendError(res, err, 'Unable to update appointment.');
     }
 });
 
@@ -2039,7 +2040,7 @@ router.post('/:id/triage/ai', requireRole(['admin', 'nurse', 'doctor']), async (
             triagedAt: updated.triaged_at ?? null
         });
     } catch (err) {
-        res.status(500).json({ message: err.message || 'Server error' });
+        sendError(res, err, 'Unable to load appointment availability.');
     }
 });
 
@@ -2103,7 +2104,7 @@ router.get('/unassigned', requireRole(['admin', 'doctor_secretary', 'staff']), a
             assignedAt: a.assigned_at ?? null
         })));
     } catch (e) {
-        res.status(500).json({ message: String(e.message || 'Unable to load unassigned appointments') });
+        sendError(res, e, 'Unable to load unassigned appointments.');
     }
 });
 
@@ -2557,7 +2558,7 @@ router.get('/:id/audit', requireRole(['admin', 'nurse', 'doctor', 'doctor_secret
             }))
         );
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        sendError(res, err, 'Unable to save appointment assignment.');
     }
 });
 
@@ -2960,13 +2961,28 @@ router.post('/:id/complete', requireRole(['admin', 'nurse', 'doctor']), async (r
             return res.status(400).json({ message: 'Cancelled appointments cannot be completed.' });
         }
 
-        const actor = String(req.headers['x-user-name'] || req.headers['x-user-email'] || req.headers['x-user-role'] || '').trim() || 'System';
-        const updated = await prisma.appointments.update({
-            where: { id },
-            data: { status: 'Completed', completed_at: new Date(), completed_by: actor }
-        });
+        // Completion is intentionally idempotent: a retry from a slow network must
+        // not rewrite the original completion audit time or create another event.
+        if (currentStatus === 'completed' || apt.completed_at) {
+            return res.json({
+                ...apt,
+                id: apt.id.toString(),
+                completedAt: apt.completed_at || null,
+                completedBy: apt.completed_by || null,
+                alreadyCompleted: true
+            });
+        }
 
-        await prisma.activity_logs.create({
+        const actor = String(req.headers['x-user-name'] || req.headers['x-user-email'] || req.headers['x-user-role'] || '').trim() || 'System';
+        const completedAt = new Date();
+        const claimed = await prisma.appointments.updateMany({
+            where: { id, completed_at: null },
+            data: { status: 'Completed', completed_at: completedAt, completed_by: actor }
+        });
+        const updated = await prisma.appointments.findUnique({ where: { id } });
+        if (!updated) return res.status(404).json({ message: 'Appointment not found.' });
+
+        if (Number(claimed?.count || 0) === 1) await prisma.activity_logs.create({
             data: {
                 actor_name: actor,
                 role: String(req.headers['x-user-role'] || '').trim() || 'nurse',
@@ -2980,10 +2996,11 @@ router.post('/:id/complete', requireRole(['admin', 'nurse', 'doctor']), async (r
             ...updated,
             id: updated.id.toString(),
             completedAt: updated.completed_at || null,
-            completedBy: updated.completed_by || null
+            completedBy: updated.completed_by || null,
+            alreadyCompleted: Number(claimed?.count || 0) === 0
         });
     } catch (err) {
-        return res.status(500).json({ message: String(err?.message || 'Unable to complete appointment') });
+        return sendError(res, err, 'Unable to complete appointment.');
     }
 });
 

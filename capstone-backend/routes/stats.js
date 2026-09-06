@@ -3,6 +3,7 @@ const router = express.Router();
 const { Prisma } = require('@prisma/client');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { sendError } = require('../utils/httpErrors');
 
 let adminOverviewCache = { fetchedAt: 0, payload: null, promise: null };
 const ADMIN_OVERVIEW_CACHE_MS = 1000;
@@ -278,7 +279,7 @@ router.get('/overview', requireRole(['admin', 'nurse', 'doctor', 'pharmacist', '
         });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ message: 'Server Error', error: err.message });
+        sendError(res, err, 'Unable to load dashboard statistics.');
     }
 });
 
@@ -385,7 +386,7 @@ router.get('/admin-overview', requireRole(['admin']), async (_req, res) => {
         return res.json(payload);
     } catch (err) {
         console.error(err);
-        res.status(500).json({ message: 'Server Error', error: err.message });
+        sendError(res, err, 'Unable to load dashboard statistics.');
     }
 });
 
@@ -764,7 +765,7 @@ router.get('/symptom-insights', requireRole(['admin']), async (req, res) => {
         return res.json({ ...payload, generatedAt: new Date().toISOString() });
     } catch (err) {
         console.error('[stats /symptom-insights v3] error:', err);
-        return res.status(500).json({ message: err.message || 'Server Error' });
+        return sendError(res, err, 'Unable to load dashboard statistics.');
     }
 });
 
@@ -976,7 +977,7 @@ router.get('/symptom-insights-legacy', requireRole(['admin']), async (req, res) 
         res.json({ ...payload, generatedAt: new Date().toISOString() });
     } catch (err) {
         console.error('[stats /symptom-insights] error:', err);
-        res.status(500).json({ message: err.message || 'Server Error' });
+        sendError(res, err, 'Unable to load dashboard statistics.');
     }
 });
 

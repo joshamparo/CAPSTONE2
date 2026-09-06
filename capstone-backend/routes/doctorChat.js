@@ -30,6 +30,7 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { sendError } = require('../utils/httpErrors');
 
 router.use(requireRole(['doctor']));
 
@@ -353,7 +354,7 @@ router.post('/messages', async (req, res) => {
     });
   } catch (err) {
     console.error('[doctorChat] POST /messages final catch:', err);
-    return res.status(500).json({ ok: false, error: String(err?.message || err).slice(0, 800) });
+    return sendError(res, err, 'Unable to load chat conversations.', 500, { ok: false, error: 'Unable to load chat conversations.' });
   }
 });
 
@@ -387,7 +388,7 @@ router.get('/messages', async (req, res) => {
     return res.json({ ok: true, count: normalized.length, rows: normalized, source: 'prisma-direct' });
   } catch (err) {
     console.error('[doctorChat] GET /messages:', err);
-    return res.status(500).json({ ok: false, error: String(err?.message || err).slice(0, 800), rows: [] });
+    return sendError(res, err, 'Unable to load chat messages.', 500, { ok: false, error: 'Unable to load chat messages.', rows: [] });
   }
 });
 
@@ -690,7 +691,7 @@ router.post('/attachments', upload.single('file'), async (req, res) => {
     if (err instanceof multer.MulterError) {
       return res.status(413).json({ ok: false, error: `Upload: ${err.message} (max 50MB)` });
     }
-    return res.status(500).json({ ok: false, error: String(err?.message || err).slice(0, 800) });
+    return sendError(res, err, 'Unable to send chat message.', 500, { ok: false, error: 'Unable to send chat message.' });
   }
 });
 

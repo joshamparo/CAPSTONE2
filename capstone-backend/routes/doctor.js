@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { sendError } = require('../utils/httpErrors');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 
 const NURSE_DOCTOR_SPECIALTY_ALIASES = {
@@ -208,7 +209,7 @@ router.post('/profile/update', requireRole(['doctor']), async (req, res) => {
 
   } catch (err) {
     console.error('Error updating doctor profile:', err);
-    res.status(500).json({ message: String(err?.message || 'Server error while updating profile').slice(0, 300) });
+    sendError(res, err, 'Unable to update doctor profile.');
   }
 });
 

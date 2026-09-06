@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+const { sendError } = require('../utils/httpErrors');
 
 const authorizeNurseDepartment = (req, res, next) => {
   if (req.auth?.role !== 'nurse') return next();
@@ -503,7 +504,7 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor']), authorizeNurseDepartm
       }))
     );
   } catch (err) {
-    res.status(500).json({ message: err.message || 'Failed to load ward status.' });
+    sendError(res, err, 'Failed to load ward status.');
   }
 });
 
@@ -512,7 +513,7 @@ router.get('/rooms', requireRole(['admin', 'nurse', 'doctor']), authorizeNurseDe
     const registry = await buildWardRegistry();
     res.json(scopeRegistryForRequest(registry, req));
   } catch (err) {
-    res.status(500).json({ message: err.message || 'Failed to load room registry.' });
+    sendError(res, err, 'Failed to load room registry.');
   }
 });
 
@@ -667,7 +668,7 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
     await prisma.wards.delete({ where: { id: BigInt(wardId) } });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ message: err.message || 'Failed to delete ward.' });
+    sendError(res, err, 'Failed to delete ward.');
   }
 });
 
@@ -766,7 +767,7 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDe
     res.json({ message: 'Patient assigned successfully.' });
   } catch (err) {
     console.error('[AssignPatient] Error:', err);
-    res.status(Number(err?.statusCode) || 500).json({ message: err.message || 'Failed to assign patient.' });
+    sendError(res, err, 'Failed to assign patient.');
   }
 });
 
@@ -825,7 +826,7 @@ router.post('/discharge-patient', requireRole(['admin', 'nurse']), authorizeNurs
     res.json({ message: 'Patient discharged successfully.' });
   } catch (err) {
     if (err?.code === 'P2025') return res.status(404).json({ message: 'Patient not found.' });
-    res.status(500).json({ message: err.message || 'Failed to discharge patient.' });
+    sendError(res, err, 'Failed to discharge patient.');
   }
 });
 

@@ -3,6 +3,7 @@ const requireRole = require('../middleware/requireRole');
 const prisma = require('../utils/prisma');
 const { getSystemSettings, saveSystemSettings } = require('../utils/systemSettingsStore');
 const { createRateLimiter } = require('../utils/rateLimit');
+const { sendError } = require('../utils/httpErrors');
 
 const router = express.Router();
 const settingsWriteRateLimit = createRateLimiter({
@@ -23,7 +24,7 @@ router.get('/public', async (_req, res) => {
     res.set('Cache-Control', 'private, no-store, no-cache, must-revalidate');
     res.json(safe);
   } catch (err) {
-    res.status(500).json({ message: err.message || 'Failed to load public system status.', maintenanceMode: false });
+    sendError(res, err, 'Failed to load public system status.', 500, { maintenanceMode: false });
   }
 });
 
@@ -32,7 +33,7 @@ router.get('/', requireRole(['admin']), async (_req, res) => {
     const settings = await getSystemSettings({ force: true });
     res.json(settings);
   } catch (err) {
-    res.status(500).json({ message: err.message || 'Failed to load system settings.' });
+    sendError(res, err, 'Failed to load system settings.');
   }
 });
 
@@ -51,7 +52,7 @@ router.put('/', requireRole(['admin']), settingsWriteRateLimit, async (req, res)
     }).catch(() => {});
     res.json(settings);
   } catch (err) {
-    res.status(err.statusCode || 500).json({ message: err.message || 'Failed to save system settings.' });
+    sendError(res, err, 'Failed to save system settings.');
   }
 });
 

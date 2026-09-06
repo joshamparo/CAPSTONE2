@@ -4,6 +4,7 @@ const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { normalizeEmail, parseLimit, parseOffset } = require('../utils/normalize');
 const { syncHmoDataFromAppointmentToInvoice } = require('../utils/billingLedger');
+const { sendError } = require('../utils/httpErrors');
 
 
 const STAFF_ROLE_SET = new Set(['doctor_secretary', 'cashier', 'admin', 'doctor']);
@@ -625,7 +626,7 @@ router.get('/invoices/summary', async (req, res) => {
     ]);
     res.json({ todayCount, readyCount, openCount });
   } catch (err) {
-    res.status(500).json({ message: String(err?.message || 'Failed to load invoice summary') });
+    sendError(res, err, 'Failed to load invoice summary.');
   }
 });
 
@@ -1368,7 +1369,7 @@ router.get('/hmo-debug', async (req, res) => {
       last5_appointments_HMO: apptsLast5
     });
   } catch (err) {
-    res.status(500).json({ error: String(err?.message || err) });
+    sendError(res, err, 'Unable to process billing request.', 500, { ok: false, error: 'Unable to process billing request.' });
   }
 });
 
@@ -2990,7 +2991,7 @@ router.get('/generate-ref', async (req, res) => {
       saved
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: String(err?.message || err) });
+    return sendError(res, err, 'Unable to process payment.', 500, { ok: false, error: 'Unable to process payment.' });
   }
 });
 
@@ -3202,7 +3203,7 @@ router.get('/search-by-ref', async (req, res) => {
       rows: results
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: String(err?.message || err) });
+    return sendError(res, err, 'Unable to reconcile payment.', 500, { ok: false, error: 'Unable to reconcile payment.' });
   }
 });
 

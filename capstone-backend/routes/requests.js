@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { sendError } = require('../utils/httpErrors');
 
 const normalizeRole = (v) => String(v || '').trim().toLowerCase();
 const headerRole = (req) => normalizeRole(req.headers['x-user-role']);
@@ -191,7 +192,7 @@ router.post('/', async (req, res) => {
         res.status(201).json({ ...serialize(newRequest), id: newRequest.id.toString() });
     } catch (err) {
         console.error("Error creating request:", err);
-        res.status(500).json({ message: "Server Error", error: err.message });
+        sendError(res, err, 'Unable to load requests.');
     }
 });
 
@@ -253,7 +254,7 @@ router.get('/', async (req, res) => {
         
         res.status(200).json(formattedRequests);
     } catch (err) {
-        res.status(500).json({ message: "Server Error", error: err.message });
+        sendError(res, err, 'Unable to save request.');
     }
 });
 
@@ -506,7 +507,7 @@ router.put('/:id', async (req, res) => {
         res.json(serialize(updatedRequest));
     } catch (err) {
         console.error('Error processing pharmacy request:', err);
-        res.status(Number(err?.statusCode) || 400).json({ message: String(err?.message || 'Unable to process request.') });
+        sendError(res, err, 'Unable to process request.', 400);
     }
 });
 

@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
+const { sendError } = require('../utils/httpErrors');
 
 async function ensurePharmacyColumns() {
   await prisma.$executeRawUnsafe(`
@@ -143,7 +144,7 @@ router.get('/', requireRole(['doctor', 'admin', 'pharmacist']), async (req, res)
     // Serialize ID
     res.json(prescriptions);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err, 'Unable to load prescriptions.');
   }
 });
 
@@ -167,7 +168,7 @@ router.get('/:id', requireRole(['doctor', 'admin', 'pharmacist']), async (req, r
       ...defaultPharmacyFields(pharmacyMeta.get(p.id.toString()) || p)
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err, 'Unable to save prescription.');
   }
 });
 

@@ -4,6 +4,7 @@ const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { normalizeEmail, parseLimit, parseOffset } = require('../utils/normalize');
 const { canRequestPatientScope } = require('../utils/doctorAccess');
+const { sendError } = require('../utils/httpErrors');
 
 
 const serialize = (obj) =>
@@ -247,7 +248,7 @@ router.get('/patients', requireRole(['doctor', 'admin']), async (req, res) => {
     res.json(serialize({ total, take, skip, rows }));
   } catch (err) {
     console.error('ERROR in /patients:', err);
-    res.status(500).json({ message: 'Server error: ' + err.message });
+    sendError(res, err, 'Unable to load doctor patients.');
   }
 });
 

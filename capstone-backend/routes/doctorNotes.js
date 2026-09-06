@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
+const { sendError } = require('../utils/httpErrors');
 
 async function ensureClinicalDetailsColumn() {
   await prisma.$executeRawUnsafe('ALTER TABLE public.doctor_notes ADD COLUMN IF NOT EXISTS clinical_details jsonb;');
@@ -37,7 +38,7 @@ router.get('/', requireRole(['doctor', 'admin']), async (req, res) => {
     
     res.json(serialized);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err, 'Unable to load clinical notes.');
   }
 });
 

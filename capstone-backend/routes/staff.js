@@ -10,6 +10,7 @@ const { normalizeEmail, normalizeRole } = require('../utils/normalize');
 const { createSessionToken } = require('../utils/sessionToken');
 const { createPasswordResetToken, hashResetToken, resetTokenIsValid } = require('../utils/passwordReset');
 const { createRateLimiter } = require('../utils/rateLimit');
+const { sendError } = require('../utils/httpErrors');
 const { sendRecoveryEmail } = require('../utils/recoveryMailer');
 const { sendStaffInvitationEmail } = require('../utils/staffInvitationMailer');
 const { selectCanonicalAccount } = require('../utils/accountMatch');
@@ -590,7 +591,7 @@ router.post('/logout', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         
         res.json({ message: "Logged out successfully" });
     } catch (err) {
-        res.status(500).json({ message: "Server Error", error: err.message });
+        sendError(res, err, 'Unable to sign in.');
     }
 });
 
@@ -637,7 +638,7 @@ router.post('/heartbeat', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => 
         await setPresenceOnline(modelType, targetId);
         res.json({ message: "Heartbeat received" });
     } catch (err) {
-        res.status(500).json({ message: "Server Error", error: err.message });
+        sendError(res, err, 'Unable to verify sign-in.');
     }
 });
 
@@ -754,7 +755,7 @@ router.post('/avatar', requireRole(STAFF_ACCOUNT_TYPES), upload.single('avatar')
         });
 
         if (uploadRes?.error) {
-            return res.status(500).json({ message: uploadRes.error.message || 'Upload failed' });
+            return sendError(res, uploadRes.error, 'Unable to upload profile image.');
         }
 
         const publicUrl = sb.storage.from(bucket).getPublicUrl(path)?.data?.publicUrl || null;
@@ -1058,11 +1059,10 @@ router.post('/', requireRole(['admin']), async (req, res) => {
             return res.status(400).json({ message: `Account type is not allowed for the staff table — try selecting a different role or specialization. (${err.code || '23514'})` });
         }
         if (String(err?.message || '').includes('invalid input syntax') || String(err?.message || '').includes('uuid')) {
-            return res.status(400).json({ message: `Database UUID mismatch — ${String(err.message).slice(0,180)}` });
+            return res.status(400).json({ message: 'The selected staff details contain an invalid identifier. Refresh and try again.' });
         }
         console.error("STAFF CREATE ERROR:", err?.code || 'NO_CODE', err?.message || 'NO_MESSAGE', err?.meta || 'NO_META');
-        const safeMsg = String(err?.message || '').slice(0, 300) || 'Database rejected the staff creation request.';
-        res.status(500).json({ message: safeMsg, code: err?.code, prismaMeta: err?.meta ? String(JSON.stringify(err.meta)).slice(0,200) : undefined });
+        sendError(res, err, 'Unable to create the staff account.');
     }
 });
 
@@ -1328,7 +1328,7 @@ router.get('/doctor-secretaries', requireRole(['admin', 'nurse', 'doctor_secreta
                 .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
         );
     } catch (err) {
-        res.status(500).json({ message: String(err?.message || 'Server error') });
+        sendError(res, err, 'Unable to load staff records.');
     }
 });
 
@@ -1349,7 +1349,7 @@ router.get('/settings', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             updatedAt: row?.updated_at || null
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        sendError(res, err, 'Unable to load staff record.');
     }
 });
 
@@ -1378,7 +1378,7 @@ router.put('/settings', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         const row = Array.isArray(rows) ? rows[0] : null;
         res.json({ prefs: row?.prefs || {}, updatedAt: row?.updated_at || null });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        sendError(res, err, 'Unable to update staff record.');
     }
 });
 
@@ -2123,7 +2123,7 @@ router.get('/notifications', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) 
         const totalUnread = items.reduce((acc, it) => acc + (Number(it.unreadCount || 0) || 0), 0);
         res.json({ unreadCount: totalUnread, items });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        sendError(res, err, 'Unable to update staff record.');
     }
 });
 
@@ -2379,7 +2379,7 @@ router.post('/notifications/mark-all-read', requireRole(STAFF_ACCOUNT_TYPES), as
 
         res.json({ ok: true });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        sendError(res, err, 'Unable to update staff account.');
     }
 });
 
@@ -2443,7 +2443,7 @@ router.post('/notifications/mark-read', requireRole(STAFF_ACCOUNT_TYPES), async 
 
         res.json({ ok: true });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        sendError(res, err, 'Unable to update staff account.');
     }
 });
 

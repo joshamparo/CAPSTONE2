@@ -3,6 +3,7 @@ const router = express.Router();
 const { Prisma } = require('@prisma/client');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { sendError } = require('../utils/httpErrors');
 const { normalizeEmail, parseLimit, parseOffset, parseDate } = require('../utils/normalize');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -1428,7 +1429,7 @@ router.post('/doctors/:doctorId/availability/exceptions', requireRole(['doctor_s
     try {
       supaRow = await upsertBlockedDateSupabase({ doctorId, date: dKey, startTime, endTime, reason: note });
     } catch (e) {
-      return res.status(500).json({ message: String(e?.message || 'Supabase sync failed') });
+      return sendError(res, e, 'Unable to synchronize doctor availability.');
     }
 
     try {
@@ -1507,7 +1508,7 @@ router.post('/availability/exceptions/bulk', requireRole(['admin']), async (req,
     try {
       await upsertBlockedDatesSupabaseBulk({ doctorIds, date: dKey, startTime, endTime, reason: note });
     } catch (e) {
-      return res.status(500).json({ message: String(e?.message || 'Supabase bulk sync failed') });
+      return sendError(res, e, 'Unable to synchronize doctor availability.');
     }
 
     try {
@@ -1561,7 +1562,7 @@ router.delete('/availability/exceptions/bulk', requireRole(['admin']), async (re
     try {
       await deleteBlockedDatesSupabaseBulk({ doctorIds, date: dKey });
     } catch (e) {
-      return res.status(500).json({ message: String(e?.message || 'Supabase bulk delete failed') });
+      return sendError(res, e, 'Unable to remove doctor availability.');
     }
 
     try {
@@ -1592,7 +1593,7 @@ router.delete('/doctors/:doctorId/availability/exceptions/:id', requireRole(['do
     try {
       await deleteBlockedDateSupabase({ doctorId, id: idRaw });
     } catch (e) {
-      return res.status(500).json({ message: String(e?.message || 'Supabase delete failed') });
+      return sendError(res, e, 'Unable to remove doctor availability.');
     }
 
     try {

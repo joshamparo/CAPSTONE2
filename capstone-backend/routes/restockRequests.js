@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { sendError } = require('../utils/httpErrors');
 
 async function ensureTable() {
   await prisma.$executeRawUnsafe(`
@@ -193,7 +194,7 @@ router.get('/', async (req, res) => {
     const serialized = (Array.isArray(rows) ? rows : []).map(serializeRow);
     res.json(serialized);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err, 'Unable to process restock request.');
   }
 });
 

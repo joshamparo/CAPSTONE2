@@ -10,6 +10,7 @@ const { sendEmail } = require('../utils/mailer');
 const { appointmentEmail } = require('../utils/emailTemplates');
 const { patientUpdateAccess, sanitizePatientUpdateForRole } = require('../utils/patientUpdateAccess');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+const { sendError } = require('../utils/httpErrors');
 const { nursePatientScope, isCentralIntakeRequest } = require('../utils/nursePatientAccess');
 
 let _supabaseAdmin = null;
@@ -1421,7 +1422,7 @@ router.post('/er-registration', requireRole(['admin', 'nurse']), async (req, res
             }
         });
     } catch (err) {
-        res.status(500).json({ message: err.message || 'Error registering ER patient' });
+        sendError(res, err, 'Unable to register ER patient.');
     }
 });
 
@@ -2877,7 +2878,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             hmo: result.hmoSummary || null
         });
     } catch (err) {
-        res.status(err.statusCode || 500).json({ message: err.message || 'Error processing walk-in intake' });
+        sendError(res, err, 'Unable to process walk-in intake.');
     }
 });
 
@@ -3103,7 +3104,7 @@ router.put('/:id', async (req, res) => {
         if (err.code === 'P2025') {
             return res.status(404).json({ message: "Patient not found" });
         }
-        res.status(500).json({ message: "Error updating patient", error: String(err.message || '') });
+        sendError(res, err, 'Unable to update patient.');
     }
 });
 

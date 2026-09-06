@@ -7,6 +7,7 @@ const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
 const { createClient } = require('@supabase/supabase-js');
 const { recordVideoConsultationPayment } = require('../utils/billingLedger');
+const { sendError } = require('../utils/httpErrors');
 
 let supabaseAdmin = null;
 function isUuid(value) {
@@ -1244,7 +1245,7 @@ router.get('/inbox', async (req, res) => {
 
     res.json(list);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    sendError(res, err, 'Unable to load approval requests.');
   }
 });
 
@@ -1298,7 +1299,7 @@ router.get('/cleanup-demo', async (req, res) => {
       deletedActivityLogs: deletedActivity.count
     });
   } catch (err) {
-    res.status(Number(err?.statusCode) || 400).json({ message: err.message });
+    sendError(res, err, 'Unable to remove approval request data.', 400);
   }
 });
 
@@ -1371,7 +1372,7 @@ router.get('/reconciliation/video-payments', async (req, res) => {
       counts: Object.fromEntries(Object.entries(report).filter(([key]) => key !== 'generatedAt').map(([key, rows]) => [key, rows.length]))
     });
   } catch (err) {
-    res.status(500).json({ message: err.message || 'Unable to reconcile paid video consultations.' });
+    sendError(res, err, 'Unable to reconcile paid video consultations.');
   }
 });
 
@@ -1394,7 +1395,7 @@ router.get('/:id', async (req, res) => {
     if (hdr.role === 'doctor') await requireDoctorRequestAccess(r, hdr);
     res.json(serializeRequestRow(r));
   } catch (err) {
-    res.status(Number(err?.statusCode) || 400).json({ message: err.message });
+    sendError(res, err, 'Unable to load approval request.', 400);
   }
 });
 
@@ -1443,7 +1444,7 @@ router.get('/:id/messages', async (req, res) => {
       messages: (Array.isArray(msgRows) ? msgRows : []).map(serializeMessageRow)
     });
   } catch (err) {
-    res.status(Number(err?.statusCode) || 400).json({ message: err.message });
+    sendError(res, err, 'Unable to load approval messages.', 400);
   }
 });
 
@@ -1513,7 +1514,7 @@ router.post('/', async (req, res) => {
 
     res.status(201).json(serializeRequestRow(created));
   } catch (err) {
-    res.status(Number(err?.statusCode) || 400).json({ message: err.message });
+    sendError(res, err, 'Unable to create approval request.', 400);
   }
 });
 
@@ -1569,7 +1570,7 @@ router.post('/:id/messages', async (req, res) => {
 
     res.status(201).json(serializeMessageRow(created));
   } catch (err) {
-    res.status(Number(err?.statusCode) || 400).json({ message: err.message });
+    sendError(res, err, 'Unable to send approval message.', 400);
   }
 });
 
@@ -1914,7 +1915,7 @@ router.patch('/:id', async (req, res) => {
 
     res.json(serializeRequestRow(updated));
   } catch (err) {
-    res.status(Number(err?.statusCode) || 400).json({ message: err.message });
+    sendError(res, err, 'Unable to update approval request.', 400);
   }
 });
 
@@ -2064,7 +2065,7 @@ router.post('/:id/finalize', async (req, res) => {
 
     res.json(serializeRequestRow(updated));
   } catch (err) {
-    res.status(Number(err?.statusCode) || 400).json({ message: err.message });
+    sendError(res, err, 'Unable to finalize appointment.', 400);
   }
 });
 
