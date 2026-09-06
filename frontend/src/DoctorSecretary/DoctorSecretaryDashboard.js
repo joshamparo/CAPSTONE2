@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Inbox, LayoutDashboard, RefreshCw, ShieldAlert, XCircle, User, Upload, Save, Eye, EyeOff, Search, CreditCard, WalletCards, Menu, X, HelpCircle } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Download, Inbox, LayoutDashboard, Printer, RefreshCw, ShieldAlert, XCircle, User, Upload, Save, Eye, EyeOff, Search, CreditCard, WalletCards, Menu, X, HelpCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
@@ -78,6 +78,16 @@ const toMoney = (v) => {
   if (!Number.isFinite(n)) return '0.00';
   return n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+const csvCell = (value) => {
+  let text = String(value ?? '');
+  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+};
+
+const htmlCell = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[char]));
 
 const toDateInput = (d) => {
   const dt = d instanceof Date ? d : new Date();
@@ -353,6 +363,17 @@ export default function DoctorSecretaryDashboard() {
   const [onsiteInbox, setOnsiteInbox] = useState([]);
   const [onsiteInboxLoading, setOnsiteInboxLoading] = useState(false);
   const [onsiteInboxError, setOnsiteInboxError] = useState('');
+  const [onsiteInboxPage, setOnsiteInboxPage] = useState(1);
+  const onsiteInboxPerPage = 5;
+  const onsiteInboxPageCount = Math.max(1, Math.ceil(onsiteInbox.length / onsiteInboxPerPage));
+  const paginatedOnsiteInbox = useMemo(() => {
+    const page = Math.min(onsiteInboxPage, onsiteInboxPageCount);
+    return onsiteInbox.slice((page - 1) * onsiteInboxPerPage, page * onsiteInboxPerPage);
+  }, [onsiteInbox, onsiteInboxPage, onsiteInboxPageCount]);
+
+  useEffect(() => {
+    setOnsiteInboxPage((page) => Math.min(Math.max(1, page), onsiteInboxPageCount));
+  }, [onsiteInboxPageCount]);
   const [onsiteDoctors, setOnsiteDoctors] = useState([]);
   const [onsiteDoctorsLoading, setOnsiteDoctorsLoading] = useState(false);
   const [onsiteDoctorsError, setOnsiteDoctorsError] = useState('');
@@ -385,6 +406,47 @@ export default function DoctorSecretaryDashboard() {
   const [availabilityCalendarMonth, setAvailabilityCalendarMonth] = useState(toDateInput(new Date()).slice(0, 7));
 
   const headers = useMemo(() => buildHeaders({ ...user, role: 'doctor_secretary' }), [user]);
+
+  const patientRecordRows = () => records.map((record) => ({
+    date: fmtDate(record.appointmentDate || record.appointment_date),
+    time: fmtTime(record.appointmentTime || record.appointment_time),
+    patient: `${norm(record.firstName || record.first_name)} ${norm(record.lastName || record.last_name)}`.trim() || 'Patient',
+    email: norm(record.email),
+    service: norm(record.reason) || '—',
+    status: norm(record.status) || '—',
+    payment: norm(record.payment_status || record.paymentStatus) || '—'
+  }));
+
+  const exportPatientRecordsCsv = () => {
+    const rows = patientRecordRows();
+    if (!rows.length) return;
+    const headings = ['Date', 'Time', 'Patient', 'Email', 'Service / Reason', 'Status', 'Payment'];
+    const csv = [headings, ...rows.map((row) => Object.values(row))]
+      .map((row) => row.map(csvCell).join(','))
+      .join('\r\n');
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `patient-records-${recordsDate || toDateInput(new Date())}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const printPatientRecords = () => {
+    const rows = patientRecordRows();
+    if (!rows.length) return;
+    const popup = window.open('', '_blank');
+    if (!popup) {
+      setRecordsError('Printing was blocked by the browser. Allow pop-ups and try again.');
+      return;
+    }
+    popup.opener = null;
+    const body = rows.map((row) => `<tr>${Object.values(row).map((value) => `<td>${htmlCell(value)}</td>`).join('')}</tr>`).join('');
+    popup.document.write(`<!doctype html><html><head><title>Patient Records</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#0f172a}h1{font-size:20px}p{color:#64748b}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #cbd5e1;padding:8px;text-align:left}th{background:#f1f5f9}@media print{body{padding:0}}</style></head><body><h1>Pascual General Hospital — Patient Records</h1><p>${htmlCell(linkedDoctor?.name || 'Linked doctor')} • ${htmlCell(recordsDate || 'All available records')}</p><table><thead><tr><th>Date</th><th>Time</th><th>Patient</th><th>Email</th><th>Service / Reason</th><th>Status</th><th>Payment</th></tr></thead><tbody>${body}</tbody></table><script>window.onload=()=>{window.print();window.close();}<\/script></body></html>`);
+    popup.document.close();
+  };
 
   const refreshAvailability = async ({ silent } = {}) => {
     if (!linkedDoctorId) {
@@ -946,7 +1008,6 @@ export default function DoctorSecretaryDashboard() {
     try {
       const params = new URLSearchParams();
       params.set('specialization', spec);
-      params.set('date', recordsDate || toDateInput(new Date()));
       params.set('take', '200');
       const rows = await fetchJson(`/api/appointments/unassigned?${params.toString()}`, { apiBase: API_BASE, headers });
       setOnsiteInbox(Array.isArray(rows) ? rows : []);
@@ -1194,7 +1255,9 @@ export default function DoctorSecretaryDashboard() {
     if (activeTab !== 'onsite-inbox') return;
     refreshOnsiteDoctors({ silent: true }).catch(() => {});
     refreshOnsiteInbox({ silent: true }).catch(() => {});
-  }, [activeTab, recordsDate, linkedDoctor?.specialization]);
+    const timer = setInterval(() => refreshOnsiteInbox({ silent: true }).catch(() => {}), 8000);
+    return () => clearInterval(timer);
+  }, [activeTab, linkedDoctor?.specialization]);
 
   useEffect(() => {
     if (activeTab !== 'patient-records') return;
@@ -1888,7 +1951,11 @@ export default function DoctorSecretaryDashboard() {
                   <div className="sec-toolbar-sub">Unassigned bookings for {linkedDoctor?.specialization || 'your department'} (secretary assigns a doctor).</div>
                 </div>
                 <div className="sec-records-right">
-                  <input className="sec-date" type="date" value={recordsDate} onChange={(e) => setRecordsDate(e.target.value)} />
+                  <div className="sec-pagination" aria-label="Onsite inbox pagination">
+                    <button type="button" className="sec-pagination-btn" aria-label="Previous page" onClick={() => setOnsiteInboxPage((page) => Math.max(1, page - 1))} disabled={onsiteInboxPage <= 1 || onsiteInboxLoading}><ChevronLeft size={16} /></button>
+                    <span className="sec-pagination-info">{Math.min(onsiteInboxPage, onsiteInboxPageCount)} / {onsiteInboxPageCount}</span>
+                    <button type="button" className="sec-pagination-btn" aria-label="Next page" onClick={() => setOnsiteInboxPage((page) => Math.min(onsiteInboxPageCount, page + 1))} disabled={onsiteInboxPage >= onsiteInboxPageCount || onsiteInboxLoading}><ChevronRight size={16} /></button>
+                  </div>
                   <button className="sec-btn ghost" type="button" onClick={() => refreshOnsiteInbox({ silent: false })} disabled={onsiteInboxLoading}>
                     <RefreshCw size={16} className={onsiteInboxLoading ? 'animate-spin' : ''} /> Refresh
                   </button>
@@ -1915,7 +1982,7 @@ export default function DoctorSecretaryDashboard() {
                     ) : onsiteInbox.length === 0 ? (
                       <tr><td colSpan={5} style={{ padding: 16, color: '#64748b' }}>No pending onsite bookings for assignment.</td></tr>
                     ) : (
-                      onsiteInbox.map((apt) => {
+                      paginatedOnsiteInbox.map((apt) => {
                         const name = `${norm(apt.firstName || apt.first_name)} ${norm(apt.lastName || apt.last_name)}`.trim() || '—';
                         const dRaw = apt.appointmentDate || apt.appointment_date || null;
                         const d = dRaw ? new Date(dRaw) : null;
@@ -1967,6 +2034,12 @@ export default function DoctorSecretaryDashboard() {
                     <option value="Completed">Completed</option>
                     <option value="Paid">Paid</option>
                   </select>
+                  <button className="sec-btn ghost" type="button" onClick={exportPatientRecordsCsv} disabled={recordsLoading || records.length === 0} title="Export the displayed patient records as a safe CSV file">
+                    <Download size={16} /> CSV
+                  </button>
+                  <button className="sec-btn ghost" type="button" onClick={printPatientRecords} disabled={recordsLoading || records.length === 0}>
+                    <Printer size={16} /> Print
+                  </button>
                   <button className="sec-btn ghost" type="button" onClick={() => refreshRecords({ silent: false })} disabled={recordsLoading}>
                     <RefreshCw size={16} className={recordsLoading ? 'animate-spin' : ''} /> Refresh
                   </button>

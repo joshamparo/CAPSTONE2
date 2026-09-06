@@ -137,6 +137,12 @@ function DoctorDashboard() {
   const [queueFilter, setQueueFilter] = useState('all'); // all | video
   const [queueScope, setQueueScope] = useState('mine'); // mine | specialization
   const [queueDateMode, setQueueDateMode] = useState('upcoming'); // upcoming | date
+  const [queuePage, setQueuePage] = useState(1);
+  const queuePageSize = 5;
+
+  useEffect(() => {
+    setQueuePage(1);
+  }, [queueFilter, queueScope, queueDateMode, selectedDate]);
 
   // Patient Records State
   const [recordList, setRecordList] = useState([]);
@@ -3406,7 +3412,12 @@ function DoctorDashboard() {
               return <div className="doc-empty">No patients in queue.</div>;
             }
 
-            return filtered.map((apt) => (
+            const pageCount = Math.max(1, Math.ceil(filtered.length / queuePageSize));
+            const currentPage = Math.min(queuePage, pageCount);
+            const pageRows = filtered.slice((currentPage - 1) * queuePageSize, currentPage * queuePageSize);
+
+            return <>
+            {pageRows.map((apt) => (
               <div
                 key={apt.id}
                 className="doc-apt"
@@ -3549,7 +3560,19 @@ function DoctorDashboard() {
                   </span>
                 </div>
               </div>
-            ));
+            ))}
+            {pageCount > 1 ? (
+              <div className="doc-pagination" aria-label="Waiting room pagination">
+                <button type="button" className="doc-pagination-btn" aria-label="Previous page" onClick={() => setQueuePage((page) => Math.max(1, page - 1))} disabled={currentPage === 1}>
+                  <ChevronLeft size={17} />
+                </button>
+                <span className="doc-pagination-info">Page {currentPage} of {pageCount}</span>
+                <button type="button" className="doc-pagination-btn" aria-label="Next page" onClick={() => setQueuePage((page) => Math.min(pageCount, page + 1))} disabled={currentPage === pageCount}>
+                  <ChevronRight size={17} />
+                </button>
+              </div>
+            ) : null}
+            </>;
           })()
         )}
       </div>
@@ -6308,6 +6331,8 @@ function DoctorDashboard() {
           </div>
         )}
 
+        </div>
+
         <PatientFullRecordModal
           open={centralRecordOpen}
           onClose={() => setCentralRecordOpen(false)}
@@ -6315,8 +6340,8 @@ function DoctorDashboard() {
           patientLabel={centralRecordPatientLabel}
           role="doctor"
           user={currentUser}
+          extraHeaders={authHeaders}
         />
-        </div>
 
         {showFullRecord && (
           <div className="doc-modal-overlay" onClick={() => setShowFullRecord(false)}>

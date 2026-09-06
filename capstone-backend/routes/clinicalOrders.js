@@ -593,7 +593,10 @@ router.post('/', async (req, res) => {
       const targetNurseDepartment = isBedManagementRequest ? 'ER' : doctorDepartment;
       if (!targetNurseDepartment) return res.status(409).json({ message: 'Your doctor account has no specialization for nurse routing.' });
       const nurses = await prisma.nurses.findMany({
-        where: { is_active: true },
+        // Bed-management requests must reach the ER head-nurse queue even
+        // while that account is offline/deactivated. Other clinical orders
+        // continue to require an active destination account.
+        where: isBedManagementRequest ? {} : { is_active: true },
         select: { email: true, specialization: true, department: true, first_name: true, last_name: true },
         take: 200
       }).catch(() => []);
@@ -602,9 +605,16 @@ router.post('/', async (req, res) => {
         && normalizeEmail(nurse?.email || '')
       ));
       if (!matchingNurse) {
-        return res.status(409).json({ message: `No active ${targetNurseDepartment} nurse is available for this order.` });
+        if (isBedManagementRequest) {
+          // Admission/transfer requests belong to the shared ER queue. Do not
+          // block the doctor merely because no ER nurse is currently online.
+          assignedToFinal = null;
+        } else {
+          return res.status(409).json({ message: `No active ${targetNurseDepartment} nurse is available for this order.` });
+        }
+      } else {
+        assignedToFinal = normalizeEmail(matchingNurse.email);
       }
-      assignedToFinal = normalizeEmail(matchingNurse.email);
     }
 
     if (isBedManagementRequest) {
