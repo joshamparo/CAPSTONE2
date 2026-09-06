@@ -10451,8 +10451,11 @@ function NurseDashboard() {
         <ModalShell
           open={walkInNextStepsOpen}
           onClose={() => setWalkInNextStepsOpen(false)}
-          maxWidth={680}
+          maxWidth={440}
+          maxHeight="calc(100dvh - 24px)"
           showCloseButton={true}
+          className="intake-receipt-modal"
+          bodyClassName="intake-receipt-modal-body"
         >
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
               {/* ================================================================ */}
@@ -10461,21 +10464,22 @@ function NurseDashboard() {
               {/* This is the NEW document the nurse prints for the patient. */}
               {/* Contains: REFERENCE #, Patient, Company, HMO, Services, Vitals */}
               <div id="intake-report-print-area" style={{
-                width: '100%',
+                width: 'min(100%, 360px)',
+                alignSelf: 'center',
                 background: '#ffffff',
                 border: '1px solid #000000',
-                borderRadius: '6px',
-                padding: '22px 18px',
-                marginBottom: 20,
+                borderRadius: '4px',
+                padding: '16px 14px',
+                marginBottom: 12,
                 fontFamily: '"Courier New", "Consolas", monospace',
                 color: '#000000',
-                fontSize: '13.5px',
-                lineHeight: '1.55',
+                fontSize: '11.5px',
+                lineHeight: '1.4',
                 boxSizing: 'border-box'
               }}>
-                <div style={{ textAlign: 'center', marginBottom: 14, paddingBottom: 12, borderBottom: '1px dashed #000000' }}>
-                  <div style={{ fontWeight: 900, fontSize: '17px', letterSpacing: '0.03em', textTransform: 'uppercase', color: '#000000' }}>Pascual General Hospital</div>
-                  <div style={{ fontWeight: 700, fontSize: '14.5px', marginTop: 4, color: '#000000' }}>PATIENT INTAKE REPORT</div>
+                <div style={{ textAlign: 'center', marginBottom: 10, paddingBottom: 9, borderBottom: '1px dashed #000000' }}>
+                  <div style={{ fontWeight: 900, fontSize: '14px', letterSpacing: '0.03em', textTransform: 'uppercase', color: '#000000' }}>Pascual General Hospital</div>
+                  <div style={{ fontWeight: 700, fontSize: '11.5px', marginTop: 2, color: '#000000' }}>PATIENT INTAKE RECEIPT</div>
                 </div>
 
                 {/* REFERENCE NUMBER: boxed, biggest text, center */}
@@ -10484,18 +10488,15 @@ function NurseDashboard() {
                   return (
                     <div style={{
                       textAlign: 'center',
-                      marginBottom: 16,
-                      padding: '14px 10px',
-                      border: '2px solid #000000',
-                      borderRadius: '8px',
+                      marginBottom: 10,
+                      padding: '8px 7px',
+                      border: '1px solid #000000',
+                      borderRadius: '3px',
                       background: '#ffffff'
                     }}>
-                      <div style={{ fontWeight: 800, fontSize: '11px', color: '#000000', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>REFERENCE NUMBER</div>
-                      <div style={{ fontWeight: 900, fontSize: '28px', color: '#000000', letterSpacing: '0.04em' }}>
-                        {refNum || '—'}
-                      </div>
-                      <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed #000000', fontSize: '10.5px', letterSpacing: '0.12em', fontWeight: 700, color: '#000000', textTransform: 'uppercase' }}>
-                        [BUILD 2026-08-17 v3 · CASHIER REF# FLOW ACTIVE]
+                      <div style={{ fontWeight: 800, fontSize: '9px', color: '#000000', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3 }}>CASHIER REFERENCE</div>
+                      <div style={{ fontWeight: 900, fontSize: refNum ? '19px' : '11px', color: '#000000', letterSpacing: refNum ? '0.03em' : 0 }}>
+                        {refNum || 'Pending cashier assignment'}
                       </div>
                     </div>
                   );
@@ -10613,10 +10614,10 @@ function NurseDashboard() {
                 </div>
 
                 <div style={{ textAlign: 'center', paddingTop: 10, borderTop: '3px double #000000' }}>
-                  <div style={{ fontWeight: 900, fontSize: '12.5px', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#000000' }}>
+                  <div style={{ fontWeight: 900, fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>
                     PRESENT THIS RECEIPT TO CASHIER
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: '12px', marginTop: 4, color: '#000000' }}>
+                  <div style={{ fontWeight: 700, fontSize: '10px', marginTop: 3, color: '#000000' }}>
                     for final settlement BEFORE any procedure or exam.
                   </div>
                 </div>
@@ -10629,12 +10630,12 @@ function NurseDashboard() {
                 const isHmo = Boolean(hmo && typeof hmo === 'object' && (String(hmo.provider || hmo.hmo_provider || '').trim() || String(hmo.card_number || hmo.hmo_card_number || '').trim() || String(hmo.loa_number || hmo.hmo_loa_number || hmo.loaNumber || '').trim()));
                 if (isHmo) return null; // HMO patient: receipt document lang, no ticket
                 return (
-                  <div style={{ background: '#f8fafc', padding: '16px 18px', borderRadius: '14px', width: '100%', marginBottom: 18, border: '1px solid #e2e8f0' }}>
+                  <div style={{ background: '#f8fafc', padding: '9px 12px', borderRadius: '8px', width: 'min(100%, 360px)', alignSelf: 'center', marginBottom: 10, border: '1px solid #e2e8f0' }}>
                     {walkInNextSteps.ticket && (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: walkInNextSteps.routeLabel ? 8 : 0 }}>
                         <div>
                           <div style={{ fontSize: '11px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>Queue Ticket</div>
-                          <div style={{ fontSize: '32px', fontWeight: '900', color: 'var(--brand-primary, #f97316)', lineHeight: '1' }}>{walkInNextSteps.ticket}</div>
+                          <div style={{ fontSize: '22px', fontWeight: '900', color: 'var(--brand-primary, #f97316)', lineHeight: '1' }}>{walkInNextSteps.ticket}</div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ color: '#1e293b', fontSize: '14px', fontWeight: '700' }}>
@@ -10667,7 +10668,7 @@ function NurseDashboard() {
                         catch (_) { return {}; }
                       })();
                       const nurseName = (userRaw?.name || userRaw?.full_name || userRaw?.firstName ? `${String(userRaw.firstName || userRaw.first_name || '').trim()} ${String(userRaw.lastName || userRaw.last_name || '').trim()}`.trim() : '') || user?.name || 'Nurse';
-                      const refNum = String(walkInNextSteps?.patient_reference || walkInPatientReference || '').trim() || '—';
+                      const refNum = String(walkInNextSteps?.patient_reference || walkInPatientReference || '').trim();
                       const pName = walkInNextSteps?.patientName || 'Patient';
                       const company = walkInNextSteps?.patientCompany || '';
                       const contact = walkInNextSteps?.patientContact || '';
@@ -10694,13 +10695,15 @@ function NurseDashboard() {
                         '<!DOCTYPE html>',
                         '<html><head><title>Patient Intake Report - ' + pName + '</title>',
                         '<style>',
-                        '  body { margin: 0; padding: 24px 20px 32px 20px; font-family: "Courier New", Courier, monospace; color: #000; background: #fff; font-size: 13.5px; line-height: 1.55; }',
+                        '  @page { size: 80mm auto; margin: 4mm; }',
+                        '  * { box-sizing: border-box; }',
+                        '  body { width: 72mm; margin: 0 auto; padding: 0; font-family: "Courier New", Courier, monospace; color: #000; background: #fff; font-size: 10.5px; line-height: 1.35; }',
                         '  .header { text-align: center; padding-bottom: 10px; border-bottom: 1px dashed #000; margin-bottom: 14px; }',
-                        '  .hospital { font-weight: 900; font-size: 18px; letter-spacing: 0.03em; text-transform: uppercase; }',
-                        '  .sub { font-weight: 700; font-size: 14.5px; margin-top: 3px; }',
-                        '  .ref { text-align: center; border: 2px solid #000; border-radius: 8px; padding: 12px 8px; margin-bottom: 14px; background: #fff; }',
+                        '  .hospital { font-weight: 900; font-size: 14px; letter-spacing: 0.03em; text-transform: uppercase; }',
+                        '  .sub { font-weight: 700; font-size: 11.5px; margin-top: 2px; }',
+                        '  .ref { text-align: center; border: 1px solid #000; padding: 8px 6px; margin-bottom: 10px; background: #fff; }',
                         '  .ref-label { font-weight: 800; font-size: 11px; color: #000; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }',
-                        '  .ref-num { font-weight: 900; font-size: 26px; letter-spacing: 0.04em; color: #000; }',
+                        '  .ref-num { font-weight: 900; font-size: 18px; letter-spacing: 0.03em; color: #000; }',
                         '  .row { display: flex; justify-content: space-between; margin-top: 3px; }',
                         '  .row b { font-weight: 700; color: #000; }',
                         '  .section { padding-bottom: 11px; margin-bottom: 11px; border-bottom: 1px dashed #000; }',
@@ -10712,12 +10715,11 @@ function NurseDashboard() {
                         '</style></head><body>',
                         '<div class="header">',
                         '  <div class="hospital">Pascual General Hospital</div>',
-                        '  <div class="sub">PATIENT INTAKE REPORT</div>',
+                        '  <div class="sub">PATIENT INTAKE RECEIPT</div>',
                         '</div>',
                         '<div class="ref">',
-                        '  <div class="ref-label">REFERENCE NUMBER</div>',
-                        '  <div class="ref-num">' + refNum + '</div>',
-                        '  <div style="margin-top:8px;padding-top:7px;border-top:1px dashed #000;font-size:10.5px;letter-spacing:0.12em;font-weight:700;color:#000;text-transform:uppercase">[BUILD 2026-08-17 v3 · CASHIER REF# FLOW ACTIVE]</div>',
+                        '  <div class="ref-label">CASHIER REFERENCE</div>',
+                        '  <div class="ref-num">' + (refNum || 'Pending cashier assignment') + '</div>',
                         '</div>',
                         '<div class="section">',
                         '  <div class="row"><b>Patient:</b><span>' + pName + '</span></div>',
@@ -10754,7 +10756,7 @@ function NurseDashboard() {
                         '</body></html>'
                       ].filter(Boolean).join('\n');
 
-                      const w = window.open('', '_blank', 'width=420,height=820,scrollbars=yes,menubar=no,toolbar=no,location=no');
+                      const w = window.open('', '_blank', 'width=380,height=720,scrollbars=yes,menubar=no,toolbar=no,location=no');
                       if (w) {
                         w.document.open();
                         w.document.write(htmlLines);
@@ -10767,7 +10769,7 @@ function NurseDashboard() {
                       alert('⚠️ Print error: ' + String(err?.message || err));
                     }
                   }}
-                  style={{ fontWeight: '800', padding: '15px 18px', borderRadius: '12px', fontSize: '16px', background: 'linear-gradient(135deg,#0f766e,#0f172a)', color: '#ffffff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(15,118,110,0.35)' }}
+                  style={{ fontWeight: '800', padding: '11px 14px', borderRadius: '9px', fontSize: '13px', background: 'linear-gradient(135deg,#0f766e,#0f172a)', color: '#ffffff', border: 'none', cursor: 'pointer', boxShadow: '0 3px 10px rgba(15,118,110,0.25)' }}
                 >
                   🖨️ PRINT INTAKE REPORT (give to patient)
                 </button>

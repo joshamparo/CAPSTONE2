@@ -5518,3 +5518,35 @@ body.compact-mode .workspace-queue-item {
   .handover-footer-actions { width: 100%; flex-wrap: wrap; }
   .handover-footer-actions .btn-gray { flex: 1; justify-content: center; }
 }
+/* Compact, viewport-safe intake receipt. The printable copy is generated separately. */
+.intake-receipt-modal .ms-header {
+  min-height: 44px;
+  padding: 8px 10px;
+  border-bottom: 0;
+}
+
+.intake-receipt-modal .ms-close-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.intake-receipt-modal-body {
+  padding: 0 16px 16px;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 520px) {
+  .intake-receipt-modal {
+    max-height: calc(100dvh - 12px) !important;
+    border-radius: 14px;
+  }
+
+  .intake-receipt-modal-body {
+    padding: 0 10px 12px;
+  }
+
+  #intake-report-print-area {
+    padding: 13px 11px !important;
+    font-size: 10.5px !important;
+  }
+}
