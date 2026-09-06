@@ -721,7 +721,7 @@ body {
 }
 
 .admin-panel-card {
-  height: 100%;
+  height: auto;
   border-radius: 22px;
   border: 1px solid #e2e8f0;
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
@@ -757,7 +757,7 @@ body {
 }
 
 .admin-dashboard-feature-card {
-  min-height: 390px;
+  min-height: 0;
 }
 
 .admin-dashboard-announcements {
@@ -768,8 +768,16 @@ body {
 }
 
 .admin-dashboard-aligned-list {
-  min-height: 350px;
-  max-height: 350px;
+  min-height: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.admin-dashboard-task-list,
+.admin-dashboard-audit-list {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 260px;
   overflow-y: auto;
 }
 

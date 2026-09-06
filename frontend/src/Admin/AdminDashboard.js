@@ -4797,7 +4797,7 @@ function AdminDashboard() {
                   </div>
                 </form>
 
-                <div className="modern-list scrollable-list-y" style={{ flex: 1, minHeight: '350px', maxHeight: '350px' }}>
+                <div className="modern-list scrollable-list-y admin-dashboard-task-list">
                   {adminTodos.length === 0 ? (
                     <div className="empty-state-sm">No tasks. Great job!</div>
                   ) : (
@@ -4861,7 +4861,7 @@ function AdminDashboard() {
                     <History size={20} className="text-purple-600" /> Audit Log
                   </h3>
                 </div>
-                <div className="modern-list scrollable-list-y compact-list" style={{ flex: 1, minHeight: '350px', maxHeight: '350px', overflowY: 'auto' }}>
+                <div className="modern-list scrollable-list-y compact-list admin-dashboard-audit-list">
                   {activityLogs.length === 0 ? (
                     <div className="empty-state-sm">No audit logs.</div>
                   ) : (
@@ -4881,13 +4881,13 @@ function AdminDashboard() {
                   )}
                 </div>
               </div>
+
+              {renderOperationalSnapshotPanel('admin-panel-card admin-dashboard-analytics-snapshot')}
             </div>
           </div>
           {/* Analytics Row */}
           <div className="admin-analytics-row admin-analytics-row-single">
               <div className="admin-analytics-left">
-                {renderOperationalSnapshotPanel('analytics-card admin-dashboard-analytics-snapshot')}
-
                 <div className="dashboard-section-card analytics-card admin-ai-card" style={{ height: 'auto' }}>
                   <div className="dashboard-section-header">
                     <h3 className="dashboard-section-title">
