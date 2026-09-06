@@ -3050,6 +3050,9 @@ function NurseDashboard() {
               } else if (next === 'flagged') {
                   const patientName = String(r?.patientName || '').trim() || 'the patient';
                   addActivity('Verification Flagged', `The file you sent to ${patientName} needs review.`, 'info');
+              } else if (next === 'matched') {
+                  const patientName = String(r?.patientName || '').trim() || 'the patient';
+                  addActivity('AI Match Ready', `The result for ${patientName} matched and is waiting for staff confirmation.`, 'info');
               }
           });
           rows.forEach((r) => {
@@ -5763,8 +5766,8 @@ function NurseDashboard() {
   const openUploadForRecord = (record) => {
     setUploadTargetRecord(record || null);
     setUploadResultFile(null);
-    setUploadResultTitle('');
-    setUploadResultType('Lab');
+    setUploadResultTitle(record?.orderLabel || '');
+    setUploadResultType(record?.resultType || 'Lab');
     setUploadResultDate('');
     setUploadResultError('');
     setShowUploadResultModal(true);
@@ -5800,6 +5803,7 @@ function NurseDashboard() {
       const fd = new FormData();
       fd.append('file', uploadResultFile);
       fd.append('patientId', pid);
+      if (uploadTargetRecord.orderId) fd.append('orderId', String(uploadTargetRecord.orderId));
 
       const uploadRes = await fetch(`${API_BASE}/api/lab-results/upload`, {
         method: 'POST',
@@ -5817,11 +5821,11 @@ function NurseDashboard() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           patientId: pid,
+          orderId: uploadTargetRecord.orderId || null,
           type: uploadResultType || 'Lab',
           title: title || (uploadResultType ? `${uploadResultType} Result` : 'Lab Result'),
           url: uploadJson.url,
           resultDate: uploadResultDate || null,
-          uploadedBy: nurseInboxName,
           fileHash: uploadJson.hash || null,
           fileMeta: {
             originalName: uploadJson.originalName || null,
@@ -5924,6 +5928,28 @@ function NurseDashboard() {
     }
     if (viewingPatient?._id) {
       fetchLabResultsForPatient(String(viewingPatient._id), { silent: true });
+    }
+  };
+
+  const confirmMatchedLabResult = async (id) => {
+    const rid = String(id || '').trim();
+    if (!rid) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/lab-results/${encodeURIComponent(rid)}/verification`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ status: 'verified' })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || 'Unable to confirm result.');
+      if (viewingPatient?._id) await fetchLabResultsForPatient(String(viewingPatient._id), { silent: true });
+      setSuccessMessage('Result confirmed and released to the patient record.');
+      setModalType('success');
+      setShowSuccessModal(true);
+    } catch (error) {
+      setSuccessMessage(String(error?.message || 'Unable to confirm result.'));
+      setModalType('error');
+      setShowSuccessModal(true);
     }
   };
 
@@ -7885,24 +7911,13 @@ function NurseDashboard() {
                                                             >
                                                                 <FileText size={18} />
                                                             </button>
-                                                            {String(patient.receptionRoute || '').toUpperCase() === 'ER' ? <button
+                                                            <button
                                                                 className="btn-icon-action"
-                                                                title="Doctor Orders (Execute)"
+                                                                title="Doctor Orders"
                                                                 onClick={() => openEROrdersForPatient(patient)}
                                                             >
                                                                 <ClipboardList size={18} />
-                                                            </button> : null}
-                                                            {String(patient.receptionRoute || '').toUpperCase() === 'ER' ? <button
-                                                                className="btn-icon-action upload"
-                                                                title="Attach Test Result"
-                                                                onClick={() => openUploadForRecord({
-                                                                  id: String(patient._id),
-                                                                  patientId: patient._id,
-                                                                  patientName: `${patient.firstName || ''} ${patient.lastName || ''}`.trim()
-                                                                })}
-                                                            >
-                                                                <Upload size={18} />
-                                                            </button> : null}
+                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -9412,6 +9427,21 @@ function NurseDashboard() {
                                 >
                                   <Eye size={16} /> {orderDetailsLoadingId === oid ? 'Loading…' : historyOpen ? 'Hide History' : 'View History'}
                                 </button>
+                                <button
+                                  type="button"
+                                  className="btn-ghost"
+                                  onClick={() => openUploadForRecord({
+                                    id: oid,
+                                    orderId: oid,
+                                    patientId: ordersTargetPatient._id,
+                                    patientName: `${ordersTargetPatient.firstName || ''} ${ordersTargetPatient.lastName || ''}`.trim(),
+                                    orderLabel: `${String(o.kind || 'Clinical')} ${String(o.service || 'Result')}`.trim(),
+                                    resultType: String(o.kind || 'Lab')
+                                  })}
+                                  disabled={orderActionLoadingId === oid || ['cancelled', 'rejected'].includes(stLow)}
+                                >
+                                  <Upload size={16} /> Attach Result
+                                </button>
                               </div>
 
                               {historyOpen ? (
@@ -9867,7 +9897,16 @@ function NurseDashboard() {
                                             {r?.url ? <a href={r.url} target="_blank" rel="noreferrer">Open</a> : '—'}
                                           </td>
                                           <td style={{textAlign: 'center'}}>
-                                            {statusRaw !== 'verified' ? (
+                                            {['matched', 'flagged'].includes(statusRaw) ? (
+                                              <button
+                                                type="button"
+                                                className="btn-icon-action view"
+                                                title="Confirm Patient and Order Match"
+                                                onClick={() => confirmMatchedLabResult(r?.id)}
+                                              >
+                                                <CheckCircle size={16} />
+                                              </button>
+                                            ) : statusRaw !== 'verified' ? (
                                               <button
                                                 type="button"
                                                 className="btn-icon-action upload"

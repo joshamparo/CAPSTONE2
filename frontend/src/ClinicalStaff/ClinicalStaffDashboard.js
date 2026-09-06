@@ -528,8 +528,9 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     } catch (_) {}
   };
 
-  const orderHasResult = useMemo(() => {
-    return Array.isArray(orderDetail?.results) && orderDetail.results.length > 0;
+  const orderHasVerifiedResult = useMemo(() => {
+    const list = Array.isArray(orderDetail?.results) ? orderDetail.results : [];
+    return list.some((result) => String(result?.verificationStatus || result?.verification_status || '').toLowerCase() === 'verified');
   }, [orderDetail?.results]);
 
   useEffect(() => {
@@ -653,7 +654,6 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
           title: String(resultTitle || '').trim() || `${cfg.resultType} Result`,
           url: uploadData.url,
           resultDate: resultDate || null,
-          uploadedBy: user.name || user.email || cfg.label,
           fileHash: uploadData.hash || null,
           fileMeta: {
             originalName: uploadData.originalName || null,
@@ -678,6 +678,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       setResultNotice(
         st === 'verified'
           ? `Result uploaded and verified.${detail}`
+          : st === 'matched'
+            ? `Result uploaded and matched by AI. Staff confirmation is required before completion.${detail}`
           : st === 'rejected'
             ? `Result uploaded but rejected as invalid.${detail} Check Notifications for details.`
             : st === 'flagged'
@@ -695,11 +697,31 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
   const handleCompleteOrder = async () => {
     if (!viewingOrder) return;
-    if (!orderHasResult) {
-      setResultError('Upload the result first before marking this order as Completed.');
+    if (!orderHasVerifiedResult) {
+      setResultError('Confirm a matched result first before marking this order as Completed.');
       return;
     }
     await handleQuickStatus(viewingOrder.id, 'Completed');
+  };
+
+  const confirmMatchedResult = async (resultId) => {
+    if (!resultId) return;
+    setResultSaving(true);
+    setResultError('');
+    try {
+      await fetchJson(`/api/lab-results/${resultId}/verification`, {
+        apiBase: API_BASE,
+        method: 'PATCH',
+        headers: buildJsonAuthHeaders(user),
+        body: JSON.stringify({ status: 'verified' })
+      });
+      setResultNotice('Result confirmed. It is now available to the patient and authorized care team.');
+      await refreshViewingOrderDetail();
+    } catch (error) {
+      setResultError(String(error?.message || 'Unable to confirm this result.'));
+    } finally {
+      setResultSaving(false);
+    }
   };
 
   const handleCreateEvent = async () => {
@@ -1770,7 +1792,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                         <button type="button" className="cs-btn secondary" onClick={() => handleQuickStatus(viewingOrder.id, 'In Progress')} disabled={String(viewingOrder.status || '').toLowerCase() === 'completed'}>
                           Start
                         </button>
-                        <button type="button" className="cs-btn" onClick={handleCompleteOrder} disabled={String(viewingOrder.status || '').toLowerCase() === 'completed'}>
+                        <button type="button" className="cs-btn" onClick={handleCompleteOrder} disabled={String(viewingOrder.status || '').toLowerCase() === 'completed' || !orderHasVerifiedResult} title={!orderHasVerifiedResult ? 'Confirm a matched result before completing this order.' : 'Complete order'}>
                           Complete
                         </button>
                       </div>
@@ -1805,6 +1827,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                                 <th>Date</th>
                                 <th>Verification</th>
                                 <th>Link</th>
+                                <th>Action</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1820,6 +1843,13 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                                     ) : (
                                       <span className="cs-badge orange">pending</span>
                                     )}
+                                  </td>
+                                  <td>
+                                    {['matched', 'flagged'].includes(String(r.verificationStatus || '').toLowerCase()) ? (
+                                      <button type="button" className="cs-btn" onClick={() => confirmMatchedResult(r.id)} disabled={resultSaving}>
+                                        Confirm Match
+                                      </button>
+                                    ) : '—'}
                                   </td>
                                   <td>
                                     {r.url ? (

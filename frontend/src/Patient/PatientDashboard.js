@@ -545,7 +545,7 @@ function PatientDashboard() {
       if (!silent) setLoadingResults(true);
       setRecordsError('');
       try {
-        const data = await fetchJson(`/api/lab-results/mine?take=50&includeRejected=true`, {
+        const data = await fetchJson(`/api/lab-results/mine?take=50`, {
           apiBase: API_BASE,
           headers: { ...getAuthHeaders() }
         });
@@ -1457,7 +1457,7 @@ function PatientDashboard() {
               if (!user?.email) return;
               setLoadingResults(true);
               setRecordsError('');
-              fetch(`${API_BASE}/api/lab-results/mine?take=50&includeRejected=true`, {
+              fetch(`${API_BASE}/api/lab-results/mine?take=50`, {
                 headers: { ...getAuthHeaders() }
               })
                 .then((r) => r.json().then((d) => ({ ok: r.ok, d })))

@@ -7,10 +7,11 @@ const { normalizeEmail, normalizeRole, parseLimit, parseOffset, parseDate } = re
 const { resolveClinicalServicePricing } = require('../utils/clinicalServiceCatalog');
 const { recordLabOrderPayment, ensureBillingTablesExist, toMoney } = require('../utils/billingLedger');
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
+const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
 
 
 const SCHEDULABLE_ROLE_SET = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist']);
-const ASSIGNABLE_ROLE_SET = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'pharmacist', 'cashier', 'admin']);
+const ASSIGNABLE_ROLE_SET = new Set(['nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'pharmacist', 'cashier', 'admin']);
 const AUTH_ROLE_SET = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'cashier', 'nurse', 'doctor', 'pharmacist', 'admin']);
 const STATUS_SET = new Set(['Pending', 'For Payment', 'Paid', 'Exam', 'Result', 'Scheduled', 'In Progress', 'Completed', 'Cancelled', 'Rejected']);
 
@@ -105,7 +106,10 @@ function canAccessOrderRow(order, actor) {
     const actorName = String(actor?.actorName || '').trim();
     const own = actorName && orderedByRole === expectedRole && orderedByName === actorName;
     if (own) return true;
-    if (assignedRole && assignedRole === role) return true;
+    if (assignedRole && assignedRole === role) {
+      if (role === 'nurse' && assignedTo) return Boolean(actor?.actorEmail && assignedTo === actor.actorEmail);
+      return true;
+    }
     if (assignedTo && actor?.actorEmail && assignedTo === actor.actorEmail) return true;
     return false;
   }
@@ -257,7 +261,7 @@ router.get('/', async (req, res) => {
         if (actor.actorName) {
           or.push({ ordered_by_role: expectedRole, ordered_by_name: actor.actorName });
         }
-        or.push({ assigned_role: actor.actorRole });
+        if (actor.actorRole !== 'nurse') or.push({ assigned_role: actor.actorRole });
         if (actor.actorEmail) or.push({ assigned_to: actor.actorEmail });
         where.OR = or;
       } else {
@@ -572,6 +576,29 @@ router.post('/', async (req, res) => {
       ? (actorRole || orderedByRoleFinal || actorFromHeaders.actorRole || null)
       : (actorFromHeaders.actorRole || null);
 
+    let assignedToFinal = assignedTo || null;
+    if (actorFromHeaders.actorRole === 'doctor' && roleNorm === 'nurse') {
+      const doctor = await prisma.doctors.findFirst({
+        where: { email: { equals: actorFromHeaders.actorEmail, mode: 'insensitive' } },
+        select: { specialization: true, department: true }
+      }).catch(() => null);
+      const doctorDepartment = normalizeNurseDepartment(doctor?.specialization || doctor?.department || '');
+      if (!doctorDepartment) return res.status(409).json({ message: 'Your doctor account has no specialization for nurse routing.' });
+      const nurses = await prisma.nurses.findMany({
+        where: { is_active: true },
+        select: { email: true, specialization: true, department: true, first_name: true, last_name: true },
+        take: 200
+      }).catch(() => []);
+      const matchingNurse = nurses.find((nurse) => (
+        normalizeNurseDepartment(nurse?.specialization || nurse?.department || '') === doctorDepartment
+        && normalizeEmail(nurse?.email || '')
+      ));
+      if (!matchingNurse) {
+        return res.status(409).json({ message: `No active ${doctorDepartment} nurse is available for this order.` });
+      }
+      assignedToFinal = normalizeEmail(matchingNurse.email);
+    }
+
     const inserted = await prisma.$queryRaw(
       Prisma.sql`
         INSERT INTO public.clinical_orders
@@ -587,7 +614,7 @@ router.post('/', async (req, res) => {
            ${orderedByNameFinal},
            ${orderedByRoleFinal},
            ${assignedRole ? roleNorm : null},
-           ${assignedTo || null},
+           ${assignedToFinal},
            ${scheduledAt ? new Date(scheduledAt) : null},
            now())
         RETURNING id::text AS id
@@ -669,7 +696,7 @@ router.post('/', async (req, res) => {
       await upsertScheduleForOrder({
         orderId: createdId,
         role: roleNorm,
-        staffEmail: assignedTo ? normalizeEmail(assignedTo) : null,
+        staffEmail: assignedToFinal ? normalizeEmail(assignedToFinal) : null,
         startAt: scheduledAt,
         title: `${String(kind || 'Procedure')}${service ? `: ${service}` : ''}`.trim(),
         notes: notes || null,
@@ -786,6 +813,18 @@ router.patch('/:id', async (req, res) => {
 
       if (!canTransitionStatus({ fromStatus: effectiveFromStatus, toStatus: newStatus, actorRole: actorFromHeaders.actorRole, assignedRole: current.assignedRole })) {
         return res.status(403).json({ message: 'Forbidden status transition' });
+      }
+      if (newStatus === 'Completed' && actorFromHeaders.actorRole !== 'admin') {
+        const verifiedResults = await prisma.$queryRaw`
+          SELECT id
+          FROM public.lab_results
+          WHERE order_id = ${BigInt(orderId)}
+            AND lower(coalesce(verification_status, 'pending')) = 'verified'
+          LIMIT 1
+        `;
+        if (!Array.isArray(verifiedResults) || verifiedResults.length === 0) {
+          return res.status(409).json({ message: 'A staff-confirmed result is required before completing this order.' });
+        }
       }
       if (newStatus === 'Paid') {
         if (!pricing.configured || !(Number(pricing.unitPrice) > 0)) {

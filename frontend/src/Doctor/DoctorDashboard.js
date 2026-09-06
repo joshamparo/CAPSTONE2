@@ -1567,7 +1567,7 @@ function DoctorDashboard() {
     if (!selectedPatient?._id || !orderForm.service) return;
     setSavingOrder(true);
     try {
-      await fetchJson(`/api/clinical-orders`, {
+      const createdOrder = await fetchJson(`/api/clinical-orders`, {
         apiBase: API_BASE,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
@@ -1584,7 +1584,12 @@ function DoctorDashboard() {
           orderedByRole: 'Doctor'
         })
       });
-      setToast({ type: 'success', message: 'Order submitted successfully!' });
+      setToast({
+        type: 'success',
+        message: createdOrder?.assignedRole === 'nurse'
+          ? 'Order sent to the matching nurse specialization.'
+          : 'Order submitted successfully!'
+      });
       setOrderModalOpen(false);
       setOrderForm({ kind: 'Laboratory', service: '', notes: '', priority: 'Routine', assignedRole: defaultAssignedRoleForKind('Laboratory') });
       fetchEROrders(selectedPatient._id).catch(() => {});

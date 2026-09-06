@@ -8,6 +8,8 @@ const multer = require('multer');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const requireRole = require('../middleware/requireRole');
+const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+const { nursePatientScope } = require('../utils/nursePatientAccess');
 const { parseLimit, parseOffset } = require('../utils/normalize');
 const { normalizeEmail } = require('../utils/normalize');
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
@@ -115,10 +117,7 @@ const upload = multer({
     const mt = String(file.mimetype || '').toLowerCase();
     const ok =
       mt === 'application/pdf' ||
-      mt.startsWith('image/') ||
-      mt === 'text/plain' ||
-      mt === 'application/octet-stream' ||
-      mt === '';
+      ['image/jpeg', 'image/png', 'image/webp'].includes(mt);
     cb(ok ? null : new Error('Invalid file type'), ok);
   }
 });
@@ -172,10 +171,37 @@ function isStaffRole(role) {
 }
 
 const CLINICAL_RESULT_ROLES = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist']);
+const ORDER_BOUND_RESULT_ROLES = new Set([...CLINICAL_RESULT_ROLES, 'nurse']);
+
+function authorizeNurseDepartment(req, res, next) {
+  if (req.auth?.role !== 'nurse') return next();
+  return requireNurseDepartment(req, res, next);
+}
+
+function hasAllowedMedicalSignature(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return false;
+  if (buffer.subarray(0, 5).toString('ascii') === '%PDF-') return true;
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return true;
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return true;
+  return buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+}
+
+async function enforceNursePatientAccess(req, res, patientId) {
+  if (req.auth?.role !== 'nurse') return true;
+  const match = await prisma.patients.findFirst({
+    where: { id: String(patientId || ''), ...nursePatientScope(req.nurseDepartment) },
+    select: { id: true }
+  }).catch(() => null);
+  if (!match) {
+    res.status(403).json({ message: 'This patient is outside your nurse specialization.' });
+    return false;
+  }
+  return true;
+}
 
 async function enforceClinicalOrderAccess(req, res, { orderId, patientId }) {
   const role = String(req.auth?.role || '').trim().toLowerCase();
-  if (!CLINICAL_RESULT_ROLES.has(role)) return true;
+  if (!ORDER_BOUND_RESULT_ROLES.has(role)) return true;
   const id = String(orderId || '').trim();
   if (!/^\d+$/.test(id)) {
     res.status(400).json({ message: 'A valid orderId is required for clinical results.' });
@@ -226,7 +252,7 @@ function decideStatus(score, flags) {
     return { status: 'flagged', score: Math.min(Math.max(s, 45), 70), flags: f };
   }
   if (s >= 80 && !f.includes('verification_timeout') && !f.includes('verification_error')) {
-    return { status: 'verified', score: s, flags: f };
+    return { status: 'matched', score: s, flags: f };
   }
   if (s < 50) return { status: 'rejected', score: s, flags: f };
   return { status: 'flagged', score: s, flags: f };
@@ -534,7 +560,7 @@ async function updateVerificationResult(id, { status, score, flags, extractedFie
           verification_score = ${safeScore},
           verification_flags = ${safeFlagsJson}::jsonb,
           extracted_fields = ${safeExtractedJson}::jsonb,
-          verified_at = now(),
+          verified_at = CASE WHEN ${safeStatus} = 'verified' THEN now() ELSE NULL END,
           verification_error = ${err}
       WHERE id = ${BigInt(id)}
     `
@@ -775,7 +801,7 @@ async function markTimedOutPending() {
     SET verification_status = 'flagged',
         verification_score = COALESCE(verification_score, 55),
         verification_flags = COALESCE(verification_flags, '[]'::jsonb) || '["verification_timeout"]'::jsonb,
-        verified_at = now()
+        verified_at = NULL
     WHERE verification_status = 'pending'
       AND created_at < (now() - interval '2 minutes')
   `);
@@ -785,7 +811,7 @@ setInterval(() => {
   markTimedOutPending().catch(() => {});
 }, 60000);
 
-router.post('/upload', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist']), upload.single('file'), async (req, res) => {
+router.post('/upload', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist']), authorizeNurseDepartment, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
     const sb = getSupabaseAdmin();
@@ -795,6 +821,8 @@ router.post('/upload', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radi
       patientName: req.body.patientName
     });
     if (!derivedPatientId) return res.status(400).json({ message: 'Missing patientId' });
+    if (!hasAllowedMedicalSignature(req.file.buffer)) return res.status(400).json({ message: 'The file content is not a valid PDF, JPEG, PNG, or WebP document.' });
+    if (!(await enforceNursePatientAccess(req, res, derivedPatientId))) return;
     if (!(await enforceClinicalOrderAccess(req, res, { orderId: req.body.orderId, patientId: derivedPatientId }))) return;
     if (req.auth?.role === 'doctor') {
       const access = await enforceDoctorPatientAccess(req, res, derivedPatientId);
@@ -815,7 +843,7 @@ router.post('/upload', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radi
 
       const uploadRes = await sb.storage.from(bucket).upload(objectPath, req.file.buffer, {
         contentType: req.file.mimetype || 'application/octet-stream',
-        upsert: true,
+        upsert: false,
         cacheControl: '3600'
       });
       if (uploadRes?.error) {
@@ -838,7 +866,7 @@ router.post('/upload', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radi
   }
 });
 
-router.get('/mine', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'patient']), async (req, res) => {
+router.get('/mine', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'patient']), authorizeNurseDepartment, async (req, res) => {
   try {
     const requesterRole = getRequesterRole(req);
     if (requesterRole === 'patient') {
@@ -874,21 +902,16 @@ router.get('/mine', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogr
       }
       if (!patient?.id) return res.status(404).json({ message: 'Patient not found' });
 
-      const { take, status, includeRejected } = req.query;
+      const { take, status } = req.query;
       const limit = parseLimit(take, { min: 1, max: 200, fallback: 50 });
       const st = String(status || '').trim().toLowerCase();
-      const allowed = new Set(['pending', 'verified', 'flagged', 'rejected']);
+      const allowed = new Set(['pending', 'matched', 'verified', 'flagged', 'rejected']);
       const statusFilter = st && allowed.has(st) ? st : '';
-
-      const includeRej = String(includeRejected || '').trim().toLowerCase();
-      const allowRejected = includeRej === '1' || includeRej === 'true' || includeRej === 'yes';
 
       const conditions = [Prisma.sql`r.patient_id = ${String(patient.id)}::uuid`];
       if (statusFilter) {
         conditions.push(Prisma.sql`lower(coalesce(r.verification_status, 'pending')) = ${statusFilter}`);
-      } else if (!allowRejected) {
-        conditions.push(Prisma.sql`lower(coalesce(r.verification_status, 'pending')) <> 'rejected'`);
-      }
+      } else conditions.push(Prisma.sql`lower(coalesce(r.verification_status, 'pending')) = 'verified'`);
       const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, Prisma.sql` AND `)}`;
 
       const rows = await prisma.$queryRaw(
@@ -946,7 +969,7 @@ router.get('/mine', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogr
     const { take, status } = req.query;
     const limit = parseLimit(take, { min: 1, max: 200, fallback: 50 });
     const st = String(status || '').trim().toLowerCase();
-    const allowed = new Set(['pending', 'verified', 'flagged', 'rejected']);
+    const allowed = new Set(['pending', 'matched', 'verified', 'flagged', 'rejected']);
     const statusFilter = st && allowed.has(st) ? st : '';
 
     const conditions = [];
@@ -997,7 +1020,7 @@ router.get('/mine', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogr
   }
 });
 
-router.get('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'patient']), async (req, res) => {
+router.get('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'patient']), authorizeNurseDepartment, async (req, res) => {
   try {
     const { patientId, orderId, take, skip } = req.query;
     if (!patientId) return res.json([]);
@@ -1016,6 +1039,7 @@ router.get('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographe
       const access = await enforceDoctorPatientAccess(req, res, patientId);
       if (!access.allowed) return;
     }
+    if (!(await enforceNursePatientAccess(req, res, patientId))) return;
     if (CLINICAL_RESULT_ROLES.has(requesterRole)) {
       if (!(await enforceClinicalOrderAccess(req, res, { orderId, patientId }))) return;
     }
@@ -1068,7 +1092,7 @@ router.get('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographe
   }
 });
 
-router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist']), async (req, res) => {
+router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist']), authorizeNurseDepartment, async (req, res) => {
   try {
     const { patientId, patientEmail, patientName, orderId, type, title, url, resultDate, uploadedBy, fileHash, fileMeta } = req.body;
     const resolvedPatientId = await resolvePatientId({ patientId, patientEmail, patientName });
@@ -1079,7 +1103,9 @@ router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiograph
       const access = await enforceDoctorPatientAccess(req, res, resolvedPatientId);
       if (!access.allowed) return;
     }
+    if (!(await enforceNursePatientAccess(req, res, resolvedPatientId))) return;
     if (!(await enforceClinicalOrderAccess(req, res, { orderId, patientId: resolvedPatientId }))) return;
+    const uploaderIdentity = req.nurseIdentity?.name || req.auth?.email || null;
 
     const rows = await prisma.$queryRaw`
       INSERT INTO lab_results (patient_id, order_id, type, title, url, result_date, uploaded_by, verification_status, file_hash, file_meta)
@@ -1090,7 +1116,7 @@ router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiograph
         ${title},
         ${url},
         ${resultDate ? new Date(resultDate) : null}::date,
-        ${uploadedBy || null},
+        ${uploaderIdentity},
         'pending',
         ${fileHash ? String(fileHash) : null},
         ${fileMeta && typeof fileMeta === 'object' ? fileMeta : null}::jsonb
@@ -1100,11 +1126,11 @@ router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiograph
     `;
     const created = Array.isArray(rows) ? rows[0] : rows;
 
-    if (uploadedBy) {
+    if (uploaderIdentity) {
       prisma.activity_logs.create({
         data: {
-          actor_name: uploadedBy,
-          role: 'ClinicalStaff',
+          actor_name: uploaderIdentity,
+          role: req.auth?.role || 'ClinicalStaff',
           action: 'Create',
           target: `Patient:${resolvedPatientId}`,
           details: 'Added lab/imaging result'
@@ -1134,7 +1160,7 @@ router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiograph
   }
 });
 
-router.get('/:id', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'patient']), async (req, res) => {
+router.get('/:id', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'patient']), authorizeNurseDepartment, async (req, res) => {
   try {
     const idRaw = String(req.params.id || '').trim();
     if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid lab result id.' });
@@ -1248,6 +1274,7 @@ router.get('/:id', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogra
       const access = await enforceDoctorPatientAccess(req, res, row.patientId);
       if (!access.allowed) return;
     }
+    if (!(await enforceNursePatientAccess(req, res, row.patientId))) return;
     if (CLINICAL_RESULT_ROLES.has(requesterRole)) {
       if (!(await enforceClinicalOrderAccess(req, res, { orderId: row.orderId, patientId: row.patientId }))) return;
     }
@@ -1325,7 +1352,7 @@ router.put('/:id/interpretation', requireRole(['doctor']), async (req, res) => {
   }
 });
 
-router.post('/:id/verify', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist']), async (req, res) => {
+router.post('/:id/verify', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist']), authorizeNurseDepartment, async (req, res) => {
   try {
     const id = String(req.params.id || '').trim();
     if (!/^\d+$/.test(id)) return res.status(400).json({ message: 'Invalid lab result id.' });
@@ -1335,7 +1362,7 @@ router.post('/:id/verify', requireRole(['doctor', 'admin', 'nurse', 'medtech', '
       const access = await enforceDoctorPatientAccess(req, res, rows[0].patient_id);
       if (!access.allowed) return;
     }
-    if (CLINICAL_RESULT_ROLES.has(req.auth?.role)) {
+    if (ORDER_BOUND_RESULT_ROLES.has(req.auth?.role)) {
       const rows = await prisma.$queryRaw`
         SELECT patient_id::text AS "patientId", order_id::text AS "orderId"
         FROM lab_results WHERE id = ${BigInt(id)} LIMIT 1
@@ -1351,7 +1378,7 @@ router.post('/:id/verify', requireRole(['doctor', 'admin', 'nurse', 'medtech', '
   }
 });
 
-router.patch('/:id/verification', requireRole(['doctor', 'admin', 'nurse']), async (req, res) => {
+router.patch('/:id/verification', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist']), authorizeNurseDepartment, async (req, res) => {
   try {
     const id = BigInt(req.params.id);
     if (req.auth?.role === 'doctor') {
@@ -1360,9 +1387,39 @@ router.patch('/:id/verification', requireRole(['doctor', 'admin', 'nurse']), asy
       const access = await enforceDoctorPatientAccess(req, res, rows[0].patient_id);
       if (!access.allowed) return;
     }
+    if (req.auth?.role === 'nurse') {
+      const rows = await prisma.$queryRaw`
+        SELECT patient_id::text AS "patientId", order_id::text AS "orderId"
+        FROM lab_results WHERE id = ${id} LIMIT 1
+      `;
+      const result = Array.isArray(rows) ? rows[0] : null;
+      if (!result) return res.status(404).json({ message: 'Lab result not found.' });
+      if (!(await enforceNursePatientAccess(req, res, result.patientId))) return;
+      if (!(await enforceClinicalOrderAccess(req, res, result))) return;
+    }
+    if (CLINICAL_RESULT_ROLES.has(req.auth?.role)) {
+      const rows = await prisma.$queryRaw`
+        SELECT patient_id::text AS "patientId", order_id::text AS "orderId"
+        FROM lab_results WHERE id = ${id} LIMIT 1
+      `;
+      const result = Array.isArray(rows) ? rows[0] : null;
+      if (!result) return res.status(404).json({ message: 'Lab result not found.' });
+      if (!(await enforceClinicalOrderAccess(req, res, result))) return;
+    }
     const status = String(req.body.status || '').trim().toLowerCase();
     if (!['verified', 'flagged', 'rejected'].includes(status)) {
       return res.status(400).json({ message: 'Invalid status.' });
+    }
+    const currentRows = await prisma.$queryRaw`
+      SELECT verification_status FROM lab_results WHERE id = ${id} LIMIT 1
+    `;
+    const currentStatus = String(currentRows?.[0]?.verification_status || '').trim().toLowerCase();
+    if (status === 'verified' && !['matched', 'flagged'].includes(currentStatus)) {
+      return res.status(409).json({ message: 'AI verification must finish before a result can be confirmed.' });
+    }
+    const reviewReason = String(req.body.reason || '').trim();
+    if (status === 'rejected' && !reviewReason) {
+      return res.status(400).json({ message: 'A rejection reason is required.' });
     }
     const score = req.body.score === null || req.body.score === undefined ? null : clampInt(req.body.score, 0, 100);
     const flags = uniqueFlags(req.body.flags);
@@ -1382,6 +1439,15 @@ router.patch('/:id/verification', requireRole(['doctor', 'admin', 'nurse']), asy
         WHERE id = ${id}
       `
     );
+    await prisma.activity_logs.create({
+      data: {
+        actor_name: req.nurseIdentity?.name || req.auth?.email || 'Clinical Staff',
+        role: req.auth?.role || 'staff',
+        action: status === 'verified' ? 'Clinical Result Confirmed' : 'Clinical Result Reviewed',
+        target: `LabResult:${id.toString()}`,
+        details: reviewReason || `Verification status set to ${status}`
+      }
+    }).catch(() => null);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ message: err.message });
