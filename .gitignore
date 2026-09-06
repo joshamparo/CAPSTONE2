@@ -24,6 +24,9 @@ backend-push-temp/
 backend/
 legacy-root-frontend/
 scripts/
+!capstone-backend/scripts/
+capstone-backend/scripts/*
+!capstone-backend/scripts/bootstrap-schema.js
 
 # Ignore temporary map files and debug files
 map_*.js

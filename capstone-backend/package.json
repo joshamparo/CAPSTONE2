@@ -6,8 +6,11 @@
   "scripts": {
     "build": "prisma generate",
     "postinstall": "prisma generate",
+    "prestart": "node scripts/bootstrap-schema.js",
+    "schema:bootstrap": "node scripts/bootstrap-schema.js",
     "db:push": "prisma db push",
     "start": "node server.js",
+    "predev": "node scripts/bootstrap-schema.js",
     "dev": "nodemon --watch server.js --watch routes --watch .env server.js",
     "test": "node --test test/*.test.js"
   },

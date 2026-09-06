@@ -1,22 +1,6 @@
 const { verifySessionToken } = require('../utils/sessionToken');
 const prisma = require('../utils/prisma');
 
-let sessionSchemaPromise = null;
-function ensureSessionSchema() {
-  if (!sessionSchemaPromise) {
-    sessionSchemaPromise = (async () => {
-      for (const table of ['staff', 'nurses', 'doctors', 'accounts']) {
-        await prisma.$executeRawUnsafe(`ALTER TABLE public.${table} ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`);
-        await prisma.$executeRawUnsafe(`ALTER TABLE public.${table} ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0`);
-      }
-    })().catch((error) => {
-      sessionSchemaPromise = null;
-      throw error;
-    });
-  }
-  return sessionSchemaPromise;
-}
-
 function normalizeRoleHeader(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw) return '';
@@ -39,7 +23,6 @@ function normalizeRoleHeader(value) {
 
 async function verifyActiveSessionAccount(session, normalizedRole) {
   if (normalizedRole === 'patient') return true;
-  await ensureSessionSchema();
   const rows = await prisma.$queryRawUnsafe(`
     SELECT account_type::text AS account_role, is_active, session_version FROM public.staff WHERE lower(email) = lower($1)
     UNION ALL
