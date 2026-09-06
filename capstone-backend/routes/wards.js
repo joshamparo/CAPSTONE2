@@ -4,9 +4,14 @@ const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 
-const authorizeNurseDepartment = (req, res, next) => (
-  req.auth?.role === 'nurse' ? requireNurseDepartment(req, res, next) : next()
-);
+const authorizeNurseDepartment = (req, res, next) => {
+  if (req.auth?.role !== 'nurse') return next();
+  // The unassigned Nurse workspace is the hospital's central ER/reception
+  // workspace. Keep this fallback local to bed management; all other nurse
+  // services retain their own department-scoped authorization.
+  req.nurseDepartmentFallback = 'ER';
+  return requireNurseDepartment(req, res, next);
+};
 
 const NURSE_WARD_BY_DEPARTMENT = Object.freeze({
   ER: 'Emergency',
