@@ -12,7 +12,13 @@ function isCentralIntakeRequest(method, path) {
 
 function nursePatientScope(department, now = new Date()) {
   const dept = String(department || '').trim().toUpperCase();
-  if (dept === 'ER') return { OR: [{ admission_status: { equals: 'Emergency', mode: 'insensitive' } }, { ward_number: { startsWith: 'E', mode: 'insensitive' } }] };
+  if (dept === 'ER') return {
+    OR: [
+      { admission_status: { equals: 'Emergency', mode: 'insensitive' } },
+      { admission_status: { equals: 'Pending Admission', mode: 'insensitive' } },
+      { ward_number: { startsWith: 'E', mode: 'insensitive' } }
+    ]
+  };
   if (dept === 'OPD') return { admission_status: { equals: 'Outpatient', mode: 'insensitive' } };
   if (dept === 'PEDIA') {
     const adultCutoff = new Date(now);

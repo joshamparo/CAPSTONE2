@@ -79,16 +79,13 @@ function scopeRegistryForRequest(registry, req) {
   const wardName = nurseWardName(req);
   if (req.auth?.role !== 'nurse') return registry;
   if (!wardName) return { wards: [], rooms: [], totals: { totalRooms: 0, occupied: 0, available: 0, reserved: 0, cleaning: 0, maintenance: 0, inactive: 0, overflow: 0 } };
-  const wards = (registry.wards || []).filter((ward) => normalizeText(ward.name) === normalizeText(wardName));
+  // All nurses may see hospital-wide capacity. ER is the head-nurse workspace
+  // and may also see every room; other nurses only receive room-level details
+  // for their own ward.
+  if (String(req.nurseDepartment || '').trim().toUpperCase() === 'ER') return registry;
+  const wards = registry.wards || [];
   const rooms = (registry.rooms || []).filter((room) => normalizeText(room.wardName) === normalizeText(wardName));
-  const totals = wards.reduce((acc, ward) => {
-    acc.totalRooms += Number(ward.totalCapacity || 0);
-    ['occupied', 'available', 'reserved', 'cleaning', 'maintenance', 'inactive', 'overflow'].forEach((key) => {
-      acc[key] += Number(ward[key] || 0);
-    });
-    return acc;
-  }, { totalRooms: 0, occupied: 0, available: 0, reserved: 0, cleaning: 0, maintenance: 0, inactive: 0, overflow: 0 });
-  return { wards, rooms, totals };
+  return { wards, rooms, totals: registry.totals || {} };
 }
 
 function roomMutationFailure(err, fallbackMessage) {
@@ -691,9 +688,9 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDe
         console.error('[AssignPatient] Room already occupied:', roomCode, 'by', targetRoom.patient?.name);
         return res.status(409).json({ message: `Room ${roomCode} is already occupied.` });
     }
-    const allowedWard = nurseWardName(req);
-    if (req.auth?.role === 'nurse' && (!allowedWard || normalizeText(targetRoom.wardName) !== normalizeText(allowedWard))) {
-      return res.status(403).json({ message: 'You can only assign patients to your department ward.' });
+    const isErHeadNurse = req.auth?.role === 'nurse' && String(req.nurseDepartment || '').trim().toUpperCase() === 'ER';
+    if (req.auth?.role === 'nurse' && !isErHeadNurse) {
+      return res.status(403).json({ message: 'Only the ER head nurse can assign patients to wards and rooms.' });
     }
 
     await prisma.$transaction(async (tx) => {
@@ -720,6 +717,13 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDe
           admission_status: 'Inpatient'
         }
       });
+      await tx.$executeRaw`
+        UPDATE public.clinical_orders
+        SET status = 'Completed', completed_at = COALESCE(completed_at, now()), updated_at = now()
+        WHERE patient_id = ${patientId}::uuid
+          AND lower(kind) IN ('admission request', 'transfer request')
+          AND lower(status) NOT IN ('completed', 'cancelled', 'rejected')
+      `;
     });
 
     console.log('[AssignPatient] Success:', { patientId, roomCode });

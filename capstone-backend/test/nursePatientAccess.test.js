@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const { nursePatientScope, isCentralIntakeRequest } = require('../utils/nursePatientAccess');
 
 test('core nurse departments produce restrictive patient scopes', () => {
-  assert.ok(nursePatientScope('ER').OR);
+  const erScope = nursePatientScope('ER');
+  assert.ok(erScope.OR);
+  assert.ok(erScope.OR.some((entry) => entry.admission_status?.equals === 'Pending Admission'));
   assert.equal(nursePatientScope('OPD').admission_status.equals, 'Outpatient');
   assert.ok(nursePatientScope('PEDIA', new Date('2026-09-05T00:00:00Z')).OR);
   assert.ok(nursePatientScope('MEDICINE').OR);

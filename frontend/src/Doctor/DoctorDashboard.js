@@ -191,9 +191,6 @@ function DoctorDashboard() {
   const [billOutItems, setBillOutItems] = useState([]);
   const [billOutNotes, setBillOutNotes] = useState('');
   const [billOutSaving, setBillOutSaving] = useState(false);
-  const [wards, setWards] = useState([]);
-  const [wardsLoading, setWardsLoading] = useState(false);
-  const [selectedWard, setSelectedWard] = useState('');
   const [disposition, setDisposition] = useState('Treatment'); // Treatment, Admit, Discharge, Transfer
   const [finalizingVisit, setFinalizingVisit] = useState(false);
 
@@ -1445,11 +1442,12 @@ function DoctorDashboard() {
       return;
     }
 
+    const latestSavedNote = Array.isArray(notes) ? notes[0] : null;
     const soapSummary = [
-      noteForm.subjective ? `Subjective: ${String(noteForm.subjective).trim()}` : '',
-      noteForm.objective ? `Objective: ${String(noteForm.objective).trim()}` : '',
-      noteForm.assessment ? `Assessment: ${String(noteForm.assessment).trim()}` : '',
-      noteForm.plan ? `Plan: ${String(noteForm.plan).trim()}` : ''
+      (noteForm.subjective || latestSavedNote?.subjective) ? `Subjective: ${String(noteForm.subjective || latestSavedNote?.subjective).trim()}` : '',
+      (noteForm.objective || latestSavedNote?.objective) ? `Objective: ${String(noteForm.objective || latestSavedNote?.objective).trim()}` : '',
+      (noteForm.assessment || latestSavedNote?.assessment) ? `Assessment: ${String(noteForm.assessment || latestSavedNote?.assessment).trim()}` : '',
+      (noteForm.plan || latestSavedNote?.plan) ? `Plan: ${String(noteForm.plan || latestSavedNote?.plan).trim()}` : ''
     ].filter(Boolean).join('\n');
 
     setOrderForm({
@@ -1462,17 +1460,30 @@ function DoctorDashboard() {
     setOrderModalOpen(true);
   };
 
-  const fetchWards = async () => {
-    if (!userRole) return;
-    setWardsLoading(true);
-    try {
-      const json = await fetchJson(`/api/wards`, { apiBase: API_BASE, headers: { ...authHeaders } });
-      setWards(Array.isArray(json) ? json : []);
-    } catch (_) {
-      setWards([]);
-    } finally {
-      setWardsLoading(false);
+  const openAdmissionRequest = () => {
+    if (!selectedPatient?._id) {
+      setToast({ type: 'error', message: 'Select a patient before requesting admission.' });
+      return;
     }
+    const latestSavedNote = Array.isArray(notes) ? notes[0] : null;
+    const assessment = String(noteForm.assessment || latestSavedNote?.assessment || '').trim();
+    const plan = String(noteForm.plan || latestSavedNote?.plan || '').trim();
+    if (!assessment) {
+      setToast({ type: 'error', message: 'Add and save a SOAP assessment before requesting admission.' });
+      return;
+    }
+    const clinicalContext = [
+      `Admitting assessment: ${assessment}`,
+      plan ? `Plan: ${plan}` : ''
+    ].filter(Boolean).join('\n');
+    setOrderForm({
+      kind: 'Admission Request',
+      service: 'Admission review and bed assignment',
+      notes: clinicalContext,
+      priority: 'Routine',
+      assignedRole: 'nurse'
+    });
+    setOrderModalOpen(true);
   };
 
   const fetchEROrders = async (patientId) => {
@@ -1605,9 +1616,12 @@ function DoctorDashboard() {
           orderedByRole: 'Doctor'
         })
       });
+      const admissionOrder = String(orderForm.kind || '').trim().toLowerCase() === 'admission request';
       setToast({
         type: 'success',
-        message: createdOrder?.assignedRole === 'nurse'
+        message: admissionOrder
+          ? 'Admission request sent to the ER head nurse for ward and room assignment.'
+          : createdOrder?.assignedRole === 'nurse'
           ? 'Order sent to the matching nurse specialization.'
           : 'Order submitted successfully!'
       });
@@ -1638,26 +1652,44 @@ function DoctorDashboard() {
         if (!prescriptionSaved) throw new Error('Correct the prescription fields before finalizing.');
       }
 
-      // 3. Update Patient Status based on Disposition
-      if (disposition === 'Admit' || disposition === 'Discharge' || disposition === 'Transfer') {
-        const wardValue = String(selectedWard || '').trim();
-        if (disposition === 'Transfer' && !wardValue) {
-          throw new Error('Select a ward/room before transferring.');
-        }
+      // 3. Doctors request bed-management actions; nurses own ward/room assignment.
+      if (disposition === 'Admit' || disposition === 'Transfer') {
+        await fetchJson(`/api/clinical-orders`, {
+          apiBase: API_BASE,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({
+            patientId: selectedPatient._id,
+            patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
+            kind: disposition === 'Admit' ? 'Admission Request' : 'Transfer Request',
+            service: disposition === 'Admit' ? 'Admission review and bed assignment' : 'Transfer review and bed reassignment',
+            notes: [noteForm.assessment ? `Assessment: ${noteForm.assessment}` : '', noteForm.plan ? `Plan: ${noteForm.plan}` : ''].filter(Boolean).join('\n'),
+            priority: 'Routine',
+            assignedRole: 'nurse',
+            assignedTo: null,
+            orderedByName: doctorName,
+            orderedByRole: 'Doctor'
+          })
+        });
+      } else if (disposition === 'Discharge') {
         await fetchJson(`/api/patients/${selectedPatient._id}`, {
           apiBase: API_BASE,
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify({
-            admissionStatus: disposition === 'Admit' ? 'Admitted' : (disposition === 'Transfer' ? 'Transferred' : 'Discharged'),
-            wardNumber: (disposition === 'Admit' || disposition === 'Transfer') ? (wardValue || undefined) : undefined,
-            attendingDoctor: disposition === 'Admit' ? doctorName : (disposition === 'Transfer' ? doctorName : undefined),
-            admissionDate: (disposition === 'Admit' || disposition === 'Transfer') ? new Date().toISOString() : undefined
+            admissionStatus: 'Discharged'
           })
         });
       }
 
-      setToast({ type: 'success', message: `Visit finalized with disposition: ${disposition}` });
+      setToast({
+        type: 'success',
+        message: disposition === 'Admit'
+          ? 'Admission requested. The ER head nurse will assign the ward and room.'
+          : disposition === 'Transfer'
+            ? 'Transfer requested. The ER head nurse will review the new ward assignment.'
+            : `Visit finalized with disposition: ${disposition}`
+      });
       setSelectedPatient(null);
       setERVitals(null);
       setERTriage(null);
@@ -1677,8 +1709,6 @@ function DoctorDashboard() {
       fetchRecordDetails(selectedPatient._id);
       if (isERDoctor) {
         fetchEROrders(selectedPatient._id).catch(() => {});
-        fetchWards().catch(() => {});
-        setSelectedWard(String(selectedPatient?.wardNumber || selectedPatient?.ward_number || '').trim());
         // Auto-scroll to clinical actions for ER doctors
         setTimeout(() => {
           const el = document.querySelector('.er-clinical-card');
@@ -1690,7 +1720,6 @@ function DoctorDashboard() {
       setERTriage(null);
       setErOrders([]);
       setErOrdersError('');
-      setSelectedWard('');
       setRecordProfile(null);
       setRecordHistory(null);
     }
@@ -2817,7 +2846,7 @@ function DoctorDashboard() {
     <div className="doc-modal-overlay" onClick={() => setOrderModalOpen(false)}>
       <div className="doc-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
         <div className="doc-modal-header">
-          <div className="doc-modal-title">Clinical Order</div>
+          <div className="doc-modal-title">{orderForm.kind === 'Admission Request' ? 'Request Admission' : 'Clinical Order'}</div>
           <button type="button" className="doc-icon-btn" onClick={() => setOrderModalOpen(false)}>
             <X size={18} />
           </button>
@@ -2837,6 +2866,7 @@ function DoctorDashboard() {
               <option value="Imaging">Imaging</option>
               <option value="Procedure">Procedure</option>
               <option value="Nursing Care">Nursing Care / Endorsement</option>
+              <option value="Admission Request">Admission Request</option>
             </select>
           </div>
           <div className="doc-form-group">
@@ -2845,6 +2875,7 @@ function DoctorDashboard() {
               className="doc-select"
               value={orderForm.assignedRole}
               onChange={(e) => setOrderForm(v => ({ ...v, assignedRole: e.target.value }))}
+              disabled={['Admission Request', 'Transfer Request'].includes(orderForm.kind)}
             >
               <option value="nurse">Nurse</option>
               <option value="medtech">Medtech</option>
@@ -2855,7 +2886,7 @@ function DoctorDashboard() {
             </select>
           </div>
           <div className="doc-form-group">
-            <label>Service / Test Name</label>
+            <label>{orderForm.kind === 'Admission Request' ? 'Request' : 'Service / Test Name'}</label>
             <input 
               className="doc-input" 
               placeholder="e.g. CBC, Chest X-ray" 
@@ -3206,29 +3237,8 @@ function DoctorDashboard() {
             ))}
           </div>
           {(disposition === 'Admit' || disposition === 'Transfer') && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#475569', marginBottom: 6 }}>Ward / Room</div>
-              {wardsLoading ? (
-                <div style={{ color: '#64748b' }}>Loading wards…</div>
-              ) : (
-                <select
-                  className="doc-select"
-                  value={selectedWard}
-                  onChange={(e) => setSelectedWard(e.target.value)}
-                >
-                  <option value="">-- Select ward --</option>
-                  {(Array.isArray(wards) ? wards : []).map((w) => (
-                    <option key={String(w.id)} value={String(w.name || '')}>
-                      {String(w.name || 'Ward')} ({Number(w.occupied || 0)}/{Number(w.totalCapacity || w.total_capacity || 0)})
-                    </option>
-                  ))}
-                </select>
-              )}
-              {disposition === 'Transfer' && (
-                <div style={{ marginTop: 6, fontSize: '0.8rem', color: '#64748b' }}>
-                  Select the target ward/room for transfer.
-                </div>
-              )}
+            <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 10, background: '#fff7ed', color: '#9a3412', fontSize: '0.82rem', fontWeight: 700 }}>
+              The ER head nurse will review this request and assign the ward and room.
             </div>
           )}
           <button 
@@ -3237,7 +3247,13 @@ function DoctorDashboard() {
             onClick={finalizeERVisit}
             disabled={finalizingVisit}
           >
-            {finalizingVisit ? 'Finalizing...' : `Finalize ER Visit (${disposition})`}
+            {finalizingVisit
+              ? 'Finalizing...'
+              : disposition === 'Admit'
+                ? 'Request Admission'
+                : disposition === 'Transfer'
+                  ? 'Request Transfer'
+                  : `Finalize ER Visit (${disposition})`}
           </button>
         </div>
       </div>
@@ -4823,6 +4839,16 @@ function DoctorDashboard() {
                       >
                         <Send size={16} />
                         Endorse to Nurse
+                      </button>
+                      <button
+                        className="doc-btn doc-soap-save-button"
+                        type="button"
+                        onClick={openAdmissionRequest}
+                        disabled={savingNote}
+                        title="Ask the ER head nurse to review admission and assign a bed"
+                      >
+                        <Bed size={16} />
+                        Request Admission
                       </button>
                     </div>
 

@@ -481,7 +481,7 @@ function NurseDashboard() {
     const byType = {
       emergency: { ...shared, appointments: true, orders: true, reception: true, erIntake: true, vitals: true, wards: true },
       pedia: { ...shared, appointments: true, orders: true, vitals: true },
-      bedside: { ...shared, orders: true, medications: true, vitals: true, wards: true },
+      bedside: { ...shared, orders: true, medications: true, vitals: true },
       clinic: { ...shared, appointments: true, orders: true, vitals: true },
       diagnostic: { ...shared, appointments: true, orders: true },
       imaging: { ...shared, appointments: true, orders: true },
@@ -6717,23 +6717,29 @@ function NurseDashboard() {
                                     <h3>Pending Admissions</h3>
                                 </div>
                                 <div className="pending-list">
-                                    {patientsList.filter(p => p.admission_status === 'Admission Requested' || (p.admission_status === 'Emergency' && !p.ward_number)).length === 0 ? (
+                                    {patientsList.filter((p) => {
+                                        const status = String(p.admissionStatus || p.admission_status || '').trim().toLowerCase();
+                                        return status === 'pending admission' || status === 'admission requested' || (status === 'emergency' && !(p.wardNumber || p.ward_number));
+                                    }).length === 0 ? (
                                         <div className="empty-pending">
                                             <CheckCircle size={32} />
                                             <p>No pending admissions.</p>
                                         </div>
                                     ) : (
-                                        patientsList.filter(p => p.admission_status === 'Admission Requested' || (p.admission_status === 'Emergency' && !p.ward_number)).map(p => (
-                                            <div key={p.id} className="pending-item">
+                                        patientsList.filter((p) => {
+                                            const status = String(p.admissionStatus || p.admission_status || '').trim().toLowerCase();
+                                            return status === 'pending admission' || status === 'admission requested' || (status === 'emergency' && !(p.wardNumber || p.ward_number));
+                                        }).map(p => (
+                                            <div key={p.id || p._id} className="pending-item">
                                                 <div className="pending-info">
-                                                    <p>{p.first_name} {p.last_name}</p>
-                                                    <span>{p.admission_status}</span>
+                                                    <p>{p.firstName || p.first_name} {p.lastName || p.last_name}</p>
+                                                    <span>{p.admissionStatus || p.admission_status}</span>
                                                 </div>
                                                 <button 
                                                     className="btn-orange-sm"
-                                                    onClick={() => setAssigningPatient({ patientId: p.id, patientName: `${p.first_name} ${p.last_name}` })}
+                                                    onClick={() => setAssigningPatient({ patientId: p.id || p._id, patientName: `${p.firstName || p.first_name || ''} ${p.lastName || p.last_name || ''}`.trim() })}
                                                 >
-                                                    Assign Bed
+                                                    Review & Assign Bed
                                                 </button>
                                             </div>
                                         ))
@@ -6969,9 +6975,9 @@ function NurseDashboard() {
                         <div className="grid-col col-side">
                             <div className="overview-card">
                                 <div className="card-header">
-                                    <h3>{nurseCapabilities.wards ? 'Ward Overview' : 'Department Focus'}</h3>
+                                    <h3>Ward Overview</h3>
                                 </div>
-                                {nurseCapabilities.wards ? <><div className="ward-summary-list ward-summary-horizontal">
+                                <div className="ward-summary-list ward-summary-horizontal">
                                     {(wardRegistry.wards || []).map(ward => (
                                         <div key={ward.id} className="ward-summary-item">
                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.85rem' }}>
@@ -6988,16 +6994,9 @@ function NurseDashboard() {
                                         </div>
                                     ))}
                                 </div>
-                                <button className="btn-gray full-width" style={{ marginTop: '12px' }} onClick={() => setView('ward-management')}>
+                                {nurseCapabilities.wards ? <button className="btn-gray full-width" style={{ marginTop: '12px' }} onClick={() => setView('ward-management')}>
                                     Full Bed Map
-                                </button></> : <div className="department-focus-list">
-                                  {workspaceFocusCards.map((item) => (
-                                    <div className="department-focus-item" key={item.title}>
-                                      <div><strong>{item.title}</strong><p>{item.caption}</p></div>
-                                      <span>{item.value}</span>
-                                    </div>
-                                  ))}
-                                </div>}
+                                </button> : null}
                             </div>
                         </div>
                     </div>
@@ -10874,7 +10873,9 @@ function NurseDashboard() {
                             </option>
                             {walkInSpecializations.map((opt) => (
                               <option key={String(opt?.value || '')} value={String(opt?.value || '')}>
-                                {String(opt?.label || opt?.value || '')}
+                                {String(opt?.value || '').trim().toLowerCase() === 'medicine'
+                                  ? 'Internal Medicine – OPD Consultation'
+                                  : String(opt?.label || opt?.value || '')}
                               </option>
                             ))}
                           </select>

@@ -422,6 +422,36 @@
   border: 1px solid var(--border);
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   padding: 18px 18px 16px;
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+}
+
+.doc-modal-card .doc-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.doc-modal-card .doc-form-group {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  min-width: 0;
+}
+
+.doc-modal-card .doc-form-group > label {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #475569;
+}
+
+.doc-modal-card .doc-form-group > .doc-input,
+.doc-modal-card .doc-form-group > .doc-select,
+.doc-modal-card .doc-form-group > .doc-textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .doc-modal-lg {

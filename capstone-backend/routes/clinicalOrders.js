@@ -557,6 +557,13 @@ router.post('/', async (req, res) => {
     const st = normalizeStatus(payBeforeExam ? 'For Payment' : 'Pending') || (payBeforeExam ? 'For Payment' : 'Pending');
 
     const patientUuid = patientId ? String(patientId) : null;
+    const orderKindKey = String(kind || '').trim().toLowerCase().replace(/[^a-z]+/g, ' ').trim();
+    const isAdmissionRequest = actorFromHeaders.actorRole === 'doctor' && orderKindKey === 'admission request';
+    const isTransferRequest = actorFromHeaders.actorRole === 'doctor' && orderKindKey === 'transfer request';
+    const isBedManagementRequest = isAdmissionRequest || isTransferRequest;
+    if (isBedManagementRequest && roleNorm !== 'nurse') {
+      return res.status(400).json({ message: 'Admission and transfer requests must be assigned to the ER nurse.' });
+    }
     let authorizedDoctor = null;
     if (actorFromHeaders.actorRole === 'doctor') {
       const access = await enforceDoctorPatientAccess(req, res, patientUuid);
@@ -583,20 +590,45 @@ router.post('/', async (req, res) => {
         select: { specialization: true, department: true }
       }).catch(() => null);
       const doctorDepartment = normalizeNurseDepartment(doctor?.specialization || doctor?.department || '');
-      if (!doctorDepartment) return res.status(409).json({ message: 'Your doctor account has no specialization for nurse routing.' });
+      const targetNurseDepartment = isBedManagementRequest ? 'ER' : doctorDepartment;
+      if (!targetNurseDepartment) return res.status(409).json({ message: 'Your doctor account has no specialization for nurse routing.' });
       const nurses = await prisma.nurses.findMany({
         where: { is_active: true },
         select: { email: true, specialization: true, department: true, first_name: true, last_name: true },
         take: 200
       }).catch(() => []);
       const matchingNurse = nurses.find((nurse) => (
-        normalizeNurseDepartment(nurse?.specialization || nurse?.department || '') === doctorDepartment
+        normalizeNurseDepartment(nurse?.specialization || nurse?.department || '') === targetNurseDepartment
         && normalizeEmail(nurse?.email || '')
       ));
       if (!matchingNurse) {
-        return res.status(409).json({ message: `No active ${doctorDepartment} nurse is available for this order.` });
+        return res.status(409).json({ message: `No active ${targetNurseDepartment} nurse is available for this order.` });
       }
       assignedToFinal = normalizeEmail(matchingNurse.email);
+    }
+
+    if (isBedManagementRequest) {
+      if (!patientUuid) return res.status(400).json({ message: 'Patient is required for an admission request.' });
+      const patient = await prisma.patients.findUnique({
+        where: { id: patientUuid },
+        select: { admission_status: true }
+      });
+      if (!patient) return res.status(404).json({ message: 'Patient not found.' });
+      const admissionState = String(patient.admission_status || '').trim().toLowerCase();
+      if (isAdmissionRequest && ['inpatient', 'admitted'].includes(admissionState)) {
+        return res.status(409).json({ message: 'This patient is already admitted.' });
+      }
+      const duplicate = await prisma.$queryRaw`
+        SELECT id::text AS id
+        FROM public.clinical_orders
+        WHERE patient_id = ${patientUuid}::uuid
+          AND lower(kind) = ${String(kind || '').trim().toLowerCase()}
+          AND lower(status) NOT IN ('completed', 'cancelled', 'rejected')
+        LIMIT 1
+      `;
+      if (Array.isArray(duplicate) && duplicate.length) {
+        return res.status(409).json({ message: `A pending ${isAdmissionRequest ? 'admission' : 'transfer'} request already exists for this patient.` });
+      }
     }
 
     const inserted = await prisma.$queryRaw(
@@ -623,6 +655,13 @@ router.post('/', async (req, res) => {
 
     const createdId = Array.isArray(inserted) ? inserted[0]?.id : null;
     if (!createdId) return res.status(500).json({ message: 'Create failed' });
+
+    if (isAdmissionRequest) {
+      await prisma.patients.update({
+        where: { id: patientUuid },
+        data: { admission_status: 'Pending Admission', attending_doctor: orderedByNameFinal || undefined }
+      });
+    }
 
     // Auto-add priced clinical orders to a Ready invoice so the cashier sees
     // every onsite clinical service immediately.
