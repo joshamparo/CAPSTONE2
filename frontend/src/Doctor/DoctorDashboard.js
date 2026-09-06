@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronLeft, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff, Maximize2, Paperclip, Pin, MoreHorizontal, Download, Image as ImageIcon, File, Video as VideoIcon, ArrowDown, Bell, Copy, AtSign, Reply, Clock, Sparkles } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronLeft, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff, Maximize2, Paperclip, Pin, MoreHorizontal, Download, Image as ImageIcon, File, Video as VideoIcon, ArrowDown, Bell, Copy, AtSign, Reply, Clock, Sparkles, Bed } from 'lucide-react';
 import './DoctorDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import EmbeddedJitsiMeeting from '../components/EmbeddedJitsiMeeting';
