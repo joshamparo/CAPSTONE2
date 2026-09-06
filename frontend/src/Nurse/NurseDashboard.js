@@ -324,24 +324,11 @@ function NurseDashboard() {
     };
   }, [API_BASE]);
 
-  // Filtered Patients by Department
+  // The backend returns only patients authorized for the authenticated nurse's
+  // specialization. Do not broaden that scope with client-side age/status guesses.
   const deptPatients = useMemo(() => {
-    const list = Array.isArray(patientsList) ? patientsList : [];
-    const filtered = list.filter((p) => {
-      const deptRaw = p?.department || p?.wardNumber || p?.ward_number || p?.ward || '';
-      const pDept = normalizeDeptId(deptRaw);
-      const status = String(p?.admissionStatus || p?.admission_status || '').trim();
-      const statusUp = status.toUpperCase();
-
-      if (activeDept === 'ER') return pDept === 'ER' || statusUp === 'EMERGENCY';
-      if (activeDept === 'OPD') return statusUp === 'OUTPATIENT' || !status;
-      if (activeDept === 'PEDIA') return pDept === 'PEDIA' || (p?.age && Number(p.age) < 18);
-      if (activeDept === 'MEDICINE') return pDept === 'MEDICINE' || statusUp === 'INPATIENT';
-      return true;
-    });
-
-    return ['ER', 'OPD', 'PEDIA', 'MEDICINE'].includes(activeDept) ? filtered : list;
-  }, [patientsList, activeDept]);
+    return Array.isArray(patientsList) ? patientsList : [];
+  }, [patientsList]);
 
   const departments = [
     { id: 'ER', label: 'Emergency Room', icon: <AlertCircle size={18} />, color: '#ef4444' },
@@ -557,6 +544,8 @@ function NurseDashboard() {
   const [suggestNote, setSuggestNote] = useState('');
   const [approvalServiceFilter, setApprovalServiceFilter] = useState('All');
   const [approvalStatusFilter, setApprovalStatusFilter] = useState('All');
+  const [approvalPage, setApprovalPage] = useState(1);
+  const approvalPageSize = 6;
 
   const nurseInboxName = useMemo(() => {
     const u = JSON.parse(localStorage.getItem('currentUser')) || {};
@@ -609,6 +598,24 @@ function NurseDashboard() {
       return true;
     });
   }, [approvalInbox, approvalServiceFilter, approvalStatusFilter]);
+
+  const approvalPageCount = useMemo(
+    () => Math.max(1, Math.ceil(filteredApprovalInbox.length / approvalPageSize)),
+    [filteredApprovalInbox.length]
+  );
+  const pagedApprovalInbox = useMemo(() => {
+    const currentPage = Math.min(approvalPage, approvalPageCount);
+    const start = (currentPage - 1) * approvalPageSize;
+    return filteredApprovalInbox.slice(start, start + approvalPageSize);
+  }, [approvalPage, approvalPageCount, filteredApprovalInbox]);
+
+  useEffect(() => {
+    setApprovalPage(1);
+  }, [approvalStatusFilter, approvalServiceFilter, activeDept]);
+
+  useEffect(() => {
+    setApprovalPage((page) => Math.min(page, approvalPageCount));
+  }, [approvalPageCount]);
 
   const [activeAppointmentTab, setActiveAppointmentTab] = useState('requests'); // 'requests' or 'confirmed'
   const [appointmentRangeFilter, setAppointmentRangeFilter] = useState('Today'); // Today | All
@@ -2229,53 +2236,13 @@ function NurseDashboard() {
     try {
       const deptRaw = String(approvalDepartment || '').trim();
       const deptId = normalizeDeptId(deptRaw);
-      const deptKey = normalizeServiceAliasKey(deptRaw);
-
-      if (supabase) {
-        const { data, error } = await supabase
-          .from('appointment_approval_requests')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(500);
-
-        if (error) {
-          setPatientRecords([]);
-          setPatientRecordsError('Unable to load patient records.');
-          return;
-        }
-
-        const mapped = (Array.isArray(data) ? data : [])
-          .filter((r) => String(r?.status || '').trim().toLowerCase() === 'approved')
-          .map((r) => ({
-          id: String(r.id),
-          patientId: r.patient_id || null,
-          patientName: r.patient_name || null,
-          doctorName: r.doctor_name || null,
-          nurseName: r.nurse_name || null,
-          requestedDate: r.requested_date || null,
-          requestedTime: r.requested_time || null,
-          serviceType: r.service_type || null,
-          reason: r.reason || null,
-          status: r.status || 'Approved',
-          appointmentId: r.appointment_id !== null && r.appointment_id !== undefined ? String(r.appointment_id) : null,
-          createdAt: r.created_at || null,
-          updatedAt: r.updated_at || null
-        }));
-
-        const filtered = deptKey
-          ? mapped.filter((t) => deptAllowsService(deptRaw, getApprovalServiceType(t)))
-          : mapped;
-
-        setPatientRecords(filtered);
-        return;
-      }
-
       const res = await fetch(`${API_BASE}/api/approval-requests/inbox?role=nurse&department=${encodeURIComponent(deptId)}&take=500`, {
         headers: { ...getAuthHeaders() }
       });
       if (!res.ok) {
+        const errorBody = await res.json().catch(() => ({}));
         setPatientRecords([]);
-        setPatientRecordsError('Unable to load patient records.');
+        setPatientRecordsError(errorBody?.message || 'Unable to load patient records.');
         return;
       }
       const rows = await res.json().catch(() => []);
@@ -2296,57 +2263,17 @@ function NurseDashboard() {
     try {
       const deptRaw = String(approvalDepartment || activeDept || '').trim();
       const deptId = normalizeDeptId(deptRaw);
-      const deptKey = normalizeServiceAliasKey(deptRaw);
-
-      if (supabase) {
-        const { data, error } = await supabase
-          .from('appointment_approval_requests')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(200);
-
-        if (error) {
-          setApprovalInbox([]);
-          setApprovalInboxError('Unable to load approval requests.');
-          return;
-        }
-
-        const mapped = (Array.isArray(data) ? data : []).map((r) => ({
-          id: String(r.id),
-          patientId: r.patient_id || null,
-          patientName: r.patient_name || null,
-          doctorName: r.doctor_name || null,
-          nurseName: r.nurse_name || null,
-          requestedDate: r.requested_date || null,
-          requestedTime: r.requested_time || null,
-          serviceType: r.service_type || null,
-          reason: r.reason || null,
-          status: r.status || 'Pending',
-          suggestedDate: r.suggested_date || null,
-          suggestedTime: r.suggested_time || null,
-          suggestedNote: r.suggested_note || null,
-          appointmentId: r.appointment_id !== null && r.appointment_id !== undefined ? String(r.appointment_id) : null,
-          createdAt: r.created_at || null,
-          updatedAt: r.updated_at || null
-        }));
-
-        const filtered = deptKey
-          ? mapped.filter((t) => deptAllowsService(deptRaw, getApprovalServiceType(t)))
-          : mapped;
-
-        setApprovalInbox(filtered);
-      } else {
-        const res = await fetch(`${API_BASE}/api/approval-requests/inbox?role=nurse&department=${encodeURIComponent(deptId)}&take=200`, {
-          headers: { ...getAuthHeaders() }
-        });
-        if (!res.ok) {
-          setApprovalInbox([]);
-          setApprovalInboxError('Unable to load messages.');
-          return;
-        }
-        const data = await res.json();
-        setApprovalInbox(Array.isArray(data) ? data : []);
+      const res = await fetch(`${API_BASE}/api/approval-requests/inbox?role=nurse&department=${encodeURIComponent(deptId)}&take=200`, {
+        headers: { ...getAuthHeaders() }
+      });
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => ({}));
+        setApprovalInbox([]);
+        setApprovalInboxError(errorBody?.message || 'Unable to load approval requests.');
+        return;
       }
+      const data = await res.json();
+      setApprovalInbox(Array.isArray(data) ? data : []);
     } catch (_) {
       setApprovalInbox([]);
       setApprovalInboxError('Unable to load messages.');
@@ -2912,17 +2839,21 @@ function NurseDashboard() {
 
   const filteredPatientsForRecords = useMemo(() => {
     const search = String(patientSearch || '').trim().toLowerCase();
-    const list = Array.isArray(patientsList) ? patientsList : [];
+    const list = Array.isArray(deptPatients) ? deptPatients : [];
     return list.filter((p) => {
       const route = String(p.receptionRoute || (String(p.admissionStatus || '').toUpperCase() === 'EMERGENCY' ? 'ER' : 'ONSITE')).toUpperCase();
-      if (patientRouteFilter !== 'ALL' && route !== patientRouteFilter) return false;
+      if (activeDept === 'ER' && patientRouteFilter !== 'ALL' && route !== patientRouteFilter) return false;
       if (!search) return true;
       const fullName = `${String(p.firstName || '')} ${String(p.lastName || '')}`.trim().toLowerCase();
       const id = String(p._id || '').toLowerCase();
       const ward = String(p.wardNumber || '').toLowerCase();
       return fullName.includes(search) || id.includes(search) || ward.includes(search);
     });
-  }, [patientsList, patientSearch, patientRouteFilter]);
+  }, [deptPatients, patientSearch, patientRouteFilter, activeDept]);
+
+  useEffect(() => {
+    if (activeDept !== 'ER' && patientRouteFilter !== 'ALL') setPatientRouteFilter('ALL');
+  }, [activeDept, patientRouteFilter]);
 
   const patientRecordsPageCount = useMemo(() => {
     return Math.max(1, Math.ceil(filteredPatientsForRecords.length / itemsPerPage));
@@ -6579,7 +6510,32 @@ function NurseDashboard() {
                             <div className="overview-card" style={{ padding: '16px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                                     <h3 style={{ margin: 0, fontSize: '1.05rem' }}>Approval Requests</h3>
-                                    <button onClick={fetchApprovalInbox} className="btn-gray"><RotateCw size={14} /></button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      {filteredApprovalInbox.length > approvalPageSize ? (
+                                        <div className="patient-pagination" style={{ margin: 0 }}>
+                                          <button
+                                            type="button"
+                                            className="patient-page-btn"
+                                            onClick={() => setApprovalPage((page) => Math.max(1, page - 1))}
+                                            disabled={approvalPage <= 1}
+                                            aria-label="Previous approval requests page"
+                                          >
+                                            <ChevronLeft size={16} />
+                                          </button>
+                                          <span className="vitals-page-indicator">{Math.min(approvalPage, approvalPageCount)} / {approvalPageCount}</span>
+                                          <button
+                                            type="button"
+                                            className="patient-page-btn"
+                                            onClick={() => setApprovalPage((page) => Math.min(approvalPageCount, page + 1))}
+                                            disabled={approvalPage >= approvalPageCount}
+                                            aria-label="Next approval requests page"
+                                          >
+                                            <ChevronRight size={16} />
+                                          </button>
+                                        </div>
+                                      ) : null}
+                                      <button onClick={fetchApprovalInbox} className="btn-gray" aria-label="Refresh approval requests"><RotateCw size={14} /></button>
+                                    </div>
                                 </div>
                                 {approvalInboxLoading ? (
                                     <div style={{ color: '#64748b' }}>Loading requests...</div>
@@ -6587,7 +6543,7 @@ function NurseDashboard() {
                                     <div style={{ color: '#64748b' }}>No requests found.</div>
                                 ) : (
                                     <div className="modern-list">
-                                        {filteredApprovalInbox.map((thread) => (
+                                        {pagedApprovalInbox.map((thread) => (
                                             <div key={thread.id} className={`modern-list-item ${selectedApproval?.id === thread.id ? 'active' : ''}`} onClick={() => openApprovalThread(thread)} style={{ cursor: 'pointer', padding: '12px', borderRadius: '8px', marginBottom: '8px', border: selectedApproval?.id === thread.id ? '2px solid #ea580c' : '1px solid #e2e8f0' }}>
                                                 <div style={{ fontWeight: 'bold' }}>{thread.patientName}</div>
                                                 <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{getApprovalServiceType(thread)}</div>
@@ -7905,7 +7861,7 @@ function NurseDashboard() {
                                         style={{ width: '100%' }}
                                     />
                                 </div>
-                                <label className="patient-route-filter">
+                                {activeDept === 'ER' ? <label className="patient-route-filter">
                                   <span className="sr-only">Filter patient records by route</span>
                                   <select value={patientRouteFilter} onChange={(event) => setPatientRouteFilter(event.target.value)}>
                                     <option value="ALL">All reception patients ({patientRouteCounts.ALL || 0})</option>
@@ -7918,7 +7874,7 @@ function NurseDashboard() {
                                     <option value="PHARMACY">Pharmacy ({patientRouteCounts.PHARMACY || 0})</option>
                                     <option value="ADMISSION">Admission Evaluation ({patientRouteCounts.ADMISSION || 0})</option>
                                   </select>
-                                </label>
+                                </label> : null}
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                   <div className="walkin-results-count" style={{ margin: 0, fontWeight: 600, color: '#64748b' }}>
@@ -8135,7 +8091,17 @@ function NurseDashboard() {
             )}
             {view === 'vitals' && (() => {
                   const vitalsPageSize = 8;
-                  const filteredVitalsPatients = patientsList.filter(p => p.admission_status === 'Emergency' || p.admission_status === 'Inpatient' || p.admission_status === 'Admission Requested' || p.admission_status === 'Waiting');
+                  const now = new Date();
+                  const infantCutoff = new Date(now);
+                  infantCutoff.setUTCFullYear(infantCutoff.getUTCFullYear() - 1);
+                  const filteredVitalsPatients = deptPatients.filter((p) => {
+                    if (activeDept === 'PEDIA') {
+                      const dob = new Date(p.dateOfBirth || p.date_of_birth || '');
+                      return !Number.isNaN(dob.getTime()) && dob <= now && dob > infantCutoff;
+                    }
+                    const status = String(p.admissionStatus || p.admission_status || '').trim().toLowerCase();
+                    return ['emergency', 'inpatient', 'admission requested', 'waiting', 'outpatient'].includes(status);
+                  });
                   const vitalsPageCount = Math.max(1, Math.ceil(filteredVitalsPatients.length / vitalsPageSize));
                   const currentVitalsPage = Math.min(vitalsPage, vitalsPageCount);
                   const vitalsStartIndex = (currentVitalsPage - 1) * vitalsPageSize;
@@ -8147,8 +8113,8 @@ function NurseDashboard() {
                           <div className="welcome-banner full-width">
                               <div className="welcome-text">
                                   <div className="workspace-badge workspace-er">Monitoring</div>
-                                  <h1>Real-time Vitals Board</h1>
-                                  <p>Monitor patient vitals and record new measurements instantly.</p>
+                                  <h1>{activeDept === 'PEDIA' ? 'Infant Vitals Board' : 'Real-time Vitals Board'}</h1>
+                                  <p>{activeDept === 'PEDIA' ? 'Monitor Pedia patients under 12 months with a verified date of birth.' : 'Monitor patient vitals and record new measurements instantly.'}</p>
                               </div>
                               <div className="header-actions">
                                   <button className="btn-orange" onClick={refreshPatientsList} disabled={loadingPatients}>

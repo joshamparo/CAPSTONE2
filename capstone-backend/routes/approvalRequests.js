@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 const { createClient } = require('@supabase/supabase-js');
 const { recordVideoConsultationPayment } = require('../utils/billingLedger');
 
@@ -774,13 +775,22 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   return updated;
 }
 
-router.get('/inbox', async (req, res) => {
+const authorizeNurseInboxDepartment = (req, res, next) => {
+  if (String(req.auth?.role || '').trim().toLowerCase() !== 'nurse') return next();
+  return requireNurseDepartment(req, res, next);
+};
+
+router.get('/inbox', authorizeNurseInboxDepartment, async (req, res) => {
   try {
     const hdr = inferRequester(req);
     const role = String(req.query.role || hdr.role || '').trim().toLowerCase();
     let name = String(req.query.name || hdr.name || '').trim();
     let doctorId = String(req.query.doctorId || '').trim();
-    const department = String(req.query.department || req.query.serviceType || '').trim();
+    const department = String(
+      role === 'nurse'
+        ? (req.nurseDepartment || '')
+        : (req.query.department || req.query.serviceType || '')
+    ).trim();
     const take = Math.min(Math.max(Number(req.query.take || 50) || 50, 1), 200);
     const status = String(req.query.status || '').trim();
 
@@ -982,6 +992,15 @@ router.get('/inbox', async (req, res) => {
         if (role === 'nurse') {
           if (deptNorm === 'er' || deptNorm === 'emergency' || deptNorm === 'emergency room') {
             return ['ER', 'Emergency', 'Emergency Room', 'Surgery', 'Surgery (Minor)', 'Surgery_Minor', 'Minor Surgery'];
+          }
+          if (deptNorm === 'pedia' || deptNorm === 'pediatric' || deptNorm === 'pediatrics') {
+            return ['PEDIA', 'Pediatric', 'Pediatrics'];
+          }
+          if (deptNorm === 'opd' || deptNorm === 'outpatient' || deptNorm === 'outpatient department') {
+            return ['OPD', 'Outpatient', 'Outpatient Department'];
+          }
+          if (deptNorm === 'medicine' || deptNorm === 'internal medicine') {
+            return ['MEDICINE', 'Medicine', 'Internal Medicine'];
           }
           return [department];
         }

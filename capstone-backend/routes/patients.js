@@ -3113,7 +3113,7 @@ router.post('/:id/clinical-records', requireRole(['admin','nurse','doctor']), as
         const patientId = String(req.params.id || '').trim();
         if (!patientId) return res.status(400).json({ message: 'Patient id is required.' });
         if (!(await enforceClinicalPatientAccess(req, res, patientId))) return;
-        const patient = await prisma.patients.findUnique({ where: { id: patientId }, select: { id: true, first_name: true, last_name: true, clinical_records: true } });
+        const patient = await prisma.patients.findUnique({ where: { id: patientId }, select: { id: true, first_name: true, last_name: true, date_of_birth: true, clinical_records: true } });
         if (!patient) return res.status(404).json({ message: 'Patient not found.' });
 
         const cleanStr = (v, maxLen) => {
@@ -3123,6 +3123,15 @@ router.post('/:id/clinical-records', requireRole(['admin','nurse','doctor']), as
         const allowedType = new Set(['Vitals','Assessment','Medication','Progress','Note','Lab','Imaging','I/O','Pain','Other']);
         const typeRaw = cleanStr(req.body?.type || 'Vitals', 32);
         const type = allowedType.has(typeRaw) ? typeRaw : 'Other';
+        if (getRequesterRole(req) === 'nurse' && req.nurseDepartment === 'PEDIA' && type === 'Vitals') {
+            const dob = patient.date_of_birth instanceof Date ? patient.date_of_birth : new Date(patient.date_of_birth || '');
+            const now = new Date();
+            const infantCutoff = new Date(now);
+            infantCutoff.setUTCFullYear(infantCutoff.getUTCFullYear() - 1);
+            if (Number.isNaN(dob.getTime()) || dob > now || dob <= infantCutoff) {
+                return res.status(403).json({ message: 'Pedia Vitals is limited to infants under 12 months with a valid date of birth.' });
+            }
+        }
         const bloodPressure = req.body?.bloodPressure != null ? cleanStr(req.body.bloodPressure, 32) : null;
         const heartRateRaw = req.body?.heartRate;
         const temperatureRaw = req.body?.temperature;
