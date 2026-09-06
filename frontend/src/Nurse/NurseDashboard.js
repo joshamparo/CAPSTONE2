@@ -490,23 +490,38 @@ function NurseDashboard() {
   }, [user.specialization, user.departmentLabel, activeDept]);
 
   const nurseCapabilities = useMemo(() => {
-    const shared = { overview: true, patients: true, appointments: true, orders: true, schedules: true };
+    const shared = { overview: true, patients: true, schedules: true };
     const byType = {
-      emergency: { ...shared, reception: true, erIntake: true, vitals: true, wards: true },
-      pedia: { ...shared, vitals: true, wards: true },
-      bedside: { ...shared, vitals: true, wards: true },
-      clinic: { ...shared, vitals: true },
-      diagnostic: { ...shared },
-      imaging: { ...shared },
-      remote: { ...shared },
-      procedure: { ...shared, vitals: true, wards: true },
-      general: { ...shared, vitals: true }
+      emergency: { ...shared, appointments: true, orders: true, reception: true, erIntake: true, vitals: true, wards: true },
+      pedia: { ...shared, appointments: true, orders: true, vitals: true },
+      bedside: { ...shared, orders: true, vitals: true, wards: true },
+      clinic: { ...shared, appointments: true, orders: true, vitals: true },
+      diagnostic: { ...shared, appointments: true, orders: true },
+      imaging: { ...shared, appointments: true, orders: true },
+      remote: { ...shared, appointments: true },
+      procedure: { ...shared, appointments: true, orders: true, vitals: true },
+      general: { ...shared, appointments: true, orders: true, vitals: true }
     };
     return byType[nurseWorkspace.type] || byType.general;
   }, [nurseWorkspace.type]);
 
+  const nurseNavLabels = useMemo(() => {
+    const labelsByType = {
+      emergency: { patients: 'ER Patient Records', appointments: 'ER Consults', vitals: 'ER Vitals Monitoring', orders: 'ER Orders Management', wards: 'Emergency Room Board' },
+      pedia: { patients: 'Pediatric Patients', appointments: 'Pediatric Appointments', vitals: 'Pediatric Vitals', orders: 'Pediatric Orders' },
+      bedside: { patients: 'Assigned Patients', vitals: 'Bedside Vitals', orders: 'Clinical Orders', wards: 'Ward Management' },
+      clinic: { patients: 'Clinic Patients', appointments: 'Clinic Appointments', vitals: 'Clinic Vitals & Rooming', orders: 'Clinic Orders' },
+      diagnostic: { patients: 'Patient Queue', appointments: 'Diagnostic Schedule', orders: 'Diagnostic Orders' },
+      imaging: { patients: 'Patient Queue', appointments: 'Exam Schedule', orders: 'Imaging Orders' },
+      remote: { patients: 'Virtual Care Patients', appointments: 'Video Consultations' },
+      procedure: { patients: 'Procedure Patients', appointments: 'Procedure Schedule', vitals: 'Recovery Vitals', orders: 'Procedure Orders' },
+      general: { patients: 'Patient Records', appointments: 'Appointments', vitals: 'Vitals Monitoring', orders: 'Orders Management', wards: 'Ward Management' }
+    };
+    return labelsByType[nurseWorkspace.type] || labelsByType.general;
+  }, [nurseWorkspace.type]);
+
   const allowedNurseViews = useMemo(() => {
-    const allowed = new Set(['overview', 'patients', 'profile']);
+    const allowed = new Set(['overview', 'patients', 'profile', 'activity']);
     if (nurseCapabilities.appointments) allowed.add('appointments');
     if (nurseCapabilities.vitals) allowed.add('vitals');
     if (nurseCapabilities.erIntake) allowed.add('er-intake');
@@ -6318,18 +6333,18 @@ function NurseDashboard() {
           
           <button className={`nurse-nav-item ${view === 'patients' ? 'active' : ''}`} onClick={() => setView('patients')}>
             <Users size={20} />
-            <span>Patient Records</span>
+            <span>{nurseNavLabels.patients}</span>
           </button>
 
           {nurseCapabilities.appointments ? <button className={`nurse-nav-item ${view === 'appointments' ? 'active' : ''}`} onClick={() => setView('appointments')}>
             <Calendar size={20} />
-            <span>Appointments</span>
+            <span>{nurseNavLabels.appointments}</span>
           </button> : null}
 
-          <div className="sidebar-section-label">CLINICAL STATIONS</div>      
+          {nurseCapabilities.vitals || nurseCapabilities.erIntake || nurseCapabilities.orders ? <div className="sidebar-section-label">CLINICAL STATIONS</div> : null}
             {nurseCapabilities.vitals ? <button className={`nurse-nav-item ${view === 'vitals' ? 'active' : ''}`} onClick={() => setView('vitals')}>
               <Activity size={20} />
-              <span>{nurseWorkspace.type === 'clinic' ? 'Clinic Vitals & Rooming' : 'Vitals Monitoring'}</span>
+              <span>{nurseNavLabels.vitals}</span>
             </button> : null}
             {nurseCapabilities.erIntake ? <button className={`nurse-nav-item ${view === 'er-intake' ?
 'active' : ''}`} onClick={() => setView('er-intake')}>
@@ -6339,13 +6354,13 @@ function NurseDashboard() {
 
           {nurseCapabilities.orders ? <button className={`nurse-nav-item ${view === 'orders' ? 'active' : ''}`} onClick={() => setView('orders')}>
             <FileText size={20} />
-            <span>Orders Management</span>
+            <span>{nurseNavLabels.orders}</span>
           </button> : null}
 
           {nurseCapabilities.wards ? <div className="sidebar-section-label">INPATIENT CARE</div> : null}
           {nurseCapabilities.wards ? <button className={`nurse-nav-item ${view === 'ward-management' ? 'active' : ''}`} onClick={() => setView('ward-management')}>
             <BedDouble size={20} />
-            <span>Ward Management</span>
+            <span>{nurseNavLabels.wards}</span>
           </button> : null}
 
           {/* Schedules Dropdown */}
@@ -6997,14 +7012,14 @@ function NurseDashboard() {
                                     <AlertTriangle size={18} />
                                     <span>Emergency Triage</span>
                                 </button> : null}
-                                {!nurseCapabilities.reception && nurseCapabilities.appointments ? <button className="btn-orange" onClick={() => setView('appointments')}><Calendar size={18} /><span>View Appointments</span></button> : null}
-                                {!nurseCapabilities.reception ? <button className="btn-gray" onClick={() => setView('patients')}><Users size={18} /><span>Patient Records</span></button> : null}
-                                {nurseCapabilities.vitals && !nurseCapabilities.erIntake ? <button className="btn-gray" onClick={() => setView('vitals')}><Activity size={18} /><span>{nurseWorkspace.type === 'clinic' ? 'Clinic Vitals' : 'Record Vitals'}</span></button> : null}
+                                {!nurseCapabilities.reception && nurseCapabilities.appointments ? <button className="btn-orange" onClick={() => setView('appointments')}><Calendar size={18} /><span>{nurseNavLabels.appointments}</span></button> : null}
+                                {!nurseCapabilities.reception ? <button className="btn-gray" onClick={() => setView('patients')}><Users size={18} /><span>{nurseNavLabels.patients}</span></button> : null}
+                                {nurseCapabilities.vitals && !nurseCapabilities.erIntake ? <button className="btn-gray" onClick={() => setView('vitals')}><Activity size={18} /><span>{nurseNavLabels.vitals}</span></button> : null}
                                 {nurseCapabilities.wards ? <button className="btn-gray" onClick={() => setView('ward-management')}>
                                     <BedDouble size={18} />
-                                    <span>Manage Wards</span>
+                                    <span>{nurseNavLabels.wards}</span>
                                 </button> : null}
-                                {!nurseCapabilities.vitals && nurseCapabilities.orders ? <button className="btn-gray" onClick={() => setView('orders')}><FileText size={18} /><span>View Orders</span></button> : null}
+                                {!nurseCapabilities.vitals && nurseCapabilities.orders ? <button className="btn-gray" onClick={() => setView('orders')}><FileText size={18} /><span>{nurseNavLabels.orders}</span></button> : null}
                             </div>
                         </div>
                     </div>
@@ -7805,8 +7820,8 @@ function NurseDashboard() {
                         <>
                         <div className="patient-view-header">
                             <div>
-                                <h1 className="page-title-large" style={{marginBottom: '4px'}}>Patient Records</h1>
-                                <p className="page-subtitle">All registered patients and patient test results</p>
+                                <h1 className="page-title-large" style={{marginBottom: '4px'}}>{nurseNavLabels.patients}</h1>
+                                <p className="page-subtitle">Patients and clinical records assigned to {nurseWorkspace.label}.</p>
                             </div>
                             <div style={{display: 'flex', gap: '12px'}}>
                                 <button className="btn-primary-action" onClick={handlePrintPatientRecords}>
