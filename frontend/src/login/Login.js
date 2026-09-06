@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { User, Lock, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, XCircle } from 'lucide-react';
 import './Login.css';
+import PrivacyConsentModal, { hasPrivacyConsent } from '../components/PrivacyConsentModal';
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
@@ -35,6 +36,7 @@ const Login = () => {
   const [isLockedOut, setIsLockedOut] = useState(false);
   const [lockoutTimer, setLockoutTimer] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(() => !hasPrivacyConsent());
 
   const navigate = useNavigate();
 
@@ -320,6 +322,11 @@ const Login = () => {
           </div>
         </div>
       </div>
+      <PrivacyConsentModal
+        open={privacyOpen}
+        onAccept={() => setPrivacyOpen(false)}
+        onDecline={() => navigate('/', { replace: true })}
+      />
     </div>
   );
 };

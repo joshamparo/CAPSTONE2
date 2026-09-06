@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import "./HomePage.css";
 import "../components/AccountHeaderActions.css";
 import SignOutConfirmModal from "../components/SignOutConfirmModal";
+import PrivacyConsentModal, { hasPrivacyConsent } from "../components/PrivacyConsentModal";
 import { Phone, Bone, Stethoscope, MapPin, Mail, Clock, Facebook, MessageCircle, Scissors, Syringe, Baby, Ear, Microscope, Smile, Eye, Scan, Droplet, Sparkles, ShieldCheck, Users, HeartPulse, Building2, BadgeCheck, ChevronLeft, ChevronRight, Pause, Play, Menu, X } from "lucide-react";
 import { buildAuthHeaders } from "../utils/api";
 
@@ -185,6 +186,7 @@ function HomePage() {
   const [newsCursor, setNewsCursor] = useState(0);
   const [newsPaused, setNewsPaused] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(() => !hasPrivacyConsent());
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -935,7 +937,7 @@ function HomePage() {
             <nav className="footer-links-col" aria-label="Legal information">
               <h3 className="footer-title">Legal</h3>
               <ul className="footer-links-list">
-                <li><a href="#privacy" className="footer-link">Privacy Policy</a></li>
+                <li><a href="#privacy" className="footer-link" onClick={(event) => { event.preventDefault(); setPrivacyOpen(true); }}>Privacy Policy</a></li>
                 <li><a href="#terms" className="footer-link">Terms of Service</a></li>
                 <li><a href="#patient-rights" className="footer-link">Patient Rights</a></li>
               </ul>
@@ -948,6 +950,11 @@ function HomePage() {
           <p>&copy; {new Date().getFullYear()} Pascual General Hospital. All rights reserved.</p>
         </div>
       </footer>
+      <PrivacyConsentModal
+        open={privacyOpen}
+        onAccept={() => setPrivacyOpen(false)}
+        onDecline={() => setPrivacyOpen(false)}
+      />
     </div>
   );
 }
