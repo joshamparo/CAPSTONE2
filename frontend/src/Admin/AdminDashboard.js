@@ -621,17 +621,45 @@ function AdminDashboard() {
         const e = timeToMinutes(r.endTime);
         if (s === null || e === null) return 'Invalid time';
         if (e <= s) return 'End must be after start';
-        if (!Number.isFinite(r.slotMinutes) || r.slotMinutes < 5) return 'Slot minutes must be at least 5';
-        if (!Number.isFinite(r.maxPerSlot) || r.maxPerSlot < 1) return 'Max per slot must be at least 1';
+        if (!Number.isInteger(r.slotMinutes) || r.slotMinutes < 5 || r.slotMinutes > 180) return 'Slot minutes must be 5-180';
+        if (!Number.isInteger(r.maxPerSlot) || r.maxPerSlot < 1 || r.maxPerSlot > 20) return 'Max per slot must be 1-20';
         return '';
       });
 
       if (invalid) {
         const label = dowLabels[Number(invalid.dayOfWeek)] || 'Day';
         const row = Number(invalid._idx) + 1;
-        const msg = `Fix Weekly Rule #${row} (${label}): End time must be after start time.`;
+        const start = timeToMinutes(invalid.startTime);
+        const end = timeToMinutes(invalid.endTime);
+        const reason = !invalid.startTime || !invalid.endTime
+          ? 'Start and end times are required.'
+          : start === null || end === null
+            ? 'Enter valid start and end times.'
+            : end <= start
+              ? 'End time must be after start time.'
+              : !Number.isInteger(invalid.slotMinutes) || invalid.slotMinutes < 5 || invalid.slotMinutes > 180
+                ? 'Slot duration must be a whole number from 5 to 180 minutes.'
+                : 'Maximum patients per slot must be a whole number from 1 to 20.';
+        const msg = `Fix Weekly Rule #${row} (${label}): ${reason}`;
         setDoctorAvailError(msg);
         throw new Error(msg);
+      }
+
+      const activeRules = normalized.filter((rule) => rule.active !== false);
+      for (let index = 0; index < activeRules.length; index += 1) {
+        for (let otherIndex = index + 1; otherIndex < activeRules.length; otherIndex += 1) {
+          const first = activeRules[index];
+          const second = activeRules[otherIndex];
+          if (first.dayOfWeek !== second.dayOfWeek) continue;
+          const overlaps = timeToMinutes(first.startTime) < timeToMinutes(second.endTime)
+            && timeToMinutes(second.startTime) < timeToMinutes(first.endTime);
+          if (overlaps) {
+            const label = dowLabels[first.dayOfWeek] || 'Day';
+            const msg = `${label} has overlapping clinic-hour rules. Adjust or remove one before saving.`;
+            setDoctorAvailError(msg);
+            throw new Error(msg);
+          }
+        }
       }
 
       const rules = normalized.map(({ dayOfWeek, startTime, endTime, slotMinutes, maxPerSlot, active }) => ({
@@ -674,7 +702,7 @@ function AdminDashboard() {
       dayOfWeek: Math.max(0, Math.min(6, Math.trunc(Number(doctorAvailAddRule.dayOfWeek)) || 0)),
       startTime: s,
       endTime: e,
-      slotMinutes: Math.max(5, Math.min(240, Math.trunc(Number(doctorAvailAddRule.slotMinutes || 30) || 30))),
+      slotMinutes: Math.max(5, Math.min(180, Math.trunc(Number(doctorAvailAddRule.slotMinutes || 30) || 30))),
       maxPerSlot: Math.max(1, Math.min(20, Math.trunc(Number(doctorAvailAddRule.maxPerSlot || 1) || 1))),
       active: doctorAvailAddRule.active === false ? false : true
     };
@@ -5537,6 +5565,62 @@ function AdminDashboard() {
             <div style={{ marginTop: 8, color: '#64748b', fontSize: 12 }}>
               Selected: {doctorAvailDoctorName ? `Dr. ${cleanDoctorName(doctorAvailDoctorName)}` : '—'}
             </div>
+          </div>
+
+          <div className="form-section-group" style={{ padding: 18, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontWeight: 1000, fontSize: 16, color: '#0f172a' }}>Weekly Clinic Hours</div>
+                <div style={{ marginTop: 4, color: '#64748b', fontSize: 13 }}>
+                  Recurring onsite hours, slot duration, and patient capacity. Blocked dates below override this schedule.
+                </div>
+              </div>
+              <button type="button" className="btn-orange-sm" onClick={saveDoctorAvailabilitySchedule} disabled={doctorAvailSaving || doctorAvailLoading || !scheduleReady}>
+                <Save size={16} /> {doctorAvailSaving ? 'Saving Schedule…' : 'Save Schedule'}
+              </button>
+            </div>
+
+            {!doctorAvailDoctorId ? (
+              <div style={{ marginTop: 14, padding: 14, borderRadius: 10, background: '#f8fafc', color: '#64748b', fontWeight: 700 }}>Select a doctor first to manage weekly clinic hours.</div>
+            ) : doctorAvailLoading || !scheduleReady ? (
+              <div style={{ marginTop: 14, padding: 14, borderRadius: 10, background: '#f8fafc', color: '#64748b', fontWeight: 700 }}>Loading the selected doctor's schedule…</div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 10, marginTop: 14, alignItems: 'end' }}>
+                  <div className="input-group" style={{ margin: 0 }}>
+                    <label>Day</label>
+                    <select className="white-input" value={doctorAvailAddRule.dayOfWeek} onChange={(e) => setDoctorAvailAddRule((value) => ({ ...value, dayOfWeek: Number(e.target.value) }))} disabled={doctorAvailSaving}>
+                      {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, index) => <option key={day} value={index}>{day}</option>)}
+                    </select>
+                  </div>
+                  <div className="input-group" style={{ margin: 0 }}><label>Start</label><input className="white-input" type="time" value={doctorAvailAddRule.startTime} onChange={(e) => setDoctorAvailAddRule((value) => ({ ...value, startTime: e.target.value }))} disabled={doctorAvailSaving} /></div>
+                  <div className="input-group" style={{ margin: 0 }}><label>End</label><input className="white-input" type="time" value={doctorAvailAddRule.endTime} onChange={(e) => setDoctorAvailAddRule((value) => ({ ...value, endTime: e.target.value }))} disabled={doctorAvailSaving} /></div>
+                  <div className="input-group" style={{ margin: 0 }}><label>Slot Minutes</label><input className="white-input" type="number" min="5" max="180" step="1" value={doctorAvailAddRule.slotMinutes} onChange={(e) => setDoctorAvailAddRule((value) => ({ ...value, slotMinutes: e.target.value }))} disabled={doctorAvailSaving} /></div>
+                  <div className="input-group" style={{ margin: 0 }}><label>Max Patients / Slot</label><input className="white-input" type="number" min="1" max="20" step="1" value={doctorAvailAddRule.maxPerSlot} onChange={(e) => setDoctorAvailAddRule((value) => ({ ...value, maxPerSlot: e.target.value }))} disabled={doctorAvailSaving} /></div>
+                  <button type="button" className="btn-gray shadow-btn" onClick={addDoctorAvailabilityRule} disabled={doctorAvailSaving}><Plus size={16} /> Add Weekly Rule</button>
+                </div>
+
+                <div style={{ marginTop: 14, border: '1px solid #e2e8f0', borderRadius: 12, overflowX: 'auto' }}>
+                  <div style={{ minWidth: 720 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1fr 1fr 1.2fr auto', gap: 10, padding: '10px 12px', background: '#f8fafc', color: '#64748b', fontSize: 12, fontWeight: 900 }}>
+                      <div>Day</div><div>Start</div><div>End</div><div>Slot</div><div>Capacity</div><div>Action</div>
+                    </div>
+                    {doctorAvailRules.length === 0 ? (
+                      <div style={{ padding: 14, color: '#b45309', background: '#fffbeb', fontWeight: 700 }}>No weekly clinic hours yet. Until at least one rule is saved, all booking dates for this doctor remain unavailable.</div>
+                    ) : doctorAvailRules.map((rule) => (
+                      <div key={String(rule.id)} style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1fr 1fr 1.2fr auto', gap: 10, padding: '10px 12px', borderTop: '1px solid #f1f5f9', alignItems: 'center' }}>
+                        <div style={{ fontWeight: 900, color: '#0f172a' }}>{['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][Number(rule.dayOfWeek)] || '—'}</div>
+                        <input className="white-input" type="time" value={String(rule.startTime || '').slice(0, 5)} onChange={(e) => setDoctorAvailRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, startTime: e.target.value } : row))} disabled={doctorAvailSaving} />
+                        <input className="white-input" type="time" value={String(rule.endTime || '').slice(0, 5)} onChange={(e) => setDoctorAvailRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, endTime: e.target.value } : row))} disabled={doctorAvailSaving} />
+                        <input className="white-input" type="number" min="5" max="180" step="1" value={rule.slotMinutes} onChange={(e) => setDoctorAvailRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, slotMinutes: Number(e.target.value) } : row))} disabled={doctorAvailSaving} />
+                        <input className="white-input" type="number" min="1" max="20" step="1" value={rule.maxPerSlot} onChange={(e) => setDoctorAvailRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, maxPerSlot: Number(e.target.value) } : row))} disabled={doctorAvailSaving} />
+                        <button type="button" className="btn-gray shadow-btn" onClick={() => removeDoctorAvailabilityRule(rule.id)} disabled={doctorAvailSaving}><Trash2 size={16} /> Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="form-section-group" style={{ padding: 18, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
