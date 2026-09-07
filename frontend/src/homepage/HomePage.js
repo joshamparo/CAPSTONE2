@@ -312,10 +312,15 @@ function HomePage() {
   }, [newsItems, newsLoading, newsPaused]);
 
   useEffect(() => {
-        if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return undefined;
-
         const elements = Array.from(document.querySelectorAll('.reveal-on-scroll, .reveal-on-zoom'));
         if (!elements.length) return undefined;
+
+        // Keep dynamically rendered service cards visible on older browsers,
+        // and register them again whenever View All or a service tab changes.
+        if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') {
+          elements.forEach((element) => element.classList.add('is-visible'));
+          return undefined;
+        }
 
         const observer = new IntersectionObserver(
           (entries) => {
@@ -330,7 +335,7 @@ function HomePage() {
 
         elements.forEach((element) => observer.observe(element));
         return () => observer.disconnect();
-      }, []);
+      }, [showAllServices, activeServiceGroup]);
 
   const visibleNews = useMemo(() => {
     if (newsLoading) return [{}, {}, {}];
