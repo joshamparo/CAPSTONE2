@@ -28,5 +28,13 @@ test('walk-in intake does not scan historical invoices or wait for email deliver
 test('walk-in HMO recovery is bounded to invoices created for the current intake window', () => {
   const handler = walkInHandlerSource();
   assert.match(handler, /created_at\s+>=\s+\(now\(\)\s+-\s+interval\s+'15 minutes'\)/i);
-  assert.match(handler, /ON CONFLICT\s+\(invoice_id\)\s+DO NOTHING/i);
+  assert.doesNotMatch(handler, /ON CONFLICT\s+\(invoice_id\)/i);
+  assert.match(handler, /upsertWalkInHmoClaim\s*\(/i);
+});
+
+test('direct clinical routes create selected services once instead of using the concern as a duplicate order', () => {
+  const handler = walkInHandlerSource();
+  assert.match(handler, /routeServices\[0\]\s*\|\|\s*payload\.mainConcern/i);
+  assert.match(handler, /routeMeta\.type === 'lab'\s*\?\s*payload\.selectedLabServices\.slice\(1\)/i);
+  assert.match(handler, /routeMeta\.type === 'imaging'\s*\?\s*payload\.selectedImagingServices\.slice\(1\)/i);
 });

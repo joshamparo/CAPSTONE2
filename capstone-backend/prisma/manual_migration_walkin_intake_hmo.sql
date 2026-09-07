@@ -122,7 +122,7 @@ ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS updated_by text N
 CREATE INDEX IF NOT EXISTS idx_billing_adjustments_invoice_id ON public.billing_adjustments(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_billing_adjustments_created_at ON public.billing_adjustments(created_at);
 CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_status ON public.billing_hmo_claims(status, updated_at DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS billing_hmo_claims_invoice_id_key ON public.billing_hmo_claims(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_invoice_id ON public.billing_hmo_claims(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_patient_id ON public.billing_hmo_claims(patient_id);
 CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_appointment_id ON public.billing_hmo_claims(appointment_id);
 CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_patient_reference ON public.billing_hmo_claims(patient_reference);

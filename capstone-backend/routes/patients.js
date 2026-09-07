@@ -497,6 +497,54 @@ function mergeWalkInClinicalRecords(currentValue, entry) {
     return base;
 }
 
+async function upsertWalkInHmoClaim(db, {
+    invoiceId, appointmentId, patientId, patientName, provider, loaNumber,
+    cardNumber, philhealthDeduction, approvedAmount, status, coverageJson,
+    notes, requester
+}) {
+    const invoiceKey = typeof invoiceId === 'bigint' ? invoiceId : BigInt(String(invoiceId));
+    // Serialize claim writes per invoice without depending on a legacy unique
+    // constraint that may not exist in older production databases.
+    await db.$queryRawUnsafe('SELECT pg_advisory_xact_lock($1::bigint)', invoiceKey);
+    const updated = await db.$executeRawUnsafe(`
+        UPDATE public.billing_hmo_claims
+        SET appointment_id = COALESCE(appointment_id, $2::bigint),
+            patient_id = COALESCE(patient_id, $3::uuid),
+            patient_name = COALESCE(patient_name, $4::text),
+            hmo_provider = $5::text,
+            hmo_loa_number = $6::text,
+            hmo_card_number = $7::text,
+            philhealth_deduction = $8::numeric,
+            loa_approved_amount = $9::numeric,
+            status = $10::text,
+            coverage_json = COALESCE($11::jsonb, coverage_json),
+            notes = COALESCE($12::text, notes),
+            requested_by = COALESCE(requested_by, $13::text),
+            updated_by = $13::text,
+            updated_at = now()
+        WHERE invoice_id = $1::bigint
+    `, invoiceKey, appointmentId || null, patientId || null, patientName || null,
+        provider || null, loaNumber || null, cardNumber || null,
+        Number(philhealthDeduction || 0), Number(approvedAmount || 0), status,
+        coverageJson || null, notes || null, requester || null);
+    if (Number(updated) > 0) return { created: false };
+
+    await db.$executeRawUnsafe(`
+        INSERT INTO public.billing_hmo_claims
+            (invoice_id, appointment_id, patient_id, patient_name, hmo_provider, hmo_loa_number,
+             hmo_card_number, philhealth_deduction, loa_approved_amount, status, coverage_json,
+             notes, requested_by, updated_by, created_at, updated_at)
+        VALUES
+            ($1::bigint, $2::bigint, $3::uuid, $4::text, $5::text, $6::text,
+             $7::text, $8::numeric, $9::numeric, $10::text, $11::jsonb,
+             $12::text, $13::text, $13::text, now(), now())
+    `, invoiceKey, appointmentId || null, patientId || null, patientName || null,
+        provider || null, loaNumber || null, cardNumber || null,
+        Number(philhealthDeduction || 0), Number(approvedAmount || 0), status,
+        coverageJson || null, notes || null, requester || null);
+    return { created: true };
+}
+
 function getReceptionRouteFromClinicalRecords(clinicalRecords) {
     const entries = clinicalRecords && typeof clinicalRecords === 'object' && Array.isArray(clinicalRecords.walkInIntakes)
         ? clinicalRecords.walkInIntakes
@@ -1966,7 +2014,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     getRequesterEmail(req)
                 ).catch(() => null);
             } else if (routeMeta.creates === 'clinical_order') {
-                const service = String(payload.mainConcern || '').trim() || routeMeta.label;
+                const routeServices = routeMeta.type === 'lab'
+                    ? (Array.isArray(payload.selectedLabServices) ? payload.selectedLabServices : [])
+                    : (Array.isArray(payload.selectedImagingServices) ? payload.selectedImagingServices : []);
+                const service = String(routeServices[0] || payload.mainConcern || '').trim() || routeMeta.label;
                 const isEcg = /\becg\b/i.test(service);
                 const kind = routeMeta.type === 'lab' ? 'Laboratory' : isEcg ? 'ECG' : 'Radiology';
                 const assignedRole = routeMeta.type === 'lab' ? 'medtech' : isEcg ? 'ecg_operator' : 'radiographer';
@@ -2161,8 +2212,11 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             const hmoActiveExtra = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
             const coverageExtra = payload.hmoCoveredServices && typeof payload.hmoCoveredServices === 'object' ? payload.hmoCoveredServices : {};
 
-            if (Array.isArray(payload.selectedLabServices) && payload.selectedLabServices.length > 0) {
-                for (const service of payload.selectedLabServices) {
+            const extraLabServices = Array.isArray(payload.selectedLabServices)
+                ? (routeMeta.type === 'lab' ? payload.selectedLabServices.slice(1) : payload.selectedLabServices)
+                : [];
+            if (extraLabServices.length > 0) {
+                for (const service of extraLabServices) {
                     const pricing = resolveClinicalServicePricing({ kind: 'Laboratory', service });
                     const configuredUnitPrice = Number(pricing?.unitPrice || 0);
                     const pillMarkedCovered = hmoActiveExtra && Boolean(coverageExtra.lab);
@@ -2259,8 +2313,11 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 }
             }
 
-            if (Array.isArray(payload.selectedImagingServices) && payload.selectedImagingServices.length > 0) {
-                for (const service of payload.selectedImagingServices) {
+            const extraImagingServices = Array.isArray(payload.selectedImagingServices)
+                ? (routeMeta.type === 'imaging' ? payload.selectedImagingServices.slice(1) : payload.selectedImagingServices)
+                : [];
+            if (extraImagingServices.length > 0) {
+                for (const service of extraImagingServices) {
                     const isECG = /\becg\b/i.test(service) || String(service).toLowerCase().includes('ecg');
                     const kind = isECG ? 'ECG' : 'Radiology';
                     const assignedRole = isECG ? 'ecg_operator' : 'radiographer';
@@ -2457,38 +2514,27 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     WHERE id = $3::bigint
                 `, hmoProv, desiredHmoStatus, BigInt(linkedInvoiceId)).catch(() => null);
 
-                // Insert into billing_hmo_claims using the unified schema
-                const onSiteAmount = hasServices ? 100 : 0;
+                // Upsert using an invoice-scoped lock so legacy databases do
+                // not need a unique constraint for safe, duplicate-free writes.
                 const autoApproveAmount = desiredHmoStatus === 'Approved'
                     ? Math.max(0, Number(payload.hmoLoaApprovedAmount || 0))
                     : 0;
                 const apptIdForClaim = createdRecord && createdRecord.id ? String(createdRecord.id) : null;
                 const coverageJson = (coverageExtra && Object.keys(coverageExtra).length > 0) ? JSON.stringify(coverageExtra) : null;
-                await tx.$executeRawUnsafe(`
-                    INSERT INTO public.billing_hmo_claims
-                        (invoice_id, appointment_id, patient_id, patient_name, hmo_provider, hmo_loa_number, hmo_card_number, 
-                         philhealth_deduction, loa_approved_amount, status, coverage_json, notes, requested_by, created_at, updated_at)
-                    VALUES
-                        ($1::bigint, $2::bigint, $3::uuid, $4::text, $5::text, $6::text, $7::text,
-                         $8::numeric, $9::numeric, $10::text, $11::jsonb, $12::text, $13::text, now(), now())
-                    ON CONFLICT (invoice_id) DO UPDATE SET
-                        appointment_id = COALESCE(public.billing_hmo_claims.appointment_id, EXCLUDED.appointment_id),
-                        patient_id = COALESCE(public.billing_hmo_claims.patient_id, EXCLUDED.patient_id),
-                        patient_name = COALESCE(public.billing_hmo_claims.patient_name, EXCLUDED.patient_name),
-                        hmo_provider = EXCLUDED.hmo_provider,
-                        hmo_loa_number = EXCLUDED.hmo_loa_number,
-                        hmo_card_number = EXCLUDED.hmo_card_number,
-                        philhealth_deduction = EXCLUDED.philhealth_deduction,
-                        loa_approved_amount = EXCLUDED.loa_approved_amount,
-                        status = EXCLUDED.status,
-                        coverage_json = COALESCE(public.billing_hmo_claims.coverage_json, EXCLUDED.coverage_json),
-                        notes = EXCLUDED.notes,
-                        updated_at = now()
-                `, linkedInvoiceId, apptIdForClaim, String(patient.id), patientName, hmoProv, loaNum, hmoCard,
-                    phAmt, autoApproveAmount, desiredHmoStatus, coverageJson, hmoNts,
-                    getRequesterEmail(req) || requesterName || null
-                ).catch((err) => {
-                    console.error('[HMO Intake] Failed to record claim:', err);
+                await upsertWalkInHmoClaim(tx, {
+                    invoiceId: linkedInvoiceId,
+                    appointmentId: apptIdForClaim,
+                    patientId: String(patient.id),
+                    patientName,
+                    provider: hmoProv,
+                    loaNumber: loaNum,
+                    cardNumber: hmoCard,
+                    philhealthDeduction: phAmt,
+                    approvedAmount: autoApproveAmount,
+                    status: desiredHmoStatus,
+                    coverageJson,
+                    notes: hmoNts,
+                    requester: getRequesterEmail(req) || requesterName || null
                 });
 
                 // AUTO-UPDATE invoice status once HMO claim is Approved:
@@ -2576,7 +2622,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         // ============== LAYER 2 FALLBACK SAFETY NET ==============
         // GUARANTEES: HMO claim row exists if patient had HMO + status approved/awaiting
         // Even if layer1 syncHmo failed silently (old bugs/crashes/.catch(()=>null)), this runs directly with fresh prisma
-        // after commit, uses ON CONFLICT (invoice_id) DO NOTHING so duplicates never happen.
+        // after commit, using an invoice-scoped advisory lock so duplicates never happen.
         try {
             const hasAnyHmoFlag = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
             const shouldCreateClaim = hasAnyHmoFlag && desiredHmoStatus && !hmoRejectedFlag;
@@ -2606,65 +2652,30 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     ORDER BY bi.id DESC
                 `, patientIdRaw).catch(() => []);
                 if (Array.isArray(candidateInvoices) && candidateInvoices.length) {
-                    const insertPromises = candidateInvoices.map(async (row) => {
+                    for (const row of candidateInvoices) {
                         const invId = row?.id ? (typeof row.id === 'bigint' ? row.id : BigInt(String(row.id))) : null;
-                        if (!invId) return;
+                        if (!invId) continue;
                         try {
                             const apptIdSafe = apptId ? BigInt(String(apptId)) : null;
-                            await prisma.$executeRawUnsafe(`
-                                INSERT INTO public.billing_hmo_claims (
-                                    invoice_id, appointment_id, patient_id, patient_name,
-                                    hmo_provider, hmo_loa_number, hmo_card_number,
-                                    philhealth_deduction, loa_approved_amount, status,
-                                    notes, requested_by, updated_by, created_at, updated_at
-                                ) VALUES (
-                                    $1::bigint,
-                                    $2::bigint,
-                                    $3::uuid,
-                                    $4::text,
-                                    $5::text,
-                                    $6::text,
-                                    $7::text,
-                                    $8::numeric,
-                                    $9::numeric,
-                                    $10::text,
-                                    $11::text,
-                                    $12::text,
-                                    $13::text,
-                                    now(),
-                                    now()
-                                ) ON CONFLICT (invoice_id) DO NOTHING
-                            `, invId, apptIdSafe, patientIdRaw, patientFullName, hmoProv, loaNum, hmoCard, phAmt, loaAmt, desiredHmoStatus, notes, requester, requester).catch(() => {
-                                // Retry without UUID cast (if patient_id column is text, or missing patient_id entirely)
-                                return prisma.$executeRawUnsafe(`
-                                    INSERT INTO public.billing_hmo_claims (
-                                        invoice_id, appointment_id, patient_name,
-                                        hmo_provider, hmo_loa_number, hmo_card_number,
-                                        philhealth_deduction, loa_approved_amount, status,
-                                        notes, requested_by, updated_by, created_at, updated_at
-                                    ) VALUES (
-                                        $1::bigint,
-                                        $2::bigint,
-                                        $3::text,
-                                        $4::text,
-                                        $5::text,
-                                        $6::text,
-                                        $7::numeric,
-                                        $8::numeric,
-                                        $9::text,
-                                        $10::text,
-                                        $11::text,
-                                        $12::text,
-                                        now(),
-                                        now()
-                                    ) ON CONFLICT (invoice_id) DO NOTHING
-                                `, invId, (apptId ? BigInt(String(apptId)) : null), patientFullName, hmoProv, loaNum, hmoCard, phAmt, loaAmt, desiredHmoStatus, notes, requester, requester).catch(() => null);
-                            });
+                            await prisma.$transaction((claimTx) => upsertWalkInHmoClaim(claimTx, {
+                                invoiceId: invId,
+                                appointmentId: apptIdSafe,
+                                patientId: patientIdRaw,
+                                patientName: patientFullName,
+                                provider: hmoProv,
+                                loaNumber: loaNum,
+                                cardNumber: hmoCard,
+                                philhealthDeduction: phAmt,
+                                approvedAmount: loaAmt,
+                                status: desiredHmoStatus,
+                                coverageJson: null,
+                                notes,
+                                requester
+                            }));
                         } catch (_ins) {
-                            // ignore duplicate or schema issues; layer1 may have worked
+                            // Layer 1 already committed the primary claim path.
                         }
-                    });
-                    await Promise.all(insertPromises);
+                    }
                 }
             }
         } catch (_layer2) {
