@@ -45,6 +45,14 @@ test('walk-in HMO synchronization cannot roll back the core intake transaction',
   assert.match(handler, /LAYER 2 FALLBACK SAFETY NET/i);
 });
 
+test('walk-in response exposes HMO sync state and an idempotent retry route', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'patients.js'), 'utf8');
+  assert.match(source, /hmoSync\s*=\s*syncedClaims\s*>\s*0/i);
+  assert.match(source, /router\.post\('\/walk-in-intake\/hmo-sync'/i);
+  assert.match(source, /upsertWalkInHmoClaim\(tx/i);
+  assert.match(source, /Billing invoice was not found for this patient/i);
+});
+
 test('direct diagnostic intake follows the actually selected service category', () => {
   const handler = walkInHandlerSource();
   assert.match(handler, /selectedLabs\.length > 0 && selectedImaging\.length === 0/i);

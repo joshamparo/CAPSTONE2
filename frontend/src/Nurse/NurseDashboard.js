@@ -682,6 +682,9 @@ function NurseDashboard() {
 
   const [walkInNextSteps, setWalkInNextSteps] = useState(null);
   const [walkInNextStepsOpen, setWalkInNextStepsOpen] = useState(false);
+  const [walkInHmoRetrying, setWalkInHmoRetrying] = useState(false);
+  const [walkInHmoRetryError, setWalkInHmoRetryError] = useState('');
+  const [walkInBillingDetailsOpen, setWalkInBillingDetailsOpen] = useState(false);
   const [walkInPatientReference, setWalkInPatientReference] = useState(''); // ✅ NEW: Patient reference number
   const [walkInIntakeVitals, setWalkInIntakeVitals] = useState(null); // ✅ NEW: Saved vitals from intake for report
   const [walkInPharmacyDest, setWalkInPharmacyDest] = useState('in_house'); // in_house | outside
@@ -1496,6 +1499,7 @@ function NurseDashboard() {
       const routeId = String(response?.routing?.id || '').trim();
       const routeTicket = String(response?.routing?.ticket || '').trim();
       const patientId = String(response?.patient?.id || response?.patient?._id || '').trim();
+      const invoiceIdRaw = String(response?.billing?.invoice_id || response?.hmoSync?.invoiceId || response?.hmo?.invoice_id || response?.invoiceId || response?.invoice_id || response?.routing?.invoice_id || '').trim();
       const patientName = response?.patient
         ? `${String(response.patient.first_name || response.patient.firstName || addPatientData.firstName || '').trim()} ${String(response.patient.last_name || response.patient.lastName || addPatientData.lastName || '').trim()}`.trim()
         : '';
@@ -1519,7 +1523,6 @@ function NurseDashboard() {
       // Returns format PGHYYMMDD-NNNNN (ex: PGH260817-00042) and saves to DB automatically
       let generatedRef = '';
       try {
-        const invoiceIdRaw = String(response?.billing?.invoice_id || response?.invoiceId || response?.invoice_id || response?.routing?.invoice_id || '').trim();
         const params = new URLSearchParams();
         if (patientId) params.append('patient_id', patientId);
         if (appointmentId) params.append('appointment_id', appointmentId);
@@ -1540,6 +1543,8 @@ function NurseDashboard() {
         loa_number: addPatientData.hmoLoaNumber || response?.hmo?.loa_number || null,
         card_number: addPatientData.hmoCardNumber || response?.hmo?.card_number || null,
         approved_amount: Number(addPatientData.hmoLoaApprovedAmount || response?.hmo?.hmo_coverage || 0),
+        philhealth_deduction: Number(addPatientData.philhealthDeduction || 0),
+        coverage: addPatientData.hmoCoveredServices || null,
         status: String(options?.hmoApprovalStatus || (addPatientData.hasHmo ? 'Approved' : '')).trim() || null
       };
 
@@ -1554,6 +1559,8 @@ function NurseDashboard() {
         routeLabel,
         routeTarget: services ? services : (routeTarget || null),
         routeKind: routeKind || null,
+        invoiceId: invoiceIdRaw || null,
+        hmoSync: response?.hmoSync || (patientHmo.hasHmo ? { state: 'pending', label: 'Sync pending', invoiceId: invoiceIdRaw || null } : { state: 'not_required', label: 'Not required' }),
         patient_reference: generatedRef || null,
         vitals: vitalsSave,
         hmo: patientHmo.hasHmo ? patientHmo : (response?.hmo && typeof response.hmo === 'object' ? response.hmo : null),
@@ -1561,6 +1568,8 @@ function NurseDashboard() {
       });
       setWalkInPharmacyDest('in_house');
       setWalkInPharmacyNotes('');
+      setWalkInHmoRetryError('');
+      setWalkInBillingDetailsOpen(false);
       setWalkInNextStepsOpen(true);
 
       // We'll skip the auto-redirect for now so the user can see the success modal and queue ticket
@@ -1799,6 +1808,41 @@ function NurseDashboard() {
     setSuccessMessage('Marked as outside pharmacy purchase.');
     setModalType('success');
     setShowSuccessModal(true);
+  };
+
+  const retryWalkInHmoSync = async () => {
+    if (walkInHmoRetrying || !walkInNextSteps?.invoiceId || !walkInNextSteps?.patientId) return;
+    const hmo = walkInNextSteps?.hmo || {};
+    setWalkInHmoRetrying(true);
+    setWalkInHmoRetryError('');
+    try {
+      const response = await fetchJson('/api/patients/walk-in-intake/hmo-sync', {
+        apiBase: API_BASE,
+        method: 'POST',
+        timeoutMs: 30000,
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          invoiceId: walkInNextSteps.invoiceId,
+          patientId: walkInNextSteps.patientId,
+          patientName: walkInNextSteps.patientName,
+          provider: hmo.provider || hmo.hmo_provider || '',
+          cardNumber: hmo.card_number || hmo.hmo_card_number || '',
+          loaNumber: hmo.loa_number || hmo.hmo_loa_number || '',
+          approvedAmount: Number(hmo.approved_amount || hmo.hmo_coverage || 0),
+          philhealthDeduction: Number(hmo.philhealth_deduction || 0),
+          coverage: hmo.coverage || null,
+          status: hmo.status || 'Approved'
+        })
+      });
+      setWalkInNextSteps((previous) => ({
+        ...previous,
+        hmoSync: response?.hmoSync || { state: 'sent', label: 'Sent to Cashier', invoiceId: previous.invoiceId }
+      }));
+    } catch (error) {
+      setWalkInHmoRetryError(String(error?.message || 'HMO sync is still pending. The intake remains saved.'));
+    } finally {
+      setWalkInHmoRetrying(false);
+    }
   };
 
   const copyWalkInSlip = async () => {
@@ -10521,6 +10565,41 @@ function NurseDashboard() {
           bodyClassName="intake-receipt-modal-body"
         >
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+              {(() => {
+                const sync = walkInNextSteps?.hmoSync || { state: 'not_required', label: 'Not required' };
+                const isPending = sync.state === 'pending' || sync.state === 'failed';
+                const isSent = sync.state === 'sent';
+                return (
+                  <div style={{ width: 'min(100%, 360px)', alignSelf: 'center', marginBottom: 12, padding: '11px 12px', borderRadius: 10, border: `1px solid ${isSent ? '#bbf7d0' : isPending ? '#fed7aa' : '#e2e8f0'}`, background: isSent ? '#f0fdf4' : isPending ? '#fff7ed' : '#f8fafc' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                      <div>
+                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13 }}>Intake completed</div>
+                        <div style={{ marginTop: 2, color: isSent ? '#15803d' : isPending ? '#c2410c' : '#64748b', fontSize: 12, fontWeight: 700 }}>
+                          HMO: {walkInHmoRetrying ? 'Syncing…' : sync.label}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {isPending ? (
+                          <button type="button" onClick={retryWalkInHmoSync} disabled={walkInHmoRetrying} style={{ border: 0, borderRadius: 7, padding: '7px 9px', background: '#f97316', color: '#fff', fontSize: 11, fontWeight: 800, cursor: walkInHmoRetrying ? 'wait' : 'pointer' }}>
+                            {walkInHmoRetrying ? 'Retrying…' : 'Retry Sync'}
+                          </button>
+                        ) : null}
+                        {walkInNextSteps?.invoiceId ? (
+                          <button type="button" onClick={() => setWalkInBillingDetailsOpen((open) => !open)} style={{ border: '1px solid #cbd5e1', borderRadius: 7, padding: '7px 9px', background: '#fff', color: '#334155', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>
+                            View Billing
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                    {walkInBillingDetailsOpen && walkInNextSteps?.invoiceId ? (
+                      <div style={{ marginTop: 9, paddingTop: 8, borderTop: '1px solid #e2e8f0', color: '#475569', fontSize: 12 }}>
+                        Invoice #{walkInNextSteps.invoiceId} · Cashier reference: {walkInNextSteps?.patient_reference || 'Pending'}
+                      </div>
+                    ) : null}
+                    {walkInHmoRetryError ? <div style={{ marginTop: 7, color: '#dc2626', fontSize: 11.5, fontWeight: 700 }}>{walkInHmoRetryError}</div> : null}
+                  </div>
+                );
+              })()}
               {/* ================================================================ */}
               {/* 🏷️ NEW: PATIENT INTAKE REPORT (THERMAL 80mm RECEIPT STYLE) */}
               {/* ================================================================ */}

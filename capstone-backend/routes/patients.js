@@ -2672,8 +2672,11 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         // GUARANTEES: HMO claim row exists if patient had HMO + status approved/awaiting
         // Even if layer1 syncHmo failed silently (old bugs/crashes/.catch(()=>null)), this runs directly with fresh prisma
         // after commit, using an invoice-scoped advisory lock so duplicates never happen.
+        const hasAnyHmoFlag = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
+        let hmoSync = hasAnyHmoFlag
+            ? { state: 'pending', label: 'Sync pending', invoiceId: result?.hmoSummary?.invoice_id || null }
+            : { state: 'not_required', label: 'Not required', invoiceId: null };
         try {
-            const hasAnyHmoFlag = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
             const shouldCreateClaim = hasAnyHmoFlag && desiredHmoStatus && !hmoRejectedFlag;
             if (shouldCreateClaim && result?.patient?.id) {
                 const patientIdRaw = String(result.patient.id || '').trim();
@@ -2702,6 +2705,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                       AND bi.created_at >= (now() - interval '15 minutes')
                     ORDER BY bi.id DESC
                 `, patientIdRaw).catch(() => []);
+                let syncedClaims = 0;
                 if (Array.isArray(candidateInvoices) && candidateInvoices.length) {
                     for (const row of candidateInvoices) {
                         const invId = row?.id ? (typeof row.id === 'bigint' ? row.id : BigInt(String(row.id))) : null;
@@ -2723,15 +2727,22 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                 notes,
                                 requester
                             }));
-                        } catch (_ins) {
-                            // Layer 1 already committed the primary claim path.
+                            syncedClaims += 1;
+                        } catch (syncError) {
+                            console.error('[HMO Layer2] Invoice sync failed:', syncError?.message || syncError);
                         }
                     }
                 }
+                hmoSync = syncedClaims > 0
+                    ? { state: 'sent', label: 'Sent to Cashier', invoiceId: String(candidateInvoices[0].id), syncedClaims }
+                    : { state: 'pending', label: 'Sync pending', invoiceId: result?.hmoSummary?.invoice_id || null, syncedClaims: 0 };
+            } else if (hasAnyHmoFlag) {
+                hmoSync = { state: 'not_required', label: 'No HMO claim required', invoiceId: result?.hmoSummary?.invoice_id || null };
             }
         } catch (_layer2) {
             // Safety net failing should never break user response
             console.error('[HMO Layer2] Safety net insert failed:', _layer2);
+            hmoSync = { state: 'pending', label: 'Sync pending', invoiceId: result?.hmoSummary?.invoice_id || null };
         }
 
         let emailSent = false;
@@ -2769,7 +2780,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             routeType: routeMeta.type,
             routeLabel: routeMeta.label,
             routing: { ...result.createdRecord, emailSent, emailQueued },
-            hmo: result.hmoSummary || null
+            hmo: result.hmoSummary || null,
+            billing: { invoice_id: result?.hmoSummary?.invoice_id || hmoSync.invoiceId || null },
+            hmoSync
         });
     } catch (err) {
         sendError(res, err, 'Unable to process walk-in intake.');
@@ -3098,6 +3111,74 @@ router.post('/:id/clinical-records', requireRole(['admin','nurse','doctor']), as
         res.json(updated);
     } catch (err) {
         res.status(500).json({ message: 'Error saving clinical record.' });
+    }
+});
+
+router.post('/walk-in-intake/hmo-sync', requireRole(['admin', 'nurse']), async (req, res) => {
+    try {
+        await ensureBillingTablesExist(prisma);
+        const invoiceIdRaw = String(req.body?.invoiceId || '').trim();
+        const patientId = String(req.body?.patientId || '').trim();
+        if (!/^\d+$/.test(invoiceIdRaw) || !patientId) {
+            return res.status(400).json({ message: 'A valid invoice and patient are required.' });
+        }
+        const invoiceId = BigInt(invoiceIdRaw);
+        const invoice = await prisma.billing_invoices.findFirst({
+            where: { id: invoiceId, patient_id: patientId },
+            select: { id: true, patient_id: true }
+        });
+        if (!invoice) return res.status(404).json({ message: 'Billing invoice was not found for this patient.' });
+
+        const provider = String(req.body?.provider || '').trim();
+        const cardNumber = String(req.body?.cardNumber || '').trim();
+        const loaNumber = String(req.body?.loaNumber || '').trim();
+        const requestedStatus = String(req.body?.status || 'Approved').trim().toLowerCase();
+        const allowedStatuses = new Map([
+            ['approved', 'Approved'],
+            ['awaiting loa', 'Awaiting LOA'],
+            ['awaiting_loa', 'Awaiting LOA'],
+            ['partially approved', 'Partially Approved']
+        ]);
+        const status = allowedStatuses.get(requestedStatus);
+        if (!provider || !cardNumber) return res.status(400).json({ message: 'HMO provider and card number are required.' });
+        if (!status) return res.status(400).json({ message: 'Select a valid HMO status.' });
+
+        const approvedAmount = Number(req.body?.approvedAmount || 0);
+        const philhealthDeduction = Number(req.body?.philhealthDeduction || 0);
+        if (!Number.isFinite(approvedAmount) || approvedAmount < 0 || !Number.isFinite(philhealthDeduction) || philhealthDeduction < 0) {
+            return res.status(400).json({ message: 'HMO amounts must be valid non-negative numbers.' });
+        }
+
+        await prisma.$transaction((tx) => upsertWalkInHmoClaim(tx, {
+            invoiceId,
+            appointmentId: null,
+            patientId,
+            patientName: String(req.body?.patientName || '').trim() || null,
+            provider,
+            loaNumber: loaNumber || null,
+            cardNumber,
+            philhealthDeduction,
+            approvedAmount,
+            status,
+            coverageJson: req.body?.coverage && typeof req.body.coverage === 'object' ? JSON.stringify(req.body.coverage) : null,
+            notes: 'Retried from nurse intake completion',
+            requester: getRequesterEmail(req) || inferRequesterName(req)
+        }));
+
+        await prisma.activity_logs.create({
+            data: {
+                actor_name: inferRequesterName(req),
+                role: getRequesterRole(req) || 'nurse',
+                action: 'HMO Intake Sync Retried',
+                target: String(req.body?.patientName || patientId),
+                details: `Invoice #${invoiceIdRaw} sent to Cashier HMO monitoring`
+            }
+        }).catch(() => null);
+
+        res.json({ ok: true, hmoSync: { state: 'sent', label: 'Sent to Cashier', invoiceId: invoiceIdRaw } });
+    } catch (err) {
+        console.error('[Walk-in HMO retry] Failed:', err?.message || err);
+        sendError(res, err, 'HMO sync is still pending. The intake remains saved.');
     }
 });
 
