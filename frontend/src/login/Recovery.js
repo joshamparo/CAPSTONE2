@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Login.css';
 import { API_BASE } from '../utils/api';
@@ -9,6 +9,7 @@ const Recovery = () => {
   const [isSuccess, setIsSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [firstCharNotice, setFirstCharNotice] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
   const navigate = useNavigate();
 
   const readJson = async (response) => {
@@ -18,6 +19,12 @@ const Recovery = () => {
       return null;
     }
   };
+
+  useEffect(() => {
+    if (resendTimer <= 0) return undefined;
+    const timer = window.setInterval(() => setResendTimer((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [resendTimer]);
 
   const handleRecovery = async (e) => {
     e.preventDefault();
@@ -39,11 +46,16 @@ const Recovery = () => {
       });
       const data = await readJson(response);
       if (!response.ok) {
-        if (response.status === 429) throw new Error('Too many recovery attempts. Please wait before trying again.');
+        if (response.status === 429) {
+          const retryAfter = Math.max(1, Number(response.headers.get('Retry-After')) || Number(data?.retryAfterSeconds) || 60);
+          setResendTimer(retryAfter);
+          throw new Error(`Please wait ${retryAfter} seconds before requesting another email.`);
+        }
         throw new Error(String(data?.message || 'Recovery service is temporarily unavailable. Please try again later.'));
       }
       setIsSuccess(true);
-      setMessage('');
+      setMessage(String(data?.message || 'If the account is eligible, a password reset email will arrive shortly.'));
+      setResendTimer(Math.max(1, Number(data?.resendAfterSeconds) || 60));
     } catch (error) {
       console.error("Recovery validation error:", error);
       setMessage(String(error?.message || "Could not connect to the server. Please try again later."));
@@ -66,6 +78,11 @@ const Recovery = () => {
 
     if (firstCharNotice) {
       setFirstCharNotice('');
+    }
+    if (value !== email) {
+      setIsSuccess(false);
+      setMessage('');
+      setResendTimer(0);
     }
     setEmail(cleanedValue);
   };
@@ -112,11 +129,22 @@ const Recovery = () => {
                 onChange={handleEmailChange}
               />
             </div>
-            <div className="didnt-receive">Didn't receive an Email?</div>
+            {isSuccess ? (
+              <div className="didnt-receive" style={{ marginTop: 10, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                <span>Didn't receive the email?</span>
+                {resendTimer > 0 ? (
+                  <span style={{ color: '#64748b', fontWeight: 600 }}>Resend in {resendTimer}s</span>
+                ) : (
+                  <button type="button" onClick={handleRecovery} disabled={isSubmitting} style={{ padding: 0, border: 0, background: 'transparent', color: '#ea580c', fontWeight: 800, cursor: isSubmitting ? 'wait' : 'pointer', textDecoration: 'underline' }}>
+                    Resend Email
+                  </button>
+                )}
+              </div>
+            ) : null}
           </div>
 
-          <button type="submit" className="submit-btn" disabled={isSubmitting}>
-            {isSubmitting ? 'Sending recovery link...' : 'Reset your password'}
+          <button type="submit" className="submit-btn" disabled={isSubmitting || (isSuccess && resendTimer > 0)}>
+            {isSubmitting ? 'Sending recovery link...' : isSuccess ? 'Recovery email sent' : 'Reset your password'}
           </button>
         </form>
 

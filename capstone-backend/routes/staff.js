@@ -338,6 +338,7 @@ const tokenRateKey = (req) => hashResetToken(req.body?.token || '').slice(0, 16)
 const loginRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 8, key: emailRateKey });
 const otpVerifyRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, key: (req) => String(req.body?.challengeId || req.ip || '') });
 const otpResendRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 6, key: (req) => String(req.body?.challengeId || req.ip || '') });
+const recoveryCooldownLimit = createRateLimiter({ windowMs: 60 * 1000, max: 1, key: emailRateKey });
 const recoveryRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 4, key: emailRateKey });
 const tokenVerifyRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30, key: tokenRateKey });
 const passwordResetRateLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 8, key: tokenRateKey });
@@ -3016,18 +3017,29 @@ const requestPasswordReset = async (req, res) => {
                 data: { reset_password_token: null, reset_password_expires: null }
             }).catch(() => null);
             console.error('[Recovery] Email delivery failed:', String(emailError?.message || emailError));
-            return res.status(503).json({ message: 'Recovery email could not be delivered. Please try again later.' });
+            // Keep the public response identical to an unknown/ineligible email
+            // so this endpoint cannot be used to enumerate hospital accounts.
+            return res.json({ ok: true, message: 'If the account is eligible, a password reset email will arrive shortly.', resendAfterSeconds: 60 });
         }
-        return res.json({ ok: true, message: 'If the account is eligible, a password reset email will arrive shortly.' });
+        await prisma.activity_logs.create({
+            data: {
+                actor_name: 'Account Recovery',
+                role: accountType || 'staff',
+                action: 'Password Reset Email Requested',
+                target: 'Protected staff account',
+                details: 'A password reset email was requested and accepted for delivery.'
+            }
+        }).catch(() => null);
+        return res.json({ ok: true, message: 'If the account is eligible, a password reset email will arrive shortly.', resendAfterSeconds: 60 });
     } catch (err) {
         console.error('[Recovery] Request failed:', String(err?.message || err));
         res.status(500).json({ message: "Server Error" });
     }
 };
 
-router.post('/request-password-reset', recoveryRateLimit, requestPasswordReset);
+router.post('/request-password-reset', recoveryCooldownLimit, recoveryRateLimit, requestPasswordReset);
 // Backward-compatible endpoint; no raw token is returned anymore.
-router.post('/forgot-password', recoveryRateLimit, requestPasswordReset);
+router.post('/forgot-password', recoveryCooldownLimit, recoveryRateLimit, requestPasswordReset);
 
 router.post('/verify-reset-token', tokenVerifyRateLimit, async (req, res) => {
     try {
