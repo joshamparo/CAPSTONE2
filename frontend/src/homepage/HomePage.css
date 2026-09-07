@@ -450,9 +450,7 @@ html {
 .footer-logo-img {
   width: 48px;
   height: 48px;
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 4px;
+  object-fit: contain;
 }
 
 .footer-brand-name {
