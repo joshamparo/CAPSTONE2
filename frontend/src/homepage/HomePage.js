@@ -566,7 +566,10 @@ function HomePage() {
           <button
             type="button"
             className={`services-tab ${activeServiceGroup === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveServiceGroup('all')}
+            onClick={() => {
+              setActiveServiceGroup('all');
+              setShowAllServices(false);
+            }}
           >
             All
           </button>
@@ -575,7 +578,10 @@ function HomePage() {
               key={g.key}
               type="button"
               className={`services-tab ${activeServiceGroup === g.key ? 'active' : ''}`}
-              onClick={() => setActiveServiceGroup(g.key)}
+              onClick={() => {
+                setActiveServiceGroup(g.key);
+                setShowAllServices(false);
+              }}
             >
               {g.label}
             </button>
@@ -593,7 +599,18 @@ function HomePage() {
             ))}
         </div>
         <div className="services-footer reveal-on-scroll reveal-delay-2">
-          <button type="button" className="services-more-btn" onClick={() => setShowAllServices((v) => !v)}>
+          <button
+            type="button"
+            className="services-more-btn"
+            onClick={() => {
+              if (showAllServices) {
+                setShowAllServices(false);
+                return;
+              }
+              setActiveServiceGroup('all');
+              setShowAllServices(true);
+            }}
+          >
             {showAllServices ? 'Show Less' : 'View All Services'}
           </button>
         </div>
