@@ -88,7 +88,7 @@ const sections = [
   }
 ];
 
-function PrivacyConsentModal({ open, onAccept, onDecline }) {
+function PrivacyConsentModal({ open, onAccept, onDecline, requireAcknowledgement = true }) {
   const acceptRef = useRef(null);
 
   useEffect(() => {
@@ -114,7 +114,7 @@ function PrivacyConsentModal({ open, onAccept, onDecline }) {
           <div>
             <span className="privacy-consent-kicker">Pascualinga Medical Link</span>
             <h2 id="privacy-consent-title">Data Privacy Statement</h2>
-            <p>Please read and acknowledge our data privacy statement before proceeding.</p>
+            <p>{requireAcknowledgement ? 'Please read and acknowledge our data privacy statement before proceeding.' : 'Review how Pascualinga handles personal and health information.'}</p>
           </div>
         </header>
 
@@ -134,8 +134,14 @@ function PrivacyConsentModal({ open, onAccept, onDecline }) {
         </div>
 
         <footer className="privacy-consent-actions">
-          <button type="button" className="privacy-decline" onClick={onDecline}>Decline</button>
-          <button ref={acceptRef} type="button" className="privacy-accept" onClick={accept}>I Agree and Continue</button>
+          {requireAcknowledgement ? (
+            <>
+              <button type="button" className="privacy-decline" onClick={onDecline}>Decline</button>
+              <button ref={acceptRef} type="button" className="privacy-accept" onClick={accept}>I Agree and Continue</button>
+            </>
+          ) : (
+            <button ref={acceptRef} type="button" className="privacy-accept legal-information-done" onClick={onDecline}>Close</button>
+          )}
         </footer>
       </section>
     </div>
