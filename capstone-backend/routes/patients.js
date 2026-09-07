@@ -2665,7 +2665,17 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 }
             }
 
-            return { patient, createdRecord, hmoSummary };
+            const selectedServices = [...selectedLabs, ...selectedImaging];
+            if (createdRecord && selectedServices.length > 0) {
+                createdRecord.services = selectedServices.join(', ');
+            }
+
+            return {
+                patient,
+                createdRecord,
+                hmoSummary,
+                linkedInvoiceId: linkedInvoiceId ? String(linkedInvoiceId) : null
+            };
         }, { timeout: 45000 });
 
         // ============== LAYER 2 FALLBACK SAFETY NET ==============
@@ -2674,7 +2684,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         // after commit, using an invoice-scoped advisory lock so duplicates never happen.
         const hasAnyHmoFlag = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
         let hmoSync = hasAnyHmoFlag
-            ? { state: 'pending', label: 'Sync pending', invoiceId: result?.hmoSummary?.invoice_id || null }
+            ? { state: 'pending', label: 'Sync pending', invoiceId: result?.linkedInvoiceId || result?.hmoSummary?.invoice_id || null }
             : { state: 'not_required', label: 'Not required', invoiceId: null };
         try {
             const shouldCreateClaim = hasAnyHmoFlag && desiredHmoStatus && !hmoRejectedFlag;
@@ -2735,14 +2745,14 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 }
                 hmoSync = syncedClaims > 0
                     ? { state: 'sent', label: 'Sent to Cashier', invoiceId: String(candidateInvoices[0].id), syncedClaims }
-                    : { state: 'pending', label: 'Sync pending', invoiceId: result?.hmoSummary?.invoice_id || null, syncedClaims: 0 };
+                    : { state: 'pending', label: 'Sync pending', invoiceId: result?.linkedInvoiceId || result?.hmoSummary?.invoice_id || null, syncedClaims: 0 };
             } else if (hasAnyHmoFlag) {
-                hmoSync = { state: 'not_required', label: 'No HMO claim required', invoiceId: result?.hmoSummary?.invoice_id || null };
+                hmoSync = { state: 'not_required', label: 'No HMO claim required', invoiceId: result?.linkedInvoiceId || result?.hmoSummary?.invoice_id || null };
             }
         } catch (_layer2) {
             // Safety net failing should never break user response
             console.error('[HMO Layer2] Safety net insert failed:', _layer2);
-            hmoSync = { state: 'pending', label: 'Sync pending', invoiceId: result?.hmoSummary?.invoice_id || null };
+            hmoSync = { state: 'pending', label: 'Sync pending', invoiceId: result?.linkedInvoiceId || result?.hmoSummary?.invoice_id || null };
         }
 
         let emailSent = false;
@@ -2781,7 +2791,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             routeLabel: routeMeta.label,
             routing: { ...result.createdRecord, emailSent, emailQueued },
             hmo: result.hmoSummary || null,
-            billing: { invoice_id: result?.hmoSummary?.invoice_id || hmoSync.invoiceId || null },
+            billing: { invoice_id: result?.linkedInvoiceId || result?.hmoSummary?.invoice_id || hmoSync.invoiceId || null },
             hmoSync
         });
     } catch (err) {

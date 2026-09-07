@@ -685,6 +685,8 @@ function NurseDashboard() {
   const [walkInHmoRetrying, setWalkInHmoRetrying] = useState(false);
   const [walkInHmoRetryError, setWalkInHmoRetryError] = useState('');
   const [walkInBillingDetailsOpen, setWalkInBillingDetailsOpen] = useState(false);
+  const [walkInReferenceRetrying, setWalkInReferenceRetrying] = useState(false);
+  const [walkInReferenceError, setWalkInReferenceError] = useState('');
   const [walkInPatientReference, setWalkInPatientReference] = useState(''); // ✅ NEW: Patient reference number
   const [walkInIntakeVitals, setWalkInIntakeVitals] = useState(null); // ✅ NEW: Saved vitals from intake for report
   const [walkInPharmacyDest, setWalkInPharmacyDest] = useState('in_house'); // in_house | outside
@@ -1562,6 +1564,7 @@ function NurseDashboard() {
         invoiceId: invoiceIdRaw || null,
         hmoSync: response?.hmoSync || (patientHmo.hasHmo ? { state: 'pending', label: 'Sync pending', invoiceId: invoiceIdRaw || null } : { state: 'not_required', label: 'Not required' }),
         patient_reference: generatedRef || null,
+        referencePending: !generatedRef,
         vitals: vitalsSave,
         hmo: patientHmo.hasHmo ? patientHmo : (response?.hmo && typeof response.hmo === 'object' ? response.hmo : null),
         created_at: new Date().toISOString()
@@ -1570,6 +1573,7 @@ function NurseDashboard() {
       setWalkInPharmacyNotes('');
       setWalkInHmoRetryError('');
       setWalkInBillingDetailsOpen(false);
+      setWalkInReferenceError('');
       setWalkInNextStepsOpen(true);
 
       // We'll skip the auto-redirect for now so the user can see the success modal and queue ticket
@@ -1842,6 +1846,30 @@ function NurseDashboard() {
       setWalkInHmoRetryError(String(error?.message || 'HMO sync is still pending. The intake remains saved.'));
     } finally {
       setWalkInHmoRetrying(false);
+    }
+  };
+
+  const retryWalkInReference = async () => {
+    if (walkInReferenceRetrying || !walkInNextSteps?.patientId) return;
+    setWalkInReferenceRetrying(true);
+    setWalkInReferenceError('');
+    try {
+      const params = new URLSearchParams();
+      params.append('patient_id', walkInNextSteps.patientId);
+      if (walkInNextSteps.appointmentId) params.append('appointment_id', walkInNextSteps.appointmentId);
+      if (walkInNextSteps.invoiceId) params.append('invoice_id', walkInNextSteps.invoiceId);
+      const response = await fetchJson(`/api/billing/generate-ref?${params.toString()}`, {
+        apiBase: API_BASE,
+        headers: { ...getAuthHeaders() }
+      });
+      const reference = String(response?.reference || '').trim();
+      if (!reference) throw new Error('Cashier reference is not ready yet.');
+      setWalkInPatientReference(reference);
+      setWalkInNextSteps((previous) => ({ ...previous, patient_reference: reference, referencePending: false }));
+    } catch (error) {
+      setWalkInReferenceError(String(error?.message || 'Cashier reference is still pending.'));
+    } finally {
+      setWalkInReferenceRetrying(false);
     }
   };
 
@@ -10593,10 +10621,16 @@ function NurseDashboard() {
                     </div>
                     {walkInBillingDetailsOpen && walkInNextSteps?.invoiceId ? (
                       <div style={{ marginTop: 9, paddingTop: 8, borderTop: '1px solid #e2e8f0', color: '#475569', fontSize: 12 }}>
-                        Invoice #{walkInNextSteps.invoiceId} · Cashier reference: {walkInNextSteps?.patient_reference || 'Pending'}
+                        <div>Invoice #{walkInNextSteps.invoiceId} · Cashier reference: {walkInNextSteps?.patient_reference || 'Pending'}</div>
+                        {!walkInNextSteps?.patient_reference ? (
+                          <button type="button" onClick={retryWalkInReference} disabled={walkInReferenceRetrying} style={{ marginTop: 7, border: '1px solid #fdba74', borderRadius: 7, padding: '6px 9px', background: '#fff7ed', color: '#c2410c', fontSize: 11, fontWeight: 800, cursor: walkInReferenceRetrying ? 'wait' : 'pointer' }}>
+                            {walkInReferenceRetrying ? 'Generating…' : 'Retry Reference'}
+                          </button>
+                        ) : null}
                       </div>
                     ) : null}
                     {walkInHmoRetryError ? <div style={{ marginTop: 7, color: '#dc2626', fontSize: 11.5, fontWeight: 700 }}>{walkInHmoRetryError}</div> : null}
+                    {walkInReferenceError ? <div style={{ marginTop: 7, color: '#dc2626', fontSize: 11.5, fontWeight: 700 }}>{walkInReferenceError}</div> : null}
                   </div>
                 );
               })()}

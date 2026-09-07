@@ -59,6 +59,9 @@ test('direct diagnostic intake follows the actually selected service category', 
   assert.match(handler, /routeMeta = getWalkInRouteMeta\('lab'\)/i);
   assert.match(handler, /selectedImaging\.length > 0 && selectedLabs\.length === 0/i);
   assert.match(handler, /routeMeta = getWalkInRouteMeta\('imaging'\)/i);
+  assert.match(handler, /createdRecord\.services = selectedServices\.join\(', '\)/i);
+  assert.match(handler, /linkedInvoiceId: linkedInvoiceId \? String\(linkedInvoiceId\) : null/i);
+  assert.match(handler, /billing:\s*\{ invoice_id: result\?\.linkedInvoiceId/i);
 });
 
 test('direct clinical routes create selected services once instead of using the concern as a duplicate order', () => {
