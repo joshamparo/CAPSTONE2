@@ -397,7 +397,7 @@ export default function AssistantWidget({ pathname = '/' }) {
               <div className="assistant-widget-input-row">
                 <textarea
                   className="assistant-widget-textarea"
-                  placeholder={role === 'public' ? 'Magtanong tungkol sa ospital o sa system...' : 'Ask about your dashboard or tasks...'}
+                  placeholder={role === 'public' ? 'Ask about the hospital or the system...' : 'Ask about your dashboard or tasks...'}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={handleKeyDown}
