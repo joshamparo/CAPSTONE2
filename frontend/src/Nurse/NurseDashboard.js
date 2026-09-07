@@ -722,6 +722,7 @@ function NurseDashboard() {
   const [appointmentSlotsError, setAppointmentSlotsError] = useState('');
   const [walkInPatientPage, setWalkInPatientPage] = useState(1);
   const [vitalsPage, setVitalsPage] = useState(1);
+  const [vitalsSearch, setVitalsSearch] = useState('');
   const [erIntakePage, setErIntakePage] = useState(1);
   const [addPatientData, setAddPatientData] = useState({
     patientMode: "new",
@@ -8121,7 +8122,7 @@ function NurseDashboard() {
                   const now = new Date();
                   const infantCutoff = new Date(now);
                   infantCutoff.setUTCFullYear(infantCutoff.getUTCFullYear() - 1);
-                  const filteredVitalsPatients = deptPatients.filter((p) => {
+                  const eligibleVitalsPatients = deptPatients.filter((p) => {
                     if (activeDept === 'PEDIA') {
                       const dob = new Date(p.dateOfBirth || p.date_of_birth || '');
                       return !Number.isNaN(dob.getTime()) && dob <= now && dob > infantCutoff;
@@ -8129,6 +8130,38 @@ function NurseDashboard() {
                     const status = String(p.admissionStatus || p.admission_status || '').trim().toLowerCase();
                     return ['emergency', 'inpatient', 'admission requested', 'waiting', 'outpatient'].includes(status);
                   });
+                  const normalizedVitalsSearch = vitalsSearch.trim().toLowerCase();
+                  const getVitalsPatientSearchValues = (patient) => {
+                    const firstName = patient.first_name || patient.firstName || '';
+                    const lastName = patient.last_name || patient.lastName || '';
+                    return [
+                      `${firstName} ${lastName}`.trim(),
+                      firstName,
+                      lastName,
+                      patient.email,
+                      patient.patient_id,
+                      patient.patientId,
+                      patient.reference_number,
+                      patient.referenceNumber,
+                      patient._id,
+                      patient.ward_number,
+                      patient.wardNumber,
+                      patient.bed_number,
+                      patient.bedNumber
+                    ].filter(Boolean).map((value) => String(value).toLowerCase());
+                  };
+                  const filteredVitalsPatients = normalizedVitalsSearch
+                    ? eligibleVitalsPatients
+                        .map((patient, index) => {
+                          const values = getVitalsPatientSearchValues(patient);
+                          const prefixMatch = values.some((value) => value.startsWith(normalizedVitalsSearch));
+                          const containsMatch = values.some((value) => value.includes(normalizedVitalsSearch));
+                          return { patient, index, rank: prefixMatch ? 0 : (containsMatch ? 1 : 2) };
+                        })
+                        .filter(({ rank }) => rank < 2)
+                        .sort((a, b) => a.rank - b.rank || a.index - b.index)
+                        .map(({ patient }) => patient)
+                    : eligibleVitalsPatients;
                   const vitalsPageCount = Math.max(1, Math.ceil(filteredVitalsPatients.length / vitalsPageSize));
                   const currentVitalsPage = Math.min(vitalsPage, vitalsPageCount);
                   const vitalsStartIndex = (currentVitalsPage - 1) * vitalsPageSize;
@@ -8153,11 +8186,31 @@ function NurseDashboard() {
                       </div>
 
                       <div className="vitals-table-container">
+                          <div className="vitals-search-toolbar">
+                              <div className="search-input-modern vitals-search-input">
+                                  <Search size={18} aria-hidden="true" />
+                                  <input
+                                      type="search"
+                                      placeholder="Search patient name, ID, email, ward, or bed..."
+                                      value={vitalsSearch}
+                                      onChange={(event) => {
+                                          setVitalsSearch(event.target.value);
+                                          setVitalsPage(1);
+                                      }}
+                                      aria-label="Search patients for vitals monitoring"
+                                  />
+                              </div>
+                              <span className="vitals-search-count">
+                                  {filteredVitalsPatients.length} {filteredVitalsPatients.length === 1 ? 'patient' : 'patients'} found
+                              </span>
+                          </div>
                           {filteredVitalsPatients.length === 0 ? (
                               <div className="empty-state" style={{ textAlign: 'center', padding: '40px', background: '#fff' }}>
                                   <Activity size={48} color="#94a3b8" style={{ marginBottom: '16px' }} />
-                                  <h3 style={{ color: '#334155', margin: '0 0 8px 0' }}>No Active Patients</h3>
-                                  <p style={{ color: '#64748b', margin: 0 }}>There are no patients requiring vitals monitoring at this time.</p>
+                                  <h3 style={{ color: '#334155', margin: '0 0 8px 0' }}>{normalizedVitalsSearch ? 'No Matching Patient' : 'No Active Patients'}</h3>
+                                  <p style={{ color: '#64748b', margin: 0 }}>
+                                      {normalizedVitalsSearch ? `No patient matches “${vitalsSearch.trim()}”.` : 'There are no patients requiring vitals monitoring at this time.'}
+                                  </p>
                               </div>
                           ) : (
                               <>
