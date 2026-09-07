@@ -32,6 +32,20 @@ test('walk-in HMO recovery is bounded to invoices created for the current intake
   assert.match(handler, /upsertWalkInHmoClaim\s*\(/i);
 });
 
+test('walk-in HMO locking does not deserialize PostgreSQL void results', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'patients.js'), 'utf8');
+  assert.match(source, /\$executeRawUnsafe\('SELECT pg_advisory_xact_lock/i);
+  assert.doesNotMatch(source, /\$queryRawUnsafe\('SELECT pg_advisory_xact_lock/i);
+});
+
+test('direct diagnostic intake follows the actually selected service category', () => {
+  const handler = walkInHandlerSource();
+  assert.match(handler, /selectedLabs\.length > 0 && selectedImaging\.length === 0/i);
+  assert.match(handler, /routeMeta = getWalkInRouteMeta\('lab'\)/i);
+  assert.match(handler, /selectedImaging\.length > 0 && selectedLabs\.length === 0/i);
+  assert.match(handler, /routeMeta = getWalkInRouteMeta\('imaging'\)/i);
+});
+
 test('direct clinical routes create selected services once instead of using the concern as a duplicate order', () => {
   const handler = walkInHandlerSource();
   assert.match(handler, /routeServices\[0\]\s*\|\|\s*payload\.mainConcern/i);

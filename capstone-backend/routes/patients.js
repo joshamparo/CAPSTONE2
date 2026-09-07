@@ -505,7 +505,11 @@ async function upsertWalkInHmoClaim(db, {
     const invoiceKey = typeof invoiceId === 'bigint' ? invoiceId : BigInt(String(invoiceId));
     // Serialize claim writes per invoice without depending on a legacy unique
     // constraint that may not exist in older production databases.
-    await db.$queryRawUnsafe('SELECT pg_advisory_xact_lock($1::bigint)', invoiceKey);
+    // pg_advisory_xact_lock returns PostgreSQL `void`. Prisma cannot deserialize
+    // that type through $queryRaw on some production driver versions, which
+    // aborted the intake transaction after the user waited for it to finish.
+    // Execute it as a statement instead; the lock still lives until commit.
+    await db.$executeRawUnsafe('SELECT pg_advisory_xact_lock($1::bigint)', invoiceKey);
     const updated = await db.$executeRawUnsafe(`
         UPDATE public.billing_hmo_claims
         SET appointment_id = COALESCE(appointment_id, $2::bigint),
@@ -1485,12 +1489,30 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         if (routeTypeRaw && !WALK_IN_ROUTE_INPUTS.has(routeTypeRaw.toLowerCase())) {
             return res.status(400).json({ message: 'Select a valid walk-in destination.' });
         }
-        const routeMeta = getWalkInRouteMeta(routeTypeRaw);
+        let routeMeta = getWalkInRouteMeta(routeTypeRaw);
         const patientMode = String(payload.patientMode || 'new').trim().toLowerCase() === 'existing' ? 'existing' : 'new';
         const now = new Date();
         const manilaDateKey = manilaDateKeyFromNow(now);
         const requesterName = inferRequesterName(req);
         const normalizedEmail = payload.email ? normalizeEmail(payload.email) : '';
+
+        // The service checkboxes are the authoritative destination for direct
+        // diagnostic intake. A stale route selection must not create a bogus
+        // Imaging order when the nurse selected only a Laboratory service (or
+        // vice versa), as happened in the reported existing-patient flow.
+        const selectedLabs = Array.isArray(payload.selectedLabServices)
+            ? payload.selectedLabServices.filter((value) => String(value || '').trim())
+            : [];
+        const selectedImaging = Array.isArray(payload.selectedImagingServices)
+            ? payload.selectedImagingServices.filter((value) => String(value || '').trim())
+            : [];
+        if (routeMeta.creates === 'clinical_order') {
+            if (selectedLabs.length > 0 && selectedImaging.length === 0) {
+                routeMeta = getWalkInRouteMeta('lab');
+            } else if (selectedImaging.length > 0 && selectedLabs.length === 0) {
+                routeMeta = getWalkInRouteMeta('imaging');
+            }
+        }
 
         const hmoApprovalStatusRaw = String(payload.hmoApprovalStatus || '').trim().toLowerCase();
         const hmoPaymentModeRaw = String(payload.hmoPaymentMode || '').trim().toLowerCase();
@@ -2519,7 +2541,11 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 const autoApproveAmount = desiredHmoStatus === 'Approved'
                     ? Math.max(0, Number(payload.hmoLoaApprovedAmount || 0))
                     : 0;
-                const apptIdForClaim = createdRecord && createdRecord.id ? String(createdRecord.id) : null;
+                // A clinical-order id is not an appointment id. Mixing these ids
+                // can associate a claim with an unrelated appointment.
+                const apptIdForClaim = createdRecord?.kind === 'appointment' && createdRecord.id
+                    ? String(createdRecord.id)
+                    : null;
                 const coverageJson = (coverageExtra && Object.keys(coverageExtra).length > 0) ? JSON.stringify(coverageExtra) : null;
                 await upsertWalkInHmoClaim(tx, {
                     invoiceId: linkedInvoiceId,
@@ -2639,7 +2665,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 const hmoCard = String(payload.hmoCardNumber || '').trim() || null;
                 const phAmt = Number(payload.philhealthDeduction) || 0;
                 const loaAmt = Number(payload.hmoLoaApprovedAmount) || 0;
-                const apptId = result?.createdRecord?.appointmentId || result?.createdRecord?.id ? String(result.createdRecord.appointmentId || result.createdRecord.id) : null;
+                const apptId = result?.createdRecord?.kind === 'appointment'
+                    ? String(result.createdRecord.appointmentId || result.createdRecord.id)
+                    : null;
                 const notes = [String(payload.hmoNotes || '').trim(), paymentModeNoteTag].filter(Boolean).join(' · ') || null;
                 const requester = getRequesterEmail(req) || requesterName || null;
 
