@@ -34,8 +34,15 @@ test('walk-in HMO recovery is bounded to invoices created for the current intake
 
 test('walk-in HMO locking does not deserialize PostgreSQL void results', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'patients.js'), 'utf8');
-  assert.match(source, /\$executeRawUnsafe\('SELECT pg_advisory_xact_lock/i);
-  assert.doesNotMatch(source, /\$queryRawUnsafe\('SELECT pg_advisory_xact_lock/i);
+  assert.match(source, /SELECT id::text AS id FROM public\.billing_invoices[^']+FOR UPDATE/i);
+  assert.doesNotMatch(source, /SELECT pg_advisory_xact_lock/i);
+});
+
+test('walk-in HMO synchronization cannot roll back the core intake transaction', () => {
+  const handler = walkInHandlerSource();
+  assert.match(handler, /const syncHmoInsideCoreTransaction = false/i);
+  assert.match(handler, /HMO monitoring is synchronized by the post-commit layer/i);
+  assert.match(handler, /LAYER 2 FALLBACK SAFETY NET/i);
 });
 
 test('direct diagnostic intake follows the actually selected service category', () => {

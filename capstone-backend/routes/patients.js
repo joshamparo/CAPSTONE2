@@ -505,11 +505,12 @@ async function upsertWalkInHmoClaim(db, {
     const invoiceKey = typeof invoiceId === 'bigint' ? invoiceId : BigInt(String(invoiceId));
     // Serialize claim writes per invoice without depending on a legacy unique
     // constraint that may not exist in older production databases.
-    // pg_advisory_xact_lock returns PostgreSQL `void`. Prisma cannot deserialize
-    // that type through $queryRaw on some production driver versions, which
-    // aborted the intake transaction after the user waited for it to finish.
-    // Execute it as a statement instead; the lock still lives until commit.
-    await db.$executeRawUnsafe('SELECT pg_advisory_xact_lock($1::bigint)', invoiceKey);
+    // Use a normal row lock with a text result. PostgreSQL advisory locks return
+    // `void`, which is not portable across Prisma database drivers.
+    await db.$queryRawUnsafe(
+        'SELECT id::text AS id FROM public.billing_invoices WHERE id = $1::bigint FOR UPDATE',
+        invoiceKey
+    );
     const updated = await db.$executeRawUnsafe(`
         UPDATE public.billing_hmo_claims
         SET appointment_id = COALESCE(appointment_id, $2::bigint),
@@ -1648,6 +1649,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         };
         const intakeEntry = buildWalkInClinicalRecordEntry({ routeMeta, requesterName, now, payload, triage });
 
+        const syncHmoInsideCoreTransaction = false;
         const result = await prisma.$transaction(async (tx) => {
             let patient = null;
 
@@ -1988,7 +1990,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                             }).catch(() => null);
 
                             // Sync HMO data if applicable
-                            await syncHmoDataFromAppointmentToInvoice(tx, appointment.id, inv.id, {
+                            if (syncHmoInsideCoreTransaction) await syncHmoDataFromAppointmentToInvoice(tx, appointment.id, inv.id, {
                                 forceStatus: desiredHmoStatus || null,
                                 isHmo: isHmoActive,
                                 notes: paymentModeNoteTag || undefined
@@ -2141,7 +2143,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                     const finalNote = paymentModeNoteTag
                                         ? [baseNote, paymentModeNoteTag].filter(Boolean).join(' · ')
                                         : baseNote;
-                                    await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id, {
+                                    if (syncHmoInsideCoreTransaction) await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id, {
                                         patientId: patient.id,
                                         patientName,
                                         hmoProvider: hmoSave ? (String(payload.hmoProvider || '').trim() || null) : null,
@@ -2311,7 +2313,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                 const finalNote = paymentModeNoteTag
                                     ? [baseNote, paymentModeNoteTag].filter(Boolean).join(' · ')
                                     : baseNote;
-                                await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id, {
+                                if (syncHmoInsideCoreTransaction) await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id, {
                                     patientId: patient.id,
                                     patientName,
                                     hmoProvider: hmoSave ? (String(payload.hmoProvider || '').trim() || null) : null,
@@ -2415,7 +2417,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                                 const finalNote = paymentModeNoteTag
                                     ? [baseNote, paymentModeNoteTag].filter(Boolean).join(' · ')
                                     : baseNote;
-                                await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id, {
+                                if (syncHmoInsideCoreTransaction) await syncHmoDataFromAppointmentToInvoice(tx, null, inv.id, {
                                     patientId: patient.id,
                                     patientName,
                                     hmoProvider: hmoSave ? (String(payload.hmoProvider || '').trim() || null) : null,
@@ -2489,7 +2491,28 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 }
             }).catch(() => null);
 
-            if (Boolean(payload.hasHmo) && desiredHmoStatus) {
+            // Always leave the committed intake with an invoice anchor for the
+            // post-commit HMO sync, including routes without selected add-ons.
+            if (Boolean(payload.hasHmo) && desiredHmoStatus && !linkedInvoiceId) {
+                const onSiteAmount = hasServices ? 100 : 0;
+                const impliedTotal = onSiteAmount + mainClinicalOrderHmoCoveredCents + extraHmoTotalCents;
+                const invoice = await tx.billing_invoices.create({
+                    data: {
+                        patient_id: patient.id,
+                        status: 'Draft',
+                        notes: `HMO Monitoring Record • ${routeMeta.label} Intake`,
+                        created_by: getRequesterEmail(req) || requesterName || null,
+                        total_amount: toMoney(Math.max(100, impliedTotal))
+                    }
+                });
+                linkedInvoiceId = invoice.id;
+            }
+
+            // HMO monitoring is synchronized by the post-commit layer below.
+            // Keeping its legacy raw-column writes outside the core transaction
+            // prevents an HMO schema mismatch from rolling back the patient,
+            // clinical order, and invoice together.
+            if (syncHmoInsideCoreTransaction && Boolean(payload.hasHmo) && desiredHmoStatus) {
                 // Ensure patient registry row has HMO flags so fallback 3rd UNION ALL hmo-queue leg picks it up
                 try {
                     const hmoProv = String(payload.hmoProvider || '').trim() || null;
