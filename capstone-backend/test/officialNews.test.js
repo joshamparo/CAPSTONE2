@@ -14,6 +14,15 @@ test('official news fallback contains only allowlisted official domains', () => 
 
 test('news XML decoder removes non-breaking-space entities', () => {
   assert.equal(_newsTest.decodeXmlEntities('Health&nbsp;care &amp; medicine'), 'Health care & medicine');
+  assert.equal(_newsTest.decodeXmlEntities('&ldquo;Care&rdquo; &mdash; now&hellip;'), '"Care" — now…');
+});
+
+test('official news links reject lookalike, insecure, and unrelated URLs', () => {
+  assert.equal(_newsTest.isOfficialNewsUrl('https://www.who.int/news-room/releases'), true);
+  assert.equal(_newsTest.isOfficialNewsUrl('https://www.philhealth.gov.ph/news/up/article/2026/item.php'), true);
+  assert.equal(_newsTest.isOfficialNewsUrl('https://evilwho.int/news-room/releases'), false);
+  assert.equal(_newsTest.isOfficialNewsUrl('http://www.who.int/news-room/releases'), false);
+  assert.equal(_newsTest.isOfficialNewsUrl('https://www.who.int/about'), false);
 });
 
 test('news summaries remove encoded markup and stay compact', () => {

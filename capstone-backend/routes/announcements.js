@@ -113,6 +113,11 @@ function decodeXmlEntities(value) {
         .replace(/&amp;/g, '&')
         .replace(/&quot;/g, '"')
         .replace(/&nbsp;/g, ' ')
+        .replace(/&ldquo;|&rdquo;/gi, '"')
+        .replace(/&lsquo;|&rsquo;/gi, "'")
+        .replace(/&ndash;/gi, '–')
+        .replace(/&mdash;/gi, '—')
+        .replace(/&hellip;/gi, '…')
         .replace(/&#39;|&apos;/g, "'")
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
@@ -127,6 +132,21 @@ function stripHtml(value) {
         .replace(/<[^>]+>/g, ' '))
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+const OFFICIAL_NEWS_HOSTS = new Set([
+    'who.int', 'www.who.int', 'philhealth.gov.ph', 'www.philhealth.gov.ph'
+]);
+
+function isOfficialNewsUrl(raw) {
+    const url = safeUrl(raw);
+    if (!url || !OFFICIAL_NEWS_HOSTS.has(url.hostname.toLowerCase())) return false;
+    const host = url.hostname.toLowerCase();
+    const path = url.pathname.toLowerCase();
+    if (host === 'who.int' || host === 'www.who.int') {
+        return path.startsWith('/news-room/') || path.startsWith('/news/') || path.startsWith('/philippines/news/');
+    }
+    return path === '/news/' || path.startsWith('/news/up/article/');
 }
 
 function compactSummary(value, max = 360) {
@@ -190,7 +210,7 @@ function parseRssItems(xml, source) {
             const summary = compactSummary(description || contentEncoded);
             const link = decodeXmlEntities(extractTag(block, 'link')).trim();
             const url = safeUrl(link);
-            if (!title || !url) return null;
+            if (!title || !url || !isOfficialNewsUrl(url.toString())) return null;
 
             const imageUrl = firstValidImageUrl(
                 extractAttr(block, 'media:content', 'url'),
@@ -309,8 +329,9 @@ async function getLiveNews(limit) {
     const liveLimit = Math.min(3, target);
     const merged = [...deduped.slice(0, liveLimit), ...trustedFallback].filter((item, index, items) => {
         const key = String(item.url || '').toLowerCase();
-        return key && items.findIndex((candidate) => String(candidate.url || '').toLowerCase() === key) === index;
+        return isOfficialNewsUrl(item.url) && key && items.findIndex((candidate) => String(candidate.url || '').toLowerCase() === key) === index;
     });
+    merged.sort((a, b) => (Date.parse(b.publishedAt || '') || 0) - (Date.parse(a.publishedAt || '') || 0));
     const finalItems = merged.slice(0, target)
         .map(({ relevanceScore, ...item }) => item);
 
@@ -684,5 +705,5 @@ router.delete('/:id', requireRole(['admin']), announcementWriteRateLimit, async 
 });
 
 module.exports = router;
-module.exports._newsTest = { decodeXmlEntities, stripHtml, compactSummary, fallbackLiveNews };
+module.exports._newsTest = { decodeXmlEntities, stripHtml, compactSummary, fallbackLiveNews, isOfficialNewsUrl };
 

@@ -154,10 +154,31 @@ const NEWS_FALLBACK_IMAGES = [
 ];
 
 const OFFICIAL_NEWS_FALLBACK = [
-  { id: 'philhealth-latest', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'Latest official PhilHealth news and advisories', summary: 'Browse verified benefit, primary-care, medicine-access, and member-service updates directly from PhilHealth.', url: 'https://www.philhealth.gov.ph/news/', imageUrl: '', publishedAt: null },
-  { id: 'who-philippines-latest', category: 'Philippine Health', label: 'WHO Philippines', source: 'World Health Organization', title: 'Latest official health releases from WHO Philippines', summary: 'Read verified public-health releases, statements, and joint updates from the WHO country office in the Philippines.', url: 'https://www.who.int/philippines/news/releases', imageUrl: '', publishedAt: null },
-  { id: 'who-global-latest', category: 'Global Health', label: 'WHO', source: 'World Health Organization', title: 'Latest global public-health news from WHO', summary: 'Read current health guidance, emergency updates, research announcements, and official statements from WHO.', url: 'https://www.who.int/news-room/', imageUrl: '', publishedAt: null }
+  { id: 'philhealth-partnership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth and St. Luke’s formalize landmark health-care partnership', summary: 'Official PhilHealth update on expanding access to quality health care.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8e8005e1b93.php', imageUrl: '', publishedAt: '2026-08-25T00:00:00.000Z' },
+  { id: 'philhealth-leadership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth’s new President and CEO vows to accelerate national health gains', summary: 'Official leadership update on the national health agenda.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8bd5523ff79.php', imageUrl: '', publishedAt: '2026-08-20T00:00:00.000Z' },
+  { id: 'philhealth-human-right-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth and CHR champion health care as a fundamental human right', summary: 'An official update on equitable access to quality health care for Filipinos.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a3b405bdfbb6.php', imageUrl: '', publishedAt: '2026-06-23T00:00:00.000Z' },
+  { id: 'philhealth-gamot-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth launches GAMOT in Zamboanga Sibugay', summary: 'Official details on expanded access to essential outpatient medicines.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a2634094e2bd.php', imageUrl: '', publishedAt: '2026-06-04T00:00:00.000Z' },
+  { id: 'who-philippines-latest', category: 'Philippine Health', label: 'WHO Philippines', source: 'World Health Organization', title: 'Latest official health releases from WHO Philippines', summary: 'Verified public-health releases from the WHO Philippines country office.', url: 'https://www.who.int/philippines/news/releases', imageUrl: '', publishedAt: null },
+  { id: 'philhealth-latest', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'Latest official PhilHealth news and advisories', summary: 'Browse current official PhilHealth updates.', url: 'https://www.philhealth.gov.ph/news/', imageUrl: '', publishedAt: null }
 ];
+
+function isOfficialNewsLink(raw) {
+  try {
+    const url = new URL(String(raw || '').trim());
+    if (url.protocol !== 'https:') return false;
+    const host = url.hostname.toLowerCase();
+    const path = url.pathname.toLowerCase();
+    if (host === 'who.int' || host === 'www.who.int') {
+      return path.startsWith('/news-room/') || path.startsWith('/news/') || path.startsWith('/philippines/news/');
+    }
+    if (host === 'philhealth.gov.ph' || host === 'www.philhealth.gov.ph') {
+      return path === '/news/' || path.startsWith('/news/up/article/');
+    }
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
 
 function pickNewsImage(item, index) {
   const directImage = String(item?.imageUrl || '').trim();
@@ -258,14 +279,7 @@ function HomePage() {
         const response = await fetch(`${API_BASE}/api/announcements/news?limit=6`, controller ? { signal: controller.signal } : undefined);
         const data = await response.json().catch(() => []);
         if (!response.ok || !Array.isArray(data) || data.length === 0) throw new Error('Official news feed is unavailable.');
-        const trusted = data.filter((item) => {
-          try {
-            const host = new URL(String(item?.url || '')).hostname.toLowerCase();
-            return ['who.int', 'www.who.int', 'philhealth.gov.ph', 'www.philhealth.gov.ph'].includes(host);
-          } catch (_) {
-            return false;
-          }
-        });
+        const trusted = data.filter((item) => isOfficialNewsLink(item?.url));
         if (!trusted.length) throw new Error('Official news feed returned no trusted links.');
         setNewsItems(trusted);
       } catch (error) {
@@ -317,7 +331,7 @@ function HomePage() {
 
   const visibleNews = useMemo(() => {
     if (newsLoading) return [{}, {}, {}];
-    const list = Array.isArray(newsItems) ? newsItems.filter((item) => String(item?.url || '').trim()) : [];
+    const list = Array.isArray(newsItems) ? newsItems.filter((item) => isOfficialNewsLink(item?.url)) : [];
     const len = list.length;
     if (!len) return [];
     if (len <= 3) return list.slice(0, 3);
