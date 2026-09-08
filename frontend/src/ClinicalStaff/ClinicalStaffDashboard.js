@@ -616,6 +616,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
   const handleUploadResult = async () => {
     if (!viewingOrder) return;
+    const resultLabel = String(resultTitle || '').trim() || `${viewingOrder.service || cfg.resultType} Result`;
     setResultSaving(true);
     setResultError('');
     setResultNotice('');
@@ -652,7 +653,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
           patientId: viewingOrder.patientId,
           orderId: viewingOrder.id,
           type: cfg.resultType,
-          title: String(resultTitle || '').trim() || `${cfg.resultType} Result`,
+          title: resultLabel,
           url: uploadData.url,
           resultDate: resultDate || null,
           fileHash: uploadData.hash || null,
@@ -1809,7 +1810,15 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                       <div className="cs-toolbar" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
                         <input className="cs-input" value={resultTitle} onChange={(e) => setResultTitle(e.target.value)} placeholder="Result title" />
                         <input className="cs-input" type="date" value={resultDate} onChange={(e) => setResultDate(e.target.value)} />
-                        <input className="cs-input" type="file" onChange={(e) => setResultFile(e.target.files?.[0] || null)} />
+                        <input
+                          className="cs-input"
+                          type="file"
+                          accept="application/pdf,image/jpeg,image/png,image/webp"
+                          onChange={(e) => setResultFile(e.target.files?.[0] || null)}
+                        />
+                        <div className="cs-muted">
+                          Upload one completed result per file (PDF, JPG, PNG, or WebP). Scanned PDFs and unclear documents stay hidden from the patient until staff review.
+                        </div>
                         <button type="button" className="cs-btn" onClick={handleUploadResult} disabled={resultSaving || !resultFile}>
                           <Upload size={16} />
                           Upload

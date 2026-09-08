@@ -10,6 +10,7 @@ const { createClient } = require('@supabase/supabase-js');
 const requireRole = require('../middleware/requireRole');
 const { resolveOwnedPatient } = require('../utils/patientOwnership');
 const { parseReference, readMedicalFile, writeMedicalFile } = require('../utils/labStorage');
+const { verificationPrompt, parseOutput, completenessFlags, buildPdfPayload } = require('../utils/labAiVerification');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 const { nursePatientScope } = require('../utils/nursePatientAccess');
 const { parseLimit, parseOffset } = require('../utils/normalize');
@@ -227,8 +228,11 @@ function clampInt(v, min, max) {
 function decideStatus(score, flags) {
   const s = clampInt(score, 0, 100);
   const f = uniqueFlags(flags);
-  if (f.includes('patient_mismatch') || f.includes('duplicate_hash_other_patient')) {
+  if (f.includes('duplicate_hash_other_patient')) {
     return { status: 'rejected', score: Math.min(s, 30), flags: f };
+  }
+  if (f.includes('patient_mismatch') || f.includes('manual_review_required')) {
+    return { status: 'flagged', score: Math.min(Math.max(s, 45), 70), flags: f };
   }
   if (f.includes('document_type_mismatch')) {
     return { status: 'flagged', score: Math.min(Math.max(s, 45), 70), flags: f };
@@ -278,6 +282,24 @@ function getOpenAiConfig() {
   return { key, model };
 }
 
+async function openAiAnalyzePdf({ buffer, filename, expectedPatientName, expectedPatientDob, expectedType }) {
+  const cfg = getOpenAiConfig();
+  if (!cfg || !Buffer.isBuffer(buffer)) return null;
+  const maxBytes = Math.max(1024 * 1024, Math.min(10 * 1024 * 1024, Number(process.env.OPENAI_PDF_MAX_BYTES || 8 * 1024 * 1024)));
+  if (buffer.length > maxBytes) return { score: 55, flags: ['file_too_large_for_ai', 'manual_review_required'], manualReviewRequired: true, extractedFields: {} };
+  try {
+    const response = await fetchWithTimeoutInit('https://api.openai.com/v1/responses', 60000, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.key}` },
+      body: JSON.stringify(buildPdfPayload({ model: cfg.model, buffer, filename, expectedPatientName, expectedPatientDob, expectedType }))
+    });
+    const json = await response.json().catch(() => null);
+    return response.ok ? parseOutput(json) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function openAiAnalyzeText({ text, expectedPatientName, expectedPatientDob, expectedType }) {
   const cfg = getOpenAiConfig();
   if (!cfg) return null;
@@ -288,9 +310,9 @@ async function openAiAnalyzeText({ text, expectedPatientName, expectedPatientDob
         role: 'system',
         content: [
           {
-            type: 'text',
+            type: 'input_text',
             text:
-              'You verify whether an uploaded medical test result document is likely legitimate, matches the expected result type, and belongs to the expected patient. Output must be strict JSON only, with this shape: {"score":number,"patientMatch":boolean,"flags":string[],"documentType":string,"extractedFields":{"patientName":string|null,"patientDob":string|null,"facilityName":string|null,"resultDate":string|null,"doctorName":string|null,"testNames":string[]|null}}. Use flags like: patient_mismatch, document_type_mismatch, missing_facility_header, no_text_extracted, suspicious_format.'
+              verificationPrompt()
           }
         ]
       },
@@ -298,7 +320,7 @@ async function openAiAnalyzeText({ text, expectedPatientName, expectedPatientDob
         role: 'user',
         content: [
           {
-            type: 'text',
+            type: 'input_text',
             text: JSON.stringify(
               {
                 expected: {
@@ -361,9 +383,9 @@ async function openAiAnalyzeImage({ dataUrl, expectedPatientName, expectedPatien
         role: 'system',
         content: [
           {
-            type: 'text',
+            type: 'input_text',
             text:
-              'You verify whether an uploaded medical test result image is likely legitimate, matches the expected result type, and belongs to the expected patient. Output must be strict JSON only, with this shape: {"score":number,"patientMatch":boolean,"flags":string[],"documentType":string,"extractedFields":{"patientName":string|null,"patientDob":string|null,"facilityName":string|null,"resultDate":string|null,"doctorName":string|null,"testNames":string[]|null}}. Use flags like: patient_mismatch, document_type_mismatch, missing_facility_header, suspicious_format.'
+              verificationPrompt()
           }
         ]
       },
@@ -371,7 +393,7 @@ async function openAiAnalyzeImage({ dataUrl, expectedPatientName, expectedPatien
         role: 'user',
         content: [
           {
-            type: 'text',
+            type: 'input_text',
             text: JSON.stringify(
               {
                 expected: {
@@ -584,6 +606,7 @@ async function verifyLabResult(id, { force } = {}) {
   }
 
   const fileMeta = row.file_meta || null;
+  const expectedDocumentType = [row.type, row.title].map((value) => String(value || '').trim()).filter(Boolean).join(': ') || null;
   const fileHash = row.file_hash ? String(row.file_hash) : null;
   const computedHash = buf ? sha256Hex(buf) : null;
   const finalHash = fileHash || computedHash || null;
@@ -615,8 +638,8 @@ async function verifyLabResult(id, { force } = {}) {
     if (isAiEnabled() && getOpenAiConfig()) {
       if (isImage) {
         if (buf.length > 3 * 1024 * 1024) {
-          flags.push('file_too_large_for_ai');
-          const h = heuristicVerify({ text: '', expectedPatientName: expectedName, expectedType: row.type || null, fileMeta });
+          flags.push('file_too_large_for_ai', 'manual_review_required');
+          const h = heuristicVerify({ text: '', expectedPatientName: expectedName, expectedType: expectedDocumentType, fileMeta });
           score = h.score;
           extractedFields = {};
         } else {
@@ -626,67 +649,79 @@ async function verifyLabResult(id, { force } = {}) {
             dataUrl,
             expectedPatientName: expectedName,
             expectedPatientDob: expectedDob,
-            expectedType: row.type || null
+            expectedType: expectedDocumentType
           });
           if (ai) {
-            score = clampInt(ai?.score ?? 60, 0, 100);
-            extractedFields = ai?.extractedFields && typeof ai.extractedFields === 'object' ? ai.extractedFields : {};
-            (Array.isArray(ai?.flags) ? ai.flags : []).forEach((f) => flags.push(String(f)));
-            if (ai?.patientMatch === false) flags.push('patient_mismatch');
-            if (!looksLikeEcgDocument({ expectedType: row.type || null, documentType: ai?.documentType, extractedFields, fileMeta })) {
+            const checked = completenessFlags(ai, expectedDocumentType);
+            score = checked.score;
+            extractedFields = checked.extractedFields;
+            checked.flags.forEach((f) => flags.push(f));
+            if (!looksLikeEcgDocument({ expectedType: expectedDocumentType, documentType: checked.documentType, extractedFields, fileMeta })) {
               flags.push('document_type_mismatch');
               score = clampInt(score - 18, 0, 100);
             }
           } else {
-            flags.push('ai_unavailable');
-            const h = heuristicVerify({ text: '', expectedPatientName: expectedName, expectedType: row.type || null, fileMeta });
+            flags.push('ai_unavailable', 'manual_review_required');
+            const h = heuristicVerify({ text: '', expectedPatientName: expectedName, expectedType: expectedDocumentType, fileMeta });
             score = h.score;
           }
         }
       } else if (isPdf && pdfParse) {
         const parsed = await pdfParse(buf).catch(() => null);
         const text = parsed?.text || '';
-        const ai = await openAiAnalyzeText({
-          text,
-          expectedPatientName: expectedName,
-          expectedPatientDob: expectedDob,
-          expectedType: row.type || null
-        });
+        const scannedPdf = text.trim().length < 80;
+        const ai = scannedPdf
+          ? await openAiAnalyzePdf({
+              buffer: buf,
+              filename: fileMeta?.originalName || `${String(row.title || 'medical-result')}.pdf`,
+              expectedPatientName: expectedName,
+              expectedPatientDob: expectedDob,
+              expectedType: expectedDocumentType
+            })
+          : await openAiAnalyzeText({
+              text,
+              expectedPatientName: expectedName,
+              expectedPatientDob: expectedDob,
+              expectedType: expectedDocumentType
+            });
         if (ai) {
-          score = clampInt(ai?.score ?? 60, 0, 100);
-          extractedFields = ai?.extractedFields && typeof ai.extractedFields === 'object' ? ai.extractedFields : {};
-          (Array.isArray(ai?.flags) ? ai.flags : []).forEach((f) => flags.push(String(f)));
-          if (ai?.patientMatch === false) flags.push('patient_mismatch');
-          if (!looksLikeEcgDocument({ expectedType: row.type || null, documentType: ai?.documentType, extractedFields, fileMeta })) {
+          const checked = completenessFlags(ai, expectedDocumentType);
+          score = checked.score;
+          extractedFields = checked.extractedFields;
+          checked.flags.forEach((f) => flags.push(f));
+          if (scannedPdf) flags.push('scanned_pdf_analyzed');
+          if (!looksLikeEcgDocument({ expectedType: expectedDocumentType, documentType: checked.documentType, extractedFields, fileMeta })) {
             flags.push('document_type_mismatch');
             score = clampInt(score - 18, 0, 100);
           }
         } else {
-          flags.push('ai_unavailable');
-          const h = heuristicVerify({ text, expectedPatientName: expectedName, expectedType: row.type || null, fileMeta });
+          flags.push('ai_unavailable', 'manual_review_required');
+          if (scannedPdf) flags.push('scanned_pdf_unreadable');
+          const h = heuristicVerify({ text, expectedPatientName: expectedName, expectedType: expectedDocumentType, fileMeta });
           score = h.score;
           h.flags.forEach((f) => flags.push(f));
         }
       } else {
         flags.push(isPdf && !pdfParse ? 'pdf_text_extractor_missing' : 'unsupported_file_type');
-        const h = heuristicVerify({ text: '', expectedPatientName: expectedName, expectedType: row.type || null, fileMeta });
+        const h = heuristicVerify({ text: '', expectedPatientName: expectedName, expectedType: expectedDocumentType, fileMeta });
         score = h.score;
         h.flags.forEach((f) => flags.push(f));
       }
     } else if (isPdf && pdfParse) {
       const parsed = await pdfParse(buf).catch(() => null);
       const text = parsed?.text || '';
-      const h = heuristicVerify({ text, expectedPatientName: expectedName, expectedType: row.type || null, fileMeta });
+      const h = heuristicVerify({ text, expectedPatientName: expectedName, expectedType: expectedDocumentType, fileMeta });
       score = h.score;
       h.flags.forEach((f) => flags.push(f));
     } else {
       if (isImage) {
-        const h = heuristicVerifyImage({ expectedType: row.type || null, fileMeta });
+        const h = heuristicVerifyImage({ expectedType: expectedDocumentType, fileMeta });
+        flags.push('manual_review_required');
         score = h.score;
         h.flags.forEach((f) => flags.push(f));
       } else {
         flags.push(isPdf && !pdfParse ? 'pdf_text_extractor_missing' : 'unsupported_file_type');
-        const h = heuristicVerify({ text: '', expectedPatientName: expectedName, expectedType: row.type || null, fileMeta });
+        const h = heuristicVerify({ text: '', expectedPatientName: expectedName, expectedType: expectedDocumentType, fileMeta });
         score = h.score;
         h.flags.forEach((f) => flags.push(f));
       }

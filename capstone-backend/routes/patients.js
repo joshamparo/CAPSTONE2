@@ -12,6 +12,7 @@ const { patientUpdateAccess, sanitizePatientUpdateForRole } = require('../utils/
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 const { sendError } = require('../utils/httpErrors');
 const { nursePatientScope, isCentralIntakeRequest } = require('../utils/nursePatientAccess');
+const { Prisma } = require('@prisma/client');
 
 let _supabaseAdmin = null;
 function getSupabaseAdmin() {
@@ -1055,11 +1056,15 @@ router.get('/:id/full-record', async (req, res) => {
                 orderBy: { created_at: 'desc' },
                 take: 200
             }).catch(() => []),
-            prisma.lab_results.findMany({
-                where: { patient_id: patient.id },
-                orderBy: { created_at: 'desc' },
-                take: 200
-            }).catch(() => []),
+            prisma.$queryRaw(Prisma.sql`
+                SELECT id, order_id, patient_id, type, title, url, result_date, uploaded_by, created_at,
+                       verification_status, verification_score, verification_flags, extracted_fields, verified_at
+                FROM public.lab_results
+                WHERE patient_id = ${patient.id}::uuid
+                  ${requesterRole === 'patient' ? Prisma.sql`AND lower(coalesce(verification_status, 'pending')) = 'verified'` : Prisma.empty}
+                ORDER BY created_at DESC
+                LIMIT 200
+            `).catch(() => []),
             prisma.clinical_orders.findMany({
                 where: { patient_id: patient.id },
                 include: {
@@ -1142,7 +1147,12 @@ router.get('/:id/full-record', async (req, res) => {
             url: result.url || null,
             resultDate: result.result_date || null,
             uploadedBy: result.uploaded_by || null,
-            createdAt: result.created_at || null
+            createdAt: result.created_at || null,
+            verificationStatus: result.verification_status || 'pending',
+            verificationScore: result.verification_score ?? null,
+            verificationFlags: result.verification_flags || [],
+            extractedFields: result.extracted_fields || null,
+            verifiedAt: result.verified_at || null
         }));
 
         const orders = ordersRaw.map((order) => ({
@@ -1170,7 +1180,7 @@ router.get('/:id/full-record', async (req, res) => {
                 note: event.note || null,
                 createdAt: event.created_at || null
             })),
-            results: (Array.isArray(order.lab_results) ? order.lab_results : []).map((result) => ({
+            results: (requesterRole === 'patient' ? [] : (Array.isArray(order.lab_results) ? order.lab_results : [])).map((result) => ({
                 id: result.id.toString(),
                 title: result.title || null,
                 type: result.type || null,
