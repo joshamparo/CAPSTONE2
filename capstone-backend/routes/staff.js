@@ -18,6 +18,7 @@ const { sendEmail } = require('../utils/mailer');
 const { otpEmail } = require('../utils/emailTemplates');
 const { adminDeactivationBlock } = require('../utils/adminAccountSafety');
 const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
+const { isValidResetPassword } = require('../utils/passwordPolicy');
 
 const publicWebOrigin = () => String(process.env.PUBLIC_WEB_ORIGIN || 'https://pascualinga.com').replace(/\/+$/, '');
 
@@ -3068,8 +3069,8 @@ router.post('/reset-password', passwordResetRateLimit, async (req, res) => {
         if (!newPassword || !token) {
             return res.status(400).json({ message: "Reset token and new password are required" });
         }
-        if (newPassword.length < 11 || !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
-            return res.status(400).json({ message: "Password must be at least 11 characters and include a number and special character." });
+        if (!isValidResetPassword(newPassword)) {
+            return res.status(400).json({ message: "Password must be at least 11 characters and include an uppercase letter, number, and special character." });
         }
 
         const lookup = { reset_password_token: hashResetToken(token) };

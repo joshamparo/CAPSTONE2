@@ -54,6 +54,7 @@ const ResetPassword = () => {
   const hasLength = newPassword.length >= 11;
   const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(newPassword);
   const hasNumber = /\d/.test(newPassword);
+  const hasUppercase = /[A-Z]/.test(newPassword);
 
   const handleReset = async (e) => {
     e.preventDefault();
@@ -70,7 +71,7 @@ const ResetPassword = () => {
       return;
     }
 
-    if (!hasLength || !hasSpecialChar || !hasNumber) {
+    if (!hasLength || !hasSpecialChar || !hasNumber || !hasUppercase) {
       setMessage("Please meet all password requirements.");
       return;
     }
@@ -160,6 +161,10 @@ const ResetPassword = () => {
               <div className={`checklist-item ${hasNumber ? 'valid' : ''}`}>
                 {hasNumber ? <Check size={14} /> : <X size={14} />}
                 <span>Contains numbers</span>
+              </div>
+              <div className={`checklist-item ${hasUppercase ? 'valid' : ''}`}>
+                {hasUppercase ? <Check size={14} /> : <X size={14} />}
+                <span>Contains at least one uppercase letter</span>
               </div>
             </div>
           </div>
