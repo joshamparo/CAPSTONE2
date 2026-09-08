@@ -2608,11 +2608,9 @@ function NurseDashboard() {
           setSelectedApproval(null);
           setApprovalThread(null);
           setApprovalMessages([]);
-          await fetchApprovalInbox();
-          await fetchAppointments();
-          await refreshPatientsList();
           setSuccessMessage('Appointment Confirmed!');
           setShowSuccessModal(true);
+          Promise.allSettled([fetchApprovalInbox(), fetchAppointments(), refreshPatientsList()]);
         } else {
           const data = await res.json().catch(() => ({}));
           setSuccessMessage(data?.message || 'Unable to confirm appointment.');
@@ -3404,7 +3402,7 @@ function NurseDashboard() {
           status: created.status || 'open'
       }, ...prev]);
       setNewTaskText("");
-      await refreshNurseWorkflow({ silent: true });
+      refreshNurseWorkflow({ silent: true }).catch(() => {});
       addActivity('New Task', `Added: ${title}`, 'info');
   };
 
@@ -3428,7 +3426,7 @@ function NurseDashboard() {
                 }
               : task
       )));
-      await refreshNurseWorkflow({ silent: true });
+      refreshNurseWorkflow({ silent: true }).catch(() => {});
   };
 
   const removeTask = async (id) => {
@@ -3438,7 +3436,7 @@ function NurseDashboard() {
           headers: { ...getAuthHeaders() }
       });
       setTasks((prev) => prev.filter((task) => String(task.id) !== String(id)));
-      await refreshNurseWorkflow({ silent: true });
+      refreshNurseWorkflow({ silent: true }).catch(() => {});
   };
 
   const saveHandoverNote = async () => {

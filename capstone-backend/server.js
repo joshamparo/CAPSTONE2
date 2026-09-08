@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const prisma = require('./utils/prisma');
 const { isMaintenanceModeEnabled } = require('./utils/systemSettingsStore');
+const { createRequestTiming } = require('./middleware/requestTiming');
 
 require('dotenv').config();
 
@@ -128,6 +129,10 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use(createRequestTiming({
+  thresholdMs: process.env.SLOW_REQUEST_MS || 1000,
+  logAll: String(process.env.LOG_ALL_API_TIMINGS || '').trim().toLowerCase() === 'true'
+}));
 // Robust preflight handler: echo requested headers to avoid "header not allowed" failures.
 app.use((req, res, next) => {
   const origin = req.headers.origin;

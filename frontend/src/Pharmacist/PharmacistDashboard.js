@@ -2158,10 +2158,6 @@ function PharmacistDashboard() {
         pharmacist: pharmacistName
       };
 
-      await fetchMedicines();
-      await fetchSupplies();
-      await fetchPosProducts();
-
       const saleData = await fetchJson(`/api/sales`, {
         apiBase: API_BASE,
         method: 'POST',
@@ -2202,6 +2198,7 @@ function PharmacistDashboard() {
       });
       resetPosCheckoutState();
       setToast({ type: 'success', text: createBillingInvoice ? 'Transaction completed and sent to billing.' : 'Transaction completed successfully!' });
+      Promise.allSettled([fetchMedicines(), fetchSupplies(), fetchPosProducts()]);
     } catch (err) {
       setToast({ type: 'error', text: err.message || 'Checkout failed.' });
     } finally {
@@ -3647,9 +3644,7 @@ function PharmacistDashboard() {
                                 try {
                                   const nextId = e.target.value ? String(e.target.value) : null;
                                   await updateItemCategory('medicine', m.id, nextId);
-                                  await fetchMedicines();
-                                  await fetchPosProducts();
-                                  await fetchPosCategories();
+                                  await Promise.all([fetchMedicines(), fetchPosProducts(), fetchPosCategories()]);
                                 } catch (err) {
                                   setToast({ type: 'error', text: String(err?.message || 'Failed to update category') });
                                 }
@@ -4816,11 +4811,8 @@ function PharmacistDashboard() {
           try {
             const url = await uploadCategoryImage(file);
             await setCategoryImage(categoryImageTargetId, url);
-            await fetchPosCategories();
-            await fetchPosProducts();
-            await fetchMedicines();
-            await fetchSupplies();
             setToast({ type: 'success', text: 'Category image updated.' });
+            Promise.allSettled([fetchPosCategories(), fetchPosProducts(), fetchMedicines(), fetchSupplies()]);
           } catch (err) {
             setToast({ type: 'error', text: String(err?.message || 'Upload failed') });
           } finally {
@@ -4841,10 +4833,8 @@ function PharmacistDashboard() {
           setImageUploading(true);
           try {
             await uploadProductImage(productImageTarget, file);
-            await fetchPosProducts();
-            await fetchMedicines();
-            await fetchSupplies();
             setToast({ type: 'success', text: 'Product image updated.' });
+            Promise.allSettled([fetchPosProducts(), fetchMedicines(), fetchSupplies()]);
           } catch (err) {
             setToast({ type: 'error', text: String(err?.message || 'Upload failed') });
           } finally {

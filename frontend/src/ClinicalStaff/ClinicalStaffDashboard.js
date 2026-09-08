@@ -604,9 +604,11 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
         assignedRole: role,
         assignedTo: user.email || null
       });
-      await refreshOrders();
-      await refreshSchedule();
-      await openOrder({ ...viewingOrder, scheduledAt: when, status: viewingOrder.status });
+      await Promise.all([
+        refreshOrders(),
+        refreshSchedule(),
+        openOrder({ ...viewingOrder, scheduledAt: when, status: viewingOrder.status })
+      ]);
     } catch (error) {
       setScheduleError(String(error?.message || 'Unable to save the schedule.'));
     } finally {
