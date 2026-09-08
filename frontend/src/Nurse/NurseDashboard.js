@@ -1,3 +1,4 @@
+import MedicalFileLink from '../components/MedicalFileLink';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, User, Users, MessageSquare, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Settings, AlertCircle, AlertOctagon, Printer, Search, Eye, BedDouble, Bed, LayoutDashboard, Activity, FileText, Calendar, ClipboardList, ArrowLeft, Stethoscope, UserCheck, Clipboard, Check, FilePenLine, LogIn, Pill, FlaskConical, Package, Clock, CheckCircle, XCircle, X, Plus, Phone, AlertTriangle, Info, MapPin, Copy, Save, Megaphone, RotateCw, Send, Upload, Download, Menu, ShieldAlert, Mail, Briefcase, Key, Shield, EyeOff } from 'lucide-react';
@@ -10044,7 +10045,7 @@ function NurseDashboard() {
                                             </div>
                                           </td>
                                           <td>
-                                            {r?.url ? <a href={r.url} target="_blank" rel="noreferrer">Open</a> : '—'}
+                                            {r?.url ? <MedicalFileLink href={r.url} target="_blank" rel="noreferrer">Open</MedicalFileLink> : '—'}
                                           </td>
                                           <td style={{textAlign: 'center'}}>
                                             {['matched', 'flagged'].includes(statusRaw) ? (

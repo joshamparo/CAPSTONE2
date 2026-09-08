@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const { resolveOwnedPatient } = require('../utils/patientOwnership');
 const { normalizeEmail, parseLimit, parseOffset } = require('../utils/normalize');
 const { syncHmoDataFromAppointmentToInvoice } = require('../utils/billingLedger');
 const { sendError } = require('../utils/httpErrors');
@@ -206,54 +207,9 @@ function isUuid(v) {
 }
 
 async function resolvePatientForRequest(req) {
-  const explicitPatientId = String(req.headers['x-patient-id'] || '').trim();
-  const requesterEmail = normalizeEmail(String(req.headers['x-user-email'] || ''));
-  const requesterName = String(req.headers['x-user-name'] || '').trim();
-
-  let patient = null;
-  if (isUuid(explicitPatientId)) {
-    patient = await prisma.patients
-      .findFirst({ where: { id: explicitPatientId }, select: { id: true, email: true, first_name: true, last_name: true } })
-      .catch(() => null);
-  }
-
-  if (patient?.id && requesterEmail) {
-    const stored = normalizeEmail(String(patient.email || ''));
-    if (!stored) {
-      await prisma.patients
-        .update({ where: { id: String(patient.id) }, data: { email: requesterEmail } })
-        .then(() => {
-          patient.email = requesterEmail;
-        })
-        .catch(() => {});
-    }
-    if (stored && stored !== requesterEmail) {
-      const err = new Error('Forbidden');
-      err.statusCode = 403;
-      throw err;
-    }
-  }
-
-  if (!patient?.id) {
-    if (!requesterEmail) {
-      const err = new Error('Missing user email or x-patient-id');
-      err.statusCode = 401;
-      throw err;
-    }
-    patient = await prisma.patients
-      .findFirst({ where: { email: { equals: requesterEmail, mode: 'insensitive' } }, select: { id: true, email: true, first_name: true, last_name: true } })
-      .catch(() => null);
-  }
-
-  if (!patient?.id) {
-    const err = new Error('Patient not found');
-    err.statusCode = 404;
-    throw err;
-  }
-
+  const patient = await resolveOwnedPatient(prisma, req.auth, req.headers['x-patient-id']);
   const patientName =
     `${String(patient.first_name || '').trim()} ${String(patient.last_name || '').trim()}`.trim() ||
-    requesterName ||
     null;
 
   return { id: String(patient.id), email: normalizeEmail(String(patient.email || '')), name: patientName };

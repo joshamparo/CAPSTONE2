@@ -175,7 +175,7 @@ app.use(
     }
   })
 );
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', require('./middleware/publicUploads')(path.join(__dirname, 'uploads')));
 
 const normalizeRoleHeader = (value) => {
   const raw = String(value || '').trim().toLowerCase();

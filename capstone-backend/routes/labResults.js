@@ -8,6 +8,8 @@ const multer = require('multer');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const requireRole = require('../middleware/requireRole');
+const { resolveOwnedPatient } = require('../utils/patientOwnership');
+const { parseReference, readMedicalFile, writeMedicalFile } = require('../utils/labStorage');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 const { nursePatientScope } = require('../utils/nursePatientAccess');
 const { parseLimit, parseOffset } = require('../utils/normalize');
@@ -26,26 +28,6 @@ function getSupabaseAdmin() {
   if (!url || !key) return null;
   supabaseAdmin = createClient(url, key, { auth: { persistSession: false } });
   return supabaseAdmin;
-}
-
-async function ensureBucket(sb, bucket) {
-  const existing = await sb.storage.listBuckets().catch(() => null);
-  const hasBucket = Array.isArray(existing?.data) && existing.data.some((b) => b.name === bucket);
-  if (!hasBucket) {
-    await sb.storage.createBucket(bucket, { public: true }).catch(() => {});
-  }
-}
-
-function safeFilename(name) {
-  return String(name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
-}
-
-function safeId(v) {
-  return String(v || 'patient').replace(/[^a-zA-Z0-9_-]/g, '');
-}
-
-function isUuid(value) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
 }
 
 const serialize = (obj) =>
@@ -262,20 +244,6 @@ function truncateText(s, maxChars) {
   const raw = String(s || '');
   if (raw.length <= maxChars) return raw;
   return raw.slice(0, maxChars);
-}
-
-async function fetchWithTimeout(url, timeoutMs) {
-  if (typeof fetch !== 'function') {
-    throw new Error('fetch_unavailable');
-  }
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal });
-    return res;
-  } finally {
-    clearTimeout(t);
-  }
 }
 
 async function fetchWithTimeoutInit(url, timeoutMs, init) {
@@ -607,19 +575,9 @@ async function verifyLabResult(id, { force } = {}) {
   let buf = null;
   let contentType = '';
   try {
-    let res = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      res = await fetchWithTimeout(url, 15000).catch(() => null);
-      if (res && res.ok) break;
-      await waitMs(350 + attempt * 350);
-    }
-    if (!res || !res.ok) {
-      await updateVerificationResult(id, decideStatus(35, ['file_unreachable', 'verification_error']));
-      return;
-    }
-    contentType = String(res.headers.get('content-type') || '').toLowerCase();
-    const ab = await res.arrayBuffer();
-    buf = Buffer.from(ab);
+    const file = await readMedicalFile(url, getSupabaseAdmin());
+    buf = file.buffer;
+    contentType = file.mimeType;
   } catch (e) {
     await updateVerificationResult(id, { ...decideStatus(35, ['file_unreachable', 'verification_error']), verificationError: String(e?.message || 'fetch_failed') });
     return;
@@ -811,6 +769,11 @@ setInterval(() => {
   markTimedOutPending().catch(() => {});
 }, 60000);
 
+router.use('/file', require('./labFiles')({
+  prisma, requireRole, authorizeNurseDepartment, enforceNursePatientAccess,
+  enforceClinicalOrderAccess, enforceDoctorPatientAccess, getStorage: getSupabaseAdmin
+}));
+
 router.post('/upload', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist']), authorizeNurseDepartment, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
@@ -828,39 +791,8 @@ router.post('/upload', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radi
       const access = await enforceDoctorPatientAccess(req, res, derivedPatientId);
       if (!access.allowed) return;
     }
-    const patientId = safeId(derivedPatientId);
-    const originalName = String(req.file.originalname || 'file');
-    const name = `${Date.now()}_${safeFilename(originalName)}`;
-    const fileHash = sha256Hex(req.file.buffer);
-    const mimeType = String(req.file.mimetype || '');
-    const size = Number(req.file.size || req.file.buffer?.length || 0);
-
-
-    if (sb) {
-      const bucket = process.env.SUPABASE_LAB_RESULTS_BUCKET || process.env.SUPABASE_STORAGE_BUCKET || 'lab-results';
-      await ensureBucket(sb, bucket).catch(() => {});
-      const objectPath = `lab-results/${patientId}/${name}`;
-
-      const uploadRes = await sb.storage.from(bucket).upload(objectPath, req.file.buffer, {
-        contentType: req.file.mimetype || 'application/octet-stream',
-        upsert: false,
-        cacheControl: '3600'
-      });
-      if (uploadRes?.error) {
-        return res.status(400).json({ message: 'Upload failed' });
-      }
-
-      const publicUrl = sb.storage.from(bucket).getPublicUrl(objectPath)?.data?.publicUrl || null;
-      if (!publicUrl) return res.status(400).json({ message: 'Upload failed' });
-      return res.json({ url: publicUrl, filename: objectPath, originalName, hash: fileHash, mimeType, size });
-    }
-
-    const filename = `${patientId}_${name}`;
-    const fullPath = path.join(uploadDir, filename);
-    await fs.promises.writeFile(fullPath, req.file.buffer);
-    const base = `${req.protocol}://${req.get('host')}`;
-    const url = `${base}/uploads/lab-results/${encodeURIComponent(filename)}`;
-    res.json({ url, filename, originalName, hash: fileHash, mimeType, size });
+    const stored = await writeMedicalFile(sb, String(derivedPatientId), req.file.originalname, req.file.buffer);
+    res.json({ ...stored, originalName: req.file.originalname, hash: sha256Hex(req.file.buffer), mimeType: req.file.mimetype, size: req.file.buffer.length });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -870,48 +802,13 @@ router.get('/mine', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogr
   try {
     const requesterRole = getRequesterRole(req);
     if (requesterRole === 'patient') {
-      const explicitPatientId = String(req.headers['x-patient-id'] || '').trim();
-      const requesterEmail = normalizeEmail(String(req.headers['x-user-email'] || ''));
-      const requesterName = String(req.headers['x-user-name'] || '').trim();
+      const patient = await resolveOwnedPatient(prisma, req.auth, req.headers['x-patient-id']);
 
-      let patient = null;
-      if (isUuid(explicitPatientId)) {
-        patient = await prisma.patients
-          .findFirst({ where: { id: explicitPatientId }, select: { id: true, email: true } })
-          .catch(() => null);
-      }
-
-      if (patient?.id && requesterEmail) {
-        const stored = normalizeEmail(String(patient.email || ''));
-        if (!stored) {
-          await prisma.patients
-            .update({ where: { id: String(patient.id) }, data: { email: requesterEmail } })
-            .then(() => {
-              patient.email = requesterEmail;
-            })
-            .catch(() => {});
-        }
-        if (stored && stored !== requesterEmail) {
-          return res.status(403).json({ message: 'Forbidden' });
-        }
-      }
-
-      if (!patient?.id) {
-        if (!requesterEmail) return res.status(401).json({ message: 'Missing user email or x-patient-id' });
-        patient = await ensurePatientByEmail({ email: requesterEmail, name: requesterName });
-      }
-      if (!patient?.id) return res.status(404).json({ message: 'Patient not found' });
-
-      const { take, status } = req.query;
-      const limit = parseLimit(take, { min: 1, max: 200, fallback: 50 });
-      const st = String(status || '').trim().toLowerCase();
-      const allowed = new Set(['pending', 'matched', 'verified', 'flagged', 'rejected']);
-      const statusFilter = st && allowed.has(st) ? st : '';
-
-      const conditions = [Prisma.sql`r.patient_id = ${String(patient.id)}::uuid`];
-      if (statusFilter) {
-        conditions.push(Prisma.sql`lower(coalesce(r.verification_status, 'pending')) = ${statusFilter}`);
-      } else conditions.push(Prisma.sql`lower(coalesce(r.verification_status, 'pending')) = 'verified'`);
+      const limit = parseLimit(req.query.take, { min: 1, max: 200, fallback: 50 });
+      const conditions = [
+        Prisma.sql`r.patient_id = ${String(patient.id)}::uuid`,
+        Prisma.sql`lower(coalesce(r.verification_status, 'pending')) = 'verified'`
+      ];
       const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, Prisma.sql` AND `)}`;
 
       const rows = await prisma.$queryRaw(
@@ -1016,7 +913,7 @@ router.get('/mine', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogr
     }));
     res.json(mapped);
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    res.status(err.statusCode || 500).json({ message: err.statusCode ? err.message : 'Server error' });
   }
 });
 
@@ -1026,14 +923,7 @@ router.get('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographe
     if (!patientId) return res.json([]);
     const requesterRole = getRequesterRole(req);
     if (requesterRole === 'patient') {
-      const requesterEmail = normalizeEmail(String(req.headers['x-user-email'] || ''));
-      if (!requesterEmail) return res.status(401).json({ message: 'Missing user email' });
-      const own = await prisma.patients.findFirst({
-        where: { email: { equals: requesterEmail, mode: 'insensitive' } },
-        select: { id: true }
-      });
-      if (!own) return res.status(404).json({ message: 'Patient not found' });
-      if (String(own.id) !== String(patientId)) return res.status(403).json({ message: 'Forbidden' });
+      await resolveOwnedPatient(prisma, req.auth, String(patientId));
     }
     if (requesterRole === 'doctor') {
       const access = await enforceDoctorPatientAccess(req, res, patientId);
@@ -1088,7 +978,7 @@ router.get('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographe
 
     res.json(serialized);
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    res.status(err.statusCode || 500).json({ message: err.statusCode ? err.message : 'Server error' });
   }
 });
 
@@ -1105,6 +995,12 @@ router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiograph
     }
     if (!(await enforceNursePatientAccess(req, res, resolvedPatientId))) return;
     if (!(await enforceClinicalOrderAccess(req, res, { orderId, patientId: resolvedPatientId }))) return;
+    const location = parseReference(url);
+    const belongsToPatient = location.kind === 'local'
+      ? location.key.startsWith(String(resolvedPatientId) + '_')
+      : location.key.startsWith('lab-results/' + String(resolvedPatientId) + '/');
+    if (!belongsToPatient) return res.status(403).json({ message: 'The uploaded file does not belong to this patient.' });
+    const storedFile = await readMedicalFile(url, getSupabaseAdmin());
     const uploaderIdentity = req.nurseIdentity?.name || req.auth?.email || null;
 
     const rows = await prisma.$queryRaw`
@@ -1118,7 +1014,7 @@ router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiograph
         ${resultDate ? new Date(resultDate) : null}::date,
         ${uploaderIdentity},
         'pending',
-        ${fileHash ? String(fileHash) : null},
+        ${sha256Hex(storedFile.buffer)},
         ${fileMeta && typeof fileMeta === 'object' ? fileMeta : null}::jsonb
       )
       RETURNING id, patient_id, order_id, type, title, url, result_date, uploaded_by, created_at,
@@ -1168,37 +1064,7 @@ router.get('/:id', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogra
 
     const requesterRole = getRequesterRole(req);
     if (requesterRole === 'patient') {
-      const explicitPatientId = String(req.headers['x-patient-id'] || '').trim();
-      const requesterEmail = normalizeEmail(String(req.headers['x-user-email'] || ''));
-      const requesterName = String(req.headers['x-user-name'] || '').trim();
-
-      let patient = null;
-      if (isUuid(explicitPatientId)) {
-        patient = await prisma.patients
-          .findFirst({ where: { id: explicitPatientId }, select: { id: true, email: true } })
-          .catch(() => null);
-      }
-
-      if (patient?.id && requesterEmail) {
-        const stored = normalizeEmail(String(patient.email || ''));
-        if (!stored) {
-          await prisma.patients
-            .update({ where: { id: String(patient.id) }, data: { email: requesterEmail } })
-            .then(() => {
-              patient.email = requesterEmail;
-            })
-            .catch(() => {});
-        }
-        if (stored && stored !== requesterEmail) {
-          return res.status(403).json({ message: 'Forbidden' });
-        }
-      }
-
-      if (!patient?.id) {
-        if (!requesterEmail) return res.status(401).json({ message: 'Missing user email or x-patient-id' });
-        patient = await ensurePatientByEmail({ email: requesterEmail, name: requesterName });
-      }
-      if (!patient?.id) return res.status(404).json({ message: 'Patient not found' });
+      const patient = await resolveOwnedPatient(prisma, req.auth, req.headers['x-patient-id']);
 
       const rows = await prisma.$queryRaw(
         Prisma.sql`
@@ -1220,6 +1086,7 @@ router.get('/:id', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogra
           FROM lab_results r
           WHERE r.id = ${id}
             AND r.patient_id = ${String(patient.id)}::uuid
+            AND r.verification_status = 'verified'
           LIMIT 1
         `
       );
@@ -1284,7 +1151,7 @@ router.get('/:id', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogra
       pdfUrl: row.url ?? null
     });
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    res.status(err.statusCode || 500).json({ message: err.statusCode ? err.message : 'Server error' });
   }
 });
 

@@ -1,3 +1,4 @@
+import MedicalFileLink from '../components/MedicalFileLink';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronLeft, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff, Maximize2, Paperclip, Pin, MoreHorizontal, Download, Image as ImageIcon, File, Video as VideoIcon, ArrowDown, Bell, Copy, AtSign, Reply, Clock, Sparkles, Bed } from 'lucide-react';
@@ -3828,7 +3829,7 @@ function DoctorDashboard() {
               </button>
             )}
           </div>
-          <input className="doc-input" placeholder="Or paste file URL (optional)" value={labForm.url} onChange={(e) => setLabForm((v) => ({ ...v, url: e.target.value }))} />
+          <input className="doc-input" placeholder="Or paste an existing clinic file URL (optional)" value={labForm.url} onChange={(e) => setLabForm((v) => ({ ...v, url: e.target.value }))} />
           <input className="doc-input" type="date" value={labForm.resultDate} onChange={(e) => setLabForm((v) => ({ ...v, resultDate: e.target.value }))} />
           <button className="doc-primary" type="button" onClick={saveLabResult} disabled={savingLab}>
             Add Result
@@ -3873,9 +3874,9 @@ function DoctorDashboard() {
                     <span className="doc-muted">{new Date(r.created_at || Date.now()).toLocaleDateString()}</span>
                   </div>
                   <div className="doc-history-sub">
-                    <a href={r.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 800 }}>
+                    <MedicalFileLink href={r.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 800 }}>
                       {r.title}
-                    </a>
+                    </MedicalFileLink>
                   </div>
                 </button>
               ))
@@ -4502,7 +4503,7 @@ function DoctorDashboard() {
                             <span>{new Date(l.created_at).toLocaleString()}</span>
                           </div>
                           <div className="entry-body">
-                            <a href={l.url} target="_blank" rel="noreferrer" className="doc-link-btn">View Result: {l.title}</a>
+                            <MedicalFileLink href={l.url} target="_blank" rel="noreferrer" className="doc-link-btn">View Result: {l.title}</MedicalFileLink>
                           </div>
                         </div>
                       ))}
@@ -5280,9 +5281,9 @@ function DoctorDashboard() {
                             </div>
                             <div className="doc-history-sub">
                               {kind === 'lab' && item.url ? (
-                                <a href={item.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 800 }}>
+                                <MedicalFileLink href={item.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 800 }}>
                                   {title}
-                                </a>
+                                </MedicalFileLink>
                               ) : (
                                 title
                               )}
@@ -6530,9 +6531,9 @@ function DoctorDashboard() {
                             <div style={{fontSize: '0.9rem'}}>
                               <div style={{marginBottom: '6px'}}><strong>Title:</strong> {item.title}</div>
                               {item.result_date && <div style={{marginBottom: '6px'}}><strong>Date:</strong> {new Date(item.result_date).toLocaleDateString()}</div>}
-                              <a href={item.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 800 }}>
+                              <MedicalFileLink href={item.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 800 }}>
                                 Open file
-                              </a>
+                              </MedicalFileLink>
                             </div>
                           )}
 

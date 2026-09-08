@@ -1,3 +1,4 @@
+import MedicalFileLink from './MedicalFileLink';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
@@ -701,7 +702,7 @@ export default function PatientFullRecordModal({
                             </div>
                             <div className="list-meta">
                               <span>{result.type || DASH}</span>
-                              {result.url ? <a href={result.url} target="_blank" rel="noreferrer">Open file</a> : <span>No file</span>}
+                              {result.url ? <MedicalFileLink href={result.url} target="_blank" rel="noreferrer">Open file</MedicalFileLink> : <span>No file</span>}
                             </div>
                           </div>
                         ))}

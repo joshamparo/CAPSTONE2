@@ -1,3 +1,4 @@
+import MedicalFileLink from '../components/MedicalFileLink';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AccountHeaderActions from '../components/AccountHeaderActions';
@@ -1586,7 +1587,7 @@ function PatientDashboard() {
                     ) : null}
                   </div>
                   {String(r.verificationStatus || r.verification_status || 'pending').toLowerCase() === 'verified' ? (
-                    <a
+                    <MedicalFileLink
                       href={r.url}
                       target="_blank"
                       rel="noreferrer"
@@ -1601,7 +1602,7 @@ function PatientDashboard() {
                       }}
                     >
                       Open File
-                    </a>
+                    </MedicalFileLink>
                   ) : (
                     <div style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontWeight: 800, whiteSpace: 'nowrap' }}>
                       Under review

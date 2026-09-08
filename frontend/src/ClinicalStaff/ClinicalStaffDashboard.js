@@ -1,3 +1,4 @@
+import MedicalFileLink from '../components/MedicalFileLink';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, RefreshCw, ShieldAlert, Upload, UserRound, X, XCircle, Menu, User, Mail, Briefcase, Key, Save, Shield, Eye, EyeOff, Check, Video } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -1853,9 +1854,9 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                                   </td>
                                   <td>
                                     {r.url ? (
-                                      <button type="button" className="cs-btn secondary" onClick={() => setViewingFileUrl(r.url)}>
+                                      <MedicalFileLink href={r.url} className="cs-btn secondary">
                                         View Result
-                                      </button>
+                                      </MedicalFileLink>
                                     ) : '—'}
                                   </td>
                                 </tr>
