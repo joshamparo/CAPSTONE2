@@ -3,6 +3,23 @@ const router = express.Router();
 const crypto = require('crypto');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+const { nurseAppointmentScope } = require('../utils/nurseScope');
+
+function authorizeNurseAppointment(req, res, next) {
+    if (req.auth?.role !== 'nurse') return next();
+    return requireNurseDepartment(req, res, async () => {
+        try {
+            req.nurseAppointmentScope = await nurseAppointmentScope(prisma, req.nurseDepartment);
+            if (req.params.id) {
+                if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ message: 'Invalid appointment ID.' });
+                const match = await prisma.appointments.findFirst({ where: { AND: [{ id: BigInt(req.params.id) }, req.nurseAppointmentScope] }, select: { id: true } });
+                if (!match) return res.status(403).json({ message: 'Appointment is outside your nurse department.' });
+            }
+            next();
+        } catch (error) { sendError(res, error, 'Unable to verify appointment access.'); }
+    });
+}
 const { newAppointmentRouting, canAssignOnsiteAppointment, doctorAppointmentScope } = require('../utils/appointmentRouting');
 const { createClient } = require('@supabase/supabase-js');
 const { ensureBillingTablesExist, toMoney } = require('../utils/billingLedger');
@@ -1395,11 +1412,11 @@ router.get('/debug/video-apts', async (req, res) => {
     }
 });
 
-router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'cashier', 'staff', 'physical_therapist']), async (req, res) => {
+router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'cashier', 'staff', 'physical_therapist']), authorizeNurseAppointment, async (req, res) => {
     try {
         await ensureAppointmentsSchema();
         const { date, start, end, take, skip, q, status, consultationMode, doctorUuid } = req.query;
-        let where = {};
+        let where = req.nurseAppointmentScope ? { AND: [req.nurseAppointmentScope] } : {};
 
         const role = String(req.headers['x-user-role'] || '').trim().toLowerCase();
         const linkedDoctorId = String(req.headers['x-linked-doctor-id'] || '').trim();
@@ -2025,7 +2042,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-router.post('/:id/triage/ai', requireRole(['admin', 'nurse', 'doctor']), async (req, res) => {
+router.post('/:id/triage/ai', requireRole(['admin', 'nurse', 'doctor']), authorizeNurseAppointment, async (req, res) => {
     try {
         const idRaw = String(req.params.id || '').trim();
         if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid appointment id' });
@@ -2109,7 +2126,7 @@ router.get('/unassigned', requireRole(['admin', 'doctor_secretary', 'staff']), a
 });
 
 // PATCH update status or assign doctor
-router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'cashier', 'staff']), async (req, res) => {
+router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'cashier', 'staff']), authorizeNurseAppointment, async (req, res) => {
     try {
         const roleRaw = String(req.headers['x-user-role'] || '').trim().toLowerCase();
         const role = roleRaw.includes('doctor') && roleRaw.includes('secretary')
@@ -2539,7 +2556,7 @@ router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary'
     }
 });
 
-router.get('/:id/audit', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'cashier', 'staff']), async (req, res) => {
+router.get('/:id/audit', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'cashier', 'staff']), authorizeNurseAppointment, async (req, res) => {
     try {
         const idRaw = String(req.params.id || '').trim();
         if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid appointment id.' });
@@ -2933,7 +2950,7 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therap
 });
 
 // Completion loop: mark appointment as completed
-router.post('/:id/complete', requireRole(['admin', 'nurse', 'doctor']), async (req, res) => {
+router.post('/:id/complete', requireRole(['admin', 'nurse', 'doctor']), authorizeNurseAppointment, async (req, res) => {
     try {
         await ensureAppointmentsSchema();
         const idRaw = String(req.params.id || '').trim();
@@ -3005,4 +3022,3 @@ router.post('/:id/complete', requireRole(['admin', 'nurse', 'doctor']), async (r
 });
 
 module.exports = router;
-

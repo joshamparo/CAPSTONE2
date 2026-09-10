@@ -11,7 +11,9 @@ const { appointmentEmail } = require('../utils/emailTemplates');
 const { patientUpdateAccess, sanitizePatientUpdateForRole } = require('../utils/patientUpdateAccess');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 const { sendError } = require('../utils/httpErrors');
-const { nursePatientScope, isCentralIntakeRequest } = require('../utils/nursePatientAccess');
+const { isCentralIntakeRequest } = require('../utils/nursePatientAccess');
+const { resolveNursePatientScope } = require('../utils/nurseScope');
+const { appendNurseClinicalRecord } = require('../utils/nurseClinicalRecords');
 const { Prisma } = require('@prisma/client');
 
 let _supabaseAdmin = null;
@@ -236,9 +238,11 @@ async function enforceDoctorAvailability({ doctorId, dateKey, mode = 'onsite', r
 
 router.use(requireRole(['admin', 'nurse', 'doctor', 'pharmacist', 'staff', 'cashier', 'doctor_secretary', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'patient']));
 router.use((req, res, next) => {
-    if (req.auth?.role !== 'nurse' || isCentralIntakeRequest(req.method, req.path)) return next();
-    req.nurseDepartmentFallback = 'ER';
-    return requireNurseDepartment(req, res, next);
+    if (req.auth?.role !== 'nurse') return next();
+    return requireNurseDepartment(req, res, () => {
+        if (isCentralIntakeRequest(req.method, req.path) && req.nurseDepartment !== 'ER') return res.status(403).json({ message: 'Central patient intake is handled by the ER nurse.' });
+        next();
+    });
 });
 
 function getRequesterRole(req) {
@@ -328,9 +332,9 @@ async function sendAppointmentSummaryEmail({ to, subject, templateParams }) {
 
 const CLINICAL_STAFF_ROLES = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist']);
 
-function clinicalPatientOrderScope(req) {
+async function clinicalPatientOrderScope(req) {
     const role = getRequesterRole(req);
-    if (role === 'nurse') return nursePatientScope(req.nurseDepartment);
+    if (role === 'nurse') return resolveNursePatientScope(prisma, req.nurseDepartment, getRequesterEmail(req));
     if (!CLINICAL_STAFF_ROLES.has(role)) return null;
     const email = getRequesterEmail(req);
     return {
@@ -357,7 +361,7 @@ async function logNursePatientAccess(req, action, target, details) {
 }
 
 async function enforceClinicalPatientAccess(req, res, patientId) {
-    const scope = clinicalPatientOrderScope(req);
+    const scope = await clinicalPatientOrderScope(req);
     if (!scope) return true;
     let match = await prisma.patients.findFirst({
         where: { id: String(patientId), ...scope },
@@ -928,7 +932,7 @@ router.get('/', async (req, res) => {
             ];
         }
 
-        let clinicalScope = clinicalPatientOrderScope(req);
+        let clinicalScope = await clinicalPatientOrderScope(req);
         const receptionRoutes = new Map();
 
         // Central reception scope. Intake history is authoritative, so ER nurses
@@ -1328,6 +1332,25 @@ router.get('/:id/full-record', async (req, res) => {
             walkIns: clinicalSummary.walkInIntakes
         });
 
+        await require('../utils/nurseCareStorage').ensureNurseCareTable();
+        const specialtyCare = await prisma.$queryRaw`SELECT id, department, stage, notes, handoff_to, history, updated_at FROM public.nurse_specialty_care WHERE patient_id = ${patientId}::uuid ORDER BY created_at DESC`;
+        payload.specialtyCare = specialtyCare;
+        payload.timeline.push(...specialtyCare.map(row => ({ id: `nursing:${row.id}`, type: 'nursing_care', date: row.updated_at,
+            title: `${row.department}: ${row.stage}${row.handoff_to ? ` — ${row.handoff_to}` : ''}`, notes: row.notes })));
+        const nursingRecords = Array.isArray(patient.clinical_records) ? patient.clinical_records :
+            ['vitals_logs', 'nursing_notes', 'legacyRecords'].flatMap(key => Array.isArray(patient.clinical_records?.[key]) ? patient.clinical_records[key] : []);
+        const seenNursingRecords = new Set();
+        nursingRecords.forEach((row, index) => {
+            if (!row || typeof row !== 'object') return;
+            const id = row.id || `legacy-${index}`;
+            if (seenNursingRecords.has(id)) return;
+            seenNursingRecords.add(id);
+            payload.timeline.push({ id: `clinical:${id}`, type: 'nursing_record', date: row.recordedAt || row.created_at,
+                title: `${row.type || 'Vitals'} recorded${row.nurseName ? ` by ${row.nurseName}` : ''}`,
+                notes: [row.notes, row.bloodPressure ? `BP: ${row.bloodPressure}` : '', row.heartRate ? `HR: ${row.heartRate}` : '',
+                    row.temperature ? `Temperature: ${row.temperature}` : '', row.weight ? `Weight: ${row.weight} kg` : ''].filter(Boolean) });
+        });
+        payload.timeline.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
         await logNursePatientAccess(req, 'Full Patient Record Viewed', `Patient:${patientId.slice(0, 8)}`, 'Viewed the complete patient record.');
         res.json(serializePayload(payload));
     } catch (err) {
@@ -2883,6 +2906,10 @@ router.put('/:id', async (req, res) => {
 
         const requesterRole = getRequesterRole(req);
         if (!(await enforceClinicalPatientAccess(req, res, patientId))) return;
+        if (requesterRole === 'nurse' && (
+            (req.body?.wardNumber !== undefined && String(req.body.wardNumber || '') !== String(exists.ward_number || '')) ||
+            (req.body?.admissionStatus !== undefined && String(req.body.admissionStatus || '') !== String(exists.admission_status || ''))
+        )) return res.status(403).json({ message: 'Use Ward / Room Overview for assignment, transfer, or discharge. Only ER and Medicine nurses can change ward placement.' });
         const access = patientUpdateAccess({
             role: requesterRole,
             actorId: req.auth?.id,
@@ -2921,7 +2948,7 @@ router.put('/:id', async (req, res) => {
         const allergies = updateData.allergies != null ? cleanStr(updateData.allergies, 1000) : null;
         const philHealthRaw = cleanStr(updateData.philHealthNumber, 24);
         const admissionStatusRaw = cleanStr(updateData.admissionStatus, 32);
-        const wardNumber = updateData.wardNumber != null ? cleanStr(updateData.wardNumber, 32) : null;
+        const wardNumber = updateData.wardNumber != null ? cleanStr(updateData.wardNumber, 32) : undefined;
         const diagnosis = updateData.diagnosis != null ? cleanStr(updateData.diagnosis, 1000) : null;
         const attendingDoctor = updateData.attendingDoctor != null ? cleanStr(updateData.attendingDoctor, 120) : null;
 
@@ -3064,10 +3091,14 @@ router.post('/:id/clinical-records', requireRole(['admin','nurse','doctor']), as
         const heartRateRaw = req.body?.heartRate;
         const temperatureRaw = req.body?.temperature;
         const respiratoryRateRaw = req.body?.respiratoryRate;
+        const weight = req.body?.weight === '' || req.body?.weight == null ? null : Number(req.body.weight);
+        const height = req.body?.height === '' || req.body?.height == null ? null : Number(req.body.height);
         const oxygenSaturation = req.body?.oxygenSaturation != null ? cleanStr(req.body.oxygenSaturation, 32) : null;
         const notes = req.body?.notes != null ? String(req.body.notes).slice(0, 4000) : null;
-        const nurseName = req.body?.nurseName != null ? cleanStr(req.body.nurseName, 120) : null;
+        const nurseName = cleanStr(inferRequesterName(req), 120);
         const errors = [];
+        if (weight !== null && (!Number.isFinite(weight) || weight <= 0)) errors.push('Weight must be a positive number in kilograms.');
+        if (height !== null && (!Number.isFinite(height) || height <= 0)) errors.push('Height must be a positive number in centimeters.');
 
         let heartRate = null;
         if (heartRateRaw !== undefined && heartRateRaw !== null && String(heartRateRaw).trim() !== '') {
@@ -3087,7 +3118,7 @@ router.post('/:id/clinical-records', requireRole(['admin','nurse','doctor']), as
             if (!Number.isFinite(n) || n < 2 || n > 80) errors.push('Respiratory rate must be a reasonable whole number (2–80).');
             else respiratoryRate = n;
         }
-        const anyFilled = bloodPressure || heartRate != null || temperature != null || respiratoryRate != null || oxygenSaturation || (notes && String(notes).trim());
+        const anyFilled = bloodPressure || heartRate != null || temperature != null || respiratoryRate != null || oxygenSaturation || weight != null || height != null || (notes && String(notes).trim());
         if (!anyFilled) errors.push('At least one vital sign or a note is required.');
 
         if (errors.length) return res.status(400).json({ message: errors.join('  ') });
@@ -3100,18 +3131,19 @@ router.post('/:id/clinical-records', requireRole(['admin','nurse','doctor']), as
             temperature,
             respiratoryRate,
             oxygenSaturation,
+            spo2: oxygenSaturation,
+            weight,
+            height,
             notes: notes && String(notes).trim() ? String(notes).trim() : null,
             nurseName,
             recordedAt: new Date().toISOString()
         };
 
-        const prev = patient.clinical_records && typeof patient.clinical_records === 'object' && Array.isArray(patient.clinical_records)
-            ? patient.clinical_records
-            : [];
-        const nextRecords = [...prev, newRecord];
-        const updated = await prisma.patients.update({
-            where: { id: patientId },
-            data: { clinical_records: nextRecords }
+        const updated = await prisma.$transaction(async tx => {
+            await tx.$queryRaw`SELECT id FROM public.patients WHERE id = ${patientId}::uuid FOR UPDATE`;
+            const current = await tx.patients.findUnique({ where: { id: patientId }, select: { clinical_records: true } });
+            if (!current) throw Object.assign(new Error('Patient no longer exists.'), { status: 404 });
+            return tx.patients.update({ where: { id: patientId }, data: { clinical_records: appendNurseClinicalRecord(current.clinical_records, newRecord) } });
         });
 
         // Activity log (best-effort)
@@ -3216,7 +3248,7 @@ router.post('/audit-access/report', requireRole(['admin', 'nurse']), async (req,
         if (!patientIds.length || patientIds.length > 2000) {
             return res.status(400).json({ message: 'Select between 1 and 2,000 patient records.' });
         }
-        const scope = clinicalPatientOrderScope(req);
+        const scope = await clinicalPatientOrderScope(req);
         const allowedRows = await prisma.patients.findMany({
             where: { id: { in: patientIds }, ...(scope || {}) },
             select: { id: true }

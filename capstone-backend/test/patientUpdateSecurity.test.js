@@ -25,7 +25,6 @@ test('patient and nurse payloads cannot overwrite protected clinical blobs', () 
   };
   assert.deepEqual(sanitizePatientUpdateForRole('patient', payload), { firstName: 'Patient' });
   assert.deepEqual(sanitizePatientUpdateForRole('nurse', payload), {
-    firstName: 'Patient', admissionStatus: 'Discharged', wardNumber: 'ICU-1',
-    diagnosis: 'Changed', attendingDoctor: 'Changed', admissionDate: '2026-01-01'
+    firstName: 'Patient', diagnosis: 'Changed', attendingDoctor: 'Changed'
   });
 });

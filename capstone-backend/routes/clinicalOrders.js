@@ -8,6 +8,8 @@ const { resolveClinicalServicePricing } = require('../utils/clinicalServiceCatal
 const { recordLabOrderPayment, ensureBillingTablesExist, toMoney } = require('../utils/billingLedger');
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
 const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
+const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+const { resolveNursePatientScope } = require('../utils/nurseScope');
 
 
 const SCHEDULABLE_ROLE_SET = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist']);
@@ -74,6 +76,32 @@ const upsertScheduleForOrder = async ({ orderId, role, staffEmail, startAt, titl
 };
 
 router.use(requireRole(Array.from(AUTH_ROLE_SET)));
+router.use((req, res, next) => {
+  if (req.auth?.role !== 'nurse') return next();
+  return requireNurseDepartment(req, res, async () => {
+    try {
+      req.headers['x-user-name'] = req.nurseIdentity.name;
+      req.nursePatientScope = await resolveNursePatientScope(prisma, req.nurseDepartment, req.auth.email);
+      let patientId = req.body?.patientId || req.query?.patientId;
+      const orderMatch = req.path.match(/^\/(\d+)(?:\/|$)/);
+      if (orderMatch) {
+        const order = await prisma.clinical_orders.findUnique({ where: { id: BigInt(orderMatch[1]) }, select: { patient_id: true } });
+        if (!order) return res.status(404).json({ message: 'Order not found.' });
+        patientId = order.patient_id;
+        if (!patientId) return res.status(403).json({ message: 'Order has no assigned patient.' });
+      }
+      if (patientId) {
+        const patient = await prisma.patients.findFirst({ where: { AND: [{ id: String(patientId) }, req.nursePatientScope] }, select: { first_name: true, last_name: true } });
+        if (!patient) return res.status(403).json({ message: 'Patient is outside your nurse department.' });
+        if (req.body?.patientId) req.body.patientName = `${patient.first_name} ${patient.last_name}`;
+      }
+      if (req.method === 'POST' && req.path === '/' && ['LABORATORY', 'PATHOLOGY', 'ECG', 'RADIOLOGY', 'VIDEO CONSULTATION'].includes(req.nurseDepartment)) {
+        return res.status(403).json({ message: 'Use the specialty care workflow to document support for existing orders.' });
+      }
+      next();
+    } catch (error) { res.status(503).json({ message: 'Unable to verify nurse order access.' }); }
+  });
+});
 
 function inferActor(req) {
   const actorRole = normalizeRole(req.headers['x-user-role'] || '') || null;
@@ -264,6 +292,7 @@ router.get('/', async (req, res) => {
         if (actor.actorRole !== 'nurse') or.push({ assigned_role: actor.actorRole });
         if (actor.actorEmail) or.push({ assigned_to: actor.actorEmail });
         where.OR = or;
+        if (actor.actorRole === 'nurse') where.AND = [...(where.AND || []), { patients: { is: req.nursePatientScope } }];
       } else {
         if (actor.actorRole === 'cashier') {
           if (requestedStatus === 'For Payment') {

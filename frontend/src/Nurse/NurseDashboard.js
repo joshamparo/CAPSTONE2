@@ -10,6 +10,7 @@ import { API_BASE, checkBackendHealth, fetchJson } from '../utils/api';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
+import SpecialtyCareBoard from './SpecialtyCareBoard';
 
 const RECEPTION_ROUTE_LABELS = {
   ER: 'ER', ONSITE: 'On-site', LAB: 'Laboratory', ECG: 'ECG', IMAGING: 'Imaging',
@@ -156,7 +157,7 @@ function NurseDashboard() {
   const [activeDept] = useState(() => {
     try {
       const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-      const dept = currentUser?.department || currentUser?.specialization || currentUser?.dept;
+      const dept = currentUser?.specialization || currentUser?.department || currentUser?.dept;
       return normalizeDeptId(dept) || 'ER';
     } catch (_) {
       return 'ER';
@@ -478,21 +479,21 @@ function NurseDashboard() {
   }, [user.specialization, user.departmentLabel, activeDept]);
 
   const nurseCapabilities = useMemo(() => {
-    const shared = { overview: true, patients: true, schedules: true };
+    const shared = { overview: true, patients: true, schedules: true, wards: true };
     const byType = {
-      emergency: { ...shared, appointments: true, orders: true, reception: true, erIntake: true, vitals: true, wards: true },
-      pedia: { ...shared, appointments: true, orders: true, vitals: true, wards: true },
+      emergency: { ...shared, medications: true, appointments: true, orders: true, reception: true, erIntake: true, vitals: true, wards: true },
+      pedia: { ...shared, medications: true, appointments: true, orders: true, vitals: true, wards: true },
       bedside: { ...shared, orders: true, medications: true, vitals: true, wards: true },
       clinic: { ...shared, appointments: true, orders: true, vitals: true },
-      diagnostic: { ...shared, appointments: true, orders: true },
-      imaging: { ...shared, appointments: true, orders: true },
+      diagnostic: { ...shared },
+      imaging: { ...shared },
       remote: { ...shared, appointments: true },
-      procedure: { ...shared, appointments: true, orders: true, vitals: true },
+      procedure: { ...shared, medications: true, appointments: true, orders: true, vitals: true },
       general: { ...shared, appointments: true, orders: true, vitals: true }
     };
     return byType[nurseWorkspace.type] || byType.general;
   }, [nurseWorkspace.type]);
-  const canManageHospitalBeds = nurseWorkspace.type === 'emergency';
+  const canManageHospitalBeds = ['ER', 'MEDICINE'].includes(normalizeDeptId(user.specialization || activeDept));
 
   const nurseNavLabels = useMemo(() => {
     const labelsByType = {
@@ -506,11 +507,11 @@ function NurseDashboard() {
       procedure: { patients: 'Procedure Patients', appointments: 'Procedure Schedule', vitals: 'Recovery Vitals', orders: 'Procedure Orders' },
       general: { patients: 'Patient Records', appointments: 'Appointments', vitals: 'Vitals Monitoring', orders: 'Orders Management', wards: 'Ward Management' }
     };
-    return labelsByType[nurseWorkspace.type] || labelsByType.general;
+    return { ...(labelsByType[nurseWorkspace.type] || labelsByType.general), wards: 'Ward / Room Overview' };
   }, [nurseWorkspace.type]);
 
   const allowedNurseViews = useMemo(() => {
-    const allowed = new Set(['overview', 'patients', 'profile', 'activity']);
+    const allowed = new Set(['overview', 'patients', 'profile', 'activity', 'specialty-care']);
     if (nurseCapabilities.appointments) allowed.add('appointments');
     if (nurseCapabilities.vitals) allowed.add('vitals');
     if (nurseCapabilities.erIntake) allowed.add('er-intake');
@@ -1967,8 +1968,9 @@ function NurseDashboard() {
       setTriageAiSuggestion(data?.triageReasons && typeof data.triageReasons === 'object' ? data.triageReasons : null);
       await fetchAppointments();
     } catch (e) {
-      setErrorMessage(String(e?.message || 'Unable to generate AI triage suggestion.'));
-      setShowErrorModal(true);
+      setSuccessMessage(String(e?.message || 'Unable to generate AI triage suggestion.'));
+      setModalType('error');
+      setShowSuccessModal(true);
     } finally {
       setTriageAiLoading(false);
     }
@@ -2122,11 +2124,7 @@ function NurseDashboard() {
       const url = qs.toString() ? `${API_BASE}/api/appointments?${qs.toString()}` : `${API_BASE}/api/appointments`;
       const data = await fetchJson(url, { headers: { ...getAuthHeaders() }, timeoutMs: 15000, parseJson: true });
       const list = Array.isArray(data) ? data : [];
-      const deptRaw = String(approvalDepartment || activeDept || '').trim();
-      const filtered = deptRaw
-        ? list.filter((apt) => deptAllowsService(deptRaw, getApprovalServiceType(apt)))
-        : list;
-      setAppointments(filtered);
+      setAppointments(list); // The API scopes by authenticated nurse department before pagination.
     } catch (e) {
       setAppointments([]);
       setAppointmentsError(String(e?.message || 'Unable to load appointments.'));
@@ -2677,8 +2675,18 @@ function NurseDashboard() {
     });
   };
 
+  const authorizePatientReport = async (accessType, patientIds) => {
+    for (let offset = 0; offset < patientIds.length; offset += 2000) {
+      await fetchJson('/api/patients/audit-access/report', {
+        apiBase: API_BASE, method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ accessType, patientIds: patientIds.slice(offset, offset + 2000) })
+      });
+    }
+  };
+
   const handlePrintPatientRecords = async () => {
-    const patientIds = patientsList.map((patient) => String(patient?._id || patient?.id || '').trim()).filter(Boolean);
+    const patientIds = filteredPatientsForRecords.map((patient) => String(patient?._id || patient?.id || '').trim()).filter(Boolean);
     if (!patientIds.length) {
       setSuccessMessage('There are no authorized patient records to print.');
       setModalType('error');
@@ -2694,12 +2702,7 @@ function NurseDashboard() {
     }
     printWindow.document.write('<!doctype html><title>Preparing secure report...</title><p style="font:16px sans-serif;padding:24px">Authorizing patient report...</p>');
     try {
-      await fetchJson('/api/patients/audit-access/report', {
-        apiBase: API_BASE,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ accessType: 'print', patientIds })
-      });
+      await authorizePatientReport('print', patientIds);
     } catch (error) {
       printWindow.close();
       setSuccessMessage(String(error?.message || 'Unable to authorize this patient report.'));
@@ -2726,8 +2729,8 @@ function NurseDashboard() {
     );
     const preparedBy = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Nursing Department';
     const logoUrl = `${window.location.origin}/images/pgh%20logo.png`;
-    const rows = patientsList.length > 0
-      ? patientsList.map((patient) => `
+    const rows = filteredPatientsForRecords.length > 0
+      ? filteredPatientsForRecords.map((patient) => `
           <tr>
             <td>${escapePrintText(patient._id || 'Not assigned')}</td>
             <td>
@@ -2784,7 +2787,7 @@ function NurseDashboard() {
         <div class="print-actions"><button class="close" type="button" id="close-report">Close</button><button type="button" id="print-report">Print Report</button></div>
         <main class="report">
           <header><img src="${escapePrintText(logoUrl)}" alt=""><div><div class="hospital">Pascual General Hospital</div><div class="system">Pascualinga Medical Link</div><h1>Patient Records Master List</h1></div></header>
-          <div class="meta"><span><strong>Generated:</strong> ${escapePrintText(new Date().toLocaleString())}</span><span><strong>Prepared by:</strong> ${escapePrintText(preparedBy)}</span><span><strong>Total records:</strong> ${patientsList.length}</span></div>
+          <div class="meta"><span><strong>Generated:</strong> ${escapePrintText(new Date().toLocaleString())}</span><span><strong>Prepared by:</strong> ${escapePrintText(preparedBy)}</span><span><strong>Total records:</strong> ${filteredPatientsForRecords.length}</span></div>
           <table><thead><tr><th>Patient ID</th><th>Patient / Demographics</th><th>Clinical Information</th><th>Location / Attending</th></tr></thead><tbody>${rows}</tbody></table>
           <footer>Confidential medical information — for authorized hospital use only.</footer>
         </main>
@@ -2802,6 +2805,10 @@ function NurseDashboard() {
   const [patientGenderFilter, setPatientGenderFilter] = useState("All");
   const [patientPage, setPatientPage] = useState(1);
   const itemsPerPage = 8;
+  const [inpatientPage, setInpatientPage] = useState(1);
+  const inpatientRecords = patientsList.filter(p => ['Inpatient', 'Admitted'].includes(p.admissionStatus));
+  const inpatientPageCount = Math.max(1, Math.ceil(inpatientRecords.length / itemsPerPage));
+  const currentInpatientPage = Math.min(inpatientPage, inpatientPageCount);
   const [loadingPatients, setLoadingPatients] = useState(false);
 
   const patientsById = useMemo(() => {
@@ -2885,6 +2892,7 @@ function NurseDashboard() {
   };
 
   const handleAssignPatient = async (patientId, roomCode) => {
+    if (!canManageHospitalBeds) return;
     const patientIdClean = String(patientId || '').trim();
     const roomCodeClean = String(roomCode || '').trim();
     const assignErr = (msg) => {
@@ -2902,13 +2910,13 @@ function NurseDashboard() {
     }
     if (bedAssignmentInFlightRef.current) return;
     const patient = patientsList.find((item) => String(item.id || item._id || '') === patientIdClean);
-    const patientName = `${patient?.firstName || patient?.first_name || ''} ${patient?.lastName || patient?.last_name || ''}`.trim() || 'this patient';
+    const patientName = `${patient?.firstName || patient?.first_name || ''} ${patient?.lastName || patient?.last_name || ''}`.trim() || wardRegistry.rooms.find(room => String(room.patient?.id) === patientIdClean)?.patient?.name || 'this patient';
     setBedAssignmentConfirmation({ patientId: patientIdClean, patientName, roomCode: roomCodeClean });
   };
 
   const confirmBedAssignment = async () => {
     const pending = bedAssignmentConfirmation;
-    if (!pending || bedAssignmentInFlightRef.current) return;
+    if (!canManageHospitalBeds || !pending || bedAssignmentInFlightRef.current) return;
     const patientIdClean = String(pending.patientId || '').trim();
     const roomCodeClean = String(pending.roomCode || '').trim();
     bedAssignmentInFlightRef.current = true;
@@ -2925,7 +2933,9 @@ function NurseDashboard() {
       setAssigningPatient(null);
       addActivity('Patient Assigned', `Patient assigned to ${roomCodeClean}`, 'success');
     } catch (err) {
-      assignErr(err.message || 'Failed to assign patient.');
+      setSuccessMessage(err.message || 'Failed to assign patient.');
+      setModalType('error');
+      setShowSuccessModal(true);
       fetchWardRegistry();
     } finally {
       bedAssignmentInFlightRef.current = false;
@@ -2934,6 +2944,7 @@ function NurseDashboard() {
   };
 
   const handleDischargePatient = async (patientId) => {
+    if (!canManageHospitalBeds) return;
     const patientIdClean = String(patientId || '').trim();
     const disErr = (msg) => {
       setSuccessMessage(msg);
@@ -2952,7 +2963,7 @@ function NurseDashboard() {
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ patientId: patientIdClean })
       });
-      fetchWardRegistry();
+      await Promise.all([fetchWardRegistry(), refreshPatientsList()]);
       addActivity('Patient Discharged', 'Patient has been discharged from ward.', 'info');
     } catch (err) {
       disErr(err.message || 'Failed to discharge patient.');
@@ -2991,15 +3002,10 @@ function NurseDashboard() {
       return;
     }
     try {
-      await fetchJson('/api/patients/audit-access/report', {
-        apiBase: API_BASE,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ accessType: 'download', patientIds })
-      });
+      await authorizePatientReport('download', patientIds);
       const safeCell = (value) => {
         let text = String(value ?? '').replace(/\r?\n/g, ' ');
-        if (/^[=+\-@]/.test(text)) text = `'${text}`;
+        if (/^[\s\u0000-\u001f]*[=+\-@]/.test(text)) text = `'${text}`;
         return `"${text.replace(/"/g, '""')}"`;
       };
       const header = ['Patient ID', 'Patient Name', 'Route', 'Routing Status', 'Date of Birth', 'Sex', 'Contact Number', 'Email', 'Ward / Room', 'Attending Doctor'];
@@ -4029,7 +4035,7 @@ function NurseDashboard() {
                       tone: 'bg-green-soft',
                       value: pendingMedicationRequests.length,
                       label: 'Medication Checks',
-                      detail: 'Weight-safe dosing and bedside administration queue'
+                      detail: 'Prescribed medication requests awaiting nursing review'
                   },
                   {
                       icon: <Stethoscope size={32} className="text-purple" />,
@@ -4073,7 +4079,7 @@ function NurseDashboard() {
                       icon: <FlaskConical size={32} className="text-orange" />,
                       tone: 'bg-orange-soft',
                       value: recentOrders.length,
-                      label: nurseWorkspace.type === 'imaging' ? 'Diagnostic Requests' : 'Specimen Support',
+                      label: nurseWorkspace.type === 'imaging' ? 'Diagnostic Requests' : 'Support Orders',
                       detail: `${approvalInbox.length} endorsements, ${openAppointments.length} patient assists`
                   },
                   {
@@ -4226,7 +4232,7 @@ function NurseDashboard() {
           case 'procedure':
               return [
                   { title: 'Procedure Prep Coverage', value: openAppointments.length, caption: 'Scheduled assists and patient prep still in progress.' },
-                  { title: 'Recovery & Medication Watch', value: pendingMedicationRequests.length, caption: 'Procedure-related medication and recovery observations.' },
+                  { title: 'Pending Medication Requests', value: pendingMedicationRequests.length, caption: 'Procedure-related medication and recovery observations.' },
                   { title: 'Doctor Coverage', value: careTeamDoctors.length, caption: doctorCoverageLabel }
               ];
           default:
@@ -4354,15 +4360,6 @@ function NurseDashboard() {
       { id: 3, name: 'Nurse Station 2', role: 'Emergency', initial: 'NS' },
   ];
 
-  // Admission State
-  const [showAdmissionModal, setShowAdmissionModal] = useState(false);
-  const [selectedPatientForAdmission, setSelectedPatientForAdmission] = useState(null);
-  const [admissionFormData, setAdmissionFormData] = useState({
-    wardNumber: '',
-    diagnosis: '',
-    attendingDoctor: ''
-  });
-
   // Clinical Update State
   const [showClinicalUpdateModal, setShowClinicalUpdateModal] = useState(false);
   const [selectedPatientForClinicalUpdate, setSelectedPatientForClinicalUpdate] = useState(null);
@@ -4375,9 +4372,11 @@ function NurseDashboard() {
     notes: ''
   });
   const [clinicalUpdateStatus, setClinicalUpdateStatus] = useState(null);
+  const [clinicalUpdateError, setClinicalUpdateError] = useState('');
+  const clinicalUpdateInFlight = useRef(false);
 
   // Orders State
-  const [activeOrderTab, setActiveOrderTab] = useState('medications');
+  const [activeOrderTab, setActiveOrderTab] = useState(nurseCapabilities.medications ? 'medications' : 'labs');
   const [orderFormData, setOrderFormData] = useState({
     patientId: '',
     patientName: '',
@@ -4995,7 +4994,7 @@ function NurseDashboard() {
         if (currentUser) {
             const displayName = currentUser.name || `${currentUser.firstName || currentUser.first_name || ''} ${currentUser.lastName || currentUser.last_name || ''}`.trim() || 'Nurse';
             const specialization = String(currentUser.specialization || '').trim();
-            const departmentRaw = currentUser.department || currentUser.dept || specialization || activeDept;
+            const departmentRaw = specialization || currentUser.department || currentUser.dept || activeDept;
             const roleLabel = specialization || formatDepartmentLabel(departmentRaw) || 'Nurse';
             const shiftLabel = deriveShiftLabel(currentUser.shift);
             setUser({
@@ -6048,112 +6047,8 @@ function NurseDashboard() {
     }
   };
 
-  // Admission Handlers
-  const handleAdmitClick = (patient) => {
-    setSelectedPatientForAdmission(patient);
-    setAdmissionFormData({
-      wardNumber: '',
-      diagnosis: '',
-      attendingDoctor: ''
-    });
-    setAdmissionError("");
-    setShowAdmissionModal(true);
-  };
-
-  const handleAdmissionChange = (e) => {
-    const { name, value } = e.target;
-    setAdmissionFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    if (admissionError) setAdmissionError("");
-  };
-
-  const handleAdmissionSubmit = async (e) => {
-    e.preventDefault();
-    const admErr = (msg) => {
-      setAdmissionError(msg);
-      setSuccessMessage(msg);
-      setModalType('error');
-      setShowSuccessModal(true);
-    };
-    if (!selectedPatientForAdmission) {
-      admErr('Select a patient record first before admitting.');
-      return;
-    }
-    const pid = String(selectedPatientForAdmission._id || selectedPatientForAdmission.id || '').trim();
-    if (!pid) {
-      admErr('Selected patient is missing an id (cannot admit).');
-      return;
-    }
-    const wardNumber = String(admissionFormData.wardNumber || '').trim();
-    const diagnosis = String(admissionFormData.diagnosis || '').trim();
-    const attendingDoctor = String(admissionFormData.attendingDoctor || '').trim();
-    const errors = [];
-    if (!wardNumber) errors.push('Ward / Room number is required for admission.');
-    else if (wardNumber.length > 32) errors.push('Ward / Room number is too long (max 32 chars).');
-    if (!diagnosis) errors.push('Admitting diagnosis is required.');
-    else if (diagnosis.length < 3) errors.push('Diagnosis is too short.');
-    else if (diagnosis.length > 1000) errors.push('Diagnosis is too long (max 1000 chars).');
-    if (!attendingDoctor) errors.push('Attending physician is required.');
-    else if (attendingDoctor.length < 3) errors.push('Attending physician name is too short.');
-    else if (attendingDoctor.length > 120) errors.push('Attending physician name is too long.');
-    if (errors.length) {
-      admErr(errors.join('  '));
-      return;
-    }
-    setAdmissionError("");
-
-    try {
-      const response = await fetch(`${API_BASE}/api/patients/${encodeURIComponent(pid)}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        },
-        body: JSON.stringify({
-          ...selectedPatientForAdmission, // Keep existing data
-          admissionStatus: 'Inpatient',
-          wardNumber,
-          diagnosis,
-          attendingDoctor,
-          admissionDate: new Date()
-        }),
-      });
-
-      if (response.ok) {
-        const updatedPatient = normalizePatient(await response.json());
-        // Update list
-        setPatientsList(prev => prev.map(p => String(p._id || p.id || '') === String(updatedPatient._id || updatedPatient.id || '') ? updatedPatient : p));
-        
-        // Update stats
-        setStats(prev => ({
-          ...prev,
-          inpatients: prev.inpatients + 1
-        }));
-
-        setShowAdmissionModal(false);
-        setSelectedPatientForAdmission(null);
-        setSuccessMessage("Patient admitted successfully!");
-        setModalType("success");
-        setShowSuccessModal(true);
-        addActivity('Patient Admitted', `${updatedPatient.firstName || ''} ${updatedPatient.lastName || ''} admitted to Ward ${updatedPatient.wardNumber || wardNumber}.`, 'success');
-        setView('inpatients'); // Switch to inpatients view
-      } else {
-        const err = await response.json().catch(() => ({}));
-        admErr(err?.message || "Failed to admit patient.");
-      }
-    } catch (error) {
-      console.error("Error admitting patient:", error);
-      admErr("Network error while admitting patient.");
-    }
-  };
-
-  // Clinical Update Handlers
-  const [admissionError, setAdmissionError] = useState("");
-  const [clinicalUpdateError, setClinicalUpdateError] = useState("");
-
   const handleClinicalUpdateClick = (patient) => {
+    if (!nurseCapabilities.vitals) return;
     setSelectedPatientForClinicalUpdate(patient);
     setClinicalUpdateStatus('idle');
     setClinicalUpdateError("");
@@ -6179,6 +6074,7 @@ function NurseDashboard() {
 
   const handleClinicalUpdateSubmit = async (e) => {
     e.preventDefault();
+    if (!nurseCapabilities.vitals || clinicalUpdateInFlight.current) return;
     const cuErr = (msg) => {
       setClinicalUpdateError(msg);
       setSuccessMessage(msg);
@@ -6216,7 +6112,7 @@ function NurseDashboard() {
       const n = Number(rr.replace(/\D/g, ''));
       if (!Number.isFinite(n) || n < 2 || n > 80) errors.push('Respiratory rate must be a reasonable whole number (2–80).');
     }
-    const allEmpty = !bp && !hr && !temp && !rr && !notes;
+    const allEmpty = !bp && !hr && !temp && !rr && !notes && !clinicalUpdateFormData.weight && !clinicalUpdateFormData.height;
     if (allEmpty) errors.push('At least one vital sign or a note is required to record a clinical update.');
     if (notes && notes.length > 4000) errors.push('Notes are too long (max 4000 characters).');
     if (errors.length) {
@@ -6225,6 +6121,8 @@ function NurseDashboard() {
     }
     setClinicalUpdateError("");
 
+    clinicalUpdateInFlight.current = true;
+    setClinicalUpdateStatus('saving');
     try {
       const response = await fetch(`${API_BASE}/api/patients/${encodeURIComponent(pid)}/clinical-records`, {
         method: 'POST',
@@ -6257,6 +6155,9 @@ function NurseDashboard() {
     } catch (error) {
       console.error("Error recording update:", error);
       cuErr("Network error while recording clinical update.");
+    } finally {
+      clinicalUpdateInFlight.current = false;
+      setClinicalUpdateStatus('idle');
     }
   };
 
@@ -6324,6 +6225,7 @@ function NurseDashboard() {
             <span>{nurseNavLabels.orders}</span>
           </button> : null}
 
+          <button className={`nurse-nav-item ${view === 'specialty-care' ? 'active' : ''}`} onClick={() => setView('specialty-care')}><ClipboardList size={20} /><span>Specialty Care & Handoffs</span></button>
           {nurseCapabilities.wards ? <div className="sidebar-section-label">INPATIENT CARE</div> : null}
           {nurseCapabilities.wards ? <button className={`nurse-nav-item ${view === 'ward-management' ? 'active' : ''}`} onClick={() => setView('ward-management')}>
             <BedDouble size={20} />
@@ -6343,7 +6245,7 @@ function NurseDashboard() {
             <div className="nurse-nav-sub-menu" style={{paddingLeft: isSidebarCollapsed ? '0' : '16px'}}>
               <button className={`nurse-nav-item sub-item ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')} style={{fontSize: '0.9rem'}}>
                   <ClipboardList size={18} />
-                  <span>Tasks & e-MAR</span>
+                  <span>{nurseCapabilities.medications ? 'Tasks & e-MAR' : 'Tasks & Handover'}</span>
                 </button>
               <button className={`nurse-nav-item sub-item ${view === 'calendar' ? 'active' : ''}`} onClick={() => setView('calendar')} style={{fontSize: '0.9rem'}}>
                 <Calendar size={18} />
@@ -6670,6 +6572,7 @@ function NurseDashboard() {
                     )}
                 </div>
 	            )}
+            {view === 'specialty-care' && <SpecialtyCareBoard apiBase={API_BASE} getHeaders={getAuthHeaders} patients={patientsList} onViewRecord={(patient) => { setCentralRecordPatientId(String(patient._id)); setCentralRecordPatientLabel(`${patient.firstName || ''} ${patient.lastName || ''}`.trim()); setCentralRecordOpen(true); }} />}
             {view === 'ward-management' && (
                 <div className="ward-management-view">
                     <div className="view-header-stack">
@@ -6677,7 +6580,7 @@ function NurseDashboard() {
                             <div className="welcome-text">
                                 <div className="workspace-badge workspace-bedside">Inpatient Care</div>
                                 <h1>{canManageHospitalBeds ? 'Ward Management & Bed Assignment' : `${nurseWorkspace.shortLabel} Ward Overview`}</h1>
-                                <p>{canManageHospitalBeds ? 'Monitor bed occupancy and manage patient admissions/transfers across wards.' : 'Monitor bed occupancy for your assigned department ward.'}</p>
+                                <p>{canManageHospitalBeds ? 'Monitor bed occupancy and manage patient admissions/transfers across wards.' : 'View hospital ward and room occupancy. ER and Medicine nurses manage patient assignments.'}</p>
                             </div>
                             <div className="header-actions">
                                 <button className="btn-orange" onClick={fetchWardRegistry} disabled={wardLoading}>
@@ -6762,7 +6665,7 @@ function NurseDashboard() {
                                                             <div 
                                                                 key={room.id}
                                                                 className={`bed-card ${room.occupied ? 'occupied' : 'available'}`}
-                                                                onClick={() => canManageHospitalBeds && !room.occupied && setAssigningPatient({ roomCode: room.roomCode })}
+                                                                onClick={() => canManageHospitalBeds && !room.occupied && room.status === 'Available' && setAssigningPatient({ roomCode: room.roomCode })}
                                                             >
                                                                 <div className="bed-card-header">
                                                                     <span className="bed-code">{room.roomCode}</span>
@@ -6781,6 +6684,10 @@ function NurseDashboard() {
                                                                                 <p className="patient-status">Admitted</p>
                                                                             </div>
                                                                         </div>
+                                                                        {canManageHospitalBeds ? <button type="button" className="btn-gray" onClick={(event) => {
+                                                                            event.stopPropagation();
+                                                                            setAssigningPatient({ patientId: room.patient?.id });
+                                                                        }}>Transfer</button> : null}
                                                                         {canManageHospitalBeds ? <button
                                                                             className="discharge-btn" 
                                                                             onClick={(e) => {
@@ -6792,7 +6699,7 @@ function NurseDashboard() {
                                                                         </button> : null}
                                                                     </div>
                                                                 ) : (
-                                                                    <span className="bed-status-label">Available</span>
+                                                                    <span className="bed-status-label">{room.status}</span>
                                                                 )}
                                                             </div>
                                                         ))}
@@ -6910,7 +6817,7 @@ function NurseDashboard() {
                                             ))
                                     ) : (
                                         // Patient Selection Mode
-                                        patientsList.filter(p => !p.ward_number && p.admission_status !== 'Discharged')
+                                        patientsList.filter(p => !(p.wardNumber || p.ward_number) && (p.admissionStatus || p.admission_status) !== 'Discharged')
                                             .filter(p => `${p.first_name} ${p.last_name}`.toLowerCase().includes(bedSearch.toLowerCase()))
                                             .map(p => {
                                                 const triage = p.clinical_records?.erRegistration?.triage || {};
@@ -6959,7 +6866,7 @@ function NurseDashboard() {
                                             })
                                     )}
                                     {((assigningPatient.patientId && wardRegistry.rooms?.filter(r => !r.occupied && r.status === 'Available').length === 0) ||
-                                      (!assigningPatient.patientId && patientsList.filter(p => !p.ward_number).length === 0)) && (
+                                      (!assigningPatient.patientId && patientsList.filter(p => !(p.wardNumber || p.ward_number) && (p.admissionStatus || p.admission_status) !== 'Discharged').length === 0)) && (
                                         <div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
                                             <p style={{ margin: 0, fontWeight: 700 }}>No results found.</p>
                                         </div>
@@ -7791,7 +7698,7 @@ function NurseDashboard() {
                                   <input 
                                     type="text" 
                                     name="wardNumber" 
-                                    value={editFormData.wardNumber || ''}
+                                    value={editFormData.wardNumber || ''} readOnly title="Use Ward / Room Overview to change patient assignment"
                                     onChange={handleEditFormChange}
                                     placeholder="e.g. 101"
                                   />
@@ -7920,13 +7827,13 @@ function NurseDashboard() {
                                       ? 'No patient records match your search.'
                                       : `Showing ${patientRecordsRangeStart}-${patientRecordsRangeEnd} of ${patientRecordsMatchCount} patient${patientRecordsMatchCount === 1 ? '' : 's'}`}
                                   </div>
-                                  {filteredPatientsForRecords.length > itemsPerPage ? (
+                                  {(
                                     <div className="patient-pagination" style={{ margin: 0 }}>
                                       <button
                                         type="button"
                                         className="patient-page-btn"
-                                        onClick={() => setPatientPage((page) => Math.max(1, page - 1))}
-                                        disabled={patientPage <= 1}
+                                        onClick={() => setPatientPage((page) => Math.max(1, Math.min(page, patientRecordsPageCount) - 1))}
+                                        disabled={Math.min(patientPage, patientRecordsPageCount) <= 1}
                                         aria-label="Previous page"
                                       >
                                         <ChevronLeft size={18} />
@@ -7941,7 +7848,7 @@ function NurseDashboard() {
                                         <ChevronRight size={18} />
                                       </button>
                                     </div>
-                                  ) : null}
+                                  )}
                                 </div>
                             </div>
 
@@ -8010,7 +7917,7 @@ function NurseDashboard() {
                                                             </button>
                                                             <button
                                                                 className="btn-icon-action"
-                                                                title="Doctor Orders"
+                                                                title="Doctor Orders" disabled={!nurseCapabilities.orders}
                                                                 onClick={() => openEROrdersForPatient(patient)}
                                                             >
                                                                 <ClipboardList size={18} />
@@ -8035,8 +7942,9 @@ function NurseDashboard() {
                         Inpatient Ward
                     </h2>
 
+                    <div className="patient-pagination" aria-label="Inpatient pagination"><button aria-label="Previous inpatient page" disabled={currentInpatientPage <= 1} onClick={() => setInpatientPage(currentInpatientPage - 1)}>&lt;</button><span>Page {currentInpatientPage} of {inpatientPageCount} - {inpatientRecords.length} patients</span><button aria-label="Next inpatient page" disabled={currentInpatientPage >= inpatientPageCount} onClick={() => setInpatientPage(currentInpatientPage + 1)}>&gt;</button></div>
                     <div className="inpatient-list-view">
-                        {patientsList.filter(p => p.admissionStatus === 'Inpatient').length === 0 ? (
+                        {inpatientRecords.length === 0 ? (
                             <div className="empty-inpatient-state">
                                 <div className="empty-icon-wrapper">
                                     <BedDouble size={40} color="#f97316" />
@@ -8046,7 +7954,7 @@ function NurseDashboard() {
                             </div>
                         ) : (
                             <div className="inpatient-grid">
-                                {patientsList.filter(p => p.admissionStatus === 'Inpatient').map(patient => (
+                                {inpatientRecords.slice((currentInpatientPage - 1) * itemsPerPage, currentInpatientPage * itemsPerPage).map(patient => (
                                     <div 
                                         key={patient._id} 
                                         className={`inpatient-card ${criticalPatients.has(String(patient._id)) ? 'status-critical' : 'status-stable'}`}
@@ -8098,13 +8006,13 @@ function NurseDashboard() {
                                             </button>
                                             <button 
                                                 className="btn-ip-action btn-ip-update"
-                                                onClick={() => handleClinicalUpdateClick(patient)}
+                                                disabled={!nurseCapabilities.vitals} onClick={() => handleClinicalUpdateClick(patient)}
                                             >
                                                 <FilePenLine size={16} /> Update
                                             </button>
                                             <button 
                                                 className={`btn-ip-action btn-ip-critical ${criticalPatients.has(String(patient._id)) ? 'active' : ''}`}
-                                                onClick={() => handleClinicalUpdateClick(patient)}
+                                                disabled={!nurseCapabilities.vitals} onClick={() => handleClinicalUpdateClick(patient)}
                                             >
                                                 <AlertTriangle size={16} /> {criticalPatients.has(String(patient._id)) ? 'Review Alert' : 'Record Vitals'}
                                             </button>
@@ -8217,7 +8125,7 @@ function NurseDashboard() {
                                   <span className="vitals-pagination-summary">
                                     Showing {vitalsStartIndex + 1}-{Math.min(vitalsStartIndex + vitalsPageSize, filteredVitalsPatients.length)} of {filteredVitalsPatients.length} patients
                                   </span>
-                                  {filteredVitalsPatients.length > vitalsPageSize && (
+                                  {(
                                   <div className="patient-pagination vitals-pagination-controls">
                                     <button
                                         type="button"
@@ -8341,12 +8249,12 @@ function NurseDashboard() {
                     </div>
 
                     <div className="orders-tabs">
-                        <button 
+                        {nurseCapabilities.medications && <button
                             className={`orders-tab-btn ${activeOrderTab === 'medications' ? 'active' : ''}`} 
                             onClick={() => setActiveOrderTab('medications')}
                         >
                             <Pill size={18} /> Medications
-                        </button>
+                        </button>}
                         <button 
                             className={`orders-tab-btn ${activeOrderTab === 'labs' ? 'active' : ''}`} 
                             onClick={() => setActiveOrderTab('labs')}
@@ -8827,7 +8735,7 @@ function NurseDashboard() {
                   <div className="tasks-board-container">
                       <div className="tasks-header">
                           <div>
-                              <h2 className="page-title">Tasks & e-MAR</h2>       
+                              <h2 className="page-title">{nurseCapabilities.medications ? 'Tasks & e-MAR' : 'Tasks & Handover'}</h2>
                               <p className="page-subtitle">Shared board for {user.departmentLabel || formatDepartmentLabel(activeDept)} • {currentShiftLabel}</p>
                         </div>
                         <form onSubmit={addTask} className="quick-task-form">
@@ -8938,7 +8846,7 @@ function NurseDashboard() {
                         </div>
                     </div>
 
-                    <div className="orders-content-grid" style={{ marginTop: '20px' }}>
+                    {nurseCapabilities.medications && <div className="orders-content-grid" style={{ marginTop: '20px' }}>
                         <div className="order-form-section">
                             <div className="order-card">
                                 <div className="order-card-header">
@@ -9020,7 +8928,7 @@ function NurseDashboard() {
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </div>}
                 </div>
             )}
             {view === 'calendar' && (
@@ -9812,89 +9720,6 @@ function NurseDashboard() {
         role="nurse"
       />
 
-      {showAdmissionModal && (
-        <div className="modal-overlay-fixed">
-          <div className="view-profile-card" style={{maxWidth: '600px'}}>
-            <div className="view-profile-header">
-              <div>
-                <h3 style={{margin: 0, fontSize: '1.25rem', fontWeight: 700}}>Admit Patient</h3>
-                <p style={{margin: '4px 0 0 0', fontSize: '0.9rem', opacity: 0.9, fontWeight: 500}}>Assign ward and clinical details</p>
-              </div>
-              <button onClick={() => setShowAdmissionModal(false)} className="btn-close-modal">
-                 <ChevronDown size={24} style={{transform: 'rotate(180deg)'}} />
-              </button>
-            </div>
-
-            <form onSubmit={handleAdmissionSubmit}>
-              <div className="bed-modal-body">
-                  <div className="detail-item full" style={{marginBottom: '24px'}}>
-                    <h4 className="detail-label" style={{borderBottom: '1px solid #e2e8f0', paddingBottom: '8px', marginBottom: '16px'}}>Admission Details</h4>
-                    
-                    <div className="form-grid-2-col">
-                        <div className="input-group">
-                          <label>Ward & Room Number</label>
-                          <input
-                              type="text"
-                              name="wardNumber"
-                              value={admissionFormData.wardNumber}
-                              onChange={handleAdmissionChange}
-                              placeholder="e.g. ICU - Room 304"
-                              required
-                              className="white-input"
-                          />
-                        </div>
-
-                        <div className="input-group">
-                          <label>Attending Doctor</label>
-                          <input
-                              type="text"
-                              name="attendingDoctor"
-                              value={admissionFormData.attendingDoctor}
-                              onChange={handleAdmissionChange}
-                              placeholder="e.g. Dr. Sarah Smith"
-                              required
-                              className="white-input"
-                          />
-                        </div>
-                    </div>
-                  </div>
-
-                  <div className="detail-item full">
-                      <h4 className="detail-label" style={{borderBottom: '1px solid #e2e8f0', paddingBottom: '8px', marginBottom: '16px'}}>Clinical Assessment</h4>
-                      <div className="input-group">
-                        <label>Initial Diagnosis</label>
-                        <textarea
-                            name="diagnosis"
-                            value={admissionFormData.diagnosis}
-                            onChange={handleAdmissionChange}
-                            placeholder="Describe the reason for admission..."
-                            required
-                            className="white-input"
-                            style={{minHeight: '120px', resize: 'vertical'}}
-                        />
-                      </div>
-                  </div>
-
-                  <div className="modal-actions-right">
-                    <button 
-                      type="button"
-                      onClick={() => setShowAdmissionModal(false)}
-                      className="btn-modal-cancel"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      type="submit"
-                      className="btn-modal-submit"
-                    >
-                      Confirm Admission
-                    </button>
-                  </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {showViewProfileModal && viewingPatient && (
         <div className="modal-overlay-fixed">
@@ -10202,6 +10027,11 @@ function NurseDashboard() {
             </div>
 
             <form onSubmit={handleClinicalUpdateSubmit}>
+              {clinicalUpdateError ? <p role="alert" className="admin-alert error">{clinicalUpdateError}</p> : null}
+              <div className="form-grid-2-col" style={{ padding: '0 24px' }}>
+                <label>Weight (kg)<input className="box-input" type="number" min="0.01" step="0.01" name="weight" value={clinicalUpdateFormData.weight || ''} onChange={handleClinicalUpdateChange} /></label>
+                <label>Height (cm)<input className="box-input" type="number" min="0.1" step="0.1" name="height" value={clinicalUpdateFormData.height || ''} onChange={handleClinicalUpdateChange} /></label>
+              </div>
               <div className="bed-modal-body">
                   <div className="detail-item full" style={{marginBottom: '24px'}}>
                       <h4 className="detail-label" style={{borderBottom: '1px solid #e2e8f0', paddingBottom: '8px', marginBottom: '16px'}}>Update Info</h4>
@@ -10299,11 +10129,11 @@ function NurseDashboard() {
                     </button>
                     <button 
                       type="submit"
-                      disabled={clinicalUpdateStatus === 'success'}
+                      disabled={clinicalUpdateStatus === 'success' || clinicalUpdateStatus === 'saving'}
                       className={`btn-modal-submit`}
                       style={clinicalUpdateStatus === 'success' ? {cursor: 'default', opacity: 0.8} : {}}
                     >
-                      {clinicalUpdateStatus === 'success' ? 'Saved!' : 'Save Record'}
+                      {clinicalUpdateStatus === 'saving' ? 'Saving...' : clinicalUpdateStatus === 'success' ? 'Saved!' : 'Save Record'}
                     </button>
                   </div>
 
@@ -10754,7 +10584,7 @@ function NurseDashboard() {
                   const hmo = walkInNextSteps?.hmo;
                   if (!hmo || typeof hmo !== 'object') return null;
                   const hmoProv = String(hmo.provider || hmo.hmo_provider || addPatientData.hmoProvider || '').trim();
-                  const hmoCard = String(hmo.card_number || hmo.hmo_card_number || hmoCardNumber || addPatientData.hmoCardNumber || '').trim();
+                  const hmoCard = String(hmo.card_number || hmo.hmo_card_number || addPatientData.hmoCardNumber || '').trim();
                   const loaNum = String(hmo.loa_number || hmo.hmo_loa_number || hmo.loaNumber || addPatientData.hmoLoaNumber || '').trim();
                   const status = String(hmo.status || '').trim();
                   if (!hmoProv && !hmoCard && !loaNum) return null;

@@ -12,7 +12,7 @@ const { resolveOwnedPatient } = require('../utils/patientOwnership');
 const { parseReference, readMedicalFile, writeMedicalFile } = require('../utils/labStorage');
 const { verificationPrompt, parseOutput, completenessFlags, buildPdfPayload } = require('../utils/labAiVerification');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
-const { nursePatientScope } = require('../utils/nursePatientAccess');
+const { resolveNursePatientScope } = require('../utils/nurseScope');
 const { parseLimit, parseOffset } = require('../utils/normalize');
 const { normalizeEmail } = require('../utils/normalize');
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
@@ -171,8 +171,9 @@ function hasAllowedMedicalSignature(buffer) {
 
 async function enforceNursePatientAccess(req, res, patientId) {
   if (req.auth?.role !== 'nurse') return true;
+  const scope = await resolveNursePatientScope(prisma, req.nurseDepartment, req.auth.email);
   const match = await prisma.patients.findFirst({
-    where: { id: String(patientId || ''), ...nursePatientScope(req.nurseDepartment) },
+    where: { AND: [{ id: String(patientId || '') }, scope] },
     select: { id: true }
   }).catch(() => null);
   if (!match) {

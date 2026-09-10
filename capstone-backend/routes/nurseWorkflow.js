@@ -2,6 +2,8 @@ const express = require('express');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+const { resolveNursePatientScope } = require('../utils/nurseScope');
+const MEDICATION_DEPARTMENTS = new Set(['ER', 'PEDIA', 'MEDICINE', 'ORTHOPEDICS', 'SURGERY (MINOR)', 'ANESTHESIA']);
 const {
   validateMedicationAction,
   medicationTransitionError,
@@ -434,9 +436,12 @@ async function loadRecentNurseActivities(department) {
   }));
 }
 
-async function loadPendingMedicationRequests(department) {
+async function loadPendingMedicationRequests(department, email = '') {
+  if (!MEDICATION_DEPARTMENTS.has(department)) return [];
+  const scope = await resolveNursePatientScope(prisma, department, email);
   const rows = await prisma.requests.findMany({
     where: {
+      patients: { is: scope },
       status: {
         in: ['Pending', 'Approved', 'On Hold']
       }
@@ -467,8 +472,7 @@ async function loadPendingMedicationRequests(department) {
       const patientName =
         String(row.patient_name || '').trim() ||
         `${String(row.patients?.first_name || '').trim()} ${String(row.patients?.last_name || '').trim()}`.trim();
-      const patientDepartment = inferPatientDepartment(row.patients || {});
-      if (department && patientDepartment !== department) return null;
+      const patientDepartment = department;
       return {
         requestId: row.id.toString(),
         patientId: row.patient_id ? String(row.patient_id) : '',
@@ -487,15 +491,23 @@ async function loadPendingMedicationRequests(department) {
 }
 
 router.use(requireRole(['nurse', 'admin']));
-router.use((req, res, next) => {
-  // The nurse portal is the hospital's ER/reception workspace when a legacy
-  // nurse account has not yet been assigned a department in the database.
-  // Explicit assignments still take precedence inside the authorization
-  // middleware, so this does not broaden access for assigned nurses.
-  if (req.auth?.role === 'nurse') req.nurseDepartmentFallback = 'ER';
-  next();
-});
 router.use(requireNurseDepartment);
+router.use(async (req, res, next) => {
+  try {
+    if (req.auth.role !== 'nurse') return next();
+    if (req.path.startsWith('/med-admin') && !MEDICATION_DEPARTMENTS.has(req.nurseDepartment)) return res.status(403).json({ message: 'Medication administration is not enabled for your nursing specialization.' });
+    const patientId = req.body?.patientId;
+    if (patientId) {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(patientId)) return res.status(400).json({ message: 'Invalid patient ID.' });
+      const scope = await resolveNursePatientScope(prisma, req.nurseDepartment, req.auth.email);
+      const patient = await prisma.patients.findFirst({ where: { AND: [{ id: patientId }, scope] }, select: { first_name: true, last_name: true } });
+      if (!patient) return res.status(403).json({ message: 'Patient is outside your nursing department.' });
+      req.body.patientName = `${patient.first_name} ${patient.last_name}`;
+    }
+    next();
+  } catch (error) { res.status(503).json({ message: 'Unable to verify nursing patient access.' }); }
+});
+router.use('/specialty-care', require('./nurseSpecialtyCare'));
 
 router.get('/calendar', async (req, res) => {
   try {
@@ -616,7 +628,7 @@ router.get('/summary', async (req, res) => {
         `,
         department
       ),
-      loadPendingMedicationRequests(department),
+      loadPendingMedicationRequests(department, req.auth?.email),
       department === 'ER' ? loadEmergencyLiveBoard() : Promise.resolve(null),
       loadRecentNurseActivities(department)
     ]);
@@ -951,7 +963,7 @@ router.get('/med-admin', async (req, res) => {
     await ensureWorkflowTables();
     const department = req.nurseDepartment || normalizeDeptId(req.query.department);
     const [pendingMedicationRequests, medAdminLogs] = await Promise.all([
-      loadPendingMedicationRequests(department),
+      loadPendingMedicationRequests(department, req.auth?.email),
       prisma.$queryRawUnsafe(
         `
           SELECT id, department, patient_id::text AS patient_id, patient_name, medication_request_id,
@@ -1021,8 +1033,9 @@ router.post('/med-admin', async (req, res) => {
         invalidError.code = 'INVALID_MED_REQUEST';
         throw invalidError;
       }
-      const requestDepartment = inferPatientDepartment(request.patients || {});
-      if (requestDepartment !== department) {
+      const requestScope = await resolveNursePatientScope(tx, department, req.auth.email);
+      const assignedPatient = request.patient_id && await tx.patients.findFirst({ where: { AND: [{ id: request.patient_id }, requestScope] }, select: { id: true } });
+      if (!assignedPatient) {
         const scopeError = new Error('This medication request belongs to another department.');
         scopeError.code = 'INVALID_MED_REQUEST';
         throw scopeError;

@@ -370,6 +370,7 @@ export default function PatientFullRecordModal({
                     <span>${escapeHtml(entry.title || 'Timeline entry')}</span>
                     <span>${escapeHtml(fmtDateTime(entry.date))}</span>
                   </div>
+                  ${Array.isArray(entry.notes) ? entry.notes.filter(Boolean).map(note => `<p>${escapeHtml(note)}</p>`).join('') : ''}
                   <div class="muted">${escapeHtml(String(entry.type || '').replace(/_/g, ' '))}</div>
                 </div>
               `,
@@ -636,6 +637,7 @@ export default function PatientFullRecordModal({
                               <span>{fmtDateTime(entry.date)}</span>
                             </div>
                             <div className="timeline-type">{String(entry.type || '').replace(/_/g, ' ')}</div>
+                            {Array.isArray(entry.notes) ? entry.notes.filter(Boolean).map((note, i) => <p key={i} style={{ whiteSpace: 'pre-wrap' }}>{note}</p>) : null}
                           </div>
                         </div>
                       ))}

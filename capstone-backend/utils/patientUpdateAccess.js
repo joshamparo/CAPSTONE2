@@ -17,7 +17,9 @@ function sanitizePatientUpdateForRole(role, updateData) {
   const safe = { ...(updateData || {}) };
   const normalizedRole = String(role || '').trim().toLowerCase();
   if (normalizedRole === 'patient') PATIENT_PROTECTED_FIELDS.forEach((field) => delete safe[field]);
-  if (normalizedRole === 'nurse') delete safe.clinicalRecords;
+  if (normalizedRole === 'nurse') {
+    ['clinicalRecords', 'wardNumber', 'admissionStatus', 'admissionDate'].forEach(field => delete safe[field]);
+  }
   return safe;
 }
 

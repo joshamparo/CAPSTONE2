@@ -4,21 +4,27 @@ const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 const { sendError } = require('../utils/httpErrors');
+const { canManageWard } = require('../utils/nurseScope');
+const { ensureNurseCareTable } = require('../utils/nurseCareStorage');
+
+async function retainWardDepartment(tx, patientId, wardName, actorDepartment) {
+  const department = { Emergency: 'ER', Pediatrics: 'PEDIA', 'General Ward': 'MEDICINE', ICU: 'MEDICINE', Orthopedics: 'ORTHOPEDICS' }[wardName];
+  for (const value of new Set([department, actorDepartment].filter(Boolean))) {
+    await tx.$executeRaw`INSERT INTO public.nurse_patient_departments (patient_id, department) VALUES (${patientId}::uuid, ${value}) ON CONFLICT DO NOTHING`;
+  }
+}
+
+function requireWardManager(req, res, next) {
+  if (req.auth?.role === 'admin' || (req.auth?.role === 'nurse' && canManageWard(req.nurseDepartment))) return next();
+  return res.status(403).json({ message: 'Only ER and Medicine nurses can assign, transfer, or discharge ward patients.' });
+}
 
 const authorizeNurseDepartment = (req, res, next) => {
   if (req.auth?.role !== 'nurse') return next();
-  // The unassigned Nurse workspace is the hospital's central ER/reception
-  // workspace. Keep this fallback local to bed management; all other nurse
-  // services retain their own department-scoped authorization.
-  req.nurseDepartmentFallback = 'ER';
   return requireNurseDepartment(req, res, next);
 };
 
-const NURSE_WARD_BY_DEPARTMENT = Object.freeze({
-  ER: 'Emergency',
-  PEDIA: 'Pediatrics',
-  MEDICINE: 'General Ward'
-});
+
 
 
 const DEFAULT_WARD_PLAN = [
@@ -76,28 +82,11 @@ function canAutoAssignRoom(status) {
   return normalized === 'available';
 }
 
-function nurseWardName(req) {
-  if (req.auth?.role !== 'nurse') return '';
-  return NURSE_WARD_BY_DEPARTMENT[String(req.nurseDepartment || '').trim().toUpperCase()] || '';
-}
-
 function scopeRegistryForRequest(registry, req) {
-  const wardName = nurseWardName(req);
-  if (req.auth?.role !== 'nurse') return registry;
-  if (!wardName) return { wards: [], rooms: [], totals: { totalRooms: 0, occupied: 0, available: 0, reserved: 0, cleaning: 0, maintenance: 0, inactive: 0, overflow: 0 } };
-  // ER is the hospital-wide head-nurse workspace. Other inpatient nurses see
-  // only the ward and room totals that belong to their department.
-  if (String(req.nurseDepartment || '').trim().toUpperCase() === 'ER') return registry;
-  const wards = (registry.wards || []).filter((ward) => normalizeText(ward.name) === normalizeText(wardName));
-  const rooms = (registry.rooms || []).filter((room) => normalizeText(room.wardName) === normalizeText(wardName));
-  const totals = wards.reduce((acc, ward) => {
-    acc.totalRooms += Number(ward.totalCapacity || 0);
-    for (const key of ['occupied', 'available', 'reserved', 'cleaning', 'maintenance', 'inactive', 'overflow']) {
-      acc[key] += Number(ward[key] || 0);
-    }
-    return acc;
-  }, { totalRooms: 0, occupied: 0, available: 0, reserved: 0, cleaning: 0, maintenance: 0, inactive: 0, overflow: 0 });
-  return { wards, rooms, totals };
+  if (req.auth?.role !== 'nurse' || canManageWard(req.nurseDepartment)) return registry;
+  return { ...registry, rooms: registry.rooms.map(room => ({
+    ...room, note: '', patient: room.occupied ? { name: 'Occupied' } : null
+  })) };
 }
 
 function roomMutationFailure(err, fallbackMessage) {
@@ -672,10 +661,10 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
   }
 });
 
-router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDepartment, async (req, res) => {
+router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDepartment, requireWardManager, async (req, res) => {
   try {
     const { patientId, roomCode } = req.body;
-    console.log('[AssignPatient] Payload:', { patientId, roomCode });
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(patientId || ''))) return res.status(400).json({ message: 'Invalid patient ID.' });
 
     if (!patientId || !roomCode) {
       return res.status(400).json({ message: 'Patient ID and Room Code are required.' });
@@ -700,11 +689,11 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDe
         console.error('[AssignPatient] Room already occupied:', roomCode, 'by', targetRoom.patient?.name);
         return res.status(409).json({ message: `Room ${roomCode} is already occupied.` });
     }
-    const isErHeadNurse = req.auth?.role === 'nurse' && String(req.nurseDepartment || '').trim().toUpperCase() === 'ER';
-    if (req.auth?.role === 'nurse' && !isErHeadNurse) {
-      return res.status(403).json({ message: 'Only the ER head nurse can assign patients to wards and rooms.' });
+    if (!targetRoom.occupied && !canAutoAssignRoom(targetRoom.manualStatus)) {
+      return res.status(409).json({ message: 'This room is not available for assignment.' });
     }
 
+    await ensureNurseCareTable();
     await prisma.$transaction(async (tx) => {
       // Lock both the patient and room in a stable order. This prevents two
       // rapid clicks (or two nurses) from assigning the same patient/bed twice.
@@ -712,11 +701,15 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDe
       for (const lockKey of lockKeys) {
         await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(hashtext($1))`, lockKey);
       }
+      const lockedRoom = await tx.$queryRawUnsafe('SELECT status FROM public.ward_rooms WHERE lower(room_code) = lower($1) FOR UPDATE', String(roomCode).trim());
+      if (!lockedRoom.length || !canAutoAssignRoom(lockedRoom[0].status)) throw Object.assign(new Error('Room is no longer available. Refresh the ward overview.'), { status: 409 });
       const currentPatient = await tx.patients.findUnique({
         where: { id: patientId },
         select: { ward_number: true, admission_status: true }
       });
       const currentRoom = String(currentPatient?.ward_number || '').trim();
+      if (!currentPatient) throw Object.assign(new Error('Patient no longer exists.'), { status: 404 });
+      if (currentRoom === String(roomCode).trim() && ['Inpatient', 'Admitted'].includes(currentPatient.admission_status)) return;
       if (currentRoom && normalizeText(currentRoom) !== normalizeText(roomCode)) {
         const pendingTransfer = await tx.$queryRaw`
           SELECT id FROM public.clinical_orders
@@ -744,11 +737,16 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDe
         conflict.statusCode = 409;
         throw conflict;
       }
+      const previousRoom = registry.rooms.find(room => normalizeText(room.roomCode) === normalizeText(currentRoom));
+      await retainWardDepartment(tx, patientId, previousRoom?.wardName, req.nurseDepartment);
+      await retainWardDepartment(tx, patientId, targetRoom.wardName, req.nurseDepartment);
+      await tx.activity_logs.create({ data: { actor_name: req.auth.email, role: req.auth.role, action: 'Ward Patient Assigned', target: 'Patient:' + patientId, details: 'Assigned to ' + roomCode } });
       await tx.patients.update({
         where: { id: patientId },
         data: {
           ward_number: String(roomCode).trim(),
-          admission_status: 'Inpatient'
+          admission_status: 'Inpatient',
+          admission_date: new Date()
         }
       });
       await tx.$executeRaw`
@@ -760,7 +758,6 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDe
       `;
     });
 
-    console.log('[AssignPatient] Success:', { patientId, roomCode });
     // Clear cache
     buildWardRegistry._cache.payload = null;
     
@@ -771,64 +768,26 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDe
   }
 });
 
-router.post('/discharge-patient', requireRole(['admin', 'nurse']), authorizeNurseDepartment, async (req, res) => {
+router.post('/discharge-patient', requireRole(['admin', 'nurse']), authorizeNurseDepartment, requireWardManager, async (req, res) => {
   try {
-    const { patientId } = req.body;
-    if (!patientId) return res.status(400).json({ message: 'Patient ID is required.' });
-    const pid = String(patientId).trim();
-    if (!pid) return res.status(400).json({ message: 'Patient ID is required.' });
-
-    const existing = await prisma.patients.findUnique({
-      where: { id: pid },
-      select: { id: true, ward_number: true, bed_number: true }
+    const patientId = String(req.body?.patientId || '').trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(patientId)) return res.status(400).json({ message: 'Invalid patient ID.' });
+    await ensureNurseCareTable();
+    const registry = await buildWardRegistry();
+    await prisma.$transaction(async tx => {
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', 'patient:' + patientId);
+      const patient = await tx.patients.findUnique({ where: { id: patientId }, select: { ward_number: true, admission_status: true } });
+      if (!patient) throw Object.assign(new Error('Patient not found.'), { status: 404 });
+      if (patient.admission_status === 'Discharged') return;
+      if (!patient.ward_number) throw Object.assign(new Error('Patient has no ward assignment to discharge.'), { status: 409 });
+      const room = registry.rooms.find(row => normalizeText(row.roomCode) === normalizeText(patient.ward_number));
+      await retainWardDepartment(tx, patientId, room?.wardName, req.nurseDepartment);
+      await tx.patients.update({ where: { id: patientId }, data: { ward_number: null, admission_status: 'Discharged' } });
+      await tx.activity_logs.create({ data: { actor_name: req.auth.email, role: req.auth.role, action: 'Ward Patient Discharged', target: 'Patient:' + patientId, details: 'Discharged from ' + patient.ward_number } });
     });
-    if (!existing) return res.status(404).json({ message: 'Patient not found.' });
-    const affectedWard = existing.ward_number;
-    if (req.auth?.role === 'nurse') {
-      const allowedWard = nurseWardName(req);
-      const registry = await buildWardRegistry();
-      const patientRoom = (registry.rooms || []).find((room) => normalizeText(room.roomCode) === normalizeText(affectedWard));
-      if (!allowedWard || !patientRoom || normalizeText(patientRoom.wardName) !== normalizeText(allowedWard)) {
-        return res.status(403).json({ message: 'You can only discharge patients from your department ward.' });
-      }
-    }
-
-    await prisma.patients.update({
-      where: { id: pid },
-      data: {
-        ward_number: null,
-        bed_number: null,
-        admission_status: 'Discharged'
-      }
-    });
-
-    if (affectedWard) {
-      const cleanWard = String(affectedWard).trim();
-      if (cleanWard) {
-        const rooms = await prisma.bed_rooms.findMany({
-          where: { ward: cleanWard },
-          select: { room_code: true, bed_number: true, patient_id: true }
-        }).catch(() => []);
-        for (const r of rooms) {
-          if (r.patient_id && String(r.patient_id) === pid) {
-            await prisma.bed_rooms.updateMany({
-              where: { ward: cleanWard, room_code: r.room_code, bed_number: r.bed_number },
-              data: { patient_id: null, patient_name: null, is_occupied: false }
-            }).catch(() => {});
-          }
-        }
-      }
-    }
-
-    // Clear cache
     buildWardRegistry._cache.payload = null;
-
     res.json({ message: 'Patient discharged successfully.' });
-  } catch (err) {
-    if (err?.code === 'P2025') return res.status(404).json({ message: 'Patient not found.' });
-    sendError(res, err, 'Failed to discharge patient.');
-  }
+  } catch (error) { sendError(res, error, 'Unable to discharge patient.'); }
 });
 
 module.exports = router;
-

@@ -1,4 +1,5 @@
 const prisma = require('../utils/prisma');
+const SUPPORTED_NURSE_DEPARTMENTS = new Set(['ER', 'OPD', 'PEDIA', 'MEDICINE', 'LABORATORY', 'VIDEO CONSULTATION', 'ECG', 'RADIOLOGY', 'PHYSICAL THERAPY', 'DENTAL CLINIC', 'SURGERY (MINOR)', 'ANESTHESIA', 'OTOLARYNGOLOGY (ENT)', 'PATHOLOGY', 'ORTHOPEDICS']);
 
 function normalizeNurseDepartment(value) {
   const raw = String(value || '').trim();
@@ -44,8 +45,9 @@ async function requireNurseDepartment(req, res, next) {
       },
       select: { first_name: true, last_name: true, specialization: true, department: true }
     });
-    const assigned = resolveNurseDepartmentScope(nurse?.department, nurse?.specialization || req.nurseDepartmentFallback);
-    if (!assigned) return res.status(403).json({ message: 'Your nurse account has no assigned department. Contact an administrator.' });
+    if (!nurse) return res.status(403).json({ message: 'An active nurse account is required.' });
+    const assigned = resolveNurseDepartmentScope(nurse.specialization, nurse.department);
+    if (!SUPPORTED_NURSE_DEPARTMENTS.has(assigned)) return res.status(403).json({ message: 'Your nurse account needs a valid assigned specialization. Contact an administrator.' });
     const requested = normalizeNurseDepartment(req.query?.department || req.body?.department);
     if (requested && requested !== assigned) {
       return res.status(403).json({ message: 'You can only access your assigned nurse department.' });

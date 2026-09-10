@@ -6,23 +6,7 @@ const requireRole = require('../middleware/requireRole');
 const { sendError } = require('../utils/httpErrors');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 
-const NURSE_DOCTOR_SPECIALTY_ALIASES = {
-  ER: ['ER', 'Emergency Medicine'],
-  OPD: ['OPD', 'Outpatient', 'Medicine'],
-  PEDIA: ['PEDIA', 'Pediatrics'],
-  MEDICINE: ['Medicine', 'Internal Medicine'],
-  LABORATORY: ['Laboratory', 'Pathology'],
-  PATHOLOGY: ['Pathology', 'Laboratory'],
-  ECG: ['ECG', 'Cardiology'],
-  RADIOLOGY: ['Radiology'],
-  'PHYSICAL THERAPY': ['Physical Therapy', 'Rehabilitation Medicine'],
-  'DENTAL CLINIC': ['Dental Clinic', 'Dental Medicine'],
-  'SURGERY (MINOR)': ['Surgery', 'Minor Surgery'],
-  ANESTHESIA: ['Anesthesia', 'Anesthesiology'],
-  'OTOLARYNGOLOGY (ENT)': ['Otolaryngology', 'ENT'],
-  ORTHOPEDICS: ['Orthopedics'],
-  'VIDEO CONSULTATION': ['Video Consultation']
-};
+const { SPECIALTIES: NURSE_DOCTOR_SPECIALTY_ALIASES } = require('../utils/nurseScope');
 
 router.get('/linked-nurse-doctors', requireRole(['nurse']), requireNurseDepartment, async (req, res) => {
   try {
