@@ -7,6 +7,15 @@ const {
 } = require('../utils/nurseWorkflowSafety');
 
 test('held and missed medication actions require a reason', () => {
+  for (const status of ['held', 'missed']) {
+    for (const note of ['', '   ']) {
+      assert.equal(validateMedicationAction({ status, note }).message, 'Please state your reason.');
+    }
+    for (const note of ['a', ' no ']) {
+      assert.equal(validateMedicationAction({ status, note }).message, 'Please input a valid reason.');
+    }
+    assert.equal(validateMedicationAction({ status, note: 'abc' }).ok, true);
+  }
   assert.equal(validateMedicationAction({ status: 'held', note: '' }).ok, false);
   assert.equal(validateMedicationAction({ status: 'missed', note: 'no' }).ok, false);
   assert.deepEqual(validateMedicationAction({ status: 'held', note: 'Patient declined' }), {

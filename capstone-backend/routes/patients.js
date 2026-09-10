@@ -14,6 +14,7 @@ const { sendError } = require('../utils/httpErrors');
 const { isCentralIntakeRequest } = require('../utils/nursePatientAccess');
 const { resolveNursePatientScope } = require('../utils/nurseScope');
 const { appendNurseClinicalRecord } = require('../utils/nurseClinicalRecords');
+const { hasIntakeSecretary } = require('../utils/intakeSecretary');
 const { Prisma } = require('@prisma/client');
 
 let _supabaseAdmin = null;
@@ -1603,6 +1604,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 select: { id: true }
             });
             if (!activeDoctor) return res.status(400).json({ message: 'Select a clinic specialization with an active doctor.' });
+            if (!await hasIntakeSecretary(prisma, selectedSpecialization)) {
+                return res.status(400).json({ message: 'No doctor secretary account linked for this specialization yet.' });
+            }
             const preferredDateRaw = String(payload.preferredDate || '').trim();
             const preferredTimeRaw = String(payload.preferredTime || '').trim();
             if (!preferredDateRaw) return res.status(400).json({ message: 'Preferred date is required for an appointment.' });

@@ -1341,7 +1341,7 @@ function NurseDashboard() {
           return;
         }
         if (!walkInSecretaryOptions.length) {
-          setAddPatientError("No doctor secretary account is linked for this specialization yet. Please set up a doctor secretary first.");
+          setAddPatientError("No doctor secretary account linked for this specialization yet.");
           return;
         }
         const date = String(addPatientData.preferredDate || '').trim();
@@ -1365,6 +1365,10 @@ function NurseDashboard() {
           setAddPatientError("Selected date is not available for this specialization. Pick another date.");
           return;
         }
+      }
+      if (addPatientData.hasHmo && (!String(addPatientData.hmoProvider || '').trim() || !String(addPatientData.hmoCardNumber || '').trim())) {
+        setAddPatientError('Please enter the HMO provider and card number.');
+        return;
       }
       setAddPatientStep(2);
       return;
@@ -1428,7 +1432,7 @@ function NurseDashboard() {
         setAddPatientError('HMO provider and card number are required.');
         return;
       }
-      if (approvalStatus === 'approved' && (!String(addPatientData.hmoLoaNumber || '').trim() || Number(addPatientData.hmoLoaApprovedAmount || 0) <= 0)) {
+      if (approvalStatus === 'approved' && (!String(addPatientData.hmoLoaNumber || '').trim() || !Number.isFinite(Number(addPatientData.hmoLoaApprovedAmount)) || Number(addPatientData.hmoLoaApprovedAmount || 0) <= 0)) {
         setAddPatientError('Enter the LOA number and approved amount before sending this claim to Cashier.');
         return;
       }
@@ -3303,6 +3307,7 @@ function NurseDashboard() {
   const [medAdminActionId, setMedAdminActionId] = useState('');
   const [medAdminDraft, setMedAdminDraft] = useState(null);
   const [medAdminReason, setMedAdminReason] = useState('');
+  const [medAdminReasonError, setMedAdminReasonError] = useState('');
   const [liveBoard, setLiveBoard] = useState(null);
   const [recentWorkflowActivities, setRecentWorkflowActivities] = useState([]);
 
@@ -3554,6 +3559,7 @@ function NurseDashboard() {
         medErr('Patient information is missing from this medication request.');
         return;
       }
+      setMedAdminReasonError('');
       setMedAdminReason('');
       setMedAdminDraft({ request, status: statusClean });
   };
@@ -3567,7 +3573,7 @@ function NurseDashboard() {
   const submitMedicationAdministration = async () => {
       const request = medAdminDraft?.request;
       const statusClean = medAdminDraft?.status;
-      if (!request || !statusClean) return;
+      if (!request || !statusClean || medAdminActionId) return;
       const medErr = (msg) => {
         setSuccessMessage(msg);
         setModalType('error');
@@ -3579,7 +3585,7 @@ function NurseDashboard() {
       const patientName = String(request?.patientName || '').trim();
       const note = String(medAdminReason || '').trim();
       if ((statusClean === 'held' || statusClean === 'missed') && note.length < 3) {
-        medErr(`A reason of at least 3 characters is required when medication is ${statusClean}.`);
+        setMedAdminReasonError(note ? 'Please input a valid reason.' : 'Please state your reason.');
         return;
       }
       const quantityRaw = request?.quantity;
@@ -10389,14 +10395,15 @@ function NurseDashboard() {
               {(medAdminDraft.status === 'held' || medAdminDraft.status === 'missed') ? (
                 <label className="med-safety-reason">
                   Reason <span aria-hidden="true">*</span>
-                  <textarea value={medAdminReason} maxLength={1000} onChange={(event) => setMedAdminReason(event.target.value)} placeholder={`Why is this medication being ${medAdminDraft.status}?`} autoFocus />
-                  <small>Required, at least 3 characters.</small>
+                  <textarea value={medAdminReason} maxLength={1000} aria-invalid={Boolean(medAdminReasonError)} aria-describedby="med-admin-reason-help" onChange={(event) => { setMedAdminReason(event.target.value); setMedAdminReasonError(''); }} placeholder={`Why is this medication being ${medAdminDraft.status}?`} autoFocus />
+                  <small id="med-admin-reason-help">Required, at least 3 characters.</small>
+                  {medAdminReasonError && <span role="alert" className="form-error-message">{medAdminReasonError}</span>}
                 </label>
               ) : <div className="med-safety-warning"><AlertTriangle size={18} /> This will mark the medication request as completed.</div>}
             </div>
             <div className="med-safety-actions">
               <button type="button" className="btn-modal-cancel" disabled={Boolean(medAdminActionId)} onClick={() => setMedAdminDraft(null)}>Cancel</button>
-              <button type="button" className="btn-modal-submit" disabled={Boolean(medAdminActionId) || ((medAdminDraft.status === 'held' || medAdminDraft.status === 'missed') && medAdminReason.trim().length < 3)} onClick={submitMedicationAdministration}>
+              <button type="button" className="btn-modal-submit" disabled={Boolean(medAdminActionId)} onClick={submitMedicationAdministration}>
                 {medAdminActionId ? 'Recording...' : `Confirm ${medAdminDraft.status}`}
               </button>
             </div>

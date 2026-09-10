@@ -49,6 +49,8 @@ Unrelated medication administration tools are hidden outside ER, Pedia, Medicine
 
 ## Rollout and verification
 
+Walk-in intake shows a clear error when the selected specialization has no usable linked doctor-secretary account; the backend rechecks the link before creating the intake. HMO provider and card number are required before leaving the first step when HMO is selected, and approved amounts must be finite and positive. In Tasks/e-MAR, choose Hold or Missed and confirm: a blank reason shows "Please state your reason." and a reason shorter than three trimmed characters shows "Please input a valid reason." The form stays open for correction, and the backend enforces the same reason requirement.
+
 Deploy the backend and frontend together. `manual_migration_nurse_specialty_care.sql` is additive and is discovered by the existing backend startup schema bootstrap. The API also initializes the new tables if necessary. The tables enable row-level security so access remains through authenticated backend routes.
 
 Automated checks cover all 15 scopes, unauthorized ward mutations, workflow progression/cancellation, linked-patient validation, stale edits, historical access, preservation of clinical records, and frontend patient pagination/view/save actions. Production-account testing still requires the deployed backend/database and representative department accounts; local automated checks are not a live clinical acceptance test.

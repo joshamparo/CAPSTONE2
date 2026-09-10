@@ -7,7 +7,7 @@ function validateMedicationAction({ status, note }) {
     return { ok: false, message: `Invalid medication status '${normalizedStatus}'. Allowed: administered, held, missed.` };
   }
   if ((normalizedStatus === 'held' || normalizedStatus === 'missed') && normalizedNote.length < 3) {
-    return { ok: false, message: `A reason of at least 3 characters is required when medication is ${normalizedStatus}.` };
+    return { ok: false, message: normalizedNote ? 'Please input a valid reason.' : 'Please state your reason.' };
   }
   return { ok: true, status: normalizedStatus, note: normalizedNote || null };
 }
