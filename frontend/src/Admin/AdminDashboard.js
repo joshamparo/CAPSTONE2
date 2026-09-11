@@ -2713,6 +2713,18 @@ function AdminDashboard() {
         return;
     }
 
+    const dob = new Date(staffFormData.dateOfBirth);
+    if (!Number.isNaN(dob.getTime())) {
+      let ageAtHire = selectedDate.getFullYear() - dob.getFullYear();
+      const monthDiff = selectedDate.getMonth() - dob.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && selectedDate.getDate() < dob.getDate())) ageAtHire -= 1;
+      if (ageAtHire < 18) {
+        setDateHiredNoticeField(fieldId);
+        setDateHiredNotice("Date Hired must be at least 18 years after the staff member's Date of Birth.");
+        return;
+      }
+    }
+
     if (dateHiredNoticeField === fieldId) {
         setDateHiredNotice("");
         setDateHiredNoticeField(null);
@@ -3130,6 +3142,16 @@ function AdminDashboard() {
       if (clean(newUser.middleName) && !isValidName(newUser.middleName)) errors.push("Middle Name contains invalid characters.");
       if (!clean(newUser.role)) errors.push("Role is required.");
       if (!clean(newUser.dateHired)) errors.push("Date Hired is required.");
+      if (clean(newUser.dateOfBirth) && clean(newUser.dateHired)) {
+        const dob = new Date(clean(newUser.dateOfBirth));
+        const hired = new Date(clean(newUser.dateHired));
+        if (!Number.isNaN(dob.getTime()) && !Number.isNaN(hired.getTime())) {
+          let ageAtHire = hired.getFullYear() - dob.getFullYear();
+          const monthDiff = hired.getMonth() - dob.getMonth();
+          if (monthDiff < 0 || (monthDiff === 0 && hired.getDate() < dob.getDate())) ageAtHire -= 1;
+          if (ageAtHire < 18) errors.push("Staff must be at least 18 years old on the Date Hired.");
+        }
+      }
       if (!isValidEmail(newUser.email)) errors.push("Invalid email address format.");
       if (!isValidPHPhone(newUser.phone)) errors.push("Invalid PH phone number. Use format: 09XX XXX XXXX or +63 9XX XXX XXXX.");
       if (!clean(newUser.streetAddress) || clean(newUser.streetAddress).length < 5) errors.push("Street Address must be at least 5 characters.");
@@ -3314,6 +3336,11 @@ function AdminDashboard() {
       const hired = new Date(hiredStr);
       const today = new Date();
       if (Number.isNaN(hired.getTime()) || hired > today) return false;
+      const dob = new Date(dobStr);
+      let ageAtHire = hired.getFullYear() - dob.getFullYear();
+      const hireMonthDiff = hired.getMonth() - dob.getMonth();
+      if (hireMonthDiff < 0 || (hireMonthDiff === 0 && hired.getDate() < dob.getDate())) ageAtHire -= 1;
+      if (ageAtHire < 18) return false;
       const medicalRoles = ['Doctor', 'Nurse', 'Pharmacist'];
       if (medicalRoles.includes(clean(staffFormData.role))) {
         if (!/^\d{7}$/.test(clean(staffFormData.medicalLicenseNumber))) return false;
@@ -3377,6 +3404,13 @@ function AdminDashboard() {
         const today = new Date();
         if (Number.isNaN(hired.getTime())) blockers.push("Valid Date Hired");
         else if (hired > today) blockers.push("Date Hired (not future)");
+        else if (clean(staffFormData.dateOfBirth)) {
+          const dob = new Date(clean(staffFormData.dateOfBirth));
+          let ageAtHire = hired.getFullYear() - dob.getFullYear();
+          const hireMonthDiff = hired.getMonth() - dob.getMonth();
+          if (hireMonthDiff < 0 || (hireMonthDiff === 0 && hired.getDate() < dob.getDate())) ageAtHire -= 1;
+          if (!Number.isNaN(dob.getTime()) && ageAtHire < 18) blockers.push("Date Hired (staff must already be 18)");
+        }
       }
       const medicalRoles = ['Doctor', 'Nurse', 'Pharmacist'];
       if (medicalRoles.includes(clean(staffFormData.role))) {
@@ -3456,6 +3490,13 @@ function AdminDashboard() {
           const today = new Date();
           if (Number.isNaN(hired.getTime())) errors.push("Date Hired is invalid.");
           else if (hired > today) errors.push("Future year is not valid, only the past years and present year.");
+          else {
+            const dob = new Date(clean(staffFormData.dateOfBirth));
+            let ageAtHire = hired.getFullYear() - dob.getFullYear();
+            const hireMonthDiff = hired.getMonth() - dob.getMonth();
+            if (hireMonthDiff < 0 || (hireMonthDiff === 0 && hired.getDate() < dob.getDate())) ageAtHire -= 1;
+            if (!Number.isNaN(dob.getTime()) && ageAtHire < 18) errors.push("Staff must be at least 18 years old on the Date Hired.");
+          }
         }
 
         const medicalRoles = ['Doctor', 'Nurse', 'Pharmacist'];

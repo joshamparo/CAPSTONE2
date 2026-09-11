@@ -921,6 +921,22 @@ router.post('/', requireRole(['admin']), async (req, res) => {
                  return res.status(400).json({ field: "dateOfBirth", message: "Date of Birth cannot be in the current or future year." });
             }
         }
+
+        if (dateOfBirth && dateHired) {
+            const dob = new Date(dateOfBirth);
+            const hired = new Date(dateHired);
+            if (!Number.isNaN(dob.getTime()) && !Number.isNaN(hired.getTime())) {
+                let ageAtHire = hired.getFullYear() - dob.getFullYear();
+                const monthDiff = hired.getMonth() - dob.getMonth();
+                if (monthDiff < 0 || (monthDiff === 0 && hired.getDate() < dob.getDate())) ageAtHire--;
+                if (ageAtHire < 18) {
+                    return res.status(400).json({
+                        field: "dateHired",
+                        message: "Staff must be at least 18 years old on the Date Hired."
+                    });
+                }
+            }
+        }
         
         // Select Model based on accountType
         let modelType;
