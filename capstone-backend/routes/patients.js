@@ -933,33 +933,38 @@ router.get('/', async (req, res) => {
             ];
         }
 
-        let clinicalScope = await clinicalPatientOrderScope(req);
+        const clinicalScopePromise = clinicalPatientOrderScope(req);
+        let clinicalScope;
         const receptionRoutes = new Map();
 
         // Central reception scope. Intake history is authoritative, so ER nurses
         // can see reception-created service patients without exposing unrelated
         // outpatient records. Appointment state enriches ER/onsite routing.
         if (requesterRole === 'nurse' && req.nurseDepartment === 'ER') {
-            const receptionPatients = await prisma.patients.findMany({
-                select: { id: true, clinical_records: true },
-                orderBy: { created_at: 'desc' },
-                take: 2000
-            });
+            const [resolvedScope, receptionPatients, receptionAppointments] = await Promise.all([
+                clinicalScopePromise,
+                prisma.patients.findMany({
+                    select: { id: true, clinical_records: true },
+                    orderBy: { created_at: 'desc' },
+                    take: 2000
+                }),
+                prisma.appointments.findMany({
+                    where: {
+                        patient_id: { not: null },
+                        OR: [
+                            { reason: { startsWith: '[TRIAGE][WALK-IN] ER Consultation' } },
+                            { reason: { startsWith: '[APPOINTMENT][CLINIC]' } }
+                        ]
+                    },
+                    select: { patient_id: true, reason: true, status: true, assignment_status: true, doctor_uuid: true },
+                    orderBy: { created_at: 'desc' },
+                    take: 2000
+                })
+            ]);
+            clinicalScope = resolvedScope;
             receptionPatients.forEach((row) => {
                 const reception = getReceptionRouteFromClinicalRecords(row.clinical_records);
                 if (reception) receptionRoutes.set(row.id, reception);
-            });
-            const receptionAppointments = await prisma.appointments.findMany({
-                where: {
-                    patient_id: { not: null },
-                    OR: [
-                        { reason: { startsWith: '[TRIAGE][WALK-IN] ER Consultation' } },
-                        { reason: { startsWith: '[APPOINTMENT][CLINIC]' } }
-                    ]
-                },
-                select: { patient_id: true, reason: true, status: true, assignment_status: true, doctor_uuid: true },
-                orderBy: { created_at: 'desc' },
-                take: 2000
             });
             const enrichedAppointmentRoutes = new Set();
             receptionAppointments.forEach((row) => {
@@ -984,6 +989,8 @@ router.get('/', async (req, res) => {
                     ]
                 };
             }
+        } else {
+            clinicalScope = await clinicalScopePromise;
         }
         const scopedWhere = clinicalScope
             ? (Object.keys(where).length ? { AND: [where, clinicalScope] } : clinicalScope)

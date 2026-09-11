@@ -74,23 +74,38 @@ async function nurseAppointmentScope(db, department) {
 async function resolveNursePatientScope(db, department, email = '') {
   const dept = normalizeNurseDepartment(department);
   if (!SPECIALTIES[dept]) return noPatients();
-  const storageReady = await require('./nurseCareStorage').ensureNurseCareTable()
+  const historyPromise = require('./nurseCareStorage').ensureNurseCareTable()
     .then(() => true)
     .catch((error) => {
       console.warn('[Nurse scope] Specialty history is unavailable; continuing with operational records:', error?.message || error);
       return false;
-    });
-  const historyPatients = storageReady
-    ? await db.$queryRaw`SELECT patient_id AS id FROM public.nurse_patient_departments WHERE department = ${dept}
-        UNION SELECT patient_id AS id FROM public.nurse_specialty_care WHERE department = ${dept}`.catch(() => [])
-    : [];
-  const appointmentScope = await nurseAppointmentScope(db, dept);
-  const appointments = await db.appointments.findMany({
+    })
+    .then(storageReady => storageReady
+      ? db.$queryRaw`SELECT patient_id AS id FROM public.nurse_patient_departments WHERE department = ${dept}
+          UNION SELECT patient_id AS id FROM public.nurse_specialty_care WHERE department = ${dept}`.catch(() => [])
+      : []);
+  const appointmentsPromise = nurseAppointmentScope(db, dept).then(appointmentScope => db.appointments.findMany({
     where: { AND: [appointmentScope, { patient_id: { not: null } }] }, select: { patient_id: true }
-  });
+  }));
+  const receptionAppointmentsPromise = dept === 'ER'
+    ? db.appointments.findMany({ where: { reason: { startsWith: '[APPOINTMENT][CLINIC]' }, patient_id: { not: null } }, select: { patient_id: true } })
+    : Promise.resolve([]);
+  const intakeTypes = dept === 'ER' ? ['er_consult', 'onsite_consult', 'lab', 'imaging', 'pharmacy', 'admission_eval']
+    : dept === 'LABORATORY' ? ['lab'] : [];
+  const intakePromise = db.$queryRaw`
+    SELECT id FROM public.patients p WHERE EXISTS (
+      SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p.clinical_records->'walkInIntakes') = 'array'
+        THEN p.clinical_records->'walkInIntakes' ELSE '[]'::jsonb END) intake
+      WHERE lower(intake->>'type') IN (SELECT jsonb_array_elements_text(${JSON.stringify(intakeTypes)}::jsonb))
+        OR lower(trim(intake->>'specialization')) IN (SELECT jsonb_array_elements_text(${JSON.stringify(SPECIALTIES[dept].map(v => v.toLowerCase()))}::jsonb))
+    )`;
+  const wardNames = { ER: ['Emergency'], PEDIA: ['Pediatrics'], MEDICINE: ['General Ward', 'ICU'], ORTHOPEDICS: ['Orthopedics'] };
+  const registryPromise = wardNames[dept] ? db.$queryRaw`SELECT to_regclass('public.ward_rooms')::text AS name` : Promise.resolve([]);
+  const [historyPatients, appointments, receptionAppointments, intakePatients, registryTable] = await Promise.all([
+    historyPromise, appointmentsPromise, receptionAppointmentsPromise, intakePromise, registryPromise
+  ]);
   const scopes = [{ id: { in: [...new Set(appointments.map(row => row.patient_id).filter(Boolean))] } }];
   if (dept === 'ER') {
-    const receptionAppointments = await db.appointments.findMany({ where: { reason: { startsWith: '[APPOINTMENT][CLINIC]' }, patient_id: { not: null } }, select: { patient_id: true } });
     scopes.push({ id: { in: receptionAppointments.map(row => row.patient_id) } });
     // Compatibility for records created before explicit intake/history links
     // existed. Keep the match limited to established ER statuses and ER room
@@ -104,23 +119,12 @@ async function resolveNursePatientScope(db, department, email = '') {
     );
   }
   scopes.push({ id: { in: historyPatients.map(row => row.id) } });
-  const intakeTypes = dept === 'ER' ? ['er_consult', 'onsite_consult', 'lab', 'imaging', 'pharmacy', 'admission_eval']
-    : dept === 'LABORATORY' ? ['lab'] : [];
-  const intakePatients = await db.$queryRaw`
-    SELECT id FROM public.patients p WHERE EXISTS (
-      SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p.clinical_records->'walkInIntakes') = 'array'
-        THEN p.clinical_records->'walkInIntakes' ELSE '[]'::jsonb END) intake
-      WHERE lower(intake->>'type') IN (SELECT jsonb_array_elements_text(${JSON.stringify(intakeTypes)}::jsonb))
-        OR lower(trim(intake->>'specialization')) IN (SELECT jsonb_array_elements_text(${JSON.stringify(SPECIALTIES[dept].map(v => v.toLowerCase()))}::jsonb))
-    )`;
   scopes.push({ id: { in: intakePatients.map(row => row.id) } });
   const services = SPECIALTIES[dept].map(value => ({ service: { equals: value, mode: 'insensitive' } }));
   if (clinicalRoles[dept]) services.push({ assigned_role: clinicalRoles[dept] });
   if (email) services.push({ assigned_role: 'nurse', assigned_to: { equals: email, mode: 'insensitive' } });
   scopes.push({ clinical_orders: { some: { OR: services } } });
   const wardPrefixes = { ER: ['ER-'], PEDIA: ['PD-'], MEDICINE: ['GW-', 'ICU-'] };
-  const wardNames = { ER: ['Emergency'], PEDIA: ['Pediatrics'], MEDICINE: ['General Ward', 'ICU'], ORTHOPEDICS: ['Orthopedics'] };
-  const registryTable = wardNames[dept] ? await db.$queryRaw`SELECT to_regclass('public.ward_rooms')::text AS name` : [];
   if (registryTable[0]?.name) {
     const wardPatients = await db.$queryRaw`SELECT p.id FROM public.patients p
       JOIN public.ward_rooms room ON lower(trim(room.room_code)) = lower(trim(p.ward_number))

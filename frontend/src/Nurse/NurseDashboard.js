@@ -5074,13 +5074,6 @@ function NurseDashboard() {
     return () => clearInterval(interval);
   }, [API_BASE]);
 
-  // Fetch Patients List
-  React.useEffect(() => {
-    if (['patients', 'overview', 'inpatients'].includes(view)) {
-        refreshPatientsList();
-    }
-  }, [view]);
-
   React.useEffect(() => {
     if (view === 'patients') {
       fetchPatientRecords();
