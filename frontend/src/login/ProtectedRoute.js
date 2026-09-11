@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 
 const API_BASE = (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_BASE_URL) || 'http://localhost:5000';
@@ -36,11 +36,31 @@ function safeNormalizeArray(value) {
   return [];
 }
 
+export function isSessionTokenExpired(token, nowMs = Date.now()) {
+  try {
+    const encoded = String(token || '').trim().split('.')[0];
+    if (!encoded) return true;
+    const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const payload = JSON.parse(window.atob(padded));
+    return !Number.isFinite(Number(payload?.exp)) || Number(payload.exp) <= Math.floor(nowMs / 1000);
+  } catch (_) {
+    return true;
+  }
+}
+
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const user = safeGetUser();
+  const [sessionInvalid, setSessionInvalid] = useState(false);
   const userRole = safeNormalizeRole(user?.role);
   const sessionToken = String(user?.sessionToken || '').trim();
+  const tokenExpired = Boolean(sessionToken) && isSessionTokenExpired(sessionToken);
   const normalizedRoles = safeNormalizeArray(allowedRoles);
+
+  useEffect(() => {
+    if (!tokenExpired) return;
+    try { localStorage.removeItem('currentUser'); } catch (_) {}
+  }, [tokenExpired]);
 
   useEffect(() => {
     if (!userRole || userRole === 'patient') return undefined;
@@ -58,15 +78,20 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     const ping = async () => {
       if (stopped) return;
       try {
-        await fetch(`${API_BASE}/api/staff/heartbeat`, {
+        const response = await fetch(`${API_BASE}/api/staff/heartbeat`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
             'x-user-role': userRole,
             ...(email ? { 'x-user-email': email } : {})
           },
           body: JSON.stringify(payload)
         });
+        if (response.status === 401 || response.status === 403) {
+          try { localStorage.removeItem('currentUser'); } catch (_) {}
+          if (!stopped) setSessionInvalid(true);
+        }
       } catch (_) {}
     };
 
@@ -76,9 +101,9 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
       stopped = true;
       clearInterval(t);
     };
-  }, [user, userRole]);
+  }, [user, userRole, sessionToken]);
 
-  if (!user || !sessionToken) {
+  if (!user || !sessionToken || tokenExpired || sessionInvalid) {
     if (user && !sessionToken) {
       try { localStorage.removeItem('currentUser'); } catch (_) {}
     }
