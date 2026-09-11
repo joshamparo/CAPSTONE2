@@ -4,6 +4,7 @@ import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Credi
 import '../Admin/AdminDashboard.css';
 import './OfficeStaffDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
+import { getClinicalPaymentStatus } from './clinicalPaymentStatus';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import { checkBackendHealth, fetchJson } from '../utils/api';
@@ -654,36 +655,26 @@ export default function OfficeStaffDashboard({ mode }) {
     setLabPaymentReference('');
     setLabPaymentError('');
 
-    // Try to fetch HMO coverage for this patient/order
-    if (order?.patientId && user) {
-      try {
-        const q = order.patientName || '';
-        const claims = await fetchJson(`/api/billing/hmo-queue?q=${encodeURIComponent(q)}`, {
-          apiBase: API_BASE,
-          headers: buildHeaders(user)
-        });
-        if (Array.isArray(claims) && claims.length > 0) {
-          // Find a claim that matches this order (either via note or just the most recent one for walk-in)
-          const orderIdStr = String(order.id);
-          const match = claims.find(c => 
-            String(c.hmo_claim?.notes || '').includes(orderIdStr) || 
-            String(c.hmo_claim?.notes || '').toLowerCase().includes('walk-in service')
-          ) || claims[0];
-          
-          if (match) {
-            setSelectedLabOrderHmo(match.hmo_claim);
-            // If HMO covers everything, set payment amount to 0
-            const hmoAmt = Number(match.hmo_claim?.applied_hmo_amount || match.hmo_claim?.loa_approved_amount || 0);
-            const phAmt = Number(match.hmo_claim?.philhealth_deduction || 0);
-            const netDue = Math.max(0, due - hmoAmt - phAmt);
-            setLabPaymentAmount(netDue.toFixed(2));
-            if (netDue <= 0) {
-              setLabPaymentMethod('Card'); // Set to something else to imply non-cash if free
-              setLabPaymentReference(match.hmo_claim?.loa_number || match.hmo_claim?.hmo_card_number || 'HMO COVERED');
-            }
-          }
-        }
-      } catch (_) {}
+    // Coverage is accepted only when the backend linked an HMO claim to this
+    // order's invoice. Never inherit another claim merely by patient name.
+    const hmo = order?.hmoIndicators && typeof order.hmoIndicators === 'object' ? order.hmoIndicators : null;
+    if (hmo?.hasHmo) {
+      const linkedClaim = {
+        hmo_provider: hmo.provider || '',
+        hmo_loa_number: hmo.loaNumber || '',
+        hmo_card_number: hmo.cardNumber || '',
+        status: hmo.status || '',
+        philhealth_deduction: Number(order?.philhealthApplied || 0),
+        applied_hmo_amount: Number(order?.hmoCoverageApplied || 0),
+        loa_approved_amount: Number(order?.hmoCoverageApplied || 0)
+      };
+      setSelectedLabOrderHmo(linkedClaim);
+      const netDue = Math.max(0, due);
+      setLabPaymentAmount(netDue.toFixed(2));
+      if (netDue <= 0) {
+        setLabPaymentMethod('Card');
+        setLabPaymentReference(hmo.loaNumber || hmo.cardNumber || 'HMO COVERED');
+      }
     }
   }, [user]);
 
@@ -1809,18 +1800,18 @@ export default function OfficeStaffDashboard({ mode }) {
                             <td className="text-sm text-slate-900">{o.patientName || '—'}</td>
                             <td className="text-sm text-slate-900">{o.service || o.kind || '—'}</td>
                             <td className="text-sm text-slate-900">
-                              {String(o.status || '').toLowerCase() === 'paid'
+                              {getClinicalPaymentStatus(o).paidByHmo
                                 ? (
                                   <div>
                                     <div style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 500, fontSize: '12px', color: '#475569' }}>₱ {toMoney(Number(o.configuredUnitPrice ?? o.unitPrice ?? 0))}</div>
-                                    <div style={{ fontWeight: 900, color: '#0f172a' }}>₱ 0.00 (covered by HMO)</div>
+                                    <div style={{ fontWeight: 900, color: '#0f172a' }}>{getClinicalPaymentStatus(o).amountLabel}</div>
                                   </div>
                                 )
-                                : (o.priceConfigured ? `₱ ${toMoney(o.amountDue)}` : 'Needs setup')}
+                                : (getClinicalPaymentStatus(o).paid ? `₱ ${toMoney(Number(o.configuredUnitPrice ?? o.unitPrice ?? 0))} (paid)` : (o.priceConfigured ? `₱ ${toMoney(o.amountDue)}` : 'Needs setup'))}
                             </td>
                             <td>
-                              {String(o.status || '').toLowerCase() === 'paid'
-                                ? <span className="status-badge-table status-duty" style={{ background: '#e2e8f0', color: '#0f172a', border: '1px solid #cbd5e1', fontWeight: 900 }}>PAID (HMO)</span>
+                              {getClinicalPaymentStatus(o).paid
+                                ? <span className="status-badge-table status-duty" style={{ fontWeight: 900 }}>{getClinicalPaymentStatus(o).statusLabel}</span>
                                 : <span className="status-badge-table status-upcoming">{o.status || 'For Payment'}</span>}
                             </td>
                             <td className="inc-right">
@@ -2630,21 +2621,22 @@ export default function OfficeStaffDashboard({ mode }) {
                     </tr>
                   ) : (
                     pagedLabOrders.items.map((o) => {
-                      const statusNorm = String(o.status || '').toLowerCase();
-                      const isPrePaid = statusNorm === 'paid';
+                      const paymentStatus = getClinicalPaymentStatus(o);
+                      const isPaid = paymentStatus.paid;
+                      const isHmoPaid = paymentStatus.paidByHmo;
                       const servicePrice = Number(o.configuredUnitPrice ?? o.unitPrice ?? o.amountDue ?? 0);
-                      const rowPatientDue = isPrePaid ? 0 : Number(o.amountDue ?? o.patientPayable ?? servicePrice);
+                      const rowPatientDue = isPaid ? 0 : Number(o.amountDue ?? o.patientPayable ?? servicePrice);
                       const hmo = o.hmoIndicators && typeof o.hmoIndicators === 'object' ? o.hmoIndicators : {};
                       const phNow = Number(o.philhealthApplied || 0);
                       const hmoNow = Number(o.hmoCoverageApplied || 0);
                       return (
-                      <tr key={String(o.id)} style={{ background: isPrePaid ? '#ffffff' : undefined }}>
+                      <tr key={String(o.id)} style={{ background: isPaid ? '#ffffff' : undefined }}>
                         <td className="text-sm font-medium text-slate-900">#{o.id}</td>
                         <td className="text-sm text-slate-900" style={{ fontWeight: 700, color: '#0f172a' }}>{o.patientName || '—'}</td>
                         <td className="text-sm text-slate-900" style={{ maxWidth: 260 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <span>{o.service || o.kind || '—'}</span>
-                            {isPrePaid ? (
+                            {isHmoPaid ? (
                               <span style={{
                                 display: 'inline-flex', alignItems: 'center', gap: 6,
                                 padding: '3px 9px', borderRadius: 999,
@@ -2686,13 +2678,13 @@ export default function OfficeStaffDashboard({ mode }) {
                         <td className="text-sm" style={{ color: hmoNow > 0 ? '#15803d' : '#94a3b8', textAlign: 'right', fontWeight: 700 }}>
                           {hmoNow > 0 ? `₱ ${toMoney(hmoNow)}` : '—'}
                         </td>
-                        <td className="text-sm" style={{ color: rowPatientDue > 0 && !isPrePaid ? '#b91c1c' : '#0f172a', textAlign: 'right', fontWeight: 900 }}>
-                          {isPrePaid ? '₱ 0.00' : `₱ ${toMoney(rowPatientDue)}`}
+                        <td className="text-sm" style={{ color: rowPatientDue > 0 && !isPaid ? '#b91c1c' : '#0f172a', textAlign: 'right', fontWeight: 900 }}>
+                          {isPaid ? '₱ 0.00' : `₱ ${toMoney(rowPatientDue)}`}
                         </td>
                         <td>
-                          {isPrePaid ? (
+                          {isPaid ? (
                             <span className={`status-badge-table status-duty`} style={{ fontWeight: 900, background: '#e2e8f0', color: '#0f172a', border: '1px solid #cbd5e1' }}>
-                              PAID (HMO)
+                              {paymentStatus.statusLabel}
                             </span>
                           ) : (
                             <span className={`status-badge-table ${
@@ -2704,7 +2696,7 @@ export default function OfficeStaffDashboard({ mode }) {
                         </td>
                         <td className="text-sm text-slate-600" style={{ fontSize: '0.78rem' }}>{o.createdAt ? new Date(o.createdAt).toLocaleString() : '—'}</td>
                         <td className="inc-right">
-                          {isPrePaid ? (
+                          {isPaid ? (
                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                               <button
                                 type="button"
@@ -2719,9 +2711,9 @@ export default function OfficeStaffDashboard({ mode }) {
                                 className="office-btn ghost"
                                 onClick={() => {
                                   if (typeof window !== 'undefined') {
-                                    const patientText = `Patient: ${o.patientName || ''}\nOrder: #${o.id}\nService: ${o.service || o.kind || ''}\nStatus: PAID via HMO (no further payment)\nAmount: ₱ ${toMoney(servicePrice)} (100% covered by HMO)\nCreated: ${o.createdAt ? new Date(o.createdAt).toLocaleString() : ''}\n\nPresent this slip to the station. Patient may proceed directly to the laboratory.`;
+                                    const patientText = `Patient: ${o.patientName || ''}\nOrder: #${o.id}\nService: ${o.service || o.kind || ''}\nStatus: ${isHmoPaid ? 'PAID via HMO (no further payment)' : 'PAID at cashier'}\nAmount: ₱ ${toMoney(servicePrice)}${isHmoPaid ? ' (100% covered by HMO)' : ''}\nCreated: ${o.createdAt ? new Date(o.createdAt).toLocaleString() : ''}\n\nPresent this slip to the station. Patient may proceed directly to the laboratory.`;
                                     navigator.clipboard?.writeText(patientText).catch(() => {});
-                                    setSuccessMessage('HMO-covered lab slip copied to clipboard — patient may go directly to lab.');
+                                    setSuccessMessage(`${isHmoPaid ? 'HMO-covered' : 'Paid'} lab slip copied to clipboard — patient may go directly to lab.`);
                                     setModalType('success');
                                     setShowSuccessModal(true);
                                   }
@@ -3211,7 +3203,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   <div style={{ marginTop: 10, color: '#64748b', fontSize: '0.9rem' }}>
                     {selectedLabOrderDue <= 0.0099
                       ? 'After confirmation, this lab order is set to PAID (HMO) and patient may proceed directly to the laboratory station.'
-                      : 'After cashier collection, this lab order moves to <strong>Paid</strong> so the lab staff can proceed with the exam.'}
+                      : 'After cashier collection, this lab order moves to Paid so the lab staff can proceed with the exam.'}
                   </div>
                 </div>
               </div>
