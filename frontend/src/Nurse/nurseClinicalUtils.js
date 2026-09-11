@@ -57,3 +57,10 @@ export const buildPatientWatchlist = (patients = []) => (
     .map(buildPatientWatchEntry)
     .filter(Boolean)
 );
+
+export const getMedicationActionSuccessMessage = (status) => {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'held') return 'Medication successfully marked as held.';
+  if (normalized === 'missed') return 'Medication successfully marked as missed.';
+  return 'Medication administration recorded successfully.';
+};

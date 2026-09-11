@@ -18,7 +18,7 @@ const RECEPTION_ROUTE_LABELS = {
 };
 import StatusBadge from '../components/StatusBadge';
 import ModalShell from '../components/ModalShell';
-import { buildPatientWatchlist } from './nurseClinicalUtils';
+import { buildPatientWatchlist, getMedicationActionSuccessMessage } from './nurseClinicalUtils';
 
 const LAB_SERVICES = ["Urinalysis", "Blood Chemistry", "Complete Blood Count (CBC)", "Fecalysis", "Hepa Screening", "Dengue Duo + NS1 Antigen (Package)"];
 const IMAGING_SERVICES = ["Standard 12-Lead ECG", "Stress Test", "Holter Monitoring", "Chest X-Ray"];
@@ -3622,15 +3622,19 @@ function NurseDashboard() {
                   note: note || null
               })
           });
-          await refreshNurseWorkflow({ silent: true });
-          setMedAdminDraft(null);
-          setMedAdminReason('');
-          addActivity('Medication Round', `${medicationName} marked as ${statusClean}.`, statusClean === 'administered' ? 'success' : 'alert');
       } catch (error) {
           medErr(String(error?.message || 'Unable to record medication administration.'));
+          return;
       } finally {
           setMedAdminActionId('');
       }
+      setMedAdminDraft(null);
+      setMedAdminReason('');
+      await refreshNurseWorkflow({ silent: true });
+      addActivity('Medication Round', `${medicationName} marked as ${statusClean}.`, statusClean === 'administered' ? 'success' : 'alert');
+      setSuccessMessage(getMedicationActionSuccessMessage(statusClean));
+      setModalType('success');
+      setShowSuccessModal(true);
   };
 
   const addTask = (e) => {

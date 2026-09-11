@@ -1,4 +1,4 @@
-import { buildPatientWatchEntry, buildPatientWatchlist, getLatestRecordedVitals } from './nurseClinicalUtils';
+import { buildPatientWatchEntry, buildPatientWatchlist, getLatestRecordedVitals, getMedicationActionSuccessMessage } from './nurseClinicalUtils';
 
 describe('nurse clinical watchlist', () => {
   test('uses recorded clinical vitals instead of invented alert values', () => {
@@ -36,5 +36,15 @@ describe('nurse clinical watchlist', () => {
     expect(buildPatientWatchlist([
       { id: 'stable', vitals: { bloodPressure: '120/80', heartRate: 75, spo2: 98, temperature: 36.8 } }
     ])).toEqual([]);
+  });
+});
+
+describe('medication action feedback', () => {
+  test.each([
+    ['held', 'Medication successfully marked as held.'],
+    ['missed', 'Medication successfully marked as missed.'],
+    ['administered', 'Medication administration recorded successfully.']
+  ])('shows a successful %s action as success', (status, expected) => {
+    expect(getMedicationActionSuccessMessage(status)).toBe(expected);
   });
 });
