@@ -186,7 +186,10 @@ function NurseDashboard() {
 
   // Patients Data State
   const [patientsList, setPatientsList] = useState([]);
+  const patientsRequestSequenceRef = useRef(0);
+  const patientsLastSuccessCountRef = useRef(0);
   const [patientRecords, setPatientRecords] = useState([]);
+  const patientRecordsRequestSequenceRef = useRef(0);
   const [patientRecordsLoading, setPatientRecordsLoading] = useState(false);
   const [patientRecordsError, setPatientRecordsError] = useState('');
 
@@ -2240,17 +2243,25 @@ function NurseDashboard() {
 
   const refreshPatientsList = async () => {
     if (document.visibilityState !== 'visible') return;
+    const requestSequence = ++patientsRequestSequenceRef.current;
     setLoadingPatients(true);
     setPatientsError('');
     try {
       const data = await fetchJson('/api/patients', { apiBase: API_BASE, headers: { ...getAuthHeaders() }, timeoutMs: 20000 });
-      setPatientsList((Array.isArray(data) ? data : []).map(normalizePatient));
+      if (requestSequence !== patientsRequestSequenceRef.current) return;
+      const nextPatients = (Array.isArray(data) ? data : []).map(normalizePatient);
+      patientsLastSuccessCountRef.current = nextPatients.length;
+      setPatientsList(nextPatients);
     } catch (error) {
       console.error("Error fetching patients:", error);
-      setPatientsList([]);
-      setPatientsError(String(error?.message || 'Unable to load patients.'));
+      if (requestSequence === patientsRequestSequenceRef.current) {
+        const suffix = patientsLastSuccessCountRef.current > 0
+          ? ` Keeping the last ${patientsLastSuccessCountRef.current} successfully loaded record(s).`
+          : ' No patient data has loaded successfully yet.';
+        setPatientsError(`${String(error?.message || 'Unable to refresh patients.')}${suffix}`);
+      }
     } finally {
-      setLoadingPatients(false);
+      if (requestSequence === patientsRequestSequenceRef.current) setLoadingPatients(false);
     }
   };
 
@@ -2307,6 +2318,7 @@ function NurseDashboard() {
   };
 
   const fetchPatientRecords = async () => {
+    const requestSequence = ++patientRecordsRequestSequenceRef.current;
     setPatientRecordsLoading(true);
     setPatientRecordsError('');
     try {
@@ -2317,18 +2329,20 @@ function NurseDashboard() {
       });
       if (!res.ok) {
         const errorBody = await res.json().catch(() => ({}));
-        setPatientRecords([]);
-        setPatientRecordsError(errorBody?.message || 'Unable to load patient records.');
+        if (requestSequence === patientRecordsRequestSequenceRef.current) {
+          setPatientRecordsError(`${errorBody?.message || 'Unable to refresh patient records.'} Showing the last successfully loaded data.`);
+        }
         return;
       }
       const rows = await res.json().catch(() => []);
       const approved = (Array.isArray(rows) ? rows : []).filter((r) => String(r.status || '').trim() === 'Approved');
-      setPatientRecords(approved);
+      if (requestSequence === patientRecordsRequestSequenceRef.current) setPatientRecords(approved);
     } catch (_) {
-      setPatientRecords([]);
-      setPatientRecordsError('Unable to load patient records.');
+      if (requestSequence === patientRecordsRequestSequenceRef.current) {
+        setPatientRecordsError('Unable to refresh patient records. Showing the last successfully loaded data.');
+      }
     } finally {
-      setPatientRecordsLoading(false);
+      if (requestSequence === patientRecordsRequestSequenceRef.current) setPatientRecordsLoading(false);
     }
   };
 
@@ -6430,6 +6444,14 @@ function NurseDashboard() {
             </div>
         </header>
         <section className={`nurse-content-body ${view === 'overview' ? 'overview-fit-content' : ''}`}>
+            {patientsError && ['overview', 'patients', 'inpatients', 'vitals', 'ward-management'].includes(view) ? (
+              <div className="form-error-message" role="alert" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <span>{patientsError}</span>
+                <button type="button" className="btn-gray" onClick={refreshPatientsList} disabled={loadingPatients}>
+                  {loadingPatients ? 'Retrying...' : 'Retry'}
+                </button>
+              </div>
+            ) : null}
             {view === 'appointments' && (
                 <div className="doc-section" style={{ padding: '24px', background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                     <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', flexWrap: 'wrap' }}>
