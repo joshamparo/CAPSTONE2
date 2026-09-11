@@ -20,6 +20,7 @@ afterEach(() => jest.restoreAllMocks());
 
 test('resend OTP is immediately available without a countdown', async () => {
   render(<OtpPage />);
+  expect(screen.getByText('1:00')).toBeInTheDocument();
   expect(screen.queryByText(/resend code in/i)).not.toBeInTheDocument();
   const resend = screen.getByRole('button', { name: /resend code/i });
   expect(resend).toBeEnabled();

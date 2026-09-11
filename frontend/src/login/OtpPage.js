@@ -15,6 +15,7 @@ const OtpPage = () => {
   const [displayEmail] = useState(() => localStorage.getItem('tempLoginEmail') || '');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [entryTimer, setEntryTimer] = useState(60);
   const [submitting, setSubmitting] = useState(false);
   const inputRefs = useRef([]);
   const navigate = useNavigate();
@@ -22,6 +23,16 @@ const OtpPage = () => {
   useEffect(() => {
     if (!localStorage.getItem('otpChallengeId')) navigate('/login', { replace: true });
   }, [navigate]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setEntryTimer((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (entryTimer === 0) {
+      localStorage.removeItem('otpChallengeId');
+      navigate('/login', { replace: true });
+    }
+  }, [entryTimer, navigate]);
   const clearCode = () => {
     setOtp(emptyCode());
     window.setTimeout(() => inputRefs.current[0]?.focus(), 0);
@@ -76,6 +87,7 @@ const OtpPage = () => {
         return;
       }
       clearCode();
+      setEntryTimer(Number(data.expiresInSeconds) || 60);
       setSuccess(`New code sent to ${displayEmail}`);
     } catch (_) {
       setError('Cannot connect to the server. Please try again.');
@@ -101,6 +113,9 @@ const OtpPage = () => {
       <p className="email-display">{displayEmail}</p>
       <h1 className="title">Approve Sign in Request</h1>
       <p className="instruction">An OTP code has been sent to your registered email. Check your inbox and spam folder, then enter the 6-digit code below.</p>
+      <p className="entry-timer" style={{ textAlign: 'center', color: 'black', fontWeight: 'bold', marginBottom: '1rem' }}>
+        {Math.floor(entryTimer / 60)}:{String(entryTimer % 60).padStart(2, '0')}
+      </p>
       <div className="otp-inputs">{otp.map((digit, index) => <input key={index} type="text" maxLength="1"
         ref={(element) => { inputRefs.current[index] = element; }} value={digit} disabled={submitting}
         onChange={(event) => handleChange(event.target, index)}
