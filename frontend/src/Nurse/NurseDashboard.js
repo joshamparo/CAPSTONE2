@@ -6136,6 +6136,11 @@ function NurseDashboard() {
     const errors = [];
     if (!type) errors.push('Record type is required.');
     else if (!allowedType.has(type)) errors.push(`Invalid record type '${type}'.`);
+    if (bp && !/^\d{2,3}\/\d{2,3}$/.test(bp)) errors.push('Blood pressure must use the format 120/80.');
+    if (isDentalScreening && !bp) errors.push('Blood pressure is required for dental pre-procedure screening.');
+    if (isDentalScreening && (!clinicalUpdateFormData.medicalHistoryReviewed || !clinicalUpdateFormData.allergiesReviewed || !clinicalUpdateFormData.consentConfirmed)) {
+      errors.push('Confirm the medical history, allergy review, and consent before saving.');
+    }
     if (hr) {
       const n = Number(hr.replace(/\D/g, ''));
       if (!Number.isFinite(n) || n < 10 || n > 300) errors.push('Heart rate must be a reasonable whole number (10–300 bpm).');
@@ -12477,8 +12482,3 @@ function NurseDashboard() {
 }
 
 export default NurseDashboard;
-    if (bp && !/^\d{2,3}\/\d{2,3}$/.test(bp)) errors.push('Blood pressure must use the format 120/80.');
-    if (isDentalScreening && !bp) errors.push('Blood pressure is required for dental pre-procedure screening.');
-    if (isDentalScreening && (!clinicalUpdateFormData.medicalHistoryReviewed || !clinicalUpdateFormData.allergiesReviewed || !clinicalUpdateFormData.consentConfirmed)) {
-      errors.push('Confirm the medical history, allergy review, and consent before saving.');
-    }
