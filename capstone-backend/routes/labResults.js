@@ -16,6 +16,7 @@ const { resolveNursePatientScope } = require('../utils/nurseScope');
 const { parseLimit, parseOffset } = require('../utils/normalize');
 const { normalizeEmail } = require('../utils/normalize');
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
+const { canSetManualVerificationStatus, validateDoctorRelease } = require('../utils/labResultWorkflow');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'lab-results');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -1231,25 +1232,59 @@ router.put('/:id/interpretation', requireRole(['doctor']), async (req, res) => {
 
     const note = String(req.body.note || '').trim();
     const doctorName = String(req.body.doctorName || rawName || '').trim() || null;
-
     const exists = await prisma.$queryRaw`
-      SELECT patient_id FROM lab_results WHERE id = ${id} LIMIT 1
+      SELECT patient_id, order_id, verification_status FROM lab_results WHERE id = ${id} LIMIT 1
     `;
     if (!Array.isArray(exists) || exists.length === 0) {
       return res.status(404).json({ message: 'Lab result not found.' });
     }
     const access = await enforceDoctorPatientAccess(req, res, exists[0].patient_id);
     if (!access.allowed) return;
+    const currentStatus = String(exists[0].verification_status || '').trim().toLowerCase();
+    const releaseError = validateDoctorRelease(note, currentStatus);
+    if (releaseError) return res.status(note ? 409 : 400).json({ message: releaseError });
 
-    const rows = await prisma.$queryRaw`
-      INSERT INTO lab_result_interpretations (lab_result_id, doctor_email, doctor_name, note, created_at, updated_at)
-      VALUES (${id}, ${email}, ${doctorName}, ${note}, now(), now())
-      ON CONFLICT (lab_result_id, doctor_email)
-      DO UPDATE SET note = EXCLUDED.note, doctor_name = EXCLUDED.doctor_name, updated_at = now()
-      RETURNING note, doctor_name, updated_at
-    `;
+    const rows = await prisma.$transaction(async (tx) => {
+      const saved = await tx.$queryRaw`
+        INSERT INTO lab_result_interpretations (lab_result_id, doctor_email, doctor_name, note, created_at, updated_at)
+        VALUES (${id}, ${email}, ${doctorName}, ${note}, now(), now())
+        ON CONFLICT (lab_result_id, doctor_email)
+        DO UPDATE SET note = EXCLUDED.note, doctor_name = EXCLUDED.doctor_name, updated_at = now()
+        RETURNING note, doctor_name, updated_at
+      `;
+      await tx.$executeRaw`
+        UPDATE lab_results
+        SET verification_status = 'verified', verified_at = now(), verification_error = NULL
+        WHERE id = ${id}
+      `;
+      if (exists[0].order_id) {
+        await tx.clinical_orders.updateMany({
+          where: { id: exists[0].order_id },
+          data: { status: 'Completed', updated_at: new Date() }
+        });
+        await tx.clinical_order_events.create({
+          data: {
+            order_id: exists[0].order_id,
+            actor_name: doctorName || email,
+            actor_role: 'doctor',
+            action: 'Result signed and released',
+            note: 'Doctor interpretation completed; result released.'
+          }
+        });
+      }
+      await tx.activity_logs.create({
+        data: {
+          actor_name: doctorName || email,
+          role: 'doctor',
+          action: 'Clinical Result Signed and Released',
+          target: `LabResult:${id.toString()}`,
+          details: 'Doctor interpretation completed.'
+        }
+      });
+      return saved;
+    });
     const row = Array.isArray(rows) ? rows[0] : rows;
-    res.json({ note: row?.note || '', doctorName: row?.doctor_name || null, updatedAt: row?.updated_at || null });
+    res.json({ note: row?.note || '', doctorName: row?.doctor_name || null, updatedAt: row?.updated_at || null, verificationStatus: 'verified', released: true });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -1310,15 +1345,8 @@ router.patch('/:id/verification', requireRole(['doctor', 'admin', 'nurse', 'medt
       if (!(await enforceClinicalOrderAccess(req, res, result))) return;
     }
     const status = String(req.body.status || '').trim().toLowerCase();
-    if (!['verified', 'flagged', 'rejected'].includes(status)) {
+    if (!canSetManualVerificationStatus(status)) {
       return res.status(400).json({ message: 'Invalid status.' });
-    }
-    const currentRows = await prisma.$queryRaw`
-      SELECT verification_status FROM lab_results WHERE id = ${id} LIMIT 1
-    `;
-    const currentStatus = String(currentRows?.[0]?.verification_status || '').trim().toLowerCase();
-    if (status === 'verified' && !['matched', 'flagged'].includes(currentStatus)) {
-      return res.status(409).json({ message: 'AI verification must finish before a result can be confirmed.' });
     }
     const reviewReason = String(req.body.reason || '').trim();
     if (status === 'rejected' && !reviewReason) {

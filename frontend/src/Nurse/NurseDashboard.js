@@ -5974,12 +5974,14 @@ function NurseDashboard() {
       setModalType('success');
       setSuccessMessage(
         st === 'verified'
-          ? 'Test result uploaded and verified. The patient can now see it.'
+          ? 'Test result signed and released by a doctor.'
           : st === 'rejected'
             ? 'Test result uploaded but rejected as invalid. Check Notifications for details.'
             : st === 'flagged'
               ? 'Test result uploaded but flagged for review. Check Notifications for details.'
-              : 'Test result uploaded. Verification is pending. Check Notifications for updates.'
+              : ['matched', 'flagged'].includes(st)
+                ? 'Test result uploaded and is pending doctor review.'
+                : 'Test result uploaded. Verification is pending. Check Notifications for updates.'
       );
       setShowSuccessModal(true);
       addActivity('Result Uploaded', `Test result uploaded for ${String(uploadTargetRecord.patientName || 'patient')}`, st === 'rejected' ? 'error' : 'success');
@@ -6048,28 +6050,6 @@ function NurseDashboard() {
     }
     if (viewingPatient?._id) {
       fetchLabResultsForPatient(String(viewingPatient._id), { silent: true });
-    }
-  };
-
-  const confirmMatchedLabResult = async (id) => {
-    const rid = String(id || '').trim();
-    if (!rid) return;
-    try {
-      const res = await fetch(`${API_BASE}/api/lab-results/${encodeURIComponent(rid)}/verification`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ status: 'verified' })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || 'Unable to confirm result.');
-      if (viewingPatient?._id) await fetchLabResultsForPatient(String(viewingPatient._id), { silent: true });
-      setSuccessMessage('Result confirmed and released to the patient record.');
-      setModalType('success');
-      setShowSuccessModal(true);
-    } catch (error) {
-      setSuccessMessage(String(error?.message || 'Unable to confirm result.'));
-      setModalType('error');
-      setShowSuccessModal(true);
     }
   };
 
@@ -9889,7 +9869,8 @@ function NurseDashboard() {
                                       const bg = statusRaw === 'verified' ? '#dcfce7' : statusRaw === 'rejected' ? '#fee2e2' : statusRaw === 'flagged' ? '#ffedd5' : '#e2e8f0';
                                       const fg = statusRaw === 'verified' ? '#166534' : statusRaw === 'rejected' ? '#991b1b' : statusRaw === 'flagged' ? '#9a3412' : '#334155';
                                       const score = r?.verificationScore !== null && r?.verificationScore !== undefined ? ` • ${r.verificationScore}` : '';
-                                      const label = `${statusRaw}${score}`;
+                                      const displayStatus = ['matched', 'flagged'].includes(statusRaw) ? 'Pending Doctor Review' : statusRaw;
+                                      const label = `${displayStatus}${score}`;
                                       const uploadedAtRaw = r?.createdAt || r?.created_at || null;
                                       const verifiedAtRaw = r?.verifiedAt || r?.verified_at || null;
                                       const uploadedAt = uploadedAtRaw ? new Date(uploadedAtRaw) : null;
@@ -9915,14 +9896,7 @@ function NurseDashboard() {
                                           </td>
                                           <td style={{textAlign: 'center'}}>
                                             {['matched', 'flagged'].includes(statusRaw) ? (
-                                              <button
-                                                type="button"
-                                                className="btn-icon-action view"
-                                                title="Confirm Patient and Order Match"
-                                                onClick={() => confirmMatchedLabResult(r?.id)}
-                                              >
-                                                <CheckCircle size={16} />
-                                              </button>
+                                              <span style={{color: '#64748b', fontSize: '0.78rem', fontWeight: 700}}>Awaiting doctor</span>
                                             ) : statusRaw !== 'verified' ? (
                                               <button
                                                 type="button"

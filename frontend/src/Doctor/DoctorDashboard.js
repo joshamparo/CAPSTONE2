@@ -1835,7 +1835,8 @@ function DoctorDashboard() {
         body: JSON.stringify({ note: String(labInterpretation.note || ''), doctorName })
       });
       setLabInterpretation({ note: String(json?.note || ''), updatedAt: json?.updatedAt || null });
-      setToast({ type: 'success', message: 'Interpretation saved.' });
+      if (selectedPatient?.id || selectedPatient?._id) await fetchLabResults(selectedPatient.id || selectedPatient._id);
+      setToast({ type: 'success', message: 'Interpretation signed. The result is now released.' });
     } catch (e) {
       setToast({ type: 'error', message: String(e?.message || 'Failed to save interpretation.') });
     } finally {
@@ -3892,8 +3893,8 @@ function DoctorDashboard() {
                     <X size={16} />
                     Close
                   </button>
-                  <button className="doc-primary" type="button" onClick={saveLabInterpretationNote} disabled={savingLabInterpretation || loadingLabInterpretation}>
-                    Save
+                  <button className="doc-primary" type="button" onClick={saveLabInterpretationNote} disabled={savingLabInterpretation || loadingLabInterpretation || !String(labInterpretation.note || '').trim()}>
+                    Sign &amp; Release
                   </button>
                 </div>
               </div>

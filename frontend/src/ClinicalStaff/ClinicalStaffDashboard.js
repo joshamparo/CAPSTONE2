@@ -681,9 +681,9 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       const detail = `${score !== null && score !== undefined ? ` Score: ${score}.` : ''}${flags.length ? ` Flags: ${flags.slice(0, 6).join(', ')}.` : ''}`;
       setResultNotice(
         st === 'verified'
-          ? `Result uploaded and verified.${detail}`
+          ? `Result signed and released by a doctor.${detail}`
           : st === 'matched'
-            ? `Result uploaded and matched by AI. Staff confirmation is required before completion.${detail}`
+            ? `Result uploaded and checked. It is pending doctor review.${detail}`
           : st === 'rejected'
             ? `Result uploaded but rejected as invalid.${detail} Check Notifications for details.`
             : st === 'flagged'
@@ -702,30 +702,10 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const handleCompleteOrder = async () => {
     if (!viewingOrder) return;
     if (!orderHasVerifiedResult) {
-      setResultError('Confirm a matched result first before marking this order as Completed.');
+      setResultError('The reviewing doctor must sign and release the result before this order can be completed.');
       return;
     }
     await handleQuickStatus(viewingOrder.id, 'Completed');
-  };
-
-  const confirmMatchedResult = async (resultId) => {
-    if (!resultId) return;
-    setResultSaving(true);
-    setResultError('');
-    try {
-      await fetchJson(`/api/lab-results/${resultId}/verification`, {
-        apiBase: API_BASE,
-        method: 'PATCH',
-        headers: buildJsonAuthHeaders(user),
-        body: JSON.stringify({ status: 'verified' })
-      });
-      setResultNotice('Result confirmed. It is now available to the patient and authorized care team.');
-      await refreshViewingOrderDetail();
-    } catch (error) {
-      setResultError(String(error?.message || 'Unable to confirm this result.'));
-    } finally {
-      setResultSaving(false);
-    }
   };
 
   const handleCreateEvent = async () => {
@@ -1850,18 +1830,14 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                                   <td>
                                     {r.verificationStatus ? (
                                       <span className={`cs-badge ${String(r.verificationStatus).toLowerCase() === 'verified' ? 'green' : 'orange'}`}>
-                                        {r.verificationStatus}{r.verificationScore !== null && r.verificationScore !== undefined ? ` • ${r.verificationScore}` : ''}
+                                        {['matched', 'flagged'].includes(String(r.verificationStatus).toLowerCase()) ? 'Pending Doctor Review' : r.verificationStatus}{r.verificationScore !== null && r.verificationScore !== undefined ? ` • ${r.verificationScore}` : ''}
                                       </span>
                                     ) : (
                                       <span className="cs-badge orange">pending</span>
                                     )}
                                   </td>
                                   <td>
-                                    {['matched', 'flagged'].includes(String(r.verificationStatus || '').toLowerCase()) ? (
-                                      <button type="button" className="cs-btn" onClick={() => confirmMatchedResult(r.id)} disabled={resultSaving}>
-                                        Confirm Match
-                                      </button>
-                                    ) : '—'}
+                                    {['matched', 'flagged'].includes(String(r.verificationStatus || '').toLowerCase()) ? 'Awaiting doctor' : '—'}
                                   </td>
                                   <td>
                                     {r.url ? (
