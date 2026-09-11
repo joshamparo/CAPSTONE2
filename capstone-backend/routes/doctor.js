@@ -6,18 +6,20 @@ const requireRole = require('../middleware/requireRole');
 const { sendError } = require('../utils/httpErrors');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 
-const { SPECIALTIES: NURSE_DOCTOR_SPECIALTY_ALIASES } = require('../utils/nurseScope');
+const { nurseDoctorWhere } = require('../utils/nurseScope');
 
 router.get('/linked-nurse-doctors', requireRole(['nurse']), requireNurseDepartment, async (req, res) => {
   try {
     const department = String(req.nurseDepartment || '').trim().toUpperCase();
-    const aliases = NURSE_DOCTOR_SPECIALTY_ALIASES[department] || [department];
-    const matches = aliases.flatMap((value) => [
-      { specialization: { equals: value, mode: 'insensitive' } },
-      { department: { equals: value, mode: 'insensitive' } }
-    ]);
+    const videoDoctorIds = department === 'VIDEO CONSULTATION'
+      ? (await prisma.appointments.findMany({
+          where: { consultation_mode: 'video', doctor_uuid: { not: null } },
+          select: { doctor_uuid: true },
+          distinct: ['doctor_uuid']
+        })).map(row => row.doctor_uuid).filter(Boolean)
+      : [];
     const doctors = await prisma.doctors.findMany({
-      where: { is_active: true, OR: matches },
+      where: nurseDoctorWhere(department, videoDoctorIds),
       select: { id: true, first_name: true, middle_name: true, last_name: true, specialization: true, department: true },
       orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }]
     });

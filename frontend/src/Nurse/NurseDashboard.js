@@ -2217,7 +2217,8 @@ function NurseDashboard() {
         });
         if (!cancelled) setLinkedSpecialtyDoctors(Array.isArray(data) ? data : []);
       } catch (_) {
-        if (!cancelled) setLinkedSpecialtyDoctors([]);
+        // Keep the last verified roster during a temporary API failure so the
+        // dashboard does not make linked doctors appear to come and go.
       }
     };
     loadLinkedDoctors();
@@ -2230,12 +2231,8 @@ function NurseDashboard() {
       const name = String(doctor?.name || '').trim();
       if (name) names.add(name);
     });
-    appointments.forEach((apt) => {
-      const name = String(apt?.doctor || apt?.doctor_name || apt?.doctorName || '').trim();
-      if (name) names.add(name);
-    });
     return Array.from(names);
-  }, [linkedSpecialtyDoctors, appointments]);
+  }, [linkedSpecialtyDoctors]);
 
   const doctorCoverageLabel = useMemo(() => {
     if (careTeamDoctors.length === 0) return 'No linked doctors yet';

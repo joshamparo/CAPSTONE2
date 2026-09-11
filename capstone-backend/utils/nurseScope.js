@@ -15,13 +15,47 @@ const clinicalRoles = { LABORATORY: 'medtech', RADIOLOGY: 'radiographer', ECG: '
 const noPatients = () => ({ id: { in: [] } });
 const canManageWard = (department) => ['ER', 'MEDICINE'].includes(normalizeNurseDepartment(department));
 
+function nurseDoctorWhere(department, doctorIds = []) {
+  const dept = normalizeNurseDepartment(department);
+  const aliases = SPECIALTIES[dept];
+  if (!aliases) return { id: { in: [] } };
+  if (dept === 'VIDEO CONSULTATION') {
+    return { is_active: true, id: { in: [...new Set(doctorIds.filter(Boolean))] } };
+  }
+  return {
+    is_active: true,
+    OR: aliases.flatMap(value => [
+      { specialization: { equals: value, mode: 'insensitive' } },
+      { department: { equals: value, mode: 'insensitive' } }
+    ])
+  };
+}
+
+function departmentFromDoctorValue(value) {
+  const compact = String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '');
+  if (!compact) return '';
+  for (const [department, aliases] of Object.entries(SPECIALTIES)) {
+    if ([department, ...aliases].some(alias => String(alias).toUpperCase().replace(/[^A-Z0-9]+/g, '') === compact)) {
+      return department;
+    }
+  }
+  return '';
+}
+
+function resolveDoctorNurseDepartment(doctor) {
+  const specialization = departmentFromDoctorValue(doctor?.specialization);
+  const department = departmentFromDoctorValue(doctor?.department);
+  if (specialization === 'MEDICINE' && ['ER', 'OPD'].includes(department)) return department;
+  return specialization || department;
+}
+
 async function nurseAppointmentScope(db, department) {
   const dept = normalizeNurseDepartment(department);
   const aliases = SPECIALTIES[dept];
   if (!aliases) return { id: { in: [] } };
   if (dept === 'VIDEO CONSULTATION') return { consultation_mode: 'video' };
   const doctors = await db.doctors.findMany({
-    where: { OR: aliases.map(value => ({ specialization: { equals: value, mode: 'insensitive' } })) },
+    where: nurseDoctorWhere(dept),
     select: { id: true }
   });
   const reasons = aliases.flatMap(value => [
@@ -102,4 +136,4 @@ async function resolveNursePatientScope(db, department, email = '') {
   return { OR: scopes };
 }
 
-module.exports = { SPECIALTIES, canManageWard, nurseAppointmentScope, resolveNursePatientScope };
+module.exports = { SPECIALTIES, canManageWard, nurseDoctorWhere, resolveDoctorNurseDepartment, nurseAppointmentScope, resolveNursePatientScope };

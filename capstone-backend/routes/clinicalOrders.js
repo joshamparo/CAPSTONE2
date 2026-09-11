@@ -9,7 +9,7 @@ const { recordLabOrderPayment, ensureBillingTablesExist, toMoney } = require('..
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
 const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
-const { resolveNursePatientScope } = require('../utils/nurseScope');
+const { resolveDoctorNurseDepartment, resolveNursePatientScope } = require('../utils/nurseScope');
 
 
 const SCHEDULABLE_ROLE_SET = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist']);
@@ -618,7 +618,7 @@ router.post('/', async (req, res) => {
         where: { email: { equals: actorFromHeaders.actorEmail, mode: 'insensitive' } },
         select: { specialization: true, department: true }
       }).catch(() => null);
-      const doctorDepartment = normalizeNurseDepartment(doctor?.specialization || doctor?.department || '');
+      const doctorDepartment = resolveDoctorNurseDepartment(doctor);
       const targetNurseDepartment = isBedManagementRequest ? 'ER' : doctorDepartment;
       if (!targetNurseDepartment) return res.status(409).json({ message: 'Your doctor account has no specialization for nurse routing.' });
       const nurses = await prisma.nurses.findMany({

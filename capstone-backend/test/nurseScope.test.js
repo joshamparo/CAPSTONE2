@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 require.cache[require.resolve('../utils/nurseCareStorage')] = { exports: { ensureNurseCareTable: async () => {} } };
-const { SPECIALTIES, resolveNursePatientScope, nurseAppointmentScope } = require('../utils/nurseScope');
+const { SPECIALTIES, nurseDoctorWhere, resolveDoctorNurseDepartment, resolveNursePatientScope, nurseAppointmentScope } = require('../utils/nurseScope');
 
 function matches(row, where) {
   return Object.entries(where).every(([key, value]) => {
@@ -17,7 +17,7 @@ function matches(row, where) {
     throw new Error('Unsupported test condition: ' + key);
   });
 }
-const doctors = Object.keys(SPECIALTIES).map((department, i) => ({ id: `doctor-${i}`, specialization: SPECIALTIES[department][0], department }));
+const doctors = Object.keys(SPECIALTIES).map((department, i) => ({ id: `doctor-${i}`, specialization: SPECIALTIES[department][0], department, is_active: true }));
 const appointments = doctors.map((doctor, i) => ({ id: i, doctor_uuid: doctor.id, patient_id: `patient-${i}`, consultation_mode: doctor.department === 'VIDEO CONSULTATION' ? 'video' : 'onsite', reason: '' }));
 const db = {
   doctors: { findMany: async ({ where }) => doctors.filter(row => matches(row, where)) },
@@ -45,6 +45,29 @@ test('clinical service and ward assignments are explicit', async () => {
 test('unknown departments fail closed without invalid UUIDs or database reads', async () => {
   assert.deepEqual(await resolveNursePatientScope({}, 'unknown'), { id: { in: [] } });
   assert.deepEqual(await nurseAppointmentScope({}, ''), { id: { in: [] } });
+});
+
+test('doctor linkage accepts specialization or department and excludes inactive doctors', () => {
+  const dentalWhere = nurseDoctorWhere('Dental Clinic');
+  assert.equal(matches({ id: 'spec', specialization: 'Dental Medicine', department: '', is_active: true }, dentalWhere), true);
+  assert.equal(matches({ id: 'dept', specialization: '', department: 'Dental Clinic', is_active: true }, dentalWhere), true);
+  assert.equal(matches({ id: 'inactive', specialization: 'Dental Medicine', department: '', is_active: false }, dentalWhere), false);
+  assert.equal(matches({ id: 'other', specialization: 'Radiology', department: '', is_active: true }, dentalWhere), false);
+});
+
+test('doctor routing falls back to a valid department when specialization is generic', () => {
+  assert.equal(resolveDoctorNurseDepartment({ specialization: 'General', department: 'Radiology' }), 'RADIOLOGY');
+  assert.equal(resolveDoctorNurseDepartment({ specialization: 'Dental Medicine', department: 'OPD' }), 'DENTAL CLINIC');
+  assert.equal(resolveDoctorNurseDepartment({ specialization: 'Medicine', department: 'ER' }), 'ER');
+  assert.equal(resolveDoctorNurseDepartment({ specialization: 'Medicine', department: 'OPD' }), 'OPD');
+  assert.equal(resolveDoctorNurseDepartment({ specialization: '', department: 'Unknown' }), '');
+});
+
+test('video nurse linkage is limited to active doctors assigned to video appointments', () => {
+  const where = nurseDoctorWhere('Video Consultation', ['doctor-a', 'doctor-a', 'doctor-b']);
+  assert.equal(matches({ id: 'doctor-a', is_active: true }, where), true);
+  assert.equal(matches({ id: 'doctor-b', is_active: false }, where), false);
+  assert.equal(matches({ id: 'doctor-c', is_active: true }, where), false);
 });
 test('recorded historical care keeps discharged patients accessible to the treating department', async () => {
   const scope = await resolveNursePatientScope({ ...db, $queryRaw: async (sql) => sql.join('').includes('nurse_patient_departments') ? [{ id: 'historical' }] : [] }, 'MEDICINE');
