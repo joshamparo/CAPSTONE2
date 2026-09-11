@@ -1016,7 +1016,10 @@ router.post('/med-admin', async (req, res) => {
     if (!requestId) return res.status(400).json({ message: 'requestId is required' });
 
     const result = await prisma.$transaction(async (tx) => {
-      await tx.$queryRawUnsafe('SELECT pg_advisory_xact_lock($1::bigint)', requestId);
+      // The lock function returns PostgreSQL `void`, which Prisma's query API
+      // cannot deserialize. Execute it as a statement while retaining the
+      // transaction-scoped lock that prevents duplicate medication actions.
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock($1::bigint)', requestId);
       const request = await tx.requests.findUnique({
         where: { id: BigInt(requestId) },
         include: { patients: true }
