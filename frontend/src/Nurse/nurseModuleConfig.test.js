@@ -1,4 +1,4 @@
-import { getNurseModuleConfig } from './nurseModuleConfig';
+import { getNurseModuleConfig, normalizeNurseModuleKey } from './nurseModuleConfig';
 
 test('dental clinic excludes inpatient and e-MAR modules', () => {
   const config = getNurseModuleConfig('DENTALCLINIC', 'clinic');
@@ -18,4 +18,20 @@ test('diagnostic, imaging and remote scopes expose only relevant workflow module
   expect(getNurseModuleConfig('LABORATORY')).toMatchObject({ appointments: true, orders: true, vitals: false, medications: false });
   expect(getNurseModuleConfig('RADIOLOGY')).toMatchObject({ appointments: true, orders: true, vitals: false, medications: false });
   expect(getNurseModuleConfig('VIDEOCONSULTATION')).toMatchObject({ appointments: true, orders: false, vitals: false, wards: false });
+});
+
+test('Emergency Nursing aliases retain the complete head ER nurse workspace', () => {
+  expect(normalizeNurseModuleKey('Emergency Nursing')).toBe('ER');
+  expect(normalizeNurseModuleKey('Emergency Room')).toBe('ER');
+  expect(getNurseModuleConfig('Emergency Nursing', 'emergency')).toMatchObject({
+    patients: true,
+    appointments: true,
+    vitals: true,
+    orders: true,
+    medications: true,
+    wards: true,
+    reception: true,
+    erIntake: true,
+    schedules: true
+  });
 });

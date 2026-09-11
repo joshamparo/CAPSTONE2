@@ -32,8 +32,25 @@ const CONFIGS = {
   ANESTHESIA: { appointments: true, vitals: true, orders: true, medications: true, orderTabs: ['medications', 'labs', 'supplies'] }
 };
 
+const MODULE_KEY_ALIASES = Object.freeze({
+  EMERGENCY: 'ER',
+  EMERGENCYROOM: 'ER',
+  EMERGENCYNURSING: 'ER',
+  ERNURSING: 'ER',
+  OUTPATIENT: 'OPD',
+  OUTPATIENTDEPARTMENT: 'OPD',
+  OUTPATIENTDEPT: 'OPD',
+  PEDIATRICS: 'PEDIA',
+  INTERNALMEDICINE: 'MEDICINE'
+});
+
+export const normalizeNurseModuleKey = (value) => {
+  const compact = String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '');
+  return MODULE_KEY_ALIASES[compact] || compact;
+};
+
 export const getNurseModuleConfig = (specializationKey, workspaceType = 'general') => {
-  const key = String(specializationKey || '').trim().toUpperCase();
+  const key = normalizeNurseModuleKey(specializationKey);
   const fallback = !CONFIGS[key] && workspaceType === 'general'
     ? { appointments: true, vitals: true, orders: true, orderTabs: ['labs', 'supplies'] }
     : {};

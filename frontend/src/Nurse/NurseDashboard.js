@@ -10,7 +10,7 @@ import { API_BASE, checkBackendHealth, fetchJson } from '../utils/api';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
-import { getNurseModuleConfig } from './nurseModuleConfig';
+import { getNurseModuleConfig, normalizeNurseModuleKey } from './nurseModuleConfig';
 
 const RECEPTION_ROUTE_LABELS = {
   ER: 'ER', ONSITE: 'On-site', LAB: 'Laboratory', ECG: 'ECG', IMAGING: 'Imaging',
@@ -83,11 +83,8 @@ function NurseDashboard() {
   const normalizeDeptId = (v) => {
     const raw = String(v || '').trim();
     if (!raw) return '';
-    const up = raw.toUpperCase().replace(/\s+/g, '');
-    if (up === 'EMERGENCYROOM' || up === 'EMERGENCY' || up === 'ER') return 'ER';
-    if (up === 'OUTPATIENTDEPT' || up === 'OUTPATIENT' || up === 'OPD') return 'OPD';
-    if (up === 'PEDIATRICS' || up === 'PEDIA') return 'PEDIA';
-    if (up === 'MEDICINE' || up === 'INTERNALMEDICINE') return 'MEDICINE';
+    const key = normalizeNurseModuleKey(raw);
+    if (['ER', 'OPD', 'PEDIA', 'MEDICINE'].includes(key)) return key;
     return raw;
   };
 
@@ -170,11 +167,7 @@ function NurseDashboard() {
     return match?.label || String(deptId || '').trim() || 'Department';
   };
 
-  const normalizeSpecializationKey = (value) =>
-    String(value || '')
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, '');
+  const normalizeSpecializationKey = normalizeNurseModuleKey;
 
   const deriveShiftLabel = (rawShift) => {
     const explicit = String(rawShift || '').trim();
