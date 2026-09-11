@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { KeyRound, X } from 'lucide-react';
+import { API_BASE, buildAuthHeaders, fetchJson, getCurrentUser } from '../utils/api';
 import './ChangePasswordModal.css';
-
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
 const getUserId = (u) => {
   const raw = u?._id ?? u?.id;
@@ -17,16 +16,6 @@ const getRole = (u) => {
 };
 
 const getEmail = (u) => String(u?.email || '').trim();
-
-const buildHeaders = (u) => {
-  const role = getRole(u).toLowerCase();
-  const email = getEmail(u);
-  return {
-    'Content-Type': 'application/json',
-    ...(role ? { 'x-user-role': role } : {}),
-    ...(email ? { 'x-user-email': email } : {})
-  };
-};
 
 export default function ChangePasswordModal({ open, user, onClose }) {
   const [saving, setSaving] = useState(false);
@@ -73,11 +62,6 @@ export default function ChangePasswordModal({ open, user, onClose }) {
   };
 
   const submit = async () => {
-    const id = getUserId(user);
-    if (!id) {
-      setNotice('Session error. Please login again.');
-      return;
-    }
     if (!canSubmit) {
       setNotice('Please complete all password fields and meet the requirements.');
       return;
@@ -85,17 +69,44 @@ export default function ChangePasswordModal({ open, user, onClose }) {
     setSaving(true);
     setNotice('');
     try {
-      const res = await fetch(`${API_BASE}/api/staff/${encodeURIComponent(id)}`, {
+      const sessionUser = getCurrentUser() || {};
+      const effectiveUser = {
+        ...sessionUser,
+        ...(user || {}),
+        sessionToken: sessionUser?.sessionToken || user?.sessionToken || ''
+      };
+      const email = getEmail(effectiveUser) || getEmail(sessionUser);
+      const headers = {
+        'Content-Type': 'application/json',
+        ...buildAuthHeaders(effectiveUser, getRole(effectiveUser))
+      };
+      let id = getUserId(effectiveUser) || getUserId(sessionUser);
+      if (!id) {
+        if (!email) throw new Error('Your session is incomplete. Please log in again.');
+        const profile = await fetchJson(`/api/staff/by-email?email=${encodeURIComponent(email)}`, {
+          apiBase: API_BASE,
+          headers
+        });
+        id = getUserId(profile);
+      }
+      if (!id) throw new Error('Unable to resolve your staff account. Please log in again.');
+
+      const updated = await fetchJson(`/api/staff/${encodeURIComponent(id)}`, {
+        apiBase: API_BASE,
         method: 'PUT',
-        headers: buildHeaders(user),
+        headers,
         body: JSON.stringify({
-          currentPassword: String(currentPassword || '').trim(),
+          currentPassword: String(currentPassword || ''),
           password: String(newPassword || '').trim(),
           requiresPasswordAuth: true
         })
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || 'Failed to update password');
+      const refreshedSession = {
+        ...sessionUser,
+        ...(updated || {}),
+        sessionToken: updated?.sessionToken || sessionUser?.sessionToken
+      };
+      localStorage.setItem('currentUser', JSON.stringify(refreshedSession));
       setNotice('Password updated successfully.');
       setTimeout(() => handleClose(), 800);
     } catch (e) {
@@ -123,15 +134,15 @@ export default function ChangePasswordModal({ open, user, onClose }) {
         <div className="cpm-body">
           <div className="cpm-field">
             <div className="cpm-label">Current Password</div>
-            <input type="password" className="cpm-input" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} disabled={saving} />
+            <input type="password" aria-label="Current Password" className="cpm-input" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} disabled={saving} />
           </div>
           <div className="cpm-field">
             <div className="cpm-label">New Password</div>
-            <input type="password" className="cpm-input" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} disabled={saving} />
+            <input type="password" aria-label="New Password" className="cpm-input" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} disabled={saving} />
           </div>
           <div className="cpm-field">
             <div className="cpm-label">Confirm New Password</div>
-            <input type="password" className="cpm-input" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={saving} />
+            <input type="password" aria-label="Confirm New Password" className="cpm-input" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} disabled={saving} />
           </div>
 
           <div className="cpm-criteria">
