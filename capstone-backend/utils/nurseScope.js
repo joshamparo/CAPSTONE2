@@ -1,7 +1,7 @@
 const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
 
 const SPECIALTIES = Object.freeze({
-  ER: ['ER', 'Emergency Medicine'], OPD: ['OPD', 'Outpatient'],
+  ER: ['ER', 'Emergency', 'Emergency Room', 'Emergency Medicine', 'Emergency Nursing'], OPD: ['OPD', 'Outpatient'],
   PEDIA: ['PEDIA', 'Pediatrics'], MEDICINE: ['Medicine', 'Internal Medicine'],
   LABORATORY: ['Laboratory'], PATHOLOGY: ['Pathology'], ECG: ['ECG', 'Cardiology'],
   RADIOLOGY: ['Radiology'], 'PHYSICAL THERAPY': ['Physical Therapy', 'Rehabilitation Medicine'],
@@ -40,9 +40,16 @@ async function nurseAppointmentScope(db, department) {
 async function resolveNursePatientScope(db, department, email = '') {
   const dept = normalizeNurseDepartment(department);
   if (!SPECIALTIES[dept]) return noPatients();
-  await require('./nurseCareStorage').ensureNurseCareTable();
-  const historyPatients = await db.$queryRaw`SELECT patient_id AS id FROM public.nurse_patient_departments WHERE department = ${dept}
-    UNION SELECT patient_id AS id FROM public.nurse_specialty_care WHERE department = ${dept}`;
+  const storageReady = await require('./nurseCareStorage').ensureNurseCareTable()
+    .then(() => true)
+    .catch((error) => {
+      console.warn('[Nurse scope] Specialty history is unavailable; continuing with operational records:', error?.message || error);
+      return false;
+    });
+  const historyPatients = storageReady
+    ? await db.$queryRaw`SELECT patient_id AS id FROM public.nurse_patient_departments WHERE department = ${dept}
+        UNION SELECT patient_id AS id FROM public.nurse_specialty_care WHERE department = ${dept}`.catch(() => [])
+    : [];
   const appointmentScope = await nurseAppointmentScope(db, dept);
   const appointments = await db.appointments.findMany({
     where: { AND: [appointmentScope, { patient_id: { not: null } }] }, select: { patient_id: true }
@@ -51,6 +58,16 @@ async function resolveNursePatientScope(db, department, email = '') {
   if (dept === 'ER') {
     const receptionAppointments = await db.appointments.findMany({ where: { reason: { startsWith: '[APPOINTMENT][CLINIC]' }, patient_id: { not: null } }, select: { patient_id: true } });
     scopes.push({ id: { in: receptionAppointments.map(row => row.patient_id) } });
+    // Compatibility for records created before explicit intake/history links
+    // existed. Keep the match limited to established ER statuses and ER room
+    // codes so unrelated outpatient and specialty records remain excluded.
+    scopes.push(
+      { admission_status: { in: ['Emergency', 'ER Observation', 'Pending Admission', 'Admission Requested'] } },
+      { AND: [
+        { ward_number: { startsWith: 'E', mode: 'insensitive' } },
+        { admission_status: { in: ['Emergency', 'ER Observation', 'Pending Admission', 'Admission Requested', 'Inpatient', 'Admitted'] } }
+      ] }
+    );
   }
   scopes.push({ id: { in: historyPatients.map(row => row.id) } });
   const intakeTypes = dept === 'ER' ? ['er_consult', 'onsite_consult', 'lab', 'imaging', 'pharmacy', 'admission_eval']

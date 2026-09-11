@@ -61,3 +61,18 @@ test('configured wards take precedence over room-code guesses', async () => {
   assert.equal(matches({ id: 'actual-pediatric-patient', ward_number: 'CUSTOM-101' }, scope), true);
   assert.equal(matches({ id: 'unrelated', ward_number: 'PD-99', admission_status: 'Inpatient' }, scope), false);
 });
+
+test('ER retains legacy emergency records after the department scope migration', async () => {
+  const registryDb = { ...db, $queryRaw: async (sql) => {
+    const query = sql.join('');
+    if (query.includes('to_regclass')) return [{ name: 'ward_rooms' }];
+    return [];
+  } };
+  const scope = await resolveNursePatientScope(registryDb, 'ER');
+  assert.equal(matches({ admission_status: 'Emergency' }, scope), true);
+  assert.equal(matches({ admission_status: 'Pending Admission' }, scope), true);
+  assert.equal(matches({ admission_status: 'Inpatient', ward_number: 'ER-02' }, scope), true);
+  assert.equal(matches({ admission_status: 'Inpatient', ward_number: 'E2' }, scope), true);
+  assert.equal(matches({ admission_status: 'Outpatient', ward_number: 'E2' }, scope), false);
+  assert.equal(matches({ admission_status: 'Inpatient', ward_number: 'GW-02' }, scope), false);
+});
