@@ -1,5 +1,6 @@
 const prisma = require('./prisma');
 const { normalizeEmail } = require('./normalize');
+const { canDoctorReviewOrder } = require('./doctorClinicalReview');
 
 const normalizeAssignee = (value) => String(value || '')
   .toLowerCase()
@@ -25,12 +26,13 @@ const resolveAuthenticatedDoctor = async (req, db = prisma) => {
   const email = normalizeEmail(req.auth?.email);
   let row = id ? await db.doctors.findUnique({ where: { id } }).catch(() => null) : null;
   if (!row && email) row = await db.doctors.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } }).catch(() => null);
-  if (!row) return null;
+  if (!row || row.is_active === false) return null;
   return {
     id: String(row.id),
     email: normalizeEmail(row.email),
     name: `${row.first_name || ''} ${row.last_name || ''}`.trim(),
-    specialization: String(row.specialization || row.department || '').trim()
+    specialization: String(row.specialization || row.department || '').trim(),
+    department: String(row.department || '').trim()
   };
 };
 
@@ -59,6 +61,13 @@ const checkDoctorPatientAccess = async (req, patientId, db = prisma) => {
   }).catch(() => []);
   if (appointments.some((appointment) => appointmentMatchesDoctor(appointment, actor))) {
     return { allowed: true, actor, patient };
+  }
+  const reviewOrders = await db.clinical_orders?.findMany({
+    where: { patient_id: cleanPatientId, status: { notIn: ['Cancelled', 'Rejected'] } },
+    select: { kind: true, service: true, assigned_role: true }
+  }).catch(() => []);
+  if ((reviewOrders || []).some(order => canDoctorReviewOrder(actor, order))) {
+    return { allowed: true, actor, patient, clinicalReview: true };
   }
   if (!actor.specialization) return { allowed: false, actor, patient };
   const peers = await db.doctors.findMany({

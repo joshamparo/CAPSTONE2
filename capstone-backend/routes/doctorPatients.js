@@ -5,6 +5,7 @@ const requireRole = require('../middleware/requireRole');
 const { normalizeEmail, parseLimit, parseOffset } = require('../utils/normalize');
 const { canRequestPatientScope } = require('../utils/doctorAccess');
 const { sendError } = require('../utils/httpErrors');
+const { canDoctorReviewOrder } = require('../utils/doctorClinicalReview');
 
 
 const serialize = (obj) =>
@@ -25,16 +26,18 @@ const getActor = async (req) => {
 
   let name = headerName;
   let specialization = '';
+  let department = '';
   let doctorId = '';
 
   if (email) {
     const doc = await prisma.doctors
-      .findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true, first_name: true, last_name: true, specialization: true } })
+      .findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true, first_name: true, last_name: true, specialization: true, department: true, is_active: true } })
       .catch(() => null);
-    if (doc) {
+    if (doc?.is_active !== false) {
       const full = `${doc.first_name || ''} ${doc.last_name || ''}`.trim();
       if (!name && full) name = full;
       specialization = String(doc.specialization || '');
+      department = String(doc.department || '');
       doctorId = String(doc.id || '');
     }
   }
@@ -43,6 +46,7 @@ const getActor = async (req) => {
     email: email || null,
     name: name || null,
     specialization: specialization || null,
+    department: department || null,
     id: doctorId || null
   };
 };
@@ -124,6 +128,13 @@ const assertDoctorAccessToPatient = async ({ role, actor, patient }) => {
   const allowedStatuses = new Set(['Confirmed', 'Completed', 'Done']);
   const activeAppointments = (Array.isArray(apts) ? apts : []).filter((a) => allowedStatuses.has(String(a.status || '')));
   if (activeAppointments.some((a) => matchDoctor(a, actor))) return true;
+  if (patientId && role === 'doctor') {
+    const reviewOrders = await prisma.clinical_orders.findMany({
+      where: { patient_id: patientId, status: { notIn: ['Cancelled', 'Rejected'] }, lab_results: { some: {} } },
+      select: { kind: true, service: true, assigned_role: true }
+    }).catch(() => []);
+    if (reviewOrders.some(order => canDoctorReviewOrder(actor, order))) return true;
+  }
   if (!actor?.specialization) return false;
 
   const sameSpecDoctors = await prisma.doctors.findMany({
@@ -182,6 +193,46 @@ router.get('/patients', requireRole(['doctor', 'admin']), async (req, res) => {
       });
     } else if (scope !== 'all' && role !== 'admin') {
       filtered = filtered.filter((a) => matchDoctor(a, actor));
+    }
+
+    if (role === 'doctor' && scope !== 'all') {
+      const reviewOrders = await prisma.clinical_orders.findMany({
+        where: {
+          patient_id: { not: null },
+          status: { notIn: ['Cancelled', 'Rejected'] },
+          lab_results: { some: {} }
+        },
+        select: { id: true, patient_id: true, kind: true, service: true, assigned_role: true, status: true, updated_at: true, created_at: true },
+        orderBy: { updated_at: 'desc' },
+        take: 1000
+      }).catch(() => []);
+      reviewOrders.filter(order => canDoctorReviewOrder(actor, order)).forEach((order) => {
+        filtered.push({
+          patient_id: order.patient_id,
+          status: order.status,
+          reason: `[DIRECT DIAGNOSTIC] ${order.service || order.kind || 'Clinical result review'}`,
+          appointment_date: order.updated_at || order.created_at,
+          created_at: order.created_at,
+          doctor_uuid: actor.id
+        });
+      });
+    }
+
+    if (q) {
+      const patientIds = [...new Set(filtered.map(row => String(row.patient_id || '')).filter(Boolean))];
+      const matchingPatients = patientIds.length ? await prisma.patients.findMany({
+        where: {
+          id: { in: patientIds },
+          OR: [
+            { first_name: { contains: q, mode: 'insensitive' } },
+            { last_name: { contains: q, mode: 'insensitive' } },
+            { email: { contains: q, mode: 'insensitive' } }
+          ]
+        },
+        select: { id: true }
+      }).catch(() => []) : [];
+      const allowedIds = new Set(matchingPatients.map(patient => String(patient.id)));
+      filtered = filtered.filter(row => allowedIds.has(String(row.patient_id || '')) || `${row.first_name || ''} ${row.last_name || ''}`.toLowerCase().includes(q) || String(row.email || '').toLowerCase().includes(q));
     }
 
     const byKey = new Map();
