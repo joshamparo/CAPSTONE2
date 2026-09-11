@@ -10,6 +10,7 @@ import { API_BASE, checkBackendHealth, fetchJson } from '../utils/api';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
+import { getNurseModuleConfig } from './nurseModuleConfig';
 
 const RECEPTION_ROUTE_LABELS = {
   ER: 'ER', ONSITE: 'On-site', LAB: 'Laboratory', ECG: 'ECG', IMAGING: 'Imaging',
@@ -481,23 +482,25 @@ function NurseDashboard() {
   }, [user.specialization, user.departmentLabel, activeDept]);
 
   const nurseCapabilities = useMemo(() => {
-    const shared = { overview: true, patients: true, schedules: true, wards: true };
-    const byType = {
-      emergency: { ...shared, medications: true, appointments: true, orders: true, reception: true, erIntake: true, vitals: true, wards: true },
-      pedia: { ...shared, medications: true, appointments: true, orders: true, vitals: true, wards: true },
-      bedside: { ...shared, orders: true, medications: true, vitals: true, wards: true },
-      clinic: { ...shared, appointments: true, orders: true, vitals: true },
-      diagnostic: { ...shared },
-      imaging: { ...shared },
-      remote: { ...shared, appointments: true },
-      procedure: { ...shared, medications: true, appointments: true, orders: true, vitals: true },
-      general: { ...shared, appointments: true, orders: true, vitals: true }
-    };
-    return byType[nurseWorkspace.type] || byType.general;
-  }, [nurseWorkspace.type]);
+    const key = normalizeSpecializationKey(user.specialization || activeDept || user.departmentLabel);
+    return getNurseModuleConfig(key, nurseWorkspace.type);
+  }, [activeDept, nurseWorkspace.type, user.departmentLabel, user.specialization]);
   const canManageHospitalBeds = ['ER', 'MEDICINE'].includes(normalizeDeptId(user.specialization || activeDept));
 
   const nurseNavLabels = useMemo(() => {
+    const key = normalizeSpecializationKey(user.specialization || activeDept || user.departmentLabel);
+    const specialized = {
+      DENTALCLINIC: { patients: 'Dental Patient Records', appointments: 'Dental Appointments & Queue', vitals: 'Pre-Procedure Screening', orders: 'Dental Orders & Supplies' },
+      LABORATORY: { patients: 'Laboratory Patient Queue', appointments: 'Specimen Schedule', orders: 'Laboratory Orders' },
+      PATHOLOGY: { patients: 'Pathology Patient Queue', appointments: 'Specimen Schedule', orders: 'Pathology Orders' },
+      RADIOLOGY: { patients: 'Imaging Patient Queue', appointments: 'Imaging Schedule', orders: 'Imaging Orders' },
+      ECG: { patients: 'ECG Patient Queue', appointments: 'ECG Schedule', orders: 'ECG Orders' },
+      PHYSICALTHERAPY: { patients: 'Therapy Patient Records', appointments: 'Therapy Schedule', vitals: 'Therapy Assessment', orders: 'Therapy Supplies' },
+      OTOLARYNGOLOGYENT: { patients: 'ENT Patient Records', appointments: 'ENT Appointments', vitals: 'ENT Pre-Consult Screening', orders: 'ENT Orders & Supplies' },
+      VIDEOCONSULTATION: { patients: 'Virtual Care Patients', appointments: 'Video Consultations' },
+      SURGERYMINOR: { patients: 'Procedure Patients', appointments: 'Procedure Schedule', vitals: 'Pre-Op & Recovery Monitoring', orders: 'Procedure Orders' },
+      ANESTHESIA: { patients: 'Anesthesia Patients', appointments: 'Anesthesia Schedule', vitals: 'Pre-Anesthesia Assessment', orders: 'Anesthesia Orders' }
+    };
     const labelsByType = {
       emergency: { patients: 'ER Patient Records', appointments: 'ER Consults', vitals: 'ER Vitals Monitoring', orders: 'ER Orders Management', wards: 'Emergency Room Board' },
       pedia: { patients: 'Pediatric Patients', appointments: 'Pediatric Appointments', vitals: 'Pediatric Vitals', orders: 'Pediatric Orders' },
@@ -509,8 +512,8 @@ function NurseDashboard() {
       procedure: { patients: 'Procedure Patients', appointments: 'Procedure Schedule', vitals: 'Recovery Vitals', orders: 'Procedure Orders' },
       general: { patients: 'Patient Records', appointments: 'Appointments', vitals: 'Vitals Monitoring', orders: 'Orders Management', wards: 'Ward Management' }
     };
-    return { ...(labelsByType[nurseWorkspace.type] || labelsByType.general), wards: 'Ward / Room Overview' };
-  }, [nurseWorkspace.type]);
+    return { ...(labelsByType[nurseWorkspace.type] || labelsByType.general), ...(specialized[key] || {}), wards: 'Ward / Room Overview' };
+  }, [activeDept, nurseWorkspace.type, user.departmentLabel, user.specialization]);
 
   const allowedNurseViews = useMemo(() => {
     const allowed = new Set(['overview', 'patients', 'profile', 'activity']);
@@ -4388,7 +4391,10 @@ function NurseDashboard() {
     heartRate: '',
     temperature: '',
     respiratoryRate: '',
-    notes: ''
+    notes: '',
+    medicalHistoryReviewed: false,
+    allergiesReviewed: false,
+    consentConfirmed: false
   });
   const [clinicalUpdateStatus, setClinicalUpdateStatus] = useState(null);
   const [clinicalUpdateError, setClinicalUpdateError] = useState('');
@@ -4396,6 +4402,10 @@ function NurseDashboard() {
 
   // Orders State
   const [activeOrderTab, setActiveOrderTab] = useState(nurseCapabilities.medications ? 'medications' : 'labs');
+  useEffect(() => {
+    const allowedTabs = nurseCapabilities.orderTabs || [];
+    if (allowedTabs.length && !allowedTabs.includes(activeOrderTab)) setActiveOrderTab(allowedTabs[0]);
+  }, [activeOrderTab, nurseCapabilities.orderTabs]);
   const [orderFormData, setOrderFormData] = useState({
     patientId: '',
     patientName: '',
@@ -6072,21 +6082,24 @@ function NurseDashboard() {
     setClinicalUpdateStatus('idle');
     setClinicalUpdateError("");
     setClinicalUpdateFormData({
-      type: 'Vitals',
+      type: nurseCapabilities.screeningMode === 'dental' ? 'Assessment' : 'Vitals',
       bloodPressure: '',
       heartRate: '',
       temperature: '',
       respiratoryRate: '',
-      notes: ''
+      notes: '',
+      medicalHistoryReviewed: false,
+      allergiesReviewed: false,
+      consentConfirmed: false
     });
     setShowClinicalUpdateModal(true);
   };
 
   const handleClinicalUpdateChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setClinicalUpdateFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: type === 'checkbox' ? checked : value
     }));
     if (clinicalUpdateError) setClinicalUpdateError("");
   };
@@ -6115,7 +6128,11 @@ function NurseDashboard() {
     const hr = String(clinicalUpdateFormData.heartRate || '').trim();
     const temp = String(clinicalUpdateFormData.temperature || '').trim();
     const rr = String(clinicalUpdateFormData.respiratoryRate || '').trim();
+    const isDentalScreening = nurseCapabilities.screeningMode === 'dental';
     const notes = String(clinicalUpdateFormData.notes || '').trim();
+    const effectiveNotes = isDentalScreening
+      ? [`Dental pre-procedure screening`, `Medical history reviewed: ${clinicalUpdateFormData.medicalHistoryReviewed ? 'Yes' : 'No'}`, `Allergies reviewed: ${clinicalUpdateFormData.allergiesReviewed ? 'Yes' : 'No'}`, `Consent confirmed: ${clinicalUpdateFormData.consentConfirmed ? 'Yes' : 'No'}`, notes].filter(Boolean).join('\n')
+      : notes;
     const errors = [];
     if (!type) errors.push('Record type is required.');
     else if (!allowedType.has(type)) errors.push(`Invalid record type '${type}'.`);
@@ -6131,7 +6148,7 @@ function NurseDashboard() {
       const n = Number(rr.replace(/\D/g, ''));
       if (!Number.isFinite(n) || n < 2 || n > 80) errors.push('Respiratory rate must be a reasonable whole number (2–80).');
     }
-    const allEmpty = !bp && !hr && !temp && !rr && !notes && !clinicalUpdateFormData.weight && !clinicalUpdateFormData.height;
+    const allEmpty = !bp && !hr && !temp && !rr && !effectiveNotes && !clinicalUpdateFormData.weight && !clinicalUpdateFormData.height;
     if (allEmpty) errors.push('At least one vital sign or a note is required to record a clinical update.');
     if (notes && notes.length > 4000) errors.push('Notes are too long (max 4000 characters).');
     if (errors.length) {
@@ -6152,7 +6169,7 @@ function NurseDashboard() {
         body: JSON.stringify({
           ...clinicalUpdateFormData,
           type,
-          notes,
+          notes: effectiveNotes,
           nurseName: user.name
         }),
       });
@@ -8104,8 +8121,8 @@ function NurseDashboard() {
                           <div className="welcome-banner full-width">
                               <div className="welcome-text">
                                   <div className="workspace-badge workspace-er">Monitoring</div>
-                                  <h1>{activeDept === 'PEDIA' ? 'Infant Vitals Board' : 'Real-time Vitals Board'}</h1>
-                                  <p>{activeDept === 'PEDIA' ? 'Monitor Pedia patients under 12 months with a verified date of birth.' : 'Monitor patient vitals and record new measurements instantly.'}</p>
+                                  <h1>{nurseCapabilities.screeningMode === 'dental' ? 'Dental Pre-Procedure Screening' : activeDept === 'PEDIA' ? 'Infant Vitals Board' : nurseNavLabels.vitals}</h1>
+                                  <p>{nurseCapabilities.screeningMode === 'dental' ? 'Review medical history, allergies, consent, and blood pressure before dental treatment.' : activeDept === 'PEDIA' ? 'Monitor Pedia patients under 12 months with a verified date of birth.' : 'Monitor patient observations and record new measurements.'}</p>
                               </div>
                               <div className="header-actions">
                                   <button className="btn-orange" onClick={refreshPatientsList} disabled={loadingPatients}>
@@ -8177,11 +8194,11 @@ function NurseDashboard() {
                                   <thead>
                                       <tr>
                                           <th>Patient</th>
-                                          <th>Location / Triage</th>
+                                          {nurseCapabilities.screeningMode !== 'dental' && <th>Location / Triage</th>}
                                           <th>BP (mmHg)</th>
-                                          <th>HR (bpm)</th>
-                                          <th>Temp (°C)</th>
-                                          <th>SpO2 (%)</th>
+                                          {nurseCapabilities.screeningMode !== 'dental' && <th>HR (bpm)</th>}
+                                          {nurseCapabilities.screeningMode !== 'dental' && <th>Temp (°C)</th>}
+                                          {nurseCapabilities.screeningMode !== 'dental' && <th>SpO2 (%)</th>}
                                           <th>Action</th>
                                       </tr>
                                   </thead>
@@ -8211,7 +8228,7 @@ function NurseDashboard() {
                                                   <td>
                                                       <div style={{ fontWeight: 700, color: '#0f172a' }}>{patient.first_name} {patient.last_name}</div>
                                                   </td>
-                                                  <td>
+                                                  {nurseCapabilities.screeningMode !== 'dental' && <td>
                                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                           <span style={{ fontSize: '0.8rem', padding: '4px 8px', borderRadius: '4px', background: patient.triage_level === 1 ? '#fee2e2' : '#f1f5f9', color: patient.triage_level === 1 ? '#ef4444' : '#475569', fontWeight: 600 }}>
                                                               {patient.ward_number ? `Ward ${patient.ward_number} - Bed ${patient.bed_number}` : (patient.admission_status === 'Emergency' ? 'ER Walk-in' : patient.admission_status)}
@@ -8222,19 +8239,19 @@ function NurseDashboard() {
                                                               </div>
                                                           )}
                                                       </div>
-                                                  </td>
+                                                  </td>}
                                                   <td>
                                                       <span style={{ fontWeight: 700, color: isHighBp ? '#ef4444' : '#0f172a' }}>{bp}</span>
                                                   </td>
-                                                  <td>
+                                                  {nurseCapabilities.screeningMode !== 'dental' && <td>
                                                       <span style={{ fontWeight: 700, color: '#0f172a' }}>{hr}</span>
-                                                  </td>
-                                                  <td>
+                                                  </td>}
+                                                  {nurseCapabilities.screeningMode !== 'dental' && <td>
                                                       <span style={{ fontWeight: 700, color: isFever ? '#ef4444' : '#0f172a' }}>{temp}</span>
-                                                  </td>
-                                                  <td>
+                                                  </td>}
+                                                  {nurseCapabilities.screeningMode !== 'dental' && <td>
                                                       <span style={{ fontWeight: 700, color: '#0f172a' }}>{spo2}</span>
-                                                  </td>
+                                                  </td>}
                                                   <td>
                                                       <button 
                                                           className="btn-orange-sm" 
@@ -8264,8 +8281,8 @@ function NurseDashboard() {
                 <div className="orders-container">
                     <div className="orders-header">
                         <div>
-                            <h2 className="page-title">Medical Orders</h2>
-                            <p className="page-subtitle">Manage patient medications, lab requests, and supplies</p>
+                            <h2 className="page-title">{nurseNavLabels.orders}</h2>
+                            <p className="page-subtitle">{nurseCapabilities.screeningMode === 'dental' ? 'Request dental supplies and laboratory or prosthetic work for authorized clinic patients.' : 'Manage authorized clinical requests for your assigned department.'}</p>
                         </div>
                         <button className="btn-primary-action" onClick={() => setView('activity')}>
                             <Clock size={18} /> History
@@ -8273,24 +8290,24 @@ function NurseDashboard() {
                     </div>
 
                     <div className="orders-tabs">
-                        {nurseCapabilities.medications && <button
+                        {nurseCapabilities.orderTabs.includes('medications') && <button
                             className={`orders-tab-btn ${activeOrderTab === 'medications' ? 'active' : ''}`} 
                             onClick={() => setActiveOrderTab('medications')}
                         >
                             <Pill size={18} /> Medications
                         </button>}
-                        <button 
+                        {nurseCapabilities.orderTabs.includes('labs') && <button
                             className={`orders-tab-btn ${activeOrderTab === 'labs' ? 'active' : ''}`} 
                             onClick={() => setActiveOrderTab('labs')}
                         >
-                            <FlaskConical size={18} /> Lab Tests
-                        </button>
-                        <button 
+                            <FlaskConical size={18} /> {nurseCapabilities.screeningMode === 'dental' ? 'Dental Lab / Prosthetics' : 'Lab Tests'}
+                        </button>}
+                        {nurseCapabilities.orderTabs.includes('supplies') && <button
                             className={`orders-tab-btn ${activeOrderTab === 'supplies' ? 'active' : ''}`} 
                             onClick={() => setActiveOrderTab('supplies')}
                         >
-                            <Package size={18} /> Supplies
-                        </button>
+                            <Package size={18} /> {nurseCapabilities.screeningMode === 'dental' ? 'Dental Supplies' : 'Supplies'}
+                        </button>}
                     </div>
 
                     <div className="orders-content-grid">
@@ -10042,8 +10059,8 @@ function NurseDashboard() {
           <div className="view-profile-card" style={{maxWidth: '600px'}}>
             <div className="view-profile-header">
               <div>
-                 <h3 style={{margin: 0, fontSize: '1.25rem', fontWeight: 700}}>Clinical Update</h3>
-                 <p style={{margin: '4px 0 0 0', fontSize: '0.9rem', opacity: 0.9, fontWeight: 500}}>Record new patient vitals and notes</p>
+                 <h3 style={{margin: 0, fontSize: '1.25rem', fontWeight: 700}}>{nurseCapabilities.screeningMode === 'dental' ? 'Dental Pre-Procedure Screening' : 'Clinical Update'}</h3>
+                 <p style={{margin: '4px 0 0 0', fontSize: '0.9rem', opacity: 0.9, fontWeight: 500}}>{nurseCapabilities.screeningMode === 'dental' ? 'Confirm safety checks and record blood pressure before treatment.' : 'Record new patient vitals and notes'}</p>
               </div>
               <button onClick={() => setShowClinicalUpdateModal(false)} className="btn-close-modal">
                  <ChevronDown size={24} style={{transform: 'rotate(180deg)'}} />
@@ -10052,14 +10069,14 @@ function NurseDashboard() {
 
             <form onSubmit={handleClinicalUpdateSubmit}>
               {clinicalUpdateError ? <p role="alert" className="admin-alert error">{clinicalUpdateError}</p> : null}
-              <div className="form-grid-2-col" style={{ padding: '0 24px' }}>
+              {nurseCapabilities.screeningMode !== 'dental' && <div className="form-grid-2-col" style={{ padding: '0 24px' }}>
                 <label>Weight (kg)<input className="box-input" type="number" min="0.01" step="0.01" name="weight" value={clinicalUpdateFormData.weight || ''} onChange={handleClinicalUpdateChange} /></label>
                 <label>Height (cm)<input className="box-input" type="number" min="0.1" step="0.1" name="height" value={clinicalUpdateFormData.height || ''} onChange={handleClinicalUpdateChange} /></label>
-              </div>
+              </div>}
               <div className="bed-modal-body">
                   <div className="detail-item full" style={{marginBottom: '24px'}}>
                       <h4 className="detail-label" style={{borderBottom: '1px solid #e2e8f0', paddingBottom: '8px', marginBottom: '16px'}}>Update Info</h4>
-                      <div className="input-group" style={{marginBottom: '16px'}}>
+                      {nurseCapabilities.screeningMode !== 'dental' && <div className="input-group" style={{marginBottom: '16px'}}>
                         <label>Update Type</label>
                         <select
                           name="type"
@@ -10072,9 +10089,9 @@ function NurseDashboard() {
                           <option value="Note">Nursing Note</option>
                           <option value="Medication">Medication Admin</option>
                         </select>
-                      </div>
+                      </div>}
 
-                      {clinicalUpdateFormData.type === 'Vitals' && (
+                      {(clinicalUpdateFormData.type === 'Vitals' || nurseCapabilities.screeningMode === 'dental') && (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
                           <div className="input-group">
                             <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Blood Pressure (mmHg)</label>
@@ -10088,7 +10105,7 @@ function NurseDashboard() {
                               style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '12px' }}
                             />
                           </div>
-                          <div className="input-group">
+                          {nurseCapabilities.screeningMode !== 'dental' && <div className="input-group">
                             <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Heart Rate (bpm)</label>
                             <input
                               type="text"
@@ -10099,8 +10116,8 @@ function NurseDashboard() {
                               className="box-input"
                               style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '12px' }}
                             />
-                          </div>
-                          <div className="input-group">
+                          </div>}
+                          {nurseCapabilities.screeningMode !== 'dental' && <div className="input-group">
                             <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Temperature (°C)</label>
                             <input
                               type="text"
@@ -10111,8 +10128,8 @@ function NurseDashboard() {
                               className="box-input"
                               style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '12px' }}
                             />
-                          </div>
-                          <div className="input-group">
+                          </div>}
+                          {nurseCapabilities.screeningMode !== 'dental' && <div className="input-group">
                             <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Resp. Rate (cpm)</label>
                             <input
                               type="text"
@@ -10123,7 +10140,14 @@ function NurseDashboard() {
                               className="box-input"
                               style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '12px' }}
                             />
-                          </div>
+                          </div>}
+                        </div>
+                      )}
+                      {nurseCapabilities.screeningMode === 'dental' && (
+                        <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
+                          <label><input type="checkbox" name="medicalHistoryReviewed" checked={Boolean(clinicalUpdateFormData.medicalHistoryReviewed)} onChange={handleClinicalUpdateChange} /> Medical history reviewed with the patient</label>
+                          <label><input type="checkbox" name="allergiesReviewed" checked={Boolean(clinicalUpdateFormData.allergiesReviewed)} onChange={handleClinicalUpdateChange} /> Allergies and current medications reviewed</label>
+                          <label><input type="checkbox" name="consentConfirmed" checked={Boolean(clinicalUpdateFormData.consentConfirmed)} onChange={handleClinicalUpdateChange} /> Procedure consent confirmed</label>
                         </div>
                       )}
                   </div>
@@ -12453,3 +12477,8 @@ function NurseDashboard() {
 }
 
 export default NurseDashboard;
+    if (bp && !/^\d{2,3}\/\d{2,3}$/.test(bp)) errors.push('Blood pressure must use the format 120/80.');
+    if (isDentalScreening && !bp) errors.push('Blood pressure is required for dental pre-procedure screening.');
+    if (isDentalScreening && (!clinicalUpdateFormData.medicalHistoryReviewed || !clinicalUpdateFormData.allergiesReviewed || !clinicalUpdateFormData.consentConfirmed)) {
+      errors.push('Confirm the medical history, allergy review, and consent before saving.');
+    }
