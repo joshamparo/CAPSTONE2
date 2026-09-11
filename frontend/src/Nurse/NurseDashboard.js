@@ -2774,22 +2774,22 @@ function NurseDashboard() {
       <style>
         @page { size: A4 landscape; margin: 12mm; }
         * { box-sizing: border-box; }
-        body { margin: 0; padding: 24px; color: #0f172a; background: #f1f5f9; font-family: Arial, Helvetica, sans-serif; }
-        .report { max-width: 1400px; margin: 0 auto; padding: 28px; background: #fff; box-shadow: 0 12px 32px rgba(15,23,42,.12); }
+        body { margin: 0; padding: 24px; color: #000; background: #eee; font-family: Arial, Helvetica, sans-serif; }
+        .report { max-width: 1400px; margin: 0 auto; padding: 28px; background: #fff; border: 1px solid #000; }
         .print-actions { display: flex; justify-content: flex-end; gap: 10px; max-width: 1400px; margin: 0 auto 14px; }
-        .print-actions button { padding: 10px 18px; border: 0; border-radius: 9px; color: #fff; background: #ea580c; cursor: pointer; font-size: 14px; font-weight: 700; }
-        .print-actions .close { color: #334155; background: #e2e8f0; }
-        header { display: flex; align-items: center; gap: 14px; padding-bottom: 12px; border-bottom: 3px solid #ea580c; }
-        header img { width: 58px; height: 58px; object-fit: contain; }
-        .hospital { color: #c2410c; font-size: 18pt; font-weight: 800; }
-        .system { margin-top: 2px; color: #64748b; font-size: 8pt; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+        .print-actions button { padding: 10px 18px; border: 1px solid #000; border-radius: 4px; color: #fff; background: #000; cursor: pointer; font-size: 14px; font-weight: 700; }
+        .print-actions .close { color: #000; background: #fff; }
+        header { display: flex; align-items: center; gap: 14px; padding-bottom: 12px; border-bottom: 3px solid #000; }
+        header img { width: 58px; height: 58px; object-fit: contain; filter: grayscale(1) contrast(1.25); }
+        .hospital { color: #000; font-size: 18pt; font-weight: 800; }
+        .system { margin-top: 2px; color: #333; font-size: 8pt; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
         h1 { margin: 7px 0 0; font-size: 13pt; }
         .meta { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; color: #475569; font-size: 8pt; }
         table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 7.5pt; }
         thead { display: table-header-group; }
         tr { break-inside: avoid; }
-        th, td { padding: 7px; border: 1px solid #cbd5e1; vertical-align: top; overflow-wrap: anywhere; }
-        th { background: #f1f5f9; color: #334155; text-align: left; text-transform: uppercase; print-color-adjust: exact; }
+        th, td { padding: 7px; border: 1px solid #000; vertical-align: top; overflow-wrap: anywhere; }
+        th { background: #e6e6e6; color: #000; text-align: left; text-transform: uppercase; print-color-adjust: exact; }
         th:first-child { width: 15%; } th:nth-child(2) { width: 28%; } th:nth-child(3) { width: 30%; } th:nth-child(4) { width: 27%; }
         td strong, td span { display: block; line-height: 1.35; }
         td span { margin-top: 2px; color: #475569; }
@@ -3041,7 +3041,7 @@ function NurseDashboard() {
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {
       setSuccessMessage(String(error?.message || 'Unable to authorize this patient records download.'));
       setModalType('error');

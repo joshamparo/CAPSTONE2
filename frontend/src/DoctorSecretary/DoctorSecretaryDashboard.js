@@ -80,8 +80,8 @@ const toMoney = (v) => {
 };
 
 const csvCell = (value) => {
-  let text = String(value ?? '');
-  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  let text = String(value ?? '').replace(/\r?\n/g, ' ');
+  if (/^[\s\u0000-\u001f]*[=+\-@]/.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
 };
 
@@ -431,7 +431,7 @@ export default function DoctorSecretaryDashboard() {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const printPatientRecords = () => {
@@ -444,7 +444,8 @@ export default function DoctorSecretaryDashboard() {
     }
     popup.opener = null;
     const body = rows.map((row) => `<tr>${Object.values(row).map((value) => `<td>${htmlCell(value)}</td>`).join('')}</tr>`).join('');
-    popup.document.write(`<!doctype html><html><head><title>Patient Records</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#0f172a}h1{font-size:20px}p{color:#64748b}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #cbd5e1;padding:8px;text-align:left}th{background:#f1f5f9}@media print{body{padding:0}}</style></head><body><h1>Pascual General Hospital — Patient Records</h1><p>${htmlCell(linkedDoctor?.name || 'Linked doctor')} • ${htmlCell(recordsDate || 'All available records')}</p><table><thead><tr><th>Date</th><th>Time</th><th>Patient</th><th>Email</th><th>Service / Reason</th><th>Status</th><th>Payment</th></tr></thead><tbody>${body}</tbody></table><script>window.onload=()=>{window.print();window.close();}<\/script></body></html>`);
+    const logoUrl = `${window.location.origin}/images/pgh%20logo.png`;
+    popup.document.write(`<!doctype html><html><head><title>Patient Records</title><style>@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:28px;color:#000}.logo{width:52px;height:52px;object-fit:contain;filter:grayscale(1) contrast(1.25)}h1{font-size:20px;border-bottom:3px solid #000;padding-bottom:10px}p{color:#000}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px}thead{display:table-header-group}tr{break-inside:avoid}th,td{border:1px solid #000;padding:8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#e6e6e6;print-color-adjust:exact}@media print{body{padding:0}}</style></head><body><img class="logo" src="${htmlCell(logoUrl)}" alt="Pascual General Hospital logo"><h1>Pascual General Hospital — Patient Records</h1><p>${htmlCell(linkedDoctor?.name || 'Linked doctor')} • ${htmlCell(recordsDate || 'All available records')}</p><table><thead><tr><th>Date</th><th>Time</th><th>Patient</th><th>Email</th><th>Service / Reason</th><th>Status</th><th>Payment</th></tr></thead><tbody>${body}</tbody></table><script>window.onload=()=>{window.print();window.close();}<\/script></body></html>`);
     popup.document.close();
   };
 

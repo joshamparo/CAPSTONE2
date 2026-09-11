@@ -196,6 +196,7 @@ export default function PatientFullRecordModal({
         ? `<div class="print-list">${items.map(renderItem).join('')}</div>`
         : `<div class="print-empty">${escapeHtml(emptyText)}</div>`;
 
+    const logoUrl = `${window.location.origin}/images/pgh%20logo.png`;
     const html = `
       <!doctype html>
       <html>
@@ -203,31 +204,41 @@ export default function PatientFullRecordModal({
           <meta charset="utf-8" />
           <title>${escapeHtml(displayName)} - Patient Record</title>
           <style>
-            body { font-family: Arial, sans-serif; color: #0f172a; margin: 24px; }
+            @page { size: A4 portrait; margin: 14mm; }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; color: #000; margin: 24px; }
             .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
-            .brand { font-size: 24px; font-weight: 800; color:#ea580c; }
-            .sub { color:#64748b; margin-top:4px; }
+            .brand-row { display:flex; align-items:center; gap:12px; }
+            .brand-row img { width:56px; height:56px; object-fit:contain; filter:grayscale(1) contrast(1.25); }
+            .brand { font-size: 24px; font-weight: 800; color:#000; }
+            .sub { color:#222; margin-top:4px; }
             .section { margin-top: 22px; page-break-inside: avoid; }
-            .section h2 { font-size: 18px; margin: 0 0 12px; border-bottom: 2px solid #fed7aa; padding-bottom: 6px; }
+            .section h2 { font-size: 18px; margin: 0 0 12px; border-bottom: 2px solid #000; padding-bottom: 6px; }
             table { width:100%; border-collapse: collapse; }
-            th, td { border: 1px solid #e2e8f0; padding: 10px; text-align:left; vertical-align: top; }
-            th { width: 28%; background:#fff7ed; font-weight:700; }
-            .chips span { display:inline-block; margin: 4px 6px 0 0; padding: 6px 10px; border-radius: 999px; background:#eff6ff; color:#1d4ed8; font-size:12px; }
-            .item { border:1px solid #e2e8f0; border-radius:12px; padding:12px 14px; margin-bottom:10px; }
+            thead { display: table-header-group; }
+            tr, .item { break-inside: avoid; }
+            th, td { border: 1px solid #000; padding: 8px; text-align:left; vertical-align: top; overflow-wrap:anywhere; }
+            th { width: 28%; background:#e6e6e6; font-weight:700; print-color-adjust:exact; }
+            .chips span { display:inline-block; margin: 4px 6px 0 0; padding: 6px 10px; border:1px solid #000; border-radius:999px; background:#fff; color:#000; font-size:12px; }
+            .item { border:1px solid #000; border-radius:4px; padding:12px 14px; margin-bottom:10px; }
             .item-head { display:flex; justify-content:space-between; gap:12px; font-weight:700; margin-bottom:6px; }
-            .muted { color:#64748b; font-size:12px; }
-            .print-empty { color:#64748b; font-style: italic; }
-            .toolbar { margin-bottom: 20px; }
-            .toolbar button { background:#ea580c; color:#fff; border:none; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer; }
+            .muted { color:#333; font-size:12px; }
+            .print-empty { color:#333; font-style: italic; }
+            .toolbar { margin-bottom: 20px; text-align:right; }
+            .toolbar button { background:#000; color:#fff; border:1px solid #000; padding:10px 16px; border-radius:4px; font-weight:700; cursor:pointer; }
+            .confidential { margin-top:20px; padding-top:8px; border-top:1px solid #000; text-align:center; font-size:10px; }
             @media print { .toolbar { display:none; } body { margin: 12px; } }
           </style>
         </head>
         <body>
           <div class="toolbar"><button onclick="window.print()">Print Record</button></div>
           <div class="header">
-            <div>
+            <div class="brand-row">
+              <img src="${escapeHtml(logoUrl)}" alt="Pascual General Hospital logo" />
+              <div>
               <div class="brand">PASCUALINGA</div>
-              <div class="sub">Centralized Patient Record</div>
+              <div class="sub">Pascual General Hospital<br />Official Patient Medical Record</div>
+              </div>
             </div>
             <div class="sub">Generated ${escapeHtml(new Date().toLocaleString())}</div>
           </div>
@@ -405,6 +416,7 @@ export default function PatientFullRecordModal({
               `
               : ''
           }
+          <div class="confidential">Confidential medical information - for authorized hospital use only.</div>
         </body>
       </html>
     `;
