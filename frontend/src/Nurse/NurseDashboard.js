@@ -1,7 +1,7 @@
 import MedicalFileLink from '../components/MedicalFileLink';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, User, Users, MessageSquare, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Settings, AlertCircle, AlertOctagon, Printer, Search, Eye, BedDouble, Bed, LayoutDashboard, Activity, FileText, Calendar, ClipboardList, ArrowLeft, Stethoscope, UserCheck, Clipboard, Check, FilePenLine, LogIn, Pill, FlaskConical, Package, Clock, CheckCircle, XCircle, X, Plus, Phone, AlertTriangle, Info, MapPin, Copy, Save, Megaphone, RotateCw, Send, Upload, Download, Menu, ShieldAlert, Mail, Briefcase, Key, Shield, EyeOff } from 'lucide-react';
+import { LogOut, User, Users, MessageSquare, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Settings, AlertCircle, AlertOctagon, Printer, Search, Eye, BedDouble, Bed, LayoutDashboard, Activity, FileText, Calendar, ClipboardList, ArrowLeft, Stethoscope, UserCheck, Clipboard, Check, FilePenLine, LogIn, Pill, FlaskConical, ScanLine, Package, Clock, CheckCircle, XCircle, X, Plus, Phone, AlertTriangle, Info, MapPin, Copy, Save, Megaphone, RotateCw, Send, Upload, Download, Menu, ShieldAlert, Mail, Briefcase, Key, Shield, EyeOff } from 'lucide-react';
 import './NurseDashboard.css';
 import '../Admin/AdminDashboard.css'; 
 import { ncrCalabarzonCities, SPECIALIZATION_OPTIONS } from '../utils/constants';
@@ -4098,7 +4098,7 @@ function NurseDashboard() {
           case 'imaging':
               return [
                   {
-                      icon: <FlaskConical size={32} className="text-orange" />,
+                      icon: nurseWorkspace.type === 'imaging' ? <ScanLine size={32} className="text-orange" /> : <FlaskConical size={32} className="text-orange" />,
                       tone: 'bg-orange-soft',
                       value: recentOrders.length,
                       label: nurseWorkspace.type === 'imaging' ? 'Diagnostic Requests' : 'Support Orders',
@@ -7021,7 +7021,7 @@ function NurseDashboard() {
                             </div>
                         </div>
 
-                        <div className="grid-col col-side">
+                        {nurseCapabilities.wards && <div className="grid-col col-side">
                             <div className="overview-card">
                                 <div className="card-header">
                                     <h3>Ward Overview</h3>
@@ -7047,7 +7047,7 @@ function NurseDashboard() {
                                     Full Bed Map
                                 </button> : null}
                             </div>
-                        </div>
+                        </div>}
                     </div>
                 </div>
             )}
