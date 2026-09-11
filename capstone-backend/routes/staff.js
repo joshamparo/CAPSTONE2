@@ -518,7 +518,7 @@ router.post('/login', loginRateLimit, async (req, res) => {
         const challengeId = crypto.randomUUID();
         const otp = secureOtp();
         const expiresAt = new Date(Date.now() + 60 * 1000);
-        const resendAfter = new Date(Date.now() + 60 * 1000);
+        const resendAfter = new Date();
         const role = String(user.account_type || user.roles || (modelType === 'doctors' ? 'doctor' : modelType === 'nurses' ? 'nurse' : 'staff')).trim().toLowerCase();
         await prisma.$executeRawUnsafe(
             `UPDATE public.login_otp_challenges SET consumed_at = now() WHERE email = $1 AND consumed_at IS NULL`,
@@ -537,7 +537,7 @@ router.post('/login', loginRateLimit, async (req, res) => {
             console.error('[OTP] Delivery failed:', mailError?.message || mailError);
             return res.status(502).json({ message: 'Unable to send the verification code right now. Please try again.' });
         }
-        return res.json({ otpRequired: true, challengeId, email, role, expiresInSeconds: 60, resendAfterSeconds: 60 });
+        return res.json({ otpRequired: true, challengeId, email, role, expiresInSeconds: 60, resendAfterSeconds: 0 });
         
     } catch (err) {
         res.status(500).json({ message: "Server Error" });
@@ -1170,17 +1170,26 @@ router.post('/login/otp/resend', otpResendRateLimit, async (req, res) => {
         const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.login_otp_challenges WHERE id = $1::uuid LIMIT 1`, challengeId);
         const challenge = Array.isArray(rows) ? rows[0] : null;
         if (!challenge || challenge.consumed_at) return res.status(400).json({ message: 'This verification request is no longer valid. Please sign in again.' });
-        const waitSeconds = Math.ceil((new Date(challenge.resend_after).getTime() - Date.now()) / 1000);
-        if (waitSeconds > 0) return res.status(429).json({ message: `Please wait ${waitSeconds} seconds before requesting another code.`, retryAfterSeconds: waitSeconds });
         const otp = secureOtp();
         const expiresAt = new Date(Date.now() + 60 * 1000);
-        await deliverLoginOtp(challenge.email, otp, expiresAt);
-        await prisma.$executeRawUnsafe(
-            `UPDATE public.login_otp_challenges SET otp_hash = $2, attempts = 0, expires_at = $3, resend_after = $4
-             WHERE id = $1::uuid AND consumed_at IS NULL`,
-            challengeId, otpHash(challengeId, otp), expiresAt, new Date(Date.now() + 60 * 1000)
+        const nextHash = otpHash(challengeId, otp);
+        const updated = await prisma.$queryRawUnsafe(
+            `UPDATE public.login_otp_challenges SET otp_hash = $2, attempts = 0, expires_at = $3, resend_after = now()
+             WHERE id = $1::uuid AND consumed_at IS NULL RETURNING id`,
+            challengeId, nextHash, expiresAt
         );
-        return res.json({ success: true, expiresInSeconds: 60, resendAfterSeconds: 60 });
+        if (!updated?.[0]) return res.status(400).json({ message: 'This verification request is no longer valid. Please sign in again.' });
+        try {
+            await deliverLoginOtp(challenge.email, otp, expiresAt);
+        } catch (deliveryError) {
+            await prisma.$executeRawUnsafe(
+                `UPDATE public.login_otp_challenges SET otp_hash = $2, attempts = $3, expires_at = $4, resend_after = now()
+                 WHERE id = $1::uuid AND otp_hash = $5 AND consumed_at IS NULL`,
+                challengeId, challenge.otp_hash, Number(challenge.attempts || 0), challenge.expires_at, nextHash
+            ).catch(() => {});
+            throw deliveryError;
+        }
+        return res.json({ success: true, expiresInSeconds: 60, resendAfterSeconds: 0 });
     } catch (error) {
         console.error('[OTP] Resend failed:', error?.message || error);
         return res.status(502).json({ message: 'Unable to resend the verification code right now. Please try again.' });

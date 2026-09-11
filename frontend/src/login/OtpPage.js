@@ -15,8 +15,6 @@ const OtpPage = () => {
   const [displayEmail] = useState(() => localStorage.getItem('tempLoginEmail') || '');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [resendTimer, setResendTimer] = useState(60);
-  const [entryTimer, setEntryTimer] = useState(60);
   const [submitting, setSubmitting] = useState(false);
   const inputRefs = useRef([]);
   const navigate = useNavigate();
@@ -24,22 +22,6 @@ const OtpPage = () => {
   useEffect(() => {
     if (!localStorage.getItem('otpChallengeId')) navigate('/login', { replace: true });
   }, [navigate]);
-  useEffect(() => {
-    const timer = window.setInterval(() => setEntryTimer((value) => Math.max(0, value - 1)), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-  useEffect(() => {
-    if (entryTimer === 0) {
-      localStorage.removeItem('otpChallengeId');
-      navigate('/login', { replace: true });
-    }
-  }, [entryTimer, navigate]);
-  useEffect(() => {
-    if (resendTimer <= 0) return undefined;
-    const timer = window.setInterval(() => setResendTimer((value) => Math.max(0, value - 1)), 1000);
-    return () => window.clearInterval(timer);
-  }, [resendTimer]);
-
   const clearCode = () => {
     setOtp(emptyCode());
     window.setTimeout(() => inputRefs.current[0]?.focus(), 0);
@@ -79,7 +61,7 @@ const OtpPage = () => {
   };
 
   const handleResendOtp = async () => {
-    if (resendTimer > 0 || submitting) return;
+    if (submitting) return;
     const challengeId = localStorage.getItem('otpChallengeId');
     if (!challengeId) return navigate('/login', { replace: true });
     setSubmitting(true);
@@ -91,12 +73,9 @@ const OtpPage = () => {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         setError(data.message || 'Unable to resend the verification code.');
-        if (data.retryAfterSeconds) setResendTimer(data.retryAfterSeconds);
         return;
       }
       clearCode();
-      setEntryTimer(Number(data.expiresInSeconds) || 60);
-      setResendTimer(Number(data.resendAfterSeconds) || 60);
       setSuccess(`New code sent to ${displayEmail}`);
     } catch (_) {
       setError('Cannot connect to the server. Please try again.');
@@ -122,17 +101,13 @@ const OtpPage = () => {
       <p className="email-display">{displayEmail}</p>
       <h1 className="title">Approve Sign in Request</h1>
       <p className="instruction">An OTP code has been sent to your registered email. Check your inbox and spam folder, then enter the 6-digit code below.</p>
-      <p className="entry-timer" style={{ textAlign: 'center', color: 'black', fontWeight: 'bold', marginBottom: '1rem' }}>
-        {Math.floor(entryTimer / 60)}:{String(entryTimer % 60).padStart(2, '0')}
-      </p>
       <div className="otp-inputs">{otp.map((digit, index) => <input key={index} type="text" maxLength="1"
         ref={(element) => { inputRefs.current[index] = element; }} value={digit} disabled={submitting}
         onChange={(event) => handleChange(event.target, index)}
         onKeyDown={(event) => { if (event.key === 'Backspace' && !otp[index] && index > 0) inputRefs.current[index - 1]?.focus(); }}
         inputMode="numeric" pattern="\d*" autoComplete={index === 0 ? 'one-time-code' : 'off'} />)}</div>
       <div className="refresh-section"><p>Didn't receive a sign-in request?</p>
-        {resendTimer > 0 ? <p className="resend-timer">Resend code in <strong style={{ color: '#ea580c' }}>{resendTimer}s</strong></p>
-          : <button className="resend-link" onClick={handleResendOtp} disabled={submitting}>Resend Code</button>}
+        <button className="resend-link" onClick={handleResendOtp} disabled={submitting}>{submitting ? 'Sending...' : 'Resend Code'}</button>
       </div>
       <button className="reset-btn" onClick={() => navigate('/recovery')}>Reset your password</button>
     </div></div>
