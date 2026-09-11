@@ -86,10 +86,16 @@ export default function PatientFullRecordModal({
   const [error, setError] = useState('');
   const [record, setRecord] = useState(null);
   const [tab, setTab] = useState('overview');
+  const [interpretations, setInterpretations] = useState({});
+  const [signingResultId, setSigningResultId] = useState('');
+  const [resultReviewError, setResultReviewError] = useState('');
 
   useEffect(() => {
     if (!open) {
       setTab('overview');
+      setInterpretations({});
+      setSigningResultId('');
+      setResultReviewError('');
       return undefined;
     }
     if (!patientId) {
@@ -165,6 +171,39 @@ export default function PatientFullRecordModal({
   ];
 
   const displayName = overview.displayName || patient.displayName || patientLabel || 'Patient';
+  const isDoctor = String(role || '').trim().toLowerCase() === 'doctor';
+
+  const signAndReleaseResult = async (result) => {
+    const resultId = String(result?.id || '').trim();
+    const note = String(interpretations[resultId] || '').trim();
+    if (!resultId || !note) {
+      setResultReviewError('Enter an interpretation before signing and releasing the result.');
+      return;
+    }
+    setSigningResultId(resultId);
+    setResultReviewError('');
+    try {
+      await fetchJson(`/api/lab-results/${encodeURIComponent(resultId)}/interpretation`, {
+        apiBase: API_BASE,
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note, doctorName: currentUser.name || currentUser.fullName || '' })
+      });
+      setRecord((current) => current ? {
+        ...current,
+        results: (current.results || []).map((item) => String(item.id) === resultId
+          ? { ...item, verificationStatus: 'verified', verifiedAt: new Date().toISOString() }
+          : item),
+        orders: (current.orders || []).map((order) => String(order.id) === String(result.orderId || '')
+          ? { ...order, status: 'Completed', completedAt: new Date().toISOString() }
+          : order)
+      } : current);
+    } catch (error) {
+      setResultReviewError(String(error?.message || 'Unable to sign and release this result.'));
+    } finally {
+      setSigningResultId('');
+    }
+  };
 
   const handlePrintRecord = () => {
     if (!record) return;
@@ -716,10 +755,32 @@ export default function PatientFullRecordModal({
                             </div>
                             <div className="list-meta">
                               <span>{result.type || DASH}</span>
+                              <span>{String(result.verificationStatus || 'pending').toLowerCase() === 'verified' ? 'Released' : ['matched', 'flagged'].includes(String(result.verificationStatus || '').toLowerCase()) ? 'Pending Doctor Review' : result.verificationStatus || 'Pending verification'}</span>
                               {result.url ? <MedicalFileLink href={result.url} target="_blank" rel="noreferrer">Open file</MedicalFileLink> : <span>No file</span>}
                             </div>
+                            {isDoctor && ['matched', 'flagged'].includes(String(result.verificationStatus || '').toLowerCase()) ? (
+                              <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+                                <textarea
+                                  value={interpretations[String(result.id)] || ''}
+                                  onChange={(event) => setInterpretations((current) => ({ ...current, [String(result.id)]: event.target.value }))}
+                                  placeholder="Enter official interpretation"
+                                  maxLength={10000}
+                                  rows={3}
+                                  style={{ width: '100%', resize: 'vertical', border: '1px solid #cbd5e1', borderRadius: 10, padding: 10, font: 'inherit' }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => signAndReleaseResult(result)}
+                                  disabled={signingResultId === String(result.id) || !String(interpretations[String(result.id)] || '').trim()}
+                                  style={{ justifySelf: 'start', border: 0, borderRadius: 10, padding: '9px 14px', background: '#f97316', color: '#fff', fontWeight: 800, cursor: 'pointer' }}
+                                >
+                                  {signingResultId === String(result.id) ? 'Signing...' : 'Sign & Release'}
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                         ))}
+                        {resultReviewError ? <div className="patient-record-empty-inline" style={{ color: '#b91c1c' }}>{resultReviewError}</div> : null}
                       </div>
                     )}
                   </section>
