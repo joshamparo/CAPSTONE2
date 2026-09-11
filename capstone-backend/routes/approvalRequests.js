@@ -1911,6 +1911,19 @@ router.patch('/:id', async (req, res) => {
           }
         }).catch(() => {});
       }
+
+      // Onsite diagnostic approvals are paid at the hospital cashier. Keep the
+      // existing Medtech/Radiology/ECG/PT "For Payment" queue while recording
+      // the same state on the originating request; no online checkout is made.
+      await prisma.$executeRaw`
+        UPDATE appointment_approval_requests
+        SET payment_status = CASE
+              WHEN lower(coalesce(payment_status, '')) = 'paid' THEN payment_status
+              ELSE 'for_payment'
+            END,
+            updated_at = now()
+        WHERE id = ${id}
+      `;
     }
 
     res.json(serializeRequestRow(updated));

@@ -10,6 +10,7 @@ const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
 const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 const { resolveDoctorNurseDepartment, resolveNursePatientScope } = require('../utils/nurseScope');
+const { approvalRequestIdFromOrderNotes } = require('../utils/onsiteDiagnosticPayment');
 
 
 const SCHEDULABLE_ROLE_SET = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist']);
@@ -871,7 +872,8 @@ router.patch('/:id', async (req, res) => {
         ordered_by_name AS "orderedByName",
         ordered_by_role AS "orderedByRole",
         assigned_role AS "assignedRole",
-        assigned_to AS "assignedTo"
+        assigned_to AS "assignedTo",
+        notes
       FROM public.clinical_orders
       WHERE id = ${BigInt(orderId)}
       LIMIT 1
@@ -1022,6 +1024,27 @@ router.patch('/:id', async (req, res) => {
       where: { id: BigInt(orderId) },
       data
     });
+
+    if (newStatus === 'Paid') {
+      const approvalRequestId = approvalRequestIdFromOrderNotes(current.notes);
+      if (approvalRequestId) {
+        await prisma.$transaction(async (tx) => {
+          const linked = await tx.$queryRaw`
+            UPDATE appointment_approval_requests
+            SET payment_status = 'paid', paid_at = COALESCE(paid_at, now()), updated_at = now()
+            WHERE id = ${BigInt(approvalRequestId)}
+            RETURNING appointment_id
+          `;
+          const appointmentId = Array.isArray(linked) ? linked[0]?.appointment_id : null;
+          if (appointmentId) {
+            await tx.appointments.update({
+              where: { id: BigInt(String(appointmentId)) },
+              data: { payment_status: 'paid', paid_at: new Date() }
+            });
+          }
+        });
+      }
+    }
 
     const action =
       acknowledged === true ? 'Acknowledge' :
