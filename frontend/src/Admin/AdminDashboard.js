@@ -3336,7 +3336,7 @@ function AdminDashboard() {
       const hired = new Date(hiredStr);
       const today = new Date();
       if (Number.isNaN(hired.getTime()) || hired > today) return false;
-      const dob = new Date(dobStr);
+      const dob = new Date(clean(staffFormData.dateOfBirth));
       let ageAtHire = hired.getFullYear() - dob.getFullYear();
       const hireMonthDiff = hired.getMonth() - dob.getMonth();
       if (hireMonthDiff < 0 || (hireMonthDiff === 0 && hired.getDate() < dob.getDate())) ageAtHire -= 1;
