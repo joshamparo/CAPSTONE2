@@ -21,5 +21,6 @@ test('empty nurse department does not silently become a default scope', () => {
 test('an explicit reception fallback is used only when the stored department is empty', () => {
   assert.equal(resolveNurseDepartmentScope('', 'ER'), 'ER');
   assert.equal(resolveNurseDepartmentScope('Pediatrics', 'ER'), 'PEDIA');
+  assert.equal(resolveNurseDepartmentScope('Nurse', 'Emergency Room'), 'ER');
   assert.equal(resolveNurseDepartmentScope('', ''), '');
 });

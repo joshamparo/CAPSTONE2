@@ -14,6 +14,10 @@ test('stored specialization takes precedence over an old general ER department',
   nurse = { specialization: 'Dental Clinic', department: 'ER', first_name: 'Nurse', last_name: 'Test' };
   assert.deepEqual(await run(), { status: 200, next: true, department: 'DENTAL CLINIC' });
 });
+test('a legacy generic specialization falls back to the valid ER department', async () => {
+  nurse = { specialization: 'Nurse', department: 'Emergency Room', first_name: 'Prince', last_name: 'Fumar' };
+  assert.deepEqual(await run(), { status: 200, next: true, department: 'ER' });
+});
 test('request parameters cannot switch a dental nurse to ER', async () => {
   nurse = { specialization: 'Dental Clinic', department: 'ER' };
   assert.equal((await run({ body: { department: 'ER' } })).status, 403);

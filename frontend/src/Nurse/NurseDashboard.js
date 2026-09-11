@@ -10,7 +10,6 @@ import { API_BASE, checkBackendHealth, fetchJson } from '../utils/api';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
-import SpecialtyCareBoard from './SpecialtyCareBoard';
 
 const RECEPTION_ROUTE_LABELS = {
   ER: 'ER', ONSITE: 'On-site', LAB: 'Laboratory', ECG: 'ECG', IMAGING: 'Imaging',
@@ -511,7 +510,7 @@ function NurseDashboard() {
   }, [nurseWorkspace.type]);
 
   const allowedNurseViews = useMemo(() => {
-    const allowed = new Set(['overview', 'patients', 'profile', 'activity', 'specialty-care']);
+    const allowed = new Set(['overview', 'patients', 'profile', 'activity']);
     if (nurseCapabilities.appointments) allowed.add('appointments');
     if (nurseCapabilities.vitals) allowed.add('vitals');
     if (nurseCapabilities.erIntake) allowed.add('er-intake');
@@ -6231,7 +6230,6 @@ function NurseDashboard() {
             <span>{nurseNavLabels.orders}</span>
           </button> : null}
 
-          <button className={`nurse-nav-item ${view === 'specialty-care' ? 'active' : ''}`} onClick={() => setView('specialty-care')}><ClipboardList size={20} /><span>Specialty Care & Handoffs</span></button>
           {nurseCapabilities.wards ? <div className="sidebar-section-label">INPATIENT CARE</div> : null}
           {nurseCapabilities.wards ? <button className={`nurse-nav-item ${view === 'ward-management' ? 'active' : ''}`} onClick={() => setView('ward-management')}>
             <BedDouble size={20} />
@@ -6577,7 +6575,6 @@ function NurseDashboard() {
                     )}
                 </div>
 	            )}
-            {view === 'specialty-care' && <SpecialtyCareBoard apiBase={API_BASE} getHeaders={getAuthHeaders} patients={patientsList} onViewRecord={(patient) => { setCentralRecordPatientId(String(patient._id)); setCentralRecordPatientLabel(`${patient.firstName || ''} ${patient.lastName || ''}`.trim()); setCentralRecordOpen(true); }} />}
             {view === 'ward-management' && (
                 <div className="ward-management-view">
                     <div className="view-header-stack">

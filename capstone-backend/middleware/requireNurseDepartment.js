@@ -23,7 +23,11 @@ function normalizeNurseDepartment(value) {
 }
 
 function resolveNurseDepartmentScope(assignedDepartment, fallbackDepartment) {
-  return normalizeNurseDepartment(assignedDepartment) || normalizeNurseDepartment(fallbackDepartment);
+  const primary = normalizeNurseDepartment(assignedDepartment);
+  const fallback = normalizeNurseDepartment(fallbackDepartment);
+  if (SUPPORTED_NURSE_DEPARTMENTS.has(primary)) return primary;
+  if (SUPPORTED_NURSE_DEPARTMENTS.has(fallback)) return fallback;
+  return primary || fallback;
 }
 
 async function requireNurseDepartment(req, res, next) {
