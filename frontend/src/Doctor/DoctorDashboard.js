@@ -336,7 +336,7 @@ function DoctorDashboard() {
   }, [doctorSpecialization]);
 
   const allowedDoctorNav = useMemo(() => {
-    const base = ['dashboard', 'approval-inbox', 'patient-records', 'certificates', 'doctor-chat', 'profile'];
+    const base = ['dashboard', 'approval-inbox', 'patient-records', 'certificates', 'doctor-chat'];
     const withLabs = ['labs'];
 
     const spec = doctorSpecKey;
@@ -4581,26 +4581,14 @@ function DoctorDashboard() {
                   {currentUser?.specialization ? currentUser.specialization : 'Specialization not set'}
                   {currentUser?.department ? ` • ${currentUser.department}` : ''}
                 </span>
-                {!currentUser?.specialization ? (
-                  <button
-                    type="button"
-                    className="doc-chip"
-                    onClick={() => setActiveNav('profile')}
-                    style={{ padding: '4px 10px', fontSize: '0.78rem', fontWeight: 900, background: '#fff', border: '1px solid #fecaca', color: '#b91c1c' }}
-                    title="Set your specialization to enable proper department routing."
-                  >
-                    Set now
-                  </button>
-                ) : null}
               </div>
             </div>
           </div>
           <div className="doctor-topbar-right">
             <AccountHeaderActions 
               user={currentUser}
-              showChangePasswordMenu={false}
+              showChangePasswordMenu={true}
               onSignOut={handleLogout} 
-              onMyProfile={() => setActiveNav('profile')}
               onOpenNotification={(n) => {
                 if (n?.type === 'approval' && n?.meta?.requestId) {
                   if (allowedDoctorNav.has('approval-inbox')) {

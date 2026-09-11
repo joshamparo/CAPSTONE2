@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
+const { nonAdminProfileFieldError } = require('../utils/profileUpdateAccess');
 const crypto = require('crypto');
 const multer = require('multer');
 const { createClient } = require('@supabase/supabase-js');
@@ -2491,6 +2492,10 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         const profileRequesterEmail = normalizeEmail(req.headers['x-user-email'] || '');
         if (profileRequesterRole !== 'admin' && (!profileRequesterEmail || profileRequesterEmail !== normalizeEmail(user.email || ''))) {
             return res.status(403).json({ message: 'You can only update your own profile.' });
+        }
+        if (profileRequesterRole !== 'admin') {
+            const restrictedFieldError = nonAdminProfileFieldError(req.body);
+            if (restrictedFieldError) return res.status(403).json({ message: restrictedFieldError });
         }
         if (profileRequesterRole === 'nurse' && originalRole === 'nurse') {
             const assignedDepartment = normalizeNurseDepartment(user.specialization || user.department);

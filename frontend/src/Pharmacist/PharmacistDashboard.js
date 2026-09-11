@@ -2649,7 +2649,7 @@ function PharmacistDashboard() {
               <Search size={18} className="pharm-search-icon" />
               <input value={searchText} onChange={(e) => setSearchText(e.target.value)} placeholder="Search..." />
             </div>
-            <AccountHeaderActions user={currentUser} showChangePasswordMenu={false} onMyProfile={() => setActiveTab('profile')} onSignOut={confirmLogout} onOpenNotification={(n) => {
+            <AccountHeaderActions user={currentUser} onSignOut={confirmLogout} onOpenNotification={(n) => {
               const type = String(n?.type || '').toLowerCase();
               if (type.includes('prescription')) {
                 setActiveTab('requests');

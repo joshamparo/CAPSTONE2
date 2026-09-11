@@ -1643,22 +1643,6 @@ export default function DoctorSecretaryDashboard() {
             </button>
           </nav>
 
-          <div className="sec-sidebar-footer">
-            <button
-              type="button"
-              className="sec-sidebar-help"
-              onClick={() => setActiveTab('profile')}
-              title="Help & Support"
-            >
-              <div className="sec-sidebar-help-icon">
-                <HelpCircle size={16} />
-              </div>
-              <div className="sec-sidebar-help-body">
-                <div className="sec-sidebar-help-title">Need Help?</div>
-                <div className="sec-sidebar-help-sub">Contact IT or visit profile docs</div>
-              </div>
-            </button>
-          </div>
         </div>
       </aside>
 
@@ -1684,7 +1668,7 @@ export default function DoctorSecretaryDashboard() {
                       : 'Approvals'}
             </div>
           </div>
-          <AccountHeaderActions user={user} roleLabel="Doctor Secretary" showChangePasswordMenu={false} onSignOut={() => setShowLogoutConfirm(true)} onMyProfile={() => setActiveTab('profile')} onOpenNotification={(n) => {
+          <AccountHeaderActions user={user} roleLabel="Doctor Secretary" onSignOut={() => setShowLogoutConfirm(true)} onOpenNotification={(n) => {
             if (n?.type === 'approval_request' || n?.meta?.requestId || String(n?.type || '').toLowerCase().includes('approval')) {
               setActiveTab('approvals');
             } else if (n?.type === 'onsite_booking' || String(n?.type || '').toLowerCase().includes('onsite') || String(n?.type || '').toLowerCase().includes('inbox')) {

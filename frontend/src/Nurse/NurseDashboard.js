@@ -6419,8 +6419,7 @@ function NurseDashboard() {
                   showDepartment={true}
                   departmentValue={activeDept}
                   departmentOptions={[{ value: activeDept, label: activeDept }]}
-                  onMyProfile={() => setView('profile')}
-                  showChangePasswordMenu={false}
+                  showChangePasswordMenu={true}
                   onSignOut={() => setShowLogoutConfirm(true)}
                   onOpenNotification={(notification) => {
                     const type = String(notification?.type || '').toLowerCase();

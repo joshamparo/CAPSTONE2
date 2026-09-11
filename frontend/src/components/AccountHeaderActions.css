@@ -72,6 +72,7 @@ html[data-theme='dark'] .aha-toggle-thumb{background:#fff;}
 .aha-user-avatar img{width:100%; height:100%; object-fit:cover; display:block;}
 .aha-user-name{font-weight:900; color:#0f172a; font-size:1.12rem; line-height:1.1;}
 .aha-user-role{color:#64748b; font-weight:700; font-size:0.96rem; margin-top:2px;}
+.aha-user-email{max-width:220px; margin-top:3px; overflow:hidden; color:#94a3b8; font-size:.76rem; text-overflow:ellipsis; white-space:nowrap;}
 .aha-profile-body{padding:14px 12px; display:flex; flex-direction:column; gap:6px;}
 .aha-menu-item{width:100%; display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; border:0; background:transparent; cursor:pointer; font-weight:800; color:#0f172a; text-align:left;}
 .aha-menu-item:hover{background:#f8fafc;}
@@ -146,6 +147,7 @@ html[data-theme='dark'] .aha-profile-menu{background:var(--app-card); border-col
 html[data-theme='dark'] .aha-profile-head{border-bottom-color:var(--app-border); background:linear-gradient(180deg, rgba(148,163,184,.06) 0%, rgba(148,163,184,.10) 100%);}
 html[data-theme='dark'] .aha-user-name{color:var(--app-text);}
 html[data-theme='dark'] .aha-user-role{color:var(--app-muted);}
+html[data-theme='dark'] .aha-user-email{color:var(--app-muted);}
 html[data-theme='dark'] .aha-menu-item{color:var(--app-text);}
 html[data-theme='dark'] .aha-menu-item:hover{background:var(--app-hover);}
 html[data-theme='dark'] .aha-menu-item.danger{color:#fca5a5; background:rgba(239,68,68,.08); border-color:rgba(239,68,68,.25);}

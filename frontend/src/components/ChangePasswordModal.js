@@ -40,6 +40,8 @@ export default function ChangePasswordModal({ open, user, onClose }) {
     const v = String(newPassword || '');
     return {
       length: v.length >= 11,
+      hasUpper: /[A-Z]/.test(v),
+      hasLower: /[a-z]/.test(v),
       hasNumber: /\d/.test(v),
       hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(v),
       matches: !!v && String(confirmPassword || '') === v
@@ -51,6 +53,8 @@ export default function ChangePasswordModal({ open, user, onClose }) {
     String(newPassword || '').trim() &&
     String(confirmPassword || '').trim() &&
     criteria.length &&
+    criteria.hasUpper &&
+    criteria.hasLower &&
     criteria.hasNumber &&
     criteria.hasSpecial &&
     criteria.matches;
@@ -132,6 +136,8 @@ export default function ChangePasswordModal({ open, user, onClose }) {
 
           <div className="cpm-criteria">
             <div className={`cpm-crit ${criteria.length ? 'ok' : ''}`}>Minimum 11 characters</div>
+            <div className={`cpm-crit ${criteria.hasUpper ? 'ok' : ''}`}>Contains an uppercase letter</div>
+            <div className={`cpm-crit ${criteria.hasLower ? 'ok' : ''}`}>Contains a lowercase letter</div>
             <div className={`cpm-crit ${criteria.hasNumber ? 'ok' : ''}`}>Contains a number</div>
             <div className={`cpm-crit ${criteria.hasSpecial ? 'ok' : ''}`}>Contains a special character</div>
             <div className={`cpm-crit ${criteria.matches ? 'ok' : ''}`}>Passwords match</div>
@@ -152,4 +158,3 @@ export default function ChangePasswordModal({ open, user, onClose }) {
     </div>
   );
 }
-

@@ -1743,7 +1743,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 <RefreshCw size={16} />
                 Refresh
               </button>
-              <AccountHeaderActions user={user} roleLabel={roleLabel} showChangePasswordMenu={false} onSignOut={() => setShowLogoutConfirm(true)} onMyProfile={() => setView('profile')} />
+              <AccountHeaderActions user={user} roleLabel={roleLabel} onSignOut={() => setShowLogoutConfirm(true)} />
             </div>
           </div>
 

@@ -795,8 +795,9 @@ export default function AccountHeaderActions({
 
         {(showNotificationsButton || canShowSystemSettings) ? <div className="aha-sep"></div> : null}
 
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           className="aha-profile-wrapper"
           onClick={(e) => {
             e.stopPropagation();
@@ -804,7 +805,16 @@ export default function AccountHeaderActions({
             setShowNotifications(false);
             setShowSettings(false);
           }}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            e.stopPropagation();
+            setShowProfileMenu((v) => !v);
+            setShowNotifications(false);
+            setShowSettings(false);
+          }}
           aria-label="Profile menu"
+          aria-expanded={showProfileMenu}
         >
           <div className="aha-profile-info">
             <span className="aha-profile-name">{name}</span>
@@ -833,6 +843,7 @@ export default function AccountHeaderActions({
                   <div>
                     <div className="aha-user-name">{name}</div>
                     <div className="aha-user-role">{role}</div>
+                    {userEmail ? <div className="aha-user-email">{userEmail}</div> : null}
                   </div>
                 </div>
               </div>
@@ -860,24 +871,14 @@ export default function AccountHeaderActions({
                   </div>
                 ) : null}
 
-                <button
-                  type="button"
-                  className="aha-menu-item"
-                  onClick={() => {
-                    setShowProfileMenu(false);
-                    if (onMyProfile) {
-                      onMyProfile();
-                      return;
-                    }
-                    if (canChangePassword && showChangePasswordMenu) setShowPasswordModal(true);
-                  }}
-                  disabled={!onMyProfile && !(canChangePassword && showChangePasswordMenu)}
-                >
-                  <User size={18} />
-                  <span className="aha-menu-label">My Profile</span>
-                </button>
+                {onMyProfile ? (
+                  <button type="button" className="aha-menu-item" onClick={() => { setShowProfileMenu(false); onMyProfile(); }}>
+                    <User size={18} />
+                    <span className="aha-menu-label">My Profile</span>
+                  </button>
+                ) : null}
 
-                {onMyProfile && canChangePassword && showChangePasswordMenu ? (
+                {canChangePassword && showChangePasswordMenu ? (
                   <button
                     type="button"
                     className="aha-menu-item"
@@ -905,7 +906,7 @@ export default function AccountHeaderActions({
               </div>
             </div>
           ) : null}
-        </button>
+        </div>
       </div>
 
       <SignOutConfirmModal
