@@ -33,10 +33,15 @@ test('private local files are read with content validation and a size bound', as
     await fs.rm(directory, { recursive: true });
   }
 });
-const storage = { storage: { from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: env.SUPABASE_URL + '/storage/v1/object/sign/private-lab-results/lab-results/p/file.pdf?token=short' } }) }) } };
+let signedUrlArguments;
+const storage = { storage: { from: () => ({ createSignedUrl: async (...args) => {
+  signedUrlArguments = args;
+  return { data: { signedUrl: env.SUPABASE_URL + '/storage/v1/object/sign/private-lab-results/lab-results/p/file.pdf?token=short' } };
+} }) } };
 test('patient clients receive a short-lived private storage URL they can open', async () => {
   const url = await createMedicalFileUrl('lab-storage:lab-results/p/file.pdf', storage, 300, { env });
   assert.equal(url, env.SUPABASE_URL + '/storage/v1/object/sign/private-lab-results/lab-results/p/file.pdf?token=short');
+  assert.deepEqual(signedUrlArguments, ['lab-results/p/file.pdf', 300, { download: 'file.pdf' }]);
 });
 test('storage downloads prohibit redirects and retain timeouts through body consumption', async () => {
   const file = await readMedicalFile('lab-storage:lab-results/p/file.pdf', storage, { env, fetch: async (_url, options) => {

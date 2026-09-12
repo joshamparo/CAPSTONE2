@@ -115,7 +115,8 @@ async function createMedicalFileUrl(reference, sb, expiresIn = 300, options = {}
   const location = parseReference(reference, options.env || process.env);
   if (location.kind !== 'storage' || !sb) return null;
   const ttl = Math.max(60, Math.min(900, Number(expiresIn) || 300));
-  const signed = await sb.storage.from(location.bucket).createSignedUrl(location.key, ttl);
+  const downloadName = path.basename(location.key).replace(/[^a-zA-Z0-9._-]/g, '_') || 'medical-result.pdf';
+  const signed = await sb.storage.from(location.bucket).createSignedUrl(location.key, ttl, { download: downloadName });
   if (signed.error || !signed.data?.signedUrl) throw new Error('Medical file unavailable.');
   const target = new URL(signed.data.signedUrl);
   const configured = new URL((options.env || process.env).SUPABASE_URL);
