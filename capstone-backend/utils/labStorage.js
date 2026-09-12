@@ -111,6 +111,18 @@ async function readMedicalFile(reference, sb, options = {}) {
   return { buffer, mimeType: contentType(buffer), filename: path.basename(location.key), location };
 }
 
+async function createMedicalFileUrl(reference, sb, expiresIn = 300, options = {}) {
+  const location = parseReference(reference, options.env || process.env);
+  if (location.kind !== 'storage' || !sb) return null;
+  const ttl = Math.max(60, Math.min(900, Number(expiresIn) || 300));
+  const signed = await sb.storage.from(location.bucket).createSignedUrl(location.key, ttl);
+  if (signed.error || !signed.data?.signedUrl) throw new Error('Medical file unavailable.');
+  const target = new URL(signed.data.signedUrl);
+  const configured = new URL((options.env || process.env).SUPABASE_URL);
+  if (target.origin !== configured.origin) throw new Error('Invalid storage destination.');
+  return target.href;
+}
+
 async function writeMedicalFile(sb, patientId, originalName, buffer) {
   if (buffer.length > MAX_BYTES) throw new Error('Medical file exceeds the size limit.');
   const mimeType = contentType(buffer);
@@ -129,4 +141,4 @@ async function writeMedicalFile(sb, patientId, originalName, buffer) {
   return { url: `lab-local:${filename}`, filename };
 }
 
-module.exports = { MAX_BYTES, PRIVATE_BUCKET, parseReference, contentType, ensurePrivateBucket, readMedicalFile, writeMedicalFile };
+module.exports = { MAX_BYTES, PRIVATE_BUCKET, parseReference, contentType, ensurePrivateBucket, readMedicalFile, createMedicalFileUrl, writeMedicalFile };

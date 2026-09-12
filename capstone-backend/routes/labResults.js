@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const requireRole = require('../middleware/requireRole');
 const { resolveOwnedPatient } = require('../utils/patientOwnership');
-const { parseReference, readMedicalFile, writeMedicalFile } = require('../utils/labStorage');
+const { parseReference, readMedicalFile, createMedicalFileUrl, writeMedicalFile } = require('../utils/labStorage');
 const { verificationPrompt, parseOutput, completenessFlags, buildPdfPayload } = require('../utils/labAiVerification');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 const { resolveNursePatientScope } = require('../utils/nurseScope');
@@ -872,15 +872,17 @@ router.get('/mine', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogr
         `
       );
 
-      const serialized = (Array.isArray(rows) ? rows : []).map((r) => {
+      const serialized = await Promise.all((Array.isArray(rows) ? rows : []).map(async (r) => {
         const raw = serialize(r);
+        const patientFileUrl = await createMedicalFileUrl(raw.url, getSupabaseAdmin()).catch(() => null);
         return {
           ...raw,
+          url: patientFileUrl,
           id: String(raw.id),
           patientId: raw.patient_id,
           orderId: raw.order_id ? String(raw.order_id) : null,
-          fileUrl: raw.url ?? null,
-          pdfUrl: raw.url ?? null,
+          fileUrl: patientFileUrl,
+          pdfUrl: patientFileUrl,
           resultDate: raw.result_date ?? null,
           uploadedBy: raw.uploaded_by ?? null,
           createdAt: raw.created_at ?? null,
@@ -890,7 +892,7 @@ router.get('/mine', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogr
           extractedFields: raw.extracted_fields ?? null,
           verifiedAt: raw.verified_at ?? null
         };
-      });
+      }));
 
       return res.json(serialized);
     }
@@ -1130,13 +1132,15 @@ router.get('/:id', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogra
       const row = Array.isArray(rows) && rows.length ? rows[0] : null;
       if (!row) return res.status(404).json({ message: 'Lab result not found' });
       const raw = serialize(row);
+      const patientFileUrl = await createMedicalFileUrl(raw.url, getSupabaseAdmin()).catch(() => null);
       return res.json({
         ...raw,
+        url: patientFileUrl,
         id: String(raw.id),
         patientId: raw.patient_id,
         orderId: raw.order_id ? String(raw.order_id) : null,
-        fileUrl: raw.url ?? null,
-        pdfUrl: raw.url ?? null,
+        fileUrl: patientFileUrl,
+        pdfUrl: patientFileUrl,
         resultDate: raw.result_date ?? null,
         uploadedBy: raw.uploaded_by ?? null,
         createdAt: raw.created_at ?? null,

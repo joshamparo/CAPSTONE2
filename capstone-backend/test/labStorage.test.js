@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
-const { parseReference, readMedicalFile, writeMedicalFile, MAX_BYTES, ensurePrivateBucket, PRIVATE_BUCKET } = require('../utils/labStorage');
+const { parseReference, readMedicalFile, createMedicalFileUrl, writeMedicalFile, MAX_BYTES, ensurePrivateBucket, PRIVATE_BUCKET } = require('../utils/labStorage');
 const env = { SUPABASE_URL: 'https://project.supabase.co' };
 const pdf = Buffer.from('%PDF-1.4\nmedical fixture');
 test('legacy medical URLs resolve to storage without fetching their supplied host', () => {
@@ -34,6 +34,10 @@ test('private local files are read with content validation and a size bound', as
   }
 });
 const storage = { storage: { from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: env.SUPABASE_URL + '/storage/v1/object/sign/private-lab-results/lab-results/p/file.pdf?token=short' } }) }) } };
+test('patient clients receive a short-lived private storage URL they can open', async () => {
+  const url = await createMedicalFileUrl('lab-storage:lab-results/p/file.pdf', storage, 300, { env });
+  assert.equal(url, env.SUPABASE_URL + '/storage/v1/object/sign/private-lab-results/lab-results/p/file.pdf?token=short');
+});
 test('storage downloads prohibit redirects and retain timeouts through body consumption', async () => {
   const file = await readMedicalFile('lab-storage:lab-results/p/file.pdf', storage, { env, fetch: async (_url, options) => {
     assert.equal(options.redirect, 'error');
