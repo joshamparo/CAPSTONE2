@@ -54,6 +54,13 @@ test('a signed app account resolves the patient UUID used by its appointments', 
   const appointment = { patient_id: other, email: appAuth.email };
   assert.equal((await resolveOwnedPatient(database([patient], [], [appointment]), appAuth, appAuth.id)).id, other);
 });
+test('the production SQL appointment bridge accepts the patientId alias', async () => {
+  const appAuth = { role: 'patient', id: '164', email: 'josh@example.com' };
+  const patient = { id: other, email: null, first_name: 'Josh', last_name: 'Amparo' };
+  const db = database([patient]);
+  db.$queryRawUnsafe = async (_query, email) => email === appAuth.email ? [{ patientId: other }] : [];
+  assert.equal((await resolveOwnedPatient(db, appAuth, appAuth.id)).id, other);
+});
 test('ambiguous legacy profiles are never selected arbitrarily', async () => {
   const legacyAuth = { role: 'patient', id: '164', email: 'josh@example.com' };
   const birthday = new Date('2005-05-24T00:00:00.000Z');

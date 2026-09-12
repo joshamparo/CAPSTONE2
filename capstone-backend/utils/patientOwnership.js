@@ -12,17 +12,32 @@ function denied(statusCode, message) {
 }
 
 async function resolveAppointmentLinkedPatient(prisma, auth) {
-  if (!prisma?.appointments?.findMany || !email(auth?.email)) return null;
-  const links = await prisma.appointments.findMany({
-    where: {
-      email: { equals: email(auth.email), mode: 'insensitive' },
-      patient_id: { not: null }
-    },
-    select: { patient_id: true },
-    distinct: ['patient_id'],
-    take: 2
-  });
-  const patientIds = Array.from(new Set((links || []).map((row) => String(row.patient_id || '').trim()).filter(Boolean)));
+  const authEmail = email(auth?.email);
+  if (!authEmail) return null;
+  let links = [];
+  if (prisma?.$queryRawUnsafe) {
+    links = await prisma.$queryRawUnsafe(
+      `SELECT DISTINCT patient_id::text AS "patientId"
+       FROM public.appointments
+       WHERE lower(email) = lower($1)
+         AND patient_id IS NOT NULL
+       LIMIT 2`,
+      authEmail
+    );
+  } else if (prisma?.appointments?.findMany) {
+    links = await prisma.appointments.findMany({
+      where: {
+        email: { equals: authEmail, mode: 'insensitive' },
+        patient_id: { not: null }
+      },
+      select: { patient_id: true },
+      distinct: ['patient_id'],
+      take: 2
+    });
+  } else {
+    return null;
+  }
+  const patientIds = Array.from(new Set((links || []).map((row) => String(row.patientId || row.patient_id || '').trim()).filter(Boolean)));
   if (patientIds.length > 1) throw denied(409, 'Multiple patient records are linked to this account. Please contact the clinic.');
   if (patientIds.length !== 1) return null;
   return prisma.patients.findFirst({
