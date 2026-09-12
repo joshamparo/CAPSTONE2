@@ -846,7 +846,7 @@ router.get('/mine', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogr
         Prisma.sql`r.patient_id = ${String(patient.id)}::uuid`,
         Prisma.sql`lower(coalesce(r.verification_status, 'pending')) = 'verified'`
       ];
-      const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, Prisma.sql` AND `)}`;
+      const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
 
       const rows = await prisma.$queryRaw(
         Prisma.sql`
@@ -917,7 +917,7 @@ router.get('/mine', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiogr
     if (statusFilter) {
       conditions.push(Prisma.sql`lower(coalesce(r.verification_status, 'pending')) = ${statusFilter}`);
     }
-    const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, Prisma.sql` AND `)}`;
+    const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
 
     const rows = await prisma.$queryRaw(
       Prisma.sql`
@@ -982,7 +982,7 @@ router.get('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographe
     if (!isStaffRole(requesterRole)) {
       conditions.push(Prisma.sql`verification_status = 'verified'`);
     }
-    const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, Prisma.sql` AND `)}`;
+    const whereClause = Prisma.sql`WHERE ${Prisma.join(conditions, ' AND ')}`;
 
     const results = await prisma.$queryRaw(
       Prisma.sql`
