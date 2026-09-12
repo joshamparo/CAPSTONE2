@@ -1244,25 +1244,27 @@ router.put('/:id/interpretation', requireRole(['doctor']), async (req, res) => {
     const releaseError = validateDoctorRelease(note, currentStatus);
     if (releaseError) return res.status(note ? 409 : 400).json({ message: releaseError });
 
-    const rows = await prisma.$transaction(async (tx) => {
-      const saved = await tx.$queryRaw`
+    const operations = [
+      prisma.$queryRaw`
         INSERT INTO lab_result_interpretations (lab_result_id, doctor_email, doctor_name, note, created_at, updated_at)
         VALUES (${id}, ${email}, ${doctorName}, ${note}, now(), now())
         ON CONFLICT (lab_result_id, doctor_email)
         DO UPDATE SET note = EXCLUDED.note, doctor_name = EXCLUDED.doctor_name, updated_at = now()
         RETURNING note, doctor_name, updated_at
-      `;
-      await tx.$executeRaw`
+      `,
+      prisma.$executeRaw`
         UPDATE lab_results
         SET verification_status = 'verified', verified_at = now(), verification_error = NULL
         WHERE id = ${id}
-      `;
-      if (exists[0].order_id) {
-        await tx.clinical_orders.updateMany({
+      `
+    ];
+    if (exists[0].order_id) {
+      operations.push(
+        prisma.clinical_orders.updateMany({
           where: { id: exists[0].order_id },
           data: { status: 'Completed', updated_at: new Date() }
-        });
-        await tx.clinical_order_events.create({
+        }),
+        prisma.clinical_order_events.create({
           data: {
             order_id: exists[0].order_id,
             actor_name: doctorName || email,
@@ -1270,9 +1272,11 @@ router.put('/:id/interpretation', requireRole(['doctor']), async (req, res) => {
             action: 'Result signed and released',
             note: 'Doctor interpretation completed; result released.'
           }
-        });
-      }
-      await tx.activity_logs.create({
+        })
+      );
+    }
+    operations.push(
+      prisma.activity_logs.create({
         data: {
           actor_name: doctorName || email,
           role: 'doctor',
@@ -1280,9 +1284,9 @@ router.put('/:id/interpretation', requireRole(['doctor']), async (req, res) => {
           target: `LabResult:${id.toString()}`,
           details: 'Doctor interpretation completed.'
         }
-      });
-      return saved;
-    });
+      })
+    );
+    const [rows] = await prisma.$transaction(operations);
     const row = Array.isArray(rows) ? rows[0] : rows;
     res.json({ note: row?.note || '', doctorName: row?.doctor_name || null, updatedAt: row?.updated_at || null, verificationStatus: 'verified', released: true });
   } catch (err) {
