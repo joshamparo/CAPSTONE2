@@ -11,15 +11,88 @@ function denied(statusCode, message) {
   return Object.assign(new Error(message), { statusCode });
 }
 
+async function resolveAppointmentLinkedPatient(prisma, auth) {
+  if (!prisma?.appointments?.findMany || !email(auth?.email)) return null;
+  const links = await prisma.appointments.findMany({
+    where: {
+      email: { equals: email(auth.email), mode: 'insensitive' },
+      patient_id: { not: null }
+    },
+    select: { patient_id: true },
+    distinct: ['patient_id'],
+    take: 2
+  });
+  const patientIds = Array.from(new Set((links || []).map((row) => String(row.patient_id || '').trim()).filter(Boolean)));
+  if (patientIds.length > 1) throw denied(409, 'Multiple patient records are linked to this account. Please contact the clinic.');
+  if (patientIds.length !== 1) return null;
+  return prisma.patients.findFirst({
+    where: { id: patientIds[0] },
+    select: { id: true, email: true, first_name: true, last_name: true }
+  });
+}
+
+async function resolvePatientAccountProfile(prisma, auth) {
+  if (!prisma?.accounts?.findFirst) return null;
+  const authId = String(auth?.id || '').trim();
+  const authEmail = email(auth?.email);
+  const identity = [];
+  if (/^\d+$/.test(authId)) identity.push({ id: BigInt(authId) });
+  if (authEmail) identity.push({ email: { equals: authEmail, mode: 'insensitive' } });
+  if (!identity.length) return null;
+
+  const account = await prisma.accounts.findFirst({
+    where: { OR: identity },
+    select: { name: true, email: true, birthday: true, roles: true }
+  });
+  if (!account || String(account.roles || '').trim().toLowerCase() !== 'patient') return null;
+
+  const accountEmail = email(account.email);
+  if (accountEmail) {
+    const emailMatches = await prisma.patients.findMany({
+      where: { email: { equals: accountEmail, mode: 'insensitive' } },
+      select: { id: true, email: true, first_name: true, last_name: true },
+      take: 2
+    });
+    if (emailMatches.length > 1) throw denied(409, 'Multiple patient records are linked to this account. Please contact the clinic.');
+    if (emailMatches.length === 1) return emailMatches[0];
+  }
+
+  const nameParts = String(account.name || '').trim().split(/\s+/).filter(Boolean);
+  if (nameParts.length < 2 || !account.birthday) return null;
+  const firstName = nameParts[0];
+  const lastName = nameParts[nameParts.length - 1];
+  const profileMatches = await prisma.patients.findMany({
+    where: {
+      first_name: { equals: firstName, mode: 'insensitive' },
+      last_name: { equals: lastName, mode: 'insensitive' },
+      date_of_birth: account.birthday
+    },
+    select: { id: true, email: true, first_name: true, last_name: true },
+    take: 2
+  });
+  if (profileMatches.length > 1) throw denied(409, 'Multiple patient records match this account. Please contact the clinic.');
+  return profileMatches[0] || null;
+}
+
 // Reads never create patients, attach emails, or trust a client-supplied identity.
 async function resolveOwnedPatient(prisma, auth, requestedId) {
   if (auth?.role !== 'patient') throw denied(401, 'Patient authentication required.');
   const select = { id: true, email: true, first_name: true, last_name: true };
   if (requestedId) {
-    if (!UUID.test(String(requestedId))) throw denied(400, 'Invalid patient ID.');
-    const patient = await prisma.patients.findFirst({ where: { id: String(requestedId) }, select });
-    if (!ownsPatient(auth, patient)) throw denied(403, 'This patient record is not linked to your account. Please contact the clinic.');
-    return patient;
+    const requested = String(requestedId).trim();
+    if (UUID.test(requested)) {
+      const patient = await prisma.patients.findFirst({ where: { id: requested }, select });
+      if (ownsPatient(auth, patient)) return patient;
+      const linked = await resolveAppointmentLinkedPatient(prisma, auth)
+        || await resolvePatientAccountProfile(prisma, auth);
+      if (linked && String(linked.id) === requested) return linked;
+      throw denied(403, 'This patient record is not linked to your account. Please contact the clinic.');
+    }
+    if (requested !== String(auth?.id || '').trim()) throw denied(400, 'Invalid patient ID.');
+    const linked = await resolveAppointmentLinkedPatient(prisma, auth)
+      || await resolvePatientAccountProfile(prisma, auth);
+    if (linked) return linked;
+    throw denied(404, 'No patient record is linked to your account. Please contact the clinic.');
   }
   if (UUID.test(String(auth.id || ''))) {
     const patient = await prisma.patients.findFirst({ where: { id: String(auth.id) }, select });
@@ -30,8 +103,11 @@ async function resolveOwnedPatient(prisma, auth, requestedId) {
     where: { email: { equals: email(auth.email), mode: 'insensitive' } }, select, take: 2
   });
   if (matches.length > 1) throw denied(409, 'Multiple patient records are linked to this email. Please contact the clinic.');
-  if (!matches.length) throw denied(404, 'No patient record is linked to your account. Please contact the clinic.');
-  return matches[0];
+  if (matches.length === 1) return matches[0];
+  const linked = await resolveAppointmentLinkedPatient(prisma, auth)
+    || await resolvePatientAccountProfile(prisma, auth);
+  if (linked) return linked;
+  throw denied(404, 'No patient record is linked to your account. Please contact the clinic.');
 }
 
 module.exports = { ownsPatient, resolveOwnedPatient };
