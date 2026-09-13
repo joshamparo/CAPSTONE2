@@ -53,7 +53,7 @@ test('the signed owner can preview and download a released PDF with no-store hea
 });
 test('the mobile signed link opens a released PDF without app authorization headers', async () => {
   const token = createLabFileAccessToken({ resultId: '1', patientId });
-  const response = await fetch(base + '/file/mobile?id=1&token=' + encodeURIComponent(token));
+  const response = await fetch(base + '/file/mobile/' + encodeURIComponent(token) + '/1.pdf');
   assert.equal(response.status, 200);
   assert.match(response.headers.get('content-type'), /application\/pdf/);
   assert.match(response.headers.get('content-disposition'), /^inline;/);

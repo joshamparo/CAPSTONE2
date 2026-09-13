@@ -5,14 +5,13 @@ const { verifyLabFileAccessToken } = require('../utils/labFileAccessToken');
 
 module.exports = function createLabFileRouter({ prisma, requireRole, authorizeNurseDepartment, enforceNursePatientAccess, enforceClinicalOrderAccess, enforceDoctorPatientAccess, getStorage, readFile = readMedicalFile }) {
   const router = express.Router();
-  router.get('/mobile', async (req, res) => {
+  async function serveMobileFile(req, res, id, token) {
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     try {
-      const id = String(req.query.id || '').trim();
       if (!/^\d+$/.test(id)) return res.status(400).json({ message: 'Invalid lab result.' });
-      const access = verifyLabFileAccessToken(req.query.token, { resultId: id });
+      const access = verifyLabFileAccessToken(token, { resultId: id });
       if (!access) return res.status(401).json({ message: 'This medical file link is invalid or has expired.' });
       const rows = await prisma.$queryRaw`SELECT patient_id, url, verification_status FROM public.lab_results WHERE id = ${BigInt(id)} LIMIT 1`;
       const row = rows[0];
@@ -25,6 +24,13 @@ module.exports = function createLabFileRouter({ prisma, requireRole, authorizeNu
     } catch (_) {
       return res.status(503).json({ message: 'Unable to load the medical file. Please contact the clinic if this continues.' });
     }
+  }
+  router.get('/mobile/:token/:filename', async (req, res) => {
+    const match = String(req.params.filename || '').match(/^(\d+)\.pdf$/i);
+    return serveMobileFile(req, res, match?.[1] || '', req.params.token);
+  });
+  router.get('/mobile', async (req, res) => {
+    return serveMobileFile(req, res, String(req.query.id || '').trim(), req.query.token);
   });
   router.get('/', requireRole(['patient', 'admin', 'doctor', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist']), authorizeNurseDepartment, async (req, res) => {
     res.setHeader('Cache-Control', 'private, no-store');

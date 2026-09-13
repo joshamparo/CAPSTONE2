@@ -41,9 +41,8 @@ function verifyLabFileAccessToken(token, { resultId, now = Date.now(), env = pro
 
 function createPatientLabFileUrl({ resultId, patientId, origin, now, ttlSeconds, env = process.env }) {
   const configuredOrigin = String(origin || env.PUBLIC_API_ORIGIN || 'https://api.pascualinga.com').trim().replace(/\/+$/, '');
-  const target = new URL('/api/lab-results/file/mobile', configuredOrigin);
-  target.searchParams.set('id', String(resultId));
-  target.searchParams.set('token', createLabFileAccessToken({ resultId, patientId, now, ttlSeconds, env }));
+  const token = createLabFileAccessToken({ resultId, patientId, now, ttlSeconds, env });
+  const target = new URL(`/api/lab-results/file/mobile/${encodeURIComponent(token)}/${encodeURIComponent(String(resultId))}.pdf`, configuredOrigin);
   return target.href;
 }
 
