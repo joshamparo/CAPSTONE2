@@ -6,6 +6,7 @@ process.env.SESSION_SECRET = 'lab-file-test-secret';
 const { createSessionToken } = require('../utils/sessionToken');
 const requireRole = require('../middleware/requireRole');
 const createRouter = require('../routes/labFiles');
+const { createLabFileAccessToken } = require('../utils/labFileAccessToken');
 const publicUploads = require('../middleware/publicUploads');
 requireRole.setSessionAccountVerifier(async () => true);
 const patientId = '11111111-1111-4111-8111-111111111111';
@@ -49,6 +50,20 @@ test('the signed owner can preview and download a released PDF with no-store hea
   assert.match(response.headers.get('content-disposition'), /fixture.pdf/);
   assert.match(response.headers.get('cache-control'), /no-store/);
   assert.match(await response.text(), /%PDF/);
+});
+test('the mobile signed link opens a released PDF without app authorization headers', async () => {
+  const token = createLabFileAccessToken({ resultId: '1', patientId });
+  const response = await fetch(base + '/file/mobile?id=1&token=' + encodeURIComponent(token));
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /application\/pdf/);
+  assert.match(response.headers.get('content-disposition'), /^inline;/);
+});
+test('mobile links reject tampering and unreleased results', async () => {
+  const token = createLabFileAccessToken({ resultId: '1', patientId });
+  assert.equal((await fetch(base + '/file/mobile?id=2&token=' + encodeURIComponent(token))).status, 401);
+  status = 'pending';
+  try { assert.equal((await fetch(base + '/file/mobile?id=1&token=' + encodeURIComponent(token))).status, 403); }
+  finally { status = 'verified'; }
 });
 test('unreleased files stay unavailable to patients', async () => {
   status = 'pending';

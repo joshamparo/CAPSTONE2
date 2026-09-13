@@ -1,9 +1,31 @@
 const express = require('express');
 const { resolveOwnedPatient } = require('../utils/patientOwnership');
 const { readMedicalFile } = require('../utils/labStorage');
+const { verifyLabFileAccessToken } = require('../utils/labFileAccessToken');
 
 module.exports = function createLabFileRouter({ prisma, requireRole, authorizeNurseDepartment, enforceNursePatientAccess, enforceClinicalOrderAccess, enforceDoctorPatientAccess, getStorage, readFile = readMedicalFile }) {
   const router = express.Router();
+  router.get('/mobile', async (req, res) => {
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    try {
+      const id = String(req.query.id || '').trim();
+      if (!/^\d+$/.test(id)) return res.status(400).json({ message: 'Invalid lab result.' });
+      const access = verifyLabFileAccessToken(req.query.token, { resultId: id });
+      if (!access) return res.status(401).json({ message: 'This medical file link is invalid or has expired.' });
+      const rows = await prisma.$queryRaw`SELECT patient_id, url, verification_status FROM public.lab_results WHERE id = ${BigInt(id)} LIMIT 1`;
+      const row = rows[0];
+      if (!row || String(row.patient_id) !== String(access.pid)) return res.status(404).json({ message: 'Lab result not found.' });
+      if (String(row.verification_status || '').toLowerCase() !== 'verified') return res.status(403).json({ message: 'This result has not been released by the clinic.' });
+      const file = await readFile(row.url, getStorage());
+      res.setHeader('Content-Type', file.mimeType);
+      res.setHeader('Content-Disposition', `inline; filename="${file.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}"`);
+      return res.send(file.buffer);
+    } catch (_) {
+      return res.status(503).json({ message: 'Unable to load the medical file. Please contact the clinic if this continues.' });
+    }
+  });
   router.get('/', requireRole(['patient', 'admin', 'doctor', 'nurse', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist']), authorizeNurseDepartment, async (req, res) => {
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
