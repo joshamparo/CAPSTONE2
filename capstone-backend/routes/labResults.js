@@ -1003,22 +1003,30 @@ router.get('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiographe
       `
     );
 
-    const serialized = (Array.isArray(results) ? results : []).map((r) => {
+    const serialized = await Promise.all((Array.isArray(results) ? results : []).map(async (r) => {
       const raw = serialize(r);
+      const patientFileUrl = requesterRole === 'patient'
+        ? createPatientLabFileUrl({ resultId: raw.id, patientId: raw.patient_id })
+        : raw.url ?? null;
       return {
         ...raw,
+        url: patientFileUrl,
         id: String(raw.id),
         patientId: raw.patient_id,
         orderId: raw.order_id ? String(raw.order_id) : null,
-        fileUrl: raw.url ?? null,
-        pdfUrl: raw.url ?? null,
+        fileUrl: patientFileUrl,
+        pdfUrl: patientFileUrl,
+        file_url: patientFileUrl,
+        pdf_url: patientFileUrl,
+        downloadUrl: patientFileUrl,
+        download_url: patientFileUrl,
         verificationStatus: raw.verification_status || 'pending',
         verificationScore: raw.verification_score ?? null,
         verificationFlags: raw.verification_flags ?? null,
         extractedFields: raw.extracted_fields ?? null,
         verifiedAt: raw.verified_at ?? null
       };
-    });
+    }));
 
     res.json(serialized);
   } catch (err) {
