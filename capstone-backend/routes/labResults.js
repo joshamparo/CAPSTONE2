@@ -16,7 +16,7 @@ const { resolveNursePatientScope } = require('../utils/nurseScope');
 const { parseLimit, parseOffset } = require('../utils/normalize');
 const { normalizeEmail } = require('../utils/normalize');
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
-const { canSetManualVerificationStatus, validateDoctorRelease } = require('../utils/labResultWorkflow');
+const { canSetManualVerificationStatus, validateDoctorRelease, shouldAutoReleaseResult } = require('../utils/labResultWorkflow');
 const { createPatientLabFileUrl } = require('../utils/labFileAccessToken');
 
 const uploadDir = path.join(__dirname, '..', 'uploads', 'lab-results');
@@ -1054,9 +1054,12 @@ router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiograph
     if (!belongsToPatient) return res.status(403).json({ message: 'The uploaded file does not belong to this patient.' });
     const storedFile = await readMedicalFile(url, getSupabaseAdmin());
     const uploaderIdentity = req.nurseIdentity?.name || req.auth?.email || null;
+    const autoRelease = shouldAutoReleaseResult(req.auth?.role);
+    const initialStatus = autoRelease ? 'verified' : 'pending';
+    const releasedAt = autoRelease ? new Date() : null;
 
     const rows = await prisma.$queryRaw`
-      INSERT INTO lab_results (patient_id, order_id, type, title, url, result_date, uploaded_by, verification_status, file_hash, file_meta)
+      INSERT INTO lab_results (patient_id, order_id, type, title, url, result_date, uploaded_by, verification_status, verified_at, file_hash, file_meta)
       VALUES (
         ${resolvedPatientId}::uuid,
         ${orderId ? BigInt(String(orderId)) : null},
@@ -1065,7 +1068,8 @@ router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiograph
         ${url},
         ${resultDate ? new Date(resultDate) : null}::date,
         ${uploaderIdentity},
-        'pending',
+        ${initialStatus},
+        ${releasedAt},
         ${sha256Hex(storedFile.buffer)},
         ${fileMeta && typeof fileMeta === 'object' ? fileMeta : null}::jsonb
       )
@@ -1073,6 +1077,24 @@ router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiograph
                 verification_status, verification_score, verification_flags, extracted_fields, verified_at
     `;
     const created = Array.isArray(rows) ? rows[0] : rows;
+
+    if (autoRelease && orderId) {
+      await prisma.$transaction([
+        prisma.clinical_orders.updateMany({
+          where: { id: BigInt(String(orderId)), patient_id: resolvedPatientId },
+          data: { status: 'Completed', completed_at: new Date(), updated_at: new Date() }
+        }),
+        prisma.clinical_order_events.create({
+          data: {
+            order_id: BigInt(String(orderId)),
+            actor_name: uploaderIdentity || 'Clinical Staff',
+            actor_role: req.auth?.role || 'clinical_staff',
+            action: 'Result finalized',
+            note: 'Result finalized by authorized diagnostic staff and released to Patient Records.'
+          }
+        })
+      ]);
+    }
 
     if (uploaderIdentity) {
       prisma.activity_logs.create({
@@ -1101,7 +1123,7 @@ router.post('/', requireRole(['doctor', 'admin', 'nurse', 'medtech', 'radiograph
       verifiedAt: createdSafe.verified_at ?? null
     };
 
-    enqueueVerification(payload.id);
+    if (!autoRelease) enqueueVerification(payload.id);
     res.status(201).json(payload);
   } catch (err) {
     res.status(400).json({ message: err.message });

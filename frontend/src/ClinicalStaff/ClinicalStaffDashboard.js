@@ -668,7 +668,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       });
 
       await updateOrder(viewingOrder.id, {
-        status: String(viewingOrder.status || '').toLowerCase() === 'completed' ? 'Completed' : 'Result',
+        status: String(createData?.verificationStatus || createData?.verification_status || '').toLowerCase() === 'verified' ? 'Completed' : 'Result',
         eventNote: `Result uploaded • ${String(resultTitle || '').trim() || cfg.resultType}`
       });
 
@@ -681,7 +681,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       const detail = `${score !== null && score !== undefined ? ` Score: ${score}.` : ''}${flags.length ? ` Flags: ${flags.slice(0, 6).join(', ')}.` : ''}`;
       setResultNotice(
         st === 'verified'
-          ? `Result signed and released by a doctor.${detail}`
+          ? `Result finalized and added to the patient's Medical Records.${detail}`
           : st === 'matched'
             ? `Result uploaded and checked. It is pending doctor review.${detail}`
           : st === 'rejected'
@@ -702,7 +702,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const handleCompleteOrder = async () => {
     if (!viewingOrder) return;
     if (!orderHasVerifiedResult) {
-      setResultError('The reviewing doctor must sign and release the result before this order can be completed.');
+      setResultError('A finalized result is required before this order can be completed.');
       return;
     }
     await handleQuickStatus(viewingOrder.id, 'Completed');

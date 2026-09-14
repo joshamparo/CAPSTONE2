@@ -1,5 +1,10 @@
 const REVIEWABLE_STATUSES = new Set(['matched', 'flagged', 'verified']);
 const MANUAL_REVIEW_STATUSES = new Set(['flagged', 'rejected']);
+const AUTO_RELEASE_ROLES = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist']);
+
+function shouldAutoReleaseResult(role) {
+  return AUTO_RELEASE_ROLES.has(String(role || '').trim().toLowerCase());
+}
 
 function validateDoctorRelease(note, verificationStatus) {
   if (!String(note || '').trim()) return 'An interpretation is required before signing and releasing this result.';
@@ -13,4 +18,4 @@ function canSetManualVerificationStatus(status) {
   return MANUAL_REVIEW_STATUSES.has(String(status || '').trim().toLowerCase());
 }
 
-module.exports = { canSetManualVerificationStatus, validateDoctorRelease };
+module.exports = { canSetManualVerificationStatus, validateDoctorRelease, shouldAutoReleaseResult };

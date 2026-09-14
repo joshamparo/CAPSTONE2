@@ -5964,7 +5964,7 @@ function NurseDashboard() {
       setModalType('success');
       setSuccessMessage(
         st === 'verified'
-          ? 'Test result signed and released by a doctor.'
+          ? "Test result finalized and added to the patient's Medical Records."
           : st === 'rejected'
             ? 'Test result uploaded but rejected as invalid. Check Notifications for details.'
             : st === 'flagged'
