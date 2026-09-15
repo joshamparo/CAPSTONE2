@@ -1,5 +1,6 @@
 const { verifySessionToken } = require('../utils/sessionToken');
 const prisma = require('../utils/prisma');
+const { verifySupabasePatientSession } = require('../utils/supabasePatientSession');
 
 function normalizeRoleHeader(value) {
   const raw = String(value || '').trim().toLowerCase();
@@ -59,7 +60,15 @@ function requireRole(allowedRoles = []) {
     if (req.method === 'OPTIONS') return next();
     const authHeader = String(req.headers.authorization || '').trim();
     const match = authHeader.match(/^Bearer\s+(.+)$/i);
-    const session = match ? verifySessionToken(match[1]) : null;
+    let session = match ? verifySessionToken(match[1]) : null;
+    if (!session && match && normalizedAllowed.includes('patient')) {
+      try {
+        session = await verifySupabasePatientSession(match[1], { prisma });
+      } catch (error) {
+        const status = [403, 404, 409, 503].includes(error.statusCode) ? error.statusCode : 503;
+        return res.status(status).json({ message: status === 503 ? 'Unable to verify your session right now.' : error.message });
+      }
+    }
     if (!session) return res.status(401).json({ message: 'Authentication required. Please sign in again.' });
     const role = normalizeRoleHeader(session.role);
     if (!role || (normalizedAllowed.length > 0 && !normalizedAllowed.includes(role))) {
