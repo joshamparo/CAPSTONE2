@@ -16,6 +16,7 @@ const { resolveNursePatientScope } = require('../utils/nurseScope');
 const { appendNurseClinicalRecord } = require('../utils/nurseClinicalRecords');
 const { hasIntakeSecretary } = require('../utils/intakeSecretary');
 const { Prisma } = require('@prisma/client');
+const { createPatientLabFileUrl } = require('../utils/labFileAccessToken');
 
 let _supabaseAdmin = null;
 function getSupabaseAdmin() {
@@ -1151,21 +1152,31 @@ router.get('/:id/full-record', async (req, res) => {
             createdAt: prescription.created_at || null
         }));
 
-        const results = resultsRaw.map((result) => ({
-            id: result.id.toString(),
-            orderId: result.order_id != null ? result.order_id.toString() : null,
-            type: result.type || null,
-            title: result.title || null,
-            url: result.url || null,
-            resultDate: result.result_date || null,
-            uploadedBy: result.uploaded_by || null,
-            createdAt: result.created_at || null,
-            verificationStatus: result.verification_status || 'pending',
-            verificationScore: result.verification_score ?? null,
-            verificationFlags: result.verification_flags || [],
-            extractedFields: result.extracted_fields || null,
-            verifiedAt: result.verified_at || null
-        }));
+        const results = resultsRaw.map((result) => {
+            const resultId = result.id.toString();
+            const patientFileUrl = requesterRole === 'patient'
+                ? createPatientLabFileUrl({ resultId, patientId: patient.id })
+                : result.url || null;
+            return {
+                id: resultId,
+                orderId: result.order_id != null ? result.order_id.toString() : null,
+                type: result.type || null,
+                title: result.title || null,
+                url: patientFileUrl,
+                fileUrl: patientFileUrl,
+                file_url: patientFileUrl,
+                pdfUrl: patientFileUrl,
+                pdf_url: patientFileUrl,
+                resultDate: result.result_date || null,
+                uploadedBy: result.uploaded_by || null,
+                createdAt: result.created_at || null,
+                verificationStatus: result.verification_status || 'pending',
+                verificationScore: result.verification_score ?? null,
+                verificationFlags: result.verification_flags || [],
+                extractedFields: result.extracted_fields || null,
+                verifiedAt: result.verified_at || null
+            };
+        });
 
         const orders = ordersRaw.map((order) => ({
             id: order.id.toString(),
