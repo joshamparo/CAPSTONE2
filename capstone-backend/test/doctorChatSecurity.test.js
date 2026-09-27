@@ -55,3 +55,22 @@ test('doctor chat accepts a signed doctor session', async () => {
     assert.equal((await response.json()).ok, true);
   });
 });
+
+test('doctor chat attachment uploads are retired before multipart parsing', async () => {
+  const token = createSessionToken({ id: 'doctor-1', email: 'doctor@example.com', role: 'doctor' });
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/doctor-chat/attachments`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data; boundary=malformed-upload'
+      },
+      body: '--malformed-upload\r\nContent-Disposition: form-data; name="deep[999999999]"\r\n\r\nx'
+    });
+    assert.equal(response.status, 410);
+    assert.deepEqual(await response.json(), {
+      ok: false,
+      error: 'Doctor Chat attachments are not supported.'
+    });
+  });
+});

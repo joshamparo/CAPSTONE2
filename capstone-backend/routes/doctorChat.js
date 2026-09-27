@@ -459,6 +459,16 @@ router.patch('/messages/:id', async (req, res) => {
 // Then inserts message via PRISMA direct = RLS BYPASSED for insert!
 // 100% PERMANENT — no more storage bucket RLS / not found errors!
 // =============================================================================
+// File sending is not part of the active Doctor Chat UI. Retire this endpoint
+// before Multer parses the request so dormant upload code cannot be invoked
+// directly. Historical attachment messages remain readable through GET.
+router.post('/attachments', (_req, res) => {
+  return res.status(410).json({
+    ok: false,
+    error: 'Doctor Chat attachments are not supported.'
+  });
+});
+
 router.post('/attachments', upload.single('file'), async (req, res) => {
   try {
     const actor = await getAuthenticatedDoctor(req);
