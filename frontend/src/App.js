@@ -1,4 +1,4 @@
-import React, { Component, useEffect, useState } from 'react';
+import React, { Component, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ServerCrash, X, Clock, RefreshCw, Home as HomeIcon } from 'lucide-react';
 // Auth Wrapper
@@ -23,6 +23,7 @@ import Recovery from './login/Recovery';
 import ResetPassword from './login/ResetPassword';
 import Appointment from './appointment/Appointment';
 import AssistantWidget from './components/AssistantWidget';
+import { API_BASE, checkBackendHealth } from './utils/api';
 
 class AppErrorBoundary extends Component {
   constructor(props) {
@@ -133,12 +134,15 @@ class AppErrorBoundary extends Component {
 }
 
 const fetchJsonSimple = async (url, opts = {}) => {
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), opts.timeoutMs || 10_000) : null;
   try {
     const r = await fetch(url, {
       method: opts.method || 'GET',
       headers: Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {}),
       body: opts.body ? JSON.stringify(opts.body) : undefined,
-      credentials: opts.credentials !== false ? 'include' : 'omit'
+      credentials: opts.credentials !== false ? 'include' : 'omit',
+      ...(controller ? { signal: controller.signal } : {})
     });
     if (!r.ok) return { __ok: false, status: r.status };
     const ctype = r.headers.get('content-type') || '';
@@ -149,6 +153,8 @@ const fetchJsonSimple = async (url, opts = {}) => {
     return { __ok: true, status: r.status, _text: await r.text().catch(() => '') };
   } catch (e) {
     return { __ok: false, __err: String(e?.message || 'Network error'), status: 0 };
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 };
 
@@ -199,6 +205,7 @@ function AppShell() {
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [bannerDismissedForKey, setBannerDismissedForKey] = useState('');
   const [lastCheckedAt, setLastCheckedAt] = useState(0);
+  const healthCheckRef = useRef(null);
 
   // Auto-dismiss reset: if backend/maintenance combo CHANGES (maint→down or down→maint or state toggle on/off)
   // re-show banner (was hidden forever after user X before this fix)
@@ -212,17 +219,18 @@ function AppShell() {
     }
   }, [backendDown, maintenanceMode, bannerDismissedForKey]);
 
-  const runSystemHealthCheck = useMark => new Promise((resolve) => {
+  const runSystemHealthCheck = useMark => {
+    if (healthCheckRef.current) return healthCheckRef.current;
+    healthCheckRef.current = new Promise((resolve) => {
     const t0 = Date.now();
-    const API_BASE = (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_URL) ? String(process.env.REACT_APP_API_URL).replace(/\/+$/, '') : '';
     const healUrl = API_BASE ? `${API_BASE}/api/health` : '/api/health';
     const settsUrl = API_BASE ? `${API_BASE}/api/system-settings/public` : '/api/system-settings/public';
-    Promise.allSettled([fetchJsonSimple(healUrl, { credentials: false }), fetchJsonSimple(settsUrl, { credentials: false })]).then((arr) => {
+    Promise.allSettled([checkBackendHealth(API_BASE), fetchJsonSimple(settsUrl, { credentials: false, timeoutMs: 10_000 })]).then((arr) => {
       const [hr, sr] = arr;
-      const hOk = hr.status === 'fulfilled' && hr.value && hr.value.__ok;
+      const hOk = hr.status === 'fulfilled' && hr.value && hr.value.ok;
       const sOk = sr.status === 'fulfilled' && sr.value && sr.value.__ok;
-      const beDown = !hOk && !sOk;
-      const beErr = (hr.status === 'fulfilled' && hr.value && hr.value.__err) || (sr.status === 'fulfilled' && sr.value && sr.value.__err) || (hOk ? '' : 'Server unreachable.');
+      const beDown = !hOk;
+      const beErr = (hr.status === 'fulfilled' && hr.value && hr.value.error) || (sr.status === 'fulfilled' && sr.value && sr.value.__err) || (hOk ? '' : 'Server unreachable.');
       const maint = Boolean(sr.status === 'fulfilled' && sr.value && (sr.value.maintenanceMode || sr.value.data?.maintenanceMode));
       try {
         localStorage.setItem('app_global_be_down', beDown ? '1' : '0');
@@ -236,8 +244,10 @@ function AppShell() {
       setLastCheckedAt(t0);
       if (typeof useMark === 'object' && useMark && useMark.current) useMark.current = t0;
       resolve({ beDown, maint, beErr });
+    }).finally(() => { healthCheckRef.current = null; });
     });
-  });
+    return healthCheckRef.current;
+  };
 
   useEffect(() => {
     // First run AFTER first paint — keep mount path fast and clean.

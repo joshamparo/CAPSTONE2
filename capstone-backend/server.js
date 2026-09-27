@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const prisma = require('./utils/prisma');
 const { isMaintenanceModeEnabled } = require('./utils/systemSettingsStore');
+const { verifySessionToken } = require('./utils/sessionToken');
 const { createRequestTiming } = require('./middleware/requestTiming');
 
 require('dotenv').config();
@@ -175,11 +176,22 @@ app.use((err, req, res, next) => {
 
 app.use(
   express.json({
+    limit: '1mb',
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     }
   })
 );
+
+// Baseline browser protections for every API response. Uploads and embedded
+// consultations remain usable because this does not impose a restrictive CSP.
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
+  next();
+});
 app.use('/uploads', require('./middleware/publicUploads')(path.join(__dirname, 'uploads')));
 
 const normalizeRoleHeader = (value) => {
@@ -244,8 +256,10 @@ app.use(async (req, res, next) => {
   try {
     const maintenanceMode = await getMaintenanceModeFast();
     if (!maintenanceMode) return next();
-    const role = normalizeRoleHeader(req.headers['x-user-role']);
-    if (role === 'admin') return next();
+    const authHeader = String(req.headers.authorization || '').trim();
+    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    const session = bearerMatch ? verifySessionToken(bearerMatch[1]) : null;
+    if (session && normalizeRoleHeader(session.role) === 'admin') return next();
     return res.status(503).json({ message: 'System is currently under maintenance. Please try again later.' });
   } catch (_) {
     return next();
@@ -326,18 +340,14 @@ app.use('/api/doctor-chat', doctorChatRoutes);
 app.use('/api/email', emailRoutes);
 
 app.get('/api/health', (_req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   const dbConfigured = Boolean(String(process.env.DATABASE_URL || '').trim());
   const directConfigured = Boolean(String(process.env.DIRECT_URL || '').trim());
-  const supabaseConfigured = Boolean(String(process.env.SUPABASE_URL || '').trim()) && Boolean(String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim());
   res.json({
     ok: true,
     dbConfigured,
     directConfigured,
-    dbConnected,
-    dbError: dbError ? String(dbError).slice(0, 220) : null,
-    supabaseConfigured,
-    supabaseUrlRef: supabaseUrlRef || null,
-    databaseUrlRef: databaseUrlRef || null
+    dbConnected
   });
 });
 

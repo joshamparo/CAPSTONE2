@@ -33,6 +33,19 @@ export const resolveApiBase = () => {
 export const API_BASE = resolveApiBase();
 const DEFAULT_API_BASE = API_BASE;
 
+// Health checks are used by every protected dashboard.  Keep one shared probe
+// so a slow tab wake-up or a brief network hiccup cannot make every screen
+// report the backend as offline at once.
+const healthProbeState = {
+  inFlight: null,
+  lastResult: null,
+  lastCheckedAt: 0,
+  consecutiveFailures: 0,
+  lastFailureAt: 0
+};
+const HEALTH_CACHE_MS = 8_000;
+const HEALTH_FAILURE_THRESHOLD = 3;
+
 const rewriteUrlForApiBase = (rawUrl, apiBase = API_BASE) => {
   const base = trimTrailingSlash(apiBase);
   const value = String(rawUrl || '').trim();
@@ -203,27 +216,50 @@ export const fetchJson = async (urlOrPath, opts = {}) => {
 };
 
 export const checkBackendHealth = async (apiBase = DEFAULT_API_BASE) => {
-  try {
-    const data = await fetchJson('/api/health', { apiBase, timeoutMs: 4000 });
-    if (!data || data.ok !== true) return { ok: false, error: `Backend health check failed at ${apiBase}.` };
-    if (data.dbConfigured === false || data.directConfigured === false) {
-      return { ok: false, error: 'Database is not configured. Set DATABASE_URL and DIRECT_URL in backend/.env.' };
-    }
-    if (data.dbConnected === false) {
-      const extra = data.dbError ? ` (${String(data.dbError)})` : '';
-      return { ok: false, error: `Database is not connected${extra}` };
-    }
-    return { ok: true, data };
-  } catch (e) {
-    const raw = String(e?.message || 'Backend offline');
-    const name = String(e?.name || '');
-    const isAbort = name === 'AbortError' || /aborted/i.test(raw);
-    const isNetwork = /failed to fetch/i.test(raw) || /networkerror/i.test(raw);
-    const msg = isAbort
-      ? `Request timed out. Cannot reach backend at ${apiBase}.`
-      : isNetwork
-        ? `Cannot reach backend at ${apiBase}.`
-        : raw;
-    return { ok: false, error: msg };
+  const now = Date.now();
+  if (healthProbeState.lastResult && now - healthProbeState.lastCheckedAt < HEALTH_CACHE_MS) {
+    return healthProbeState.lastResult;
   }
+  if (healthProbeState.inFlight) return healthProbeState.inFlight;
+
+  healthProbeState.inFlight = (async () => {
+    let result;
+    try {
+      const data = await fetchJson('/api/health', { apiBase, timeoutMs: 10_000 });
+      if (!data || data.ok !== true) throw new Error(`Backend health check failed at ${apiBase}.`);
+      if (data.dbConfigured === false) throw new Error('Database is not configured. Set DATABASE_URL in backend/.env.');
+      if (data.dbConnected === false) {
+        throw new Error('Database is not connected.');
+      }
+      healthProbeState.consecutiveFailures = 0;
+      result = { ok: true, data };
+    } catch (e) {
+      const raw = String(e?.message || 'Backend offline');
+      const name = String(e?.name || '');
+      const isAbort = name === 'AbortError' || /aborted/i.test(raw);
+      const isNetwork = /failed to fetch/i.test(raw) || /networkerror/i.test(raw);
+      const error = isAbort
+        ? `Request timed out. Cannot reach backend at ${apiBase}.`
+        : isNetwork
+          ? `Cannot reach backend at ${apiBase}.`
+          : raw;
+
+      // Count distinct failed probes only.  Calls from several mounted
+      // dashboards share this probe and therefore count as one failure.
+      if (now - healthProbeState.lastFailureAt > 5_000) {
+        healthProbeState.consecutiveFailures += 1;
+        healthProbeState.lastFailureAt = now;
+      }
+      result = healthProbeState.consecutiveFailures >= HEALTH_FAILURE_THRESHOLD
+        ? { ok: false, error }
+        : { ok: true, degraded: true, error };
+    }
+    healthProbeState.lastCheckedAt = Date.now();
+    healthProbeState.lastResult = result;
+    return result;
+  })().finally(() => {
+    healthProbeState.inFlight = null;
+  });
+
+  return healthProbeState.inFlight;
 };
