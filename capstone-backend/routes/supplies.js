@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
-const fs = require('fs');
-const path = require('path');
 const multer = require('multer');
 const requireRole = require('../middleware/requireRole');
+const { uploadProductImage } = require('../utils/productImageStorage');
 
 router.use(requireRole(['admin', 'pharmacist', 'nurse']));
 
@@ -71,20 +70,8 @@ function normalizeBarcode(input) {
   return cleaned;
 }
 
-const uploadDir = path.join(__dirname, '..', 'uploads', 'pharmacy-products');
-fs.mkdirSync(uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const id = String(req.params.id || 'product').replace(/[^a-zA-Z0-9_-]/g, '');
-    const safeName = String(file.originalname || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, `supply_${id}_${Date.now()}_${safeName}`);
-  }
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ok = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(String(file.mimetype || '').toLowerCase());
@@ -279,11 +266,11 @@ router.put('/:id', async (req, res) => {
 router.post('/:id/upload-image', requireRole(['admin', 'pharmacist']), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-    const base = `${req.protocol}://${req.get('host')}`;
-    const url = `${base}/uploads/pharmacy-products/${encodeURIComponent(req.file.filename)}`;
     const idRaw = String(req.params.id || '').trim();
     if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid id' });
     const id = BigInt(idRaw);
+    const stored = await uploadProductImage({ file: req.file, folder: 'supplies', ownerId: idRaw });
+    const url = stored.url;
     let updated;
     try {
       updated = await prisma.supplies.update({
@@ -296,7 +283,8 @@ router.post('/:id/upload-image', requireRole(['admin', 'pharmacist']), upload.si
     }
     res.json({ url, id: updated.id.toString() });
   } catch (err) {
-    res.status(400).json({ message: 'Upload failed' });
+    const status = Number(err?.statusCode) || 400;
+    res.status(status).json({ message: err?.message || 'Upload failed' });
   }
 });
 

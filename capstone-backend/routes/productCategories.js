@@ -1,24 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
-const fs = require('fs');
-const path = require('path');
 const multer = require('multer');
 const requireRole = require('../middleware/requireRole');
-
-const uploadDir = path.join(__dirname, '..', 'uploads', 'product-categories');
-fs.mkdirSync(uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const safeName = String(file.originalname || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, `category_${Date.now()}_${safeName}`);
-  }
-});
+const { uploadProductImage } = require('../utils/productImageStorage');
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ok = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(String(file.mimetype || '').toLowerCase());
@@ -161,11 +149,11 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
 router.post('/upload', requireRole(['admin', 'pharmacist']), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-    const base = `${req.protocol}://${req.get('host')}`;
-    const url = `${base}/uploads/product-categories/${encodeURIComponent(req.file.filename)}`;
-    res.json({ url, filename: req.file.filename, originalName: req.file.originalname });
+    const stored = await uploadProductImage({ file: req.file, folder: 'categories', ownerId: 'category' });
+    res.json({ url: stored.url, filename: stored.path, originalName: req.file.originalname });
   } catch (err) {
-    res.status(400).json({ message: 'Upload failed' });
+    const status = Number(err?.statusCode) || 400;
+    res.status(status).json({ message: err?.message || 'Upload failed' });
   }
 });
 
