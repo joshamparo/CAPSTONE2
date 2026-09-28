@@ -138,6 +138,7 @@ export default function AssistantWidget({ pathname = '/' }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showQuickQuestions, setShowQuickQuestions] = useState(true);
+  const [suggestionsVisible, setSuggestionsVisible] = useState(true);
   const [suggestedQuestions, setSuggestedQuestions] = useState([]);
   const [lastFailedMessage, setLastFailedMessage] = useState('');
   const messagesRef = useRef(null);
@@ -166,6 +167,7 @@ export default function AssistantWidget({ pathname = '/' }) {
     setLoading(false);
     setDraft('');
     setShowQuickQuestions(true);
+    setSuggestionsVisible(true);
     setSuggestedQuestions([]);
     setLastFailedMessage('');
   }, [role, pathname]);
@@ -305,6 +307,7 @@ export default function AssistantWidget({ pathname = '/' }) {
     setError('');
     setLoading(false);
     setShowQuickQuestions(true);
+    setSuggestionsVisible(true);
     setSuggestedQuestions([]);
     setLastFailedMessage('');
     setIsOpen(true);
@@ -374,9 +377,20 @@ export default function AssistantWidget({ pathname = '/' }) {
               ) : null}
             </div>
 
-            {displayedQuestions.length ? (
+            {displayedQuestions.length && suggestionsVisible ? (
               <div className="assistant-widget-quick">
-                <span className="assistant-widget-quick-label">{showQuickQuestions ? 'Quick questions' : 'You may also ask'}</span>
+                <div className="assistant-widget-quick-heading">
+                  <span className="assistant-widget-quick-label">{showQuickQuestions ? 'Quick questions' : 'You may also ask'}</span>
+                  <button
+                    type="button"
+                    className="assistant-widget-quick-close"
+                    onClick={() => setSuggestionsVisible(false)}
+                    aria-label="Hide suggested questions"
+                    title="Hide suggestions"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
                 <div className="assistant-widget-quick-grid">
                   {displayedQuestions.map((question) => (
                     <button
@@ -390,6 +404,17 @@ export default function AssistantWidget({ pathname = '/' }) {
                     </button>
                   ))}
                 </div>
+              </div>
+            ) : displayedQuestions.length ? (
+              <div className="assistant-widget-quick-collapsed">
+                <button
+                  type="button"
+                  className="assistant-widget-quick-show"
+                  onClick={() => setSuggestionsVisible(true)}
+                  aria-label="Show suggested questions"
+                >
+                  Show suggestions
+                </button>
               </div>
             ) : null}
 
