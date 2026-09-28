@@ -412,6 +412,40 @@
   font-weight: 900;
 }
 
+.cs-approval-table {
+  table-layout: fixed;
+}
+
+.cs-approval-table th:nth-child(1) { width: 22%; }
+.cs-approval-table th:nth-child(2) { width: auto; }
+.cs-approval-table th:nth-child(3) { width: 112px; }
+.cs-approval-table th:nth-child(4) { width: 76px; }
+
+.cs-approval-reason {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.cs-approval-row {
+  cursor: pointer;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.cs-approval-row:hover,
+.cs-approval-row:focus-visible {
+  background: #fff7ed;
+}
+
+.cs-approval-row:focus-visible {
+  outline: 2px solid #f97316;
+  outline-offset: -2px;
+}
+
+.cs-approval-row.selected {
+  background: #fff7ed;
+  box-shadow: inset 3px 0 0 #f97316;
+}
+
 .cs-row-actions {
   display: inline-flex;
   gap: 8px;

@@ -1260,7 +1260,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                 ) : displayedApprovals.length === 0 ? (
                   <div className="cs-muted">No requests match your filters.</div>
                 ) : (
-                  <table className="cs-table">
+                  <table className="cs-table cs-approval-table">
                     <thead>
                       <tr>
                         <th>Patient</th>
@@ -1271,12 +1271,26 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     </thead>
                     <tbody>
                       {paginatedApprovals.items.map((r) => (
-                        <tr key={String(r.id)}>
+                        <tr
+                          key={String(r.id)}
+                          className={`cs-approval-row ${String(selectedApproval?.id) === String(r.id) ? 'selected' : ''}`}
+                          onClick={() => openApproval(r)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              openApproval(r);
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`Review approval request for ${r.patientName || 'patient'}`}
+                          aria-pressed={String(selectedApproval?.id) === String(r.id)}
+                        >
                           <td>{r.patientName || 'Patient'}</td>
-                          <td>{r.reason || r.serviceType || '—'}</td>
+                          <td className="cs-approval-reason">{r.reason || r.serviceType || '—'}</td>
                           <td><span className={statusBadgeClass(String(r.status || '').includes('Pending') ? 'Pending' : r.status)}>{r.status || 'Pending'}</span></td>
                           <td>
-                            <button type="button" className="cs-btn secondary" onClick={() => openApproval(r)}>
+                            <button type="button" className="cs-btn secondary" onClick={(e) => { e.stopPropagation(); openApproval(r); }}>
                               View
                             </button>
                           </td>
