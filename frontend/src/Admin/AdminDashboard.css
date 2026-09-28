@@ -2406,6 +2406,26 @@ body {
   gap: 8px;
 }
 
+.admin-patient-refresh-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 16px 12px;
+  padding: 10px 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.admin-patient-refresh-warning svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 .admin-error-icon {
   font-size: 1.1rem;
 }

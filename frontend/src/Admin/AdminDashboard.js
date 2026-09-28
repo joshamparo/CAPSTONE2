@@ -1079,6 +1079,7 @@ function AdminDashboard() {
 
   // Patient Management State
   const [patientList, setPatientList] = useState([]);
+  const [patientListError, setPatientListError] = useState("");
   const [appointmentEvents, setAppointmentEvents] = useState([]);
   const [editingPatient, setEditingPatient] = useState(null);
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -1113,9 +1114,13 @@ function AdminDashboard() {
 
   // Real-time Dashboard Data
   const [recentActivities, setRecentActivities] = useState([]);
+  const dashboardRefreshInFlightRef = useRef(false);
+  const patientListRequestSequenceRef = useRef(0);
   
   // Fetch Dashboard Data
   const fetchDashboardData = async () => {
+    if (dashboardRefreshInFlightRef.current) return;
+    dashboardRefreshInFlightRef.current = true;
     try {
         try {
             const logs = await fetchJson(`/api/activity-logs?take=1000`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
@@ -1142,11 +1147,18 @@ function AdminDashboard() {
             setAppointmentEvents([]);
         }
 
+        const patientRequestSequence = ++patientListRequestSequenceRef.current;
         try {
             const rows = await fetchJson(`/api/patients?take=2000`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
-            setPatientList(Array.isArray(rows) ? rows : []);
-        } catch (_) {
-            setPatientList([]);
+            if (patientRequestSequence !== patientListRequestSequenceRef.current) return;
+            if (!Array.isArray(rows)) throw new Error('The server returned an invalid patient list.');
+            setPatientList(rows);
+            setPatientListError("");
+        } catch (err) {
+            if (patientRequestSequence === patientListRequestSequenceRef.current) {
+              console.error("Failed to refresh patient records", err);
+              setPatientListError(`${String(err?.message || "Unable to refresh patient records.")} Displaying the last successfully loaded data.`);
+            }
         }
 
         try {
@@ -1192,8 +1204,9 @@ function AdminDashboard() {
     } catch (error) {
         console.error("Error fetching dashboard data:", error);
         setAppointmentEvents([]);
-        setPatientList([]);
         setIncidents([]);
+    } finally {
+        dashboardRefreshInFlightRef.current = false;
     }
   };
 
@@ -1226,7 +1239,10 @@ function AdminDashboard() {
   useEffect(() => {
     fetchDashboardData(); // Initial fetch
     const interval = setInterval(fetchDashboardData, 30000); // Keep dashboard sections synchronized without excessive polling
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      patientListRequestSequenceRef.current += 1;
+    };
   }, []); // Refetch when selectedDate changes
 
   useEffect(() => {
@@ -7843,6 +7859,12 @@ function AdminDashboard() {
                                 <UserPlus size={20} className="text-green-600" /> Patient Demographics
                             </h3>
                         </div>
+                        {patientListError ? (
+                          <div className="admin-patient-refresh-warning" role="status">
+                            <AlertCircle size={16} />
+                            <span>{patientListError}</span>
+                          </div>
+                        ) : null}
                         <div className="logs-table-container" style={{ maxHeight: '320px' }}>
                           <table className="staff-table">
                             <thead>
