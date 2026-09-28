@@ -603,6 +603,22 @@ function toPatientResponse(row) {
     };
 }
 
+// List screens do not need clinical history or account-recovery fields. Keep
+// this projection opt-in and admin-only so existing clinical consumers retain
+// the full response shape they already depend on.
+const ADMIN_PATIENT_SUMMARY_SELECT = Object.freeze({
+    id: true,
+    first_name: true,
+    middle_name: true,
+    last_name: true,
+    date_of_birth: true,
+    gender: true,
+    contact_number: true,
+    email: true,
+    created_at: true,
+    updated_at: true
+});
+
 function serializePayload(value) {
     return JSON.parse(
         JSON.stringify(value, (_key, current) => {
@@ -918,6 +934,7 @@ router.get('/', async (req, res) => {
         }
 
         const { q, email, take, skip } = req.query;
+        const adminSummaryRequested = requesterRole === 'admin' && String(req.query.summary || '').trim() === '1';
         const limit = take !== undefined ? parseLimit(take, { min: 1, max: 2000, fallback: 200 }) : null;
         const offset = skip !== undefined ? parseOffset(skip, { min: 0, max: 20000, fallback: 0 }) : 0;
 
@@ -999,6 +1016,7 @@ router.get('/', async (req, res) => {
         const patients = await prisma.patients.findMany({
             where: scopedWhere,
             orderBy: { created_at: 'desc' },
+            ...(adminSummaryRequested ? { select: ADMIN_PATIENT_SUMMARY_SELECT } : {}),
             ...(limit ? { take: limit } : {}),
             ...(offset ? { skip: offset } : {})
         });

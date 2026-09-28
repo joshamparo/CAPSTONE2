@@ -1123,7 +1123,7 @@ function AdminDashboard() {
     dashboardRefreshInFlightRef.current = true;
     try {
         try {
-            const logs = await fetchJson(`/api/activity-logs?take=1000`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
+            const logs = await fetchJson(`/api/activity-logs?take=50`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
             const mapped = Array.isArray(logs) ? logs.map((l) => formatActivityLog({
               ...l,
               id: String(l.id || l._id || ''),
@@ -1149,7 +1149,7 @@ function AdminDashboard() {
 
         const patientRequestSequence = ++patientListRequestSequenceRef.current;
         try {
-            const rows = await fetchJson(`/api/patients?take=2000`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
+            const rows = await fetchJson(`/api/patients?summary=1&take=2000`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
             if (patientRequestSequence !== patientListRequestSequenceRef.current) return;
             if (!Array.isArray(rows)) throw new Error('The server returned an invalid patient list.');
             setPatientList(rows);
