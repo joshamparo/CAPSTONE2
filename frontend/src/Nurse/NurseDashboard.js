@@ -11829,24 +11829,19 @@ function NurseDashboard() {
                     ) : null}
 
                     {(addPatientData.hasHmo || addPatientData.hasPhilhealth) ? (
-                      <div style={{
-                        marginTop: 14,
-                        padding: '16px 16px',
-                        borderRadius: 14,
-                        border: '1px solid #fde68a',
-                        background: 'linear-gradient(180deg,#fffbeb 0%, #fef3c7 100%)',
-                        display: 'grid',
-                        gap: 12
-                      }}>
-                        <div style={{
-                          fontSize: 13.5,
-                          fontWeight: 950,
-                          color: '#92400e',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8
-                        }}>
-                          <ShieldAlert size={15} /> HMO / PhilHealth Claim Submission
+                      <section className="hmo-claim-review-card" aria-labelledby="hmo-claim-review-title">
+                        <div className="hmo-claim-review-header">
+                          <span className="hmo-claim-review-icon" aria-hidden="true">
+                            <ShieldAlert size={18} />
+                          </span>
+                          <div>
+                            <div id="hmo-claim-review-title" className="hmo-claim-review-title">
+                              HMO / PhilHealth Claim Submission
+                            </div>
+                            <div className="hmo-claim-review-subtitle">
+                              Verify the coverage result before completing this intake.
+                            </div>
+                          </div>
                         </div>
                         <div style={{
                           padding: '10px 12px',
@@ -12078,7 +12073,7 @@ function NurseDashboard() {
                             </button>
                           </div>
                         )}
-                      </div>
+                      </section>
                     ) : null}
                   </div>
                 </div>
