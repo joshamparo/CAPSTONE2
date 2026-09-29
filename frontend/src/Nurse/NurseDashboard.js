@@ -12346,14 +12346,17 @@ function NurseDashboard() {
 
       {showHmoUnavailableModal ? (
         <div className="modal-overlay" onClick={() => setShowHmoUnavailableModal(false)}>
-          <div className="modal-shell" style={{maxWidth: 560}} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <div className="modal-title">
-              <ShieldAlert size={18} /> HMO Hotline Unavailable
+          <div className="hmo-unavailable-modal" role="dialog" aria-modal="true" aria-labelledby="hmo-unavailable-title" onClick={(e) => e.stopPropagation()}>
+            <div className="hmo-unavailable-header">
+              <div className="hmo-unavailable-icon" aria-hidden="true">
+                <ShieldAlert size={22} />
               </div>
-              <button type="button" className="btn-modal-cancel" onClick={() => setShowHmoUnavailableModal(false)}>Close</button>
+              <div>
+                <h3 id="hmo-unavailable-title">HMO Hotline Unavailable</h3>
+                <p>Choose how the patient account should be handled while approval is pending.</p>
+              </div>
             </div>
-            <div style={{padding: '14px 18px'}}>
+            <div className="hmo-unavailable-body">
               <div style={{fontWeight: 900, color:'#0f172a', marginBottom: 10}}>
                 Patient will proceed — claim saved with status <span style={{color:'#9a3412'}}>Awaiting LOA</span>. Choose payment handling:
               </div>
@@ -12378,7 +12381,7 @@ function NurseDashboard() {
                     style={{marginTop: 3}}
                   />
                   <div>
-                    <div style={{fontWeight: 900, color:'#1e3a8a'}}>Patient pays full cash (refundable later</div>
+                    <div style={{fontWeight: 900, color:'#1e3a8a'}}>Patient pays full cash (refundable later)</div>
                     <div style={{fontSize: 12.5, color: '#475569', fontWeight:700}}>
                       Recommended. Patient will settle full balance at cashier. When HMO approves later, reimburse excess automatically and adjust claim will be refunded patient. Claim still tracked in HMO Monitoring (Awaiting LOA) until Approved.
                     </div>
@@ -12411,7 +12414,7 @@ function NurseDashboard() {
                   </div>
                 </label>
               </div>
-              <div style={{marginTop: 14, display:'flex', gap: 10, justifyContent: 'flex-end'}}>
+              <div className="hmo-unavailable-actions">
                 <button type="button" className="btn-modal-cancel" onClick={() => setShowHmoUnavailableModal(false)} disabled={addPatientSaving}>Cancel</button>
                 <button
                   type="button"
