@@ -49,6 +49,16 @@ function defaultColorForWard(name) {
   return matched?.color || '#64748b';
 }
 
+function matchesActivityLogFilter(log, filter) {
+  const selected = String(filter || 'All');
+  if (selected === 'All') return true;
+  const action = String(log?.action || '').toLowerCase();
+  if (selected === 'Create') return action.includes('create') || action.includes('register');
+  if (selected === 'Update') return action.includes('update') || action.includes('edit');
+  if (selected === 'Delete') return action.includes('delete') || action.includes('remove');
+  return action === selected.toLowerCase();
+}
+
 function AdminDashboard() {
   const navigate = useNavigate();
   const getAuthHeaders = () => {
@@ -1643,7 +1653,7 @@ function AdminDashboard() {
       }
   };
 
-  const fetchActivityLogsForExport = async (fromDate, toDate) => {
+  const fetchActivityLogsForExport = async (fromDate, toDate, actionFilter = 'All') => {
       const from = parseDateStart(fromDate);
       const to = parseDateEnd(toDate);
       const params = new URLSearchParams();
@@ -1666,7 +1676,7 @@ function AdminDashboard() {
         action: l.action || '',
         target: l.target || '',
         details: l.details || ''
-      }));
+      })).filter((log) => matchesActivityLogFilter(log, actionFilter));
   };
 
   // Fetch Announcements
@@ -6547,9 +6557,24 @@ function AdminDashboard() {
     if (view === "patient-management") {
       const PATIENTS_PER_PAGE = 9;
       const q = String(searchTerm || '').trim().toLowerCase();
-      const g = 'All'; // Gender filter removed for simplification
-
-      const filteredPatients = []; // Patient list removed
+      const filteredPatients = patientList.filter((patient) => {
+        const searchable = [
+          patient.id,
+          patient.patient_id,
+          patient.first_name,
+          patient.firstName,
+          patient.last_name,
+          patient.lastName,
+          patient.email,
+          patient.contact_number,
+          patient.contactNumber,
+          patient.phone
+        ].map((value) => String(value || '').toLowerCase()).join(' ');
+        const matchesSearch = !q || searchable.includes(q);
+        const matchesGender = patientGenderFilter === 'All'
+          || String(patient.gender || '').toLowerCase() === patientGenderFilter.toLowerCase();
+        return matchesSearch && matchesGender;
+      });
 
       const totalPages = Math.max(1, Math.ceil(filteredPatients.length / PATIENTS_PER_PAGE));
       const currentPage = Math.min(Math.max(1, patientPage), totalPages);
@@ -6561,18 +6586,107 @@ function AdminDashboard() {
            <div className="page-header-container mt-12">
              <div className="flex-col">
                {/* Duplicate Header Removed */}
-               <p className="text-slate-500">Manage and monitor patient records</p>
+               <p className="text-slate-500">Manage and monitor {patientList.length.toLocaleString()} patient records</p>
              </div>
              <div className="patient-controls-row">
-              {/* Search and filter controls removed */}
+                <div className="input-wrapper-relative">
+                  <Search size={17} className="absolute-icon-left" />
+                  <input
+                    type="search"
+                    className="search-input-with-icon"
+                    placeholder="Search patients..."
+                    value={searchTerm}
+                    onChange={(event) => { setSearchTerm(event.target.value); setPatientPage(1); }}
+                    aria-label="Search patients"
+                  />
+                </div>
+                <select
+                  className="patient-filter-select"
+                  value={patientGenderFilter}
+                  onChange={(event) => { setPatientGenderFilter(event.target.value); setPatientPage(1); }}
+                  aria-label="Filter patients by gender"
+                >
+                  <option value="All">All genders</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+                <button type="button" className="staff-export-btn" onClick={exportPatientReport}>
+                  <Download size={16} /> CSV
+                </button>
+                <button type="button" className="staff-export-btn" onClick={fetchDashboardData}>
+                  <RefreshCw size={16} /> Refresh
+                </button>
              </div>
            </div>
 
+           {patientListError ? (
+             <div className="admin-patient-refresh-warning" role="status">
+               <AlertCircle size={16} />
+               <span>{patientListError}</span>
+             </div>
+           ) : null}
+
            <div className="patient-card-list">
+             {pagedPatients.length === 0 ? (
                 <div className="empty-state-box">
                     <User size={48} className="opacity-30 mb-4" />
-                    <p className="text-slate-500 text-lg">Patient management is handled by the admin staff.</p>
+                    <p className="text-slate-500 text-lg">
+                      {patientList.length === 0 ? 'No patient records found.' : 'No patients match the selected filters.'}
+                    </p>
                   </div>
+             ) : (
+               <div className="modern-patient-grid">
+                 {pagedPatients.map((patient) => {
+                   const firstName = patient.first_name || patient.firstName || '';
+                   const lastName = patient.last_name || patient.lastName || '';
+                   const fullName = `${firstName} ${lastName}`.trim() || 'Unnamed Patient';
+                   const initials = `${String(firstName).charAt(0)}${String(lastName).charAt(0)}`.toUpperCase() || 'P';
+                   const birthDate = patient.date_of_birth || patient.dateOfBirth;
+                   const address = typeof patient.address === 'string'
+                     ? patient.address
+                     : [patient.address?.street, patient.address?.city, patient.address?.province].filter(Boolean).join(', ');
+                   return (
+                     <article className="modern-patient-card" key={patient.id || patient._id || patient.email}>
+                       <div className="mpc-header">
+                         <div className="mpc-avatar" aria-hidden="true">{initials}</div>
+                         <div className="mpc-info">
+                           <div className="mpc-name" title={fullName}>{fullName}</div>
+                           <div className="mpc-email"><Mail size={14} /><span>{patient.email || 'No email recorded'}</span></div>
+                         </div>
+                       </div>
+                       <div className="mpc-body">
+                         <div className="mpc-row">
+                           <div className="mpc-icon-box"><Phone size={16} /></div>
+                           <div className="mpc-content"><div className="mpc-label">Contact</div><div className="mpc-value">{patient.contact_number || patient.contactNumber || patient.phone || 'Not recorded'}</div></div>
+                         </div>
+                         <div className="mpc-row">
+                           <div className="mpc-icon-box"><Calendar size={16} /></div>
+                           <div className="mpc-content"><div className="mpc-label">Date of birth</div><div className="mpc-value">{birthDate ? new Date(birthDate).toLocaleDateString() : 'Not recorded'}</div></div>
+                         </div>
+                         <div className="mpc-row">
+                           <div className="mpc-icon-box"><MapPin size={16} /></div>
+                           <div className="mpc-content"><div className="mpc-label">Address</div><div className="mpc-value">{address || 'Not recorded'}</div></div>
+                         </div>
+                       </div>
+                       <div className="mpc-footer">
+                         <span className="mpc-badge badge-default">{patient.gender || 'Unspecified'}</span>
+                         <span className="text-xs text-slate-400">ID: {patient.patient_id || patient.id || patient._id || '—'}</span>
+                       </div>
+                     </article>
+                   );
+                 })}
+               </div>
+             )}
+           </div>
+
+           <div className="patient-management-footer">
+             <span className="text-sm text-slate-500">Showing {filteredPatients.length === 0 ? 0 : startIndex + 1}–{Math.min(startIndex + PATIENTS_PER_PAGE, filteredPatients.length)} of {filteredPatients.length}</span>
+             <div className="patient-pagination">
+               <button type="button" className="patient-page-btn" onClick={() => setPatientPage((page) => Math.max(1, page - 1))} disabled={currentPage <= 1} aria-label="Previous patient page"><ChevronLeft size={18} /></button>
+               <span className="patient-page-indicator">Page <span className="patient-page-strong">{currentPage}</span> of {totalPages}</span>
+               <button type="button" className="patient-page-btn" onClick={() => setPatientPage((page) => Math.min(totalPages, page + 1))} disabled={currentPage >= totalPages} aria-label="Next patient page"><ChevronRight size={18} /></button>
+             </div>
            </div>
         </div>
       );
@@ -7298,14 +7412,7 @@ function AdminDashboard() {
     // 6. ACTIVITY LOGS VIEW
     if (view === "activity-logs") {
         const LOGS_PER_PAGE = 12;
-        const filteredLogs = logFilter === 'All'
-            ? activityLogs
-            : activityLogs.filter(log => {
-                if (logFilter === 'Create') return log.action.includes('Create') || log.action.includes('Register');
-                if (logFilter === 'Update') return log.action.includes('Update') || log.action.includes('Edit');
-                if (logFilter === 'Delete') return log.action.includes('Delete') || log.action.includes('Remove');
-                return log.action === logFilter;
-            });
+        const filteredLogs = activityLogs.filter((log) => matchesActivityLogFilter(log, logFilter));
         const logFrom = parseDateStart(logDateFrom);
         const logTo = parseDateEnd(logDateTo);
         const rangedLogs = filteredLogs.filter((l) => {
@@ -7361,7 +7468,7 @@ function AdminDashboard() {
                               className="inc-btn inc-btn-ghost"
                               onClick={async () => {
                                 try {
-                                  const rows = await fetchActivityLogsForExport(logDateFrom, logDateTo);
+                                  const rows = await fetchActivityLogsForExport(logDateFrom, logDateTo, logFilter);
                                   exportActivityReport(rows);
                                 } catch (_) {
                                   setModalType("error");
@@ -7372,7 +7479,7 @@ function AdminDashboard() {
                               disabled={Boolean(activityLogsError)}
                             >
                               <Download size={16} />
-                              Export All
+                              Export Filtered
                             </button>
                             <button
                               type="button"
