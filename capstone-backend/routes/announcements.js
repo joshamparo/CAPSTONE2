@@ -79,6 +79,14 @@ const LIVE_NEWS_RSS_SOURCES = [
     }
 ];
 
+const PHILHEALTH_NEWS_URL = 'https://www.philhealth.gov.ph/news/';
+const PHILHEALTH_SOURCE = {
+    id: 'philhealth-news',
+    category: 'Philippine Health',
+    label: 'PhilHealth',
+    sourceName: 'PhilHealth'
+};
+
 const LIVE_NEWS_KEYWORDS = [
     'health',
     'hospital',
@@ -255,31 +263,93 @@ async function fetchRssSource(source) {
     return parseRssItems(xml, source);
 }
 
+function parsePhilHealthDate(value) {
+    const match = String(value || '').trim().match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    if (!match) return null;
+    const parsed = new Date(`${match[3]}-${match[1]}-${match[2]}T00:00:00.000Z`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function parsePhilHealthListing(html, limit = 6) {
+    const matches = [...String(html || '').matchAll(
+        /<span>\s*(\d{2}-\d{2}-\d{4})\s*<\/span>\s*<a\s+href=(?:"([^"]+)"|'([^']+)')[^>]*>([\s\S]*?)<\/a>/gi
+    )];
+    return matches.map((match, index) => {
+        const url = safeUrl(new URL(match[2] || match[3], PHILHEALTH_NEWS_URL).toString());
+        const title = stripHtml(match[4]);
+        if (!url || !title || !isOfficialNewsUrl(url.toString())) return null;
+        return {
+            id: `${PHILHEALTH_SOURCE.id}-${slugify(title) || index}`,
+            category: PHILHEALTH_SOURCE.category,
+            label: PHILHEALTH_SOURCE.label,
+            source: PHILHEALTH_SOURCE.sourceName,
+            title,
+            summary: `Read the full official update from ${PHILHEALTH_SOURCE.sourceName}.`,
+            url: url.toString(),
+            imageUrl: '',
+            publishedAt: parsePhilHealthDate(match[1]),
+            relevanceScore: scoreHealthRelevance(title)
+        };
+    }).filter(Boolean).slice(0, Math.max(1, limit));
+}
+
+function enrichPhilHealthArticle(item, html) {
+    const title = stripHtml(extractTag(html, 'title')) || item.title;
+    const imageMatch = String(html || '').match(
+        /<img\b(?=[^>]*\bclass=(?:"[^"]*\bpic_pos\b[^"]*"|'[^']*\bpic_pos\b[^']*'))[^>]*\bsrc=(?:"([^"]+)"|'([^']+)')[^>]*>/i
+    );
+    const imageCandidate = decodeXmlEntities(imageMatch?.[1] || imageMatch?.[2] || '').trim();
+    let imageUrl = '';
+    try { imageUrl = firstValidImageUrl(new URL(imageCandidate, item.url).toString()); } catch (_) {}
+
+    const contentMatch = String(html || '').match(/<div\s+id=(?:"news_con"|'news_con')[^>]*>([\s\S]*?)<hr\b/i);
+    const paragraphs = contentMatch
+        ? [...contentMatch[1].matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].map((match) => stripHtml(match[1])).filter(Boolean)
+        : [];
+    return { ...item, title, summary: compactSummary(paragraphs[0] || item.summary), imageUrl };
+}
+
+async function fetchPhilHealthNews(limit = 6) {
+    const listingResponse = await fetch(PHILHEALTH_NEWS_URL, {
+        headers: { Accept: 'text/html,*/*;q=0.8', 'User-Agent': 'PascualingaNewsBot/1.0' }
+    });
+    if (!listingResponse.ok) throw new Error(`Failed to load PhilHealth news: ${listingResponse.status}`);
+    const listed = parsePhilHealthListing(await listingResponse.text(), limit);
+    return Promise.all(listed.map(async (item) => {
+        try {
+            const response = await fetch(item.url, {
+                headers: { Accept: 'text/html,*/*;q=0.8', 'User-Agent': 'PascualingaNewsBot/1.0' }
+            });
+            return response.ok ? enrichPhilHealthArticle(item, await response.text()) : item;
+        } catch (_) { return item; }
+    }));
+}
+
 function fallbackLiveNews() {
     return [
         {
             id: 'official-philhealth-partnership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth',
             title: 'PhilHealth and St. Luke’s formalize landmark health-care partnership',
             summary: 'Official PhilHealth update on expanding access to quality health care through a new institutional partnership.',
-            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8e8005e1b93.php', imageUrl: '', publishedAt: '2026-08-25T00:00:00.000Z'
+            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8e8005e1b93.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PR-2026-22.png', publishedAt: '2026-08-25T00:00:00.000Z'
         },
         {
             id: 'official-philhealth-leadership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth',
             title: 'PhilHealth’s new President and CEO vows to accelerate national health gains',
             summary: 'Official leadership update outlining continuity and acceleration of PhilHealth programs under the national health agenda.',
-            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8bd5523ff79.php', imageUrl: '', publishedAt: '2026-08-20T00:00:00.000Z'
+            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8bd5523ff79.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PR-2026-21.png', publishedAt: '2026-08-20T00:00:00.000Z'
         },
         {
             id: 'official-philhealth-human-right-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth',
             title: 'PhilHealth and CHR champion health care as a fundamental human right',
             summary: 'PhilHealth and the Commission on Human Rights reinforce equitable access to quality health care for Filipinos.',
-            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a3b405bdfbb6.php', imageUrl: '', publishedAt: '2026-06-23T00:00:00.000Z'
+            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a3b405bdfbb6.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PR-2026-18.jpg', publishedAt: '2026-06-23T00:00:00.000Z'
         },
         {
             id: 'official-philhealth-gamot-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth',
             title: 'PhilHealth launches GAMOT in Zamboanga Sibugay',
             summary: 'The official GAMOT program update explains expanded access to essential outpatient medicines for eligible members.',
-            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a2634094e2bd.php', imageUrl: '', publishedAt: '2026-06-04T00:00:00.000Z'
+            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a2634094e2bd.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PROXI-PR2026-004.jpg', publishedAt: '2026-06-04T00:00:00.000Z'
         },
         {
             id: 'official-who-philippines-releases', category: 'Philippine Health', label: 'WHO Philippines', source: 'World Health Organization',
@@ -303,7 +373,10 @@ async function getLiveNews(limit) {
         return liveNewsCache.items.slice(0, target);
     }
 
-    const settled = await Promise.allSettled(LIVE_NEWS_RSS_SOURCES.map((source) => fetchRssSource(source)));
+    const settled = await Promise.allSettled([
+        ...LIVE_NEWS_RSS_SOURCES.map((source) => fetchRssSource(source)),
+        fetchPhilHealthNews(target)
+    ]);
     const combined = settled
         .filter((result) => result.status === 'fulfilled')
         .flatMap((result) => result.value);
@@ -326,8 +399,7 @@ async function getLiveNews(limit) {
     });
 
     const trustedFallback = fallbackLiveNews();
-    const liveLimit = Math.min(3, target);
-    const merged = [...deduped.slice(0, liveLimit), ...trustedFallback].filter((item, index, items) => {
+    const merged = [...deduped, ...trustedFallback].filter((item, index, items) => {
         const key = String(item.url || '').toLowerCase();
         return isOfficialNewsUrl(item.url) && key && items.findIndex((candidate) => String(candidate.url || '').toLowerCase() === key) === index;
     });
@@ -705,5 +777,5 @@ router.delete('/:id', requireRole(['admin']), announcementWriteRateLimit, async 
 });
 
 module.exports = router;
-module.exports._newsTest = { decodeXmlEntities, stripHtml, compactSummary, fallbackLiveNews, isOfficialNewsUrl };
+module.exports._newsTest = { decodeXmlEntities, stripHtml, compactSummary, fallbackLiveNews, isOfficialNewsUrl, parsePhilHealthListing, enrichPhilHealthArticle };
 

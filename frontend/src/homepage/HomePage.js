@@ -146,19 +146,19 @@ const slides = [
 ];
 
 const NEWS_FALLBACK_IMAGES = [
-  'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=900&q=80',
-  'https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=900&q=80',
-  'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=900&q=80',
-  'https://images.unsplash.com/photo-1516574187841-cb9cc2ca948b?auto=format&fit=crop&w=900&q=80',
-  'https://images.unsplash.com/photo-1584515933487-779824d29309?auto=format&fit=crop&w=900&q=80',
-  'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=900&q=80'
+  '/images/hospital-main-800.jpg',
+  '/images/hospital-emergency-800.jpg',
+  '/images/hospital-pharmacy-800.jpg',
+  '/images/hospital-interior-800.jpg',
+  '/images/hospital-service-window-800.jpg',
+  '/images/hospital-about-700.jpg'
 ];
 
 const OFFICIAL_NEWS_FALLBACK = [
-  { id: 'philhealth-partnership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth and St. Luke’s formalize landmark health-care partnership', summary: 'Official PhilHealth update on expanding access to quality health care.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8e8005e1b93.php', imageUrl: '', publishedAt: '2026-08-25T00:00:00.000Z' },
-  { id: 'philhealth-leadership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth’s new President and CEO vows to accelerate national health gains', summary: 'Official leadership update on the national health agenda.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8bd5523ff79.php', imageUrl: '', publishedAt: '2026-08-20T00:00:00.000Z' },
-  { id: 'philhealth-human-right-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth and CHR champion health care as a fundamental human right', summary: 'An official update on equitable access to quality health care for Filipinos.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a3b405bdfbb6.php', imageUrl: '', publishedAt: '2026-06-23T00:00:00.000Z' },
-  { id: 'philhealth-gamot-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth launches GAMOT in Zamboanga Sibugay', summary: 'Official details on expanded access to essential outpatient medicines.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a2634094e2bd.php', imageUrl: '', publishedAt: '2026-06-04T00:00:00.000Z' },
+  { id: 'philhealth-partnership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth and St. Luke’s formalize landmark health-care partnership', summary: 'Official PhilHealth update on expanding access to quality health care.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8e8005e1b93.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PR-2026-22.png', publishedAt: '2026-08-25T00:00:00.000Z' },
+  { id: 'philhealth-leadership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth’s new President and CEO vows to accelerate national health gains', summary: 'Official leadership update on the national health agenda.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8bd5523ff79.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PR-2026-21.png', publishedAt: '2026-08-20T00:00:00.000Z' },
+  { id: 'philhealth-human-right-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth and CHR champion health care as a fundamental human right', summary: 'An official update on equitable access to quality health care for Filipinos.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a3b405bdfbb6.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PR-2026-18.jpg', publishedAt: '2026-06-23T00:00:00.000Z' },
+  { id: 'philhealth-gamot-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth launches GAMOT in Zamboanga Sibugay', summary: 'Official details on expanded access to essential outpatient medicines.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a2634094e2bd.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PROXI-PR2026-004.jpg', publishedAt: '2026-06-04T00:00:00.000Z' },
   { id: 'who-philippines-latest', category: 'Philippine Health', label: 'WHO Philippines', source: 'World Health Organization', title: 'Latest official health releases from WHO Philippines', summary: 'Verified public-health releases from the WHO Philippines country office.', url: 'https://www.who.int/philippines/news/releases', imageUrl: '', publishedAt: null },
   { id: 'philhealth-latest', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'Latest official PhilHealth news and advisories', summary: 'Browse current official PhilHealth updates.', url: 'https://www.philhealth.gov.ph/news/', imageUrl: '', publishedAt: null }
 ];
@@ -184,10 +184,7 @@ function isOfficialNewsLink(raw) {
 function pickNewsImage(item, index) {
   const directImage = String(item?.imageUrl || '').trim();
   if (/^https:\/\//i.test(directImage)) return directImage;
-
-  const basis = String(item?.url || item?.title || index);
-  const hash = Array.from(basis).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  return NEWS_FALLBACK_IMAGES[hash % NEWS_FALLBACK_IMAGES.length];
+  return NEWS_FALLBACK_IMAGES[index % NEWS_FALLBACK_IMAGES.length];
 }
 
 function formatNewsDate(value) {
@@ -797,7 +794,7 @@ function HomePage() {
               return (
                 <div key={n?.id || idx} className={`news-card reveal-on-scroll reveal-delay-${(idx % 3) + 1}`}>
                   <div className="news-card-image">
-                    <img src={img} alt={`${title || cat || 'Official health'} news`} loading="lazy" width="900" height="480" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = '/images/hero_bg.jpg'; }} />
+                    <img src={img} alt={`${title || cat || 'Official health'} news`} loading="lazy" width="900" height="480" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = NEWS_FALLBACK_IMAGES[idx % NEWS_FALLBACK_IMAGES.length]; }} />
                   </div>
                   <div className="news-card-body">
                     <div className="news-card-meta">
