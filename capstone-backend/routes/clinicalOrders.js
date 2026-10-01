@@ -236,7 +236,7 @@ function enrichClinicalOrder(order) {
       provider: hmoProvider || '',
       loaNumber: hmoLoa || '',
       cardNumber: hmoCard || '',
-      status: hmoClaimStatus || (statusIsPaid ? 'Approved' : '')
+      status: hmoApplied ? hmoClaimStatus : ''
     }
   };
 }

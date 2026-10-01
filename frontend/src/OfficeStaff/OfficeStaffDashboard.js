@@ -2631,7 +2631,7 @@ export default function OfficeStaffDashboard({ mode }) {
                       const isPaid = paymentStatus.paid;
                       const isHmoPaid = paymentStatus.paidByHmo;
                       const servicePrice = Number(o.configuredUnitPrice ?? o.unitPrice ?? o.amountDue ?? 0);
-                      const rowPatientDue = isPaid ? 0 : Number(o.amountDue ?? o.patientPayable ?? servicePrice);
+                      const rowPatientDue = paymentStatus.patientPayable;
                       const hmo = o.hmoIndicators && typeof o.hmoIndicators === 'object' ? o.hmoIndicators : {};
                       const phNow = Number(o.philhealthApplied || 0);
                       const hmoNow = Number(o.hmoCoverageApplied || 0);
@@ -2650,22 +2650,22 @@ export default function OfficeStaffDashboard({ mode }) {
                                 border: '1px solid #cbd5e1',
                                 fontSize: '11px', fontWeight: 700
                               }}>
-                                HMO COVERED • NO PAYMENT NEEDED
+                                {paymentStatus.paidWithCopay ? 'HMO + PATIENT SETTLED' : 'HMO COVERED • NO PAYMENT NEEDED'}
                               </span>
                             ) : null}
                           </div>
                         </td>
                         <td className="text-sm text-slate-600">
                           <div style={{ fontWeight: 700, color: hmo.provider ? '#0f172a' : '#94a3b8', fontSize: '0.82rem' }}>{hmo.provider || '—'}</div>
-                          {hmo.cardNumber ? <div className="office-billing-subline" style={{ color: '#64748b', fontSize: '0.72rem' }}>Card: {String(hmo.cardNumber)}</div> : null}
+                          {paymentStatus.hasLinkedCoverage && hmo.cardNumber ? <div className="office-billing-subline" style={{ color: '#64748b', fontSize: '0.72rem' }}>Card: {String(hmo.cardNumber)}</div> : null}
                         </td>
                         <td className="text-sm text-slate-600">
-                          {hmo.loaNumber ? (
+                          {paymentStatus.hasLinkedCoverage && hmo.loaNumber ? (
                             <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#2563eb', fontWeight: 800, fontSize: '0.82rem' }}>{String(hmo.loaNumber)}</div>
                           ) : (
-                            <div style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.78rem' }}>no LOA</div>
+                            <div style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.78rem' }}>{paymentStatus.hasLinkedCoverage ? 'no LOA' : '—'}</div>
                           )}
-                          {hmo.status ? (
+                          {paymentStatus.hasLinkedCoverage && hmo.status ? (
                             <div style={{ marginTop: 3 }}>
                               <span className={`status-badge-table ${
                                 String(hmo.status || '').toLowerCase() === 'approved' ? 'status-duty' :
@@ -2685,7 +2685,7 @@ export default function OfficeStaffDashboard({ mode }) {
                           {hmoNow > 0 ? `₱ ${toMoney(hmoNow)}` : '—'}
                         </td>
                         <td className="text-sm" style={{ color: rowPatientDue > 0 && !isPaid ? '#b91c1c' : '#0f172a', textAlign: 'right', fontWeight: 900 }}>
-                          {isPaid ? '₱ 0.00' : `₱ ${toMoney(rowPatientDue)}`}
+                          ₱ {toMoney(rowPatientDue)}
                         </td>
                         <td>
                           {isPaid ? (
@@ -2694,10 +2694,10 @@ export default function OfficeStaffDashboard({ mode }) {
                             </span>
                           ) : (
                             <span className={`status-badge-table ${
-                              String(o.status || '').toLowerCase() === 'paid' ? 'status-duty' :
+                              paymentStatus.requiresHmoSettlement ? 'status-duty' :
                               String(o.status || '').toLowerCase() === 'for payment' ? 'status-upcoming' :
                               'status-scheduled'
-                            }`}>{o.status || '—'}</span>
+                            }`}>{paymentStatus.statusLabel}</span>
                           )}
                         </td>
                         <td className="text-sm text-slate-600" style={{ fontSize: '0.78rem' }}>{o.createdAt ? new Date(o.createdAt).toLocaleString() : '—'}</td>
@@ -2734,7 +2734,7 @@ export default function OfficeStaffDashboard({ mode }) {
                               className="office-btn ghost"
                               onClick={() => openLabOrderPos(o)}
                             >
-                              Record Payment
+                              {paymentStatus.requiresHmoSettlement ? 'Settle HMO' : 'Record Payment'}
                             </button>
                           )}
                         </td>

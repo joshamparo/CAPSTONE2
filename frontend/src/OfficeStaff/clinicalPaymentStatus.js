@@ -11,12 +11,35 @@ export const getClinicalPaymentStatus = (order = {}) => {
       philhealth > 0 || hmoCoverage > 0
     )
   );
-  const paidByHmo = paid && hasLinkedCoverage && Boolean(indicators.isHmoPrePaid);
+  const claimStatus = String(indicators.status || '').trim().toLowerCase();
+  const coverageApproved = ['approved', 'partially approved', 'paid'].includes(claimStatus);
+  const gross = Math.max(0, Number(order?.configuredUnitPrice ?? order?.originalTotal ?? order?.unitPrice ?? order?.amountDue ?? 0));
+  const patientPayableRaw = Number(order?.patientPayable);
+  const patientPayable = Number.isFinite(patientPayableRaw)
+    ? Math.max(0, patientPayableRaw)
+    : Math.max(0, gross - philhealth - hmoCoverage);
+  const hasAppliedCoverage = hasLinkedCoverage && coverageApproved && (philhealth > 0 || hmoCoverage > 0);
+  const fullyCovered = hasAppliedCoverage && patientPayable <= 0.0099;
+  const paidByHmo = paid && hasAppliedCoverage && Boolean(indicators.isHmoPrePaid);
+  const paidWithCopay = paidByHmo && patientPayable > 0.0099;
+  const requiresHmoSettlement = !paid && fullyCovered;
 
   return {
     paid,
     paidByHmo,
-    statusLabel: paidByHmo ? 'PAID (HMO)' : (paid ? 'PAID' : String(order?.status || 'For Payment')),
-    amountLabel: paidByHmo ? '₱ 0.00 (covered by HMO)' : null
+    paidWithCopay,
+    hasLinkedCoverage,
+    coverageApproved,
+    fullyCovered,
+    requiresHmoSettlement,
+    patientPayable,
+    statusLabel: paidWithCopay
+      ? 'PAID (HMO + PATIENT)'
+      : paidByHmo
+        ? 'PAID (HMO)'
+        : requiresHmoSettlement
+          ? 'READY (HMO)'
+          : (paid ? 'PAID' : String(order?.status || 'For Payment')),
+    amountLabel: fullyCovered ? '₱ 0.00 (covered by HMO)' : null
   };
 };
