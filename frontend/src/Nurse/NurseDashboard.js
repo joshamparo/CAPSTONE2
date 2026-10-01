@@ -11837,7 +11837,7 @@ function NurseDashboard() {
                           </span>
                           <div>
                             <div id="hmo-claim-review-title" className="hmo-claim-review-title">
-                              HMO / PhilHealth Claim Submission
+                              HMO Claim Submission
                             </div>
                             <div className="hmo-claim-review-subtitle">
                               Verify the coverage result before completing this intake.
@@ -11861,7 +11861,7 @@ function NurseDashboard() {
                             <strong>STEP 1 — CALL THE HMO HOTLINE NOW</strong>
                           </div>
                           <div>
-                            Fill the HMO Provider &amp; Card number on the right. Then call the HMO provider hotline for approval.
+                            Confirm the HMO provider and card number entered in Step 1. Then call the HMO provider hotline for approval.
                             Only after the HMO agent responds, pick a result below.
                           </div>
                         </div>
