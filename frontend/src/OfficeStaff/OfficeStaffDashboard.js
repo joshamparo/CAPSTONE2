@@ -5,6 +5,7 @@ import '../Admin/AdminDashboard.css';
 import './OfficeStaffDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import { getClinicalPaymentStatus } from './clinicalPaymentStatus';
+import { getLabPaymentFinancials } from './labPaymentFinancials';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import { checkBackendHealth, fetchJson } from '../utils/api';
@@ -647,7 +648,8 @@ export default function OfficeStaffDashboard({ mode }) {
   }, []);
 
   const openLabOrderPos = useCallback(async (order) => {
-    const due = Number(order?.amountDue ?? order?.unitPrice ?? 0);
+    const isPaid = String(order?.status || '').trim().toLowerCase() === 'paid';
+    const due = isPaid ? 0 : Number(order?.patientPayable ?? order?.amountDue ?? order?.unitPrice ?? 0);
     setSelectedLabOrder(order || null);
     setSelectedLabOrderHmo(null); // Reset
     setLabPaymentMethod('Cash');
@@ -1314,9 +1316,13 @@ export default function OfficeStaffDashboard({ mode }) {
 
   const recordLabPayment = async () => {
     if (!user || role !== 'cashier' || !selectedLabOrder?.id) return;
+    if (String(selectedLabOrder?.status || '').trim().toLowerCase() === 'paid') {
+      setLabPaymentError('This order is already paid. No additional payment can be collected.');
+      return;
+    }
     const amountReceived = Number(labPaymentAmount || 0);
-    const amountDue = Number(selectedLabOrder?.amountDue ?? selectedLabOrder?.patientPayable ?? selectedLabOrder?.unitPrice ?? 0);
-    const grossAmount = Number(selectedLabOrder?.configuredUnitPrice ?? selectedLabOrder?.unitPrice ?? 0);
+    const amountDue = Number(selectedLabOrderDue || 0);
+    const grossAmount = Number(selectedLabOrder?.configuredUnitPrice ?? selectedLabOrder?.originalTotal ?? selectedLabOrder?.unitPrice ?? 0);
     const method = String(labPaymentMethod || 'Cash').trim();
     const ref = String(labPaymentReference || '').trim();
     if (!selectedLabOrder?.priceConfigured) {
@@ -1623,11 +1629,7 @@ export default function OfficeStaffDashboard({ mode }) {
   }, [displayedLabOrders, labPage]);
 
   const selectedLabOrderDue = useMemo(() => {
-    const gross = Number(selectedLabOrder?.amountDue ?? selectedLabOrder?.unitPrice ?? 0);
-    const hmoAmt = Number(selectedLabOrderHmo?.applied_hmo_amount || selectedLabOrderHmo?.loa_approved_amount || 0);
-    const phAmt = Number(selectedLabOrderHmo?.philhealth_deduction || 0);
-    const due = Math.max(0, gross - hmoAmt - phAmt);
-    return Number.isFinite(due) ? due : 0;
+    return getLabPaymentFinancials(selectedLabOrder, selectedLabOrderHmo).due;
   }, [selectedLabOrder, selectedLabOrderHmo]);
 
   const selectedLabOrderReceived = useMemo(() => {
@@ -1643,6 +1645,10 @@ export default function OfficeStaffDashboard({ mode }) {
   const selectedLabOrderShort = useMemo(() => {
     return Math.max(0, selectedLabOrderDue - selectedLabOrderReceived);
   }, [selectedLabOrderDue, selectedLabOrderReceived]);
+
+  const selectedLabOrderFinancials = getLabPaymentFinancials(selectedLabOrder, selectedLabOrderHmo);
+  const selectedLabOrderIsPaid = selectedLabOrderFinancials.paid;
+  const selectedLabOrderGross = selectedLabOrderFinancials.gross;
 
   return (
     <div className="office-shell" style={{ paddingTop: backendHealth.checked && !backendHealth.ok ? 44 : 0 }}>
@@ -3099,7 +3105,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div className="office-pos-summary">
                   <div className="office-pos-metric">
                     <div className="office-pos-label">Gross Amount</div>
-                    <div className="office-pos-value">₱ {toMoney(Number(selectedLabOrder?.amountDue ?? selectedLabOrder?.unitPrice ?? 0))}</div>
+                    <div className="office-pos-value">₱ {toMoney(selectedLabOrderGross)}</div>
                   </div>
                   {selectedLabOrderHmo ? (
                     <>
@@ -3121,18 +3127,22 @@ export default function OfficeStaffDashboard({ mode }) {
                     <div className="office-pos-label">Net Due</div>
                     <div className="office-pos-value">₱ {toMoney(selectedLabOrderDue)}</div>
                   </div>
-                  <div className="office-pos-metric">
-                    <div className="office-pos-label">Received</div>
-                    <div className="office-pos-value">₱ {toMoney(selectedLabOrderReceived)}</div>
-                  </div>
-                  <div className="office-pos-metric">
-                    <div className="office-pos-label">{labPaymentMethod === 'Cash' ? 'Change' : 'Balance Check'}</div>
-                    <div className="office-pos-value">
-                      {labPaymentMethod === 'Cash'
-                        ? `₱ ${toMoney(selectedLabOrderChange)}`
-                        : (selectedLabOrderShort > 0 ? `Short ₱ ${toMoney(selectedLabOrderShort)}` : 'Fully covered')}
+                  {!selectedLabOrderIsPaid ? (
+                    <div className="office-pos-metric">
+                      <div className="office-pos-label">Received</div>
+                      <div className="office-pos-value">₱ {toMoney(selectedLabOrderReceived)}</div>
                     </div>
-                  </div>
+                  ) : null}
+                  {!selectedLabOrderIsPaid ? (
+                    <div className="office-pos-metric">
+                      <div className="office-pos-label">{labPaymentMethod === 'Cash' ? 'Change' : 'Balance Check'}</div>
+                      <div className="office-pos-value">
+                        {labPaymentMethod === 'Cash'
+                          ? `₱ ${toMoney(selectedLabOrderChange)}`
+                          : (selectedLabOrderShort > 0 ? `Short ₱ ${toMoney(selectedLabOrderShort)}` : 'Fully covered')}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="office-pos-line-item">
@@ -3141,7 +3151,7 @@ export default function OfficeStaffDashboard({ mode }) {
                     <div className="office-billing-subline">Order #{selectedLabOrder.id} • Qty 1</div>
                   </div>
                   <div className="office-pos-line-total">
-                    {selectedLabOrder.priceConfigured ? `₱ ${toMoney(selectedLabOrderDue)}` : 'Needs setup'}
+                    {selectedLabOrder.priceConfigured ? `₱ ${toMoney(selectedLabOrderGross)}` : 'Needs setup'}
                   </div>
                 </div>
 
@@ -3153,7 +3163,11 @@ export default function OfficeStaffDashboard({ mode }) {
                       This lab service has no configured cashier price yet. Add it to the clinical service catalog before collecting payment.
                     </div>
                   ) : null}
-                  {selectedLabOrderDue <= 0.0099 && selectedLabOrder.priceConfigured ? (
+                  {selectedLabOrderIsPaid ? (
+                    <div className="admin-alert success" style={{ marginBottom: 12 }}>
+                      This order is already settled. No additional patient payment may be collected.
+                    </div>
+                  ) : selectedLabOrderDue <= 0.0099 && selectedLabOrder.priceConfigured ? (
                     <div style={{
                       marginBottom: 12, padding: '14px 18px', borderRadius: 10,
                       background: '#f8fafc', border: '1px solid #e2e8f0',
@@ -3167,7 +3181,7 @@ export default function OfficeStaffDashboard({ mode }) {
                     </div>
                   ) : null}
                   <div className="office-row">
-                    <select className="office-select" value={labPaymentMethod} onChange={(e) => setLabPaymentMethod(e.target.value)} disabled={selectedLabOrderDue <= 0.0099}>
+                    <select className="office-select" value={labPaymentMethod} onChange={(e) => setLabPaymentMethod(e.target.value)} disabled={selectedLabOrderIsPaid || selectedLabOrderDue <= 0.0099}>
                       <option value="Cash">Cash</option>
                       <option value="GCash">GCash</option>
                       <option value="Card">Card</option>
@@ -3181,7 +3195,7 @@ export default function OfficeStaffDashboard({ mode }) {
                       step="0.01"
                       value={selectedLabOrderDue <= 0.0099 ? '0.00' : labPaymentAmount}
                       onChange={(e) => setLabPaymentAmount(selectedLabOrderDue <= 0.0099 ? '0.00' : e.target.value)}
-                      disabled={selectedLabOrderDue <= 0.0099}
+                      disabled={selectedLabOrderIsPaid || selectedLabOrderDue <= 0.0099}
                       placeholder="Amount received"
                     />
                     <input
@@ -3189,19 +3203,22 @@ export default function OfficeStaffDashboard({ mode }) {
                       style={{ flex: '1 1 220px', minWidth: 0 }}
                       value={labPaymentReference}
                       onChange={(e) => setLabPaymentReference(e.target.value)}
+                      disabled={selectedLabOrderIsPaid}
                       placeholder={selectedLabOrderDue <= 0.0099 ? 'HMO LOA Number / Reference (required)' : (labPaymentMethod === 'Cash' ? 'Receipt / Reference (optional)' : 'Receipt / Reference (required)')}
                     />
                     <button
                       type="button"
                       className="office-btn primary"
                       onClick={recordLabPayment}
-                      disabled={labPaymentLoading || !selectedLabOrder.priceConfigured}
+                      disabled={selectedLabOrderIsPaid || labPaymentLoading || !selectedLabOrder.priceConfigured}
                     >
-                      {labPaymentLoading ? 'Saving…' : (selectedLabOrderDue <= 0.0099 ? 'Mark as Settled (No Charge)' : 'Collect Payment')}
+                      {selectedLabOrderIsPaid ? 'Already Paid' : (labPaymentLoading ? 'Saving…' : (selectedLabOrderDue <= 0.0099 ? 'Mark as Settled (No Charge)' : 'Collect Payment'))}
                     </button>
                   </div>
                   <div style={{ marginTop: 10, color: '#64748b', fontSize: '0.9rem' }}>
-                    {selectedLabOrderDue <= 0.0099
+                    {selectedLabOrderIsPaid
+                      ? 'This record is view-only because the transaction has already been settled.'
+                      : selectedLabOrderDue <= 0.0099
                       ? 'After confirmation, this lab order is set to PAID (HMO) and patient may proceed directly to the laboratory station.'
                       : 'After cashier collection, this lab order moves to Paid so the lab staff can proceed with the exam.'}
                   </div>

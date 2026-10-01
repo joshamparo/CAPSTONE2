@@ -265,8 +265,8 @@ function normalizeHmoStatus(value) {
 
 function isHmoCoverageApplied(status) {
   const normalized = normalizeHmoStatus(status);
-  // Auto-apply for Approved, Partially Approved, and Pending (if LOA amount is set)
-  return normalized === 'Approved' || normalized === 'Partially Approved' || normalized === 'Pending';
+  // An entered amount is not coverage until the HMO has actually authorized it.
+  return normalized === 'Approved' || normalized === 'Partially Approved';
 }
 
 function summarizeHmoClaim(row, totalAmount) {

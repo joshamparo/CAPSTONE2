@@ -209,9 +209,9 @@ function enrichClinicalOrder(order) {
   const hmoLoaAmt = h ? Math.max(0, Number(h.loa_approved_amount || 0)) : 0;
   const hmoClaimStatus = h ? String(h.status || '') : '';
   const hmoApplied = !!(hmoProvider || hmoLoa || hmoCard || (phDed + hmoLoaAmt > 0));
-  const hmoStatusApplied = ['Approved', 'Partially Approved', 'Pending', 'Ready', 'Paid', 'approved', 'partially approved'].includes(String(hmoClaimStatus || '').trim());
+  const hmoStatusApplied = ['approved', 'partially approved', 'paid'].includes(String(hmoClaimStatus || '').trim().toLowerCase());
   const maxAfterPh = Math.max(0, realTotal - phDed);
-  const realHmoCovered = hmoStatusApplied && hmoApplied ? Math.min(maxAfterPh, hmoLoaAmt) : (statusIsPaid && hmoApplied ? realTotal - phDed : 0);
+  const realHmoCovered = hmoStatusApplied && hmoApplied ? Math.min(maxAfterPh, hmoLoaAmt) : 0;
   const patientPayable = Math.max(0, realTotal - phDed - realHmoCovered);
   const isHmoPrePaid = !!(statusIsPaid && hmoApplied);
   return {
@@ -920,6 +920,9 @@ router.patch('/:id', async (req, res) => {
         }
       }
       if (newStatus === 'Paid') {
+        if (String(current.status || '').trim().toLowerCase() === 'paid') {
+          return res.status(409).json({ message: 'This order is already paid. Duplicate payment was not recorded.' });
+        }
         if (!pricing.configured || !(Number(pricing.unitPrice) > 0)) {
           return res.status(400).json({ message: 'No cashier price is configured for this service yet.' });
         }
@@ -944,7 +947,7 @@ router.patch('/:id', async (req, res) => {
             hmoLoaAmt = Math.max(0, Number(f.loa_approved_amount || 0));
             const status = String(f.claim_status || '').toLowerCase();
             const hasAny = !!(f.hmo_provider || f.hmo_loa_number || hmoPh + hmoLoaAmt > 0);
-            if (hasAny && ['approved', 'partially approved', 'pending', 'ready', 'paid'].includes(status)) {
+            if (hasAny && ['approved', 'partially approved', 'paid'].includes(status)) {
               hmoApplied = true;
             } else if (hasAny && status === '' && hmoPh + hmoLoaAmt > 0) {
               hmoApplied = true;
