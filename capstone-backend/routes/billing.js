@@ -6,6 +6,7 @@ const { resolveOwnedPatient } = require('../utils/patientOwnership');
 const { normalizeEmail, parseLimit, parseOffset } = require('../utils/normalize');
 const { syncHmoDataFromAppointmentToInvoice } = require('../utils/billingLedger');
 const { sendError } = require('../utils/httpErrors');
+const { buildHmoQueueRows } = require('../utils/hmoQueueView');
 
 
 const STAFF_ROLE_SET = new Set(['doctor_secretary', 'cashier', 'admin', 'doctor']);
@@ -27,6 +28,106 @@ const serialize = (obj) =>
   JSON.parse(
     JSON.stringify(obj, (k, v) => (typeof v === 'bigint' ? v.toString() : v))
   );
+
+async function serveFastHmoQueue(req, res) {
+  const filterMode = String(req.query.filter || 'all').trim().toLowerCase() === 'all' ? 'all' : 'approved';
+  const query = String(req.query.q || '').trim().toLowerCase();
+  const page = Math.max(1, Math.trunc(Number(req.query.page || 1)));
+  const perPage = Math.max(1, Math.min(50, Math.trunc(Number(req.query.perPage || req.query.per_page || 8))));
+
+  const rawRows = await prisma.$queryRawUnsafe(`
+    SELECT
+      h.id::text AS id,
+      h.invoice_id::text AS invoice_id,
+      h.appointment_id::text AS appointment_id,
+      COALESCE(i.patient_id, h.patient_id, co.patient_id)::text AS patient_id,
+      NULLIF(TRIM(CONCAT_WS(' ', p.first_name, NULLIF(TRIM(p.middle_name), ''), p.last_name)), '') AS registry_patient_name,
+      NULLIF(TRIM(co.patient_name), '') AS order_patient_name,
+      NULLIF(TRIM(h.patient_name), '') AS claim_patient_name,
+      COALESCE(NULLIF(TRIM(h.hmo_provider), ''), NULLIF(TRIM(p.hmo_provider), '')) AS hmo_provider,
+      COALESCE(NULLIF(TRIM(h.hmo_card_number), ''), NULLIF(TRIM(p.hmo_card_number), '')) AS hmo_card_number,
+      NULLIF(TRIM(h.hmo_loa_number), '') AS hmo_loa_number,
+      COALESCE(h.philhealth_deduction, 0) AS philhealth_deduction,
+      COALESCE(h.loa_approved_amount, 0) AS loa_approved_amount,
+      COALESCE(NULLIF(TRIM(h.status), ''), 'Pending') AS claim_status,
+      h.notes AS claim_notes,
+      h.requested_by,
+      h.updated_by,
+      h.created_at AS claim_created_at,
+      h.updated_at AS claim_updated_at,
+      COALESCE(NULLIF(TRIM(h.patient_reference), ''), NULLIF(TRIM(i.patient_reference), ''), NULLIF(TRIM(p.patient_reference), '')) AS patient_reference,
+      p.contact_number,
+      p.email,
+      p.company,
+      p.hmo_provider AS registry_hmo_provider,
+      p.hmo_card_number AS registry_hmo_card_number,
+      COALESCE(i.total_amount, 0) AS total_amount,
+      i.status AS invoice_status,
+      i.created_at AS invoice_created_at,
+      items.workups_list,
+      NULLIF(TRIM(CONCAT_WS(': ', co.kind, co.service)), '') AS order_service
+    FROM public.billing_hmo_claims h
+    LEFT JOIN public.billing_invoices i ON i.id = h.invoice_id
+    LEFT JOIN public.clinical_orders co ON co.id = (
+      COALESCE(
+        substring(COALESCE(i.notes, '') from 'Clinical Order #([0-9]+)'),
+        substring(COALESCE(i.notes, '') from 'Lab Order #([0-9]+)')
+      )
+    )::bigint
+    LEFT JOIN public.patients p ON p.id = COALESCE(i.patient_id, h.patient_id, co.patient_id)
+    LEFT JOIN LATERAL (
+      SELECT STRING_AGG(ii.description, ', ' ORDER BY ii.id) AS workups_list
+      FROM public.billing_invoice_items ii
+      WHERE ii.invoice_id = i.id
+    ) items ON TRUE
+    ORDER BY h.updated_at DESC NULLS LAST, h.created_at DESC NULLS LAST
+    LIMIT 1000
+  `);
+
+  const genuineRows = (Array.isArray(rawRows) ? rawRows : []).filter((row) => {
+    const automated = /^system:/i.test(String(row.requested_by || '').trim())
+      || /auto[- ]?recover|auto[- ]?pass|gate-no-crash/i.test(String(row.claim_notes || ''));
+    // Historical page-load recovery guessed HMO membership from a patient flag and
+    // produced unrelated invoice rows. Only transaction-created claims belong here.
+    return !automated;
+  });
+
+  let rows = buildHmoQueueRows(genuineRows);
+  if (filterMode === 'approved') {
+    rows = rows.filter((row) => {
+      const claim = row.hmo_claim || {};
+      const status = String(row.claim_status || claim.status || '').toLowerCase();
+      return (status === 'approved' || status === 'partially approved')
+        && row.patient_name !== 'Patient name unavailable'
+        && Boolean(claim.provider)
+        && Boolean(claim.loa_number)
+        && Number(claim.applied_hmo_amount || 0) > 0;
+    });
+  }
+  if (query) {
+    rows = rows.filter((row) => [
+      row.patient_name, row.patient_reference, row.contact_number, row.email,
+      row.invoice_id, row.workups_list, row.claim_status,
+      row.hmo_claim?.provider, row.hmo_claim?.loa_number,
+      row.hmo_claim?.hmo_card_number, row.hmo_claim?.notes, row.hmo_claim?.company
+    ].some((value) => String(value || '').toLowerCase().includes(query)));
+  }
+
+  const invoiceCount = rows.reduce((sum, row) => sum + Number(row.invoice_count || 0), 0);
+  const totalCount = rows.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
+  const currentPage = Math.min(page, totalPages);
+  const offset = (currentPage - 1) * perPage;
+  return res.json(serialize({
+    filter: filterMode,
+    page: currentPage,
+    perPage,
+    totalCount,
+    invoiceCount,
+    totalPages,
+    rows: rows.slice(offset, offset + perPage)
+  }));
+}
 
 async function ensureBillingTablesExist() {
   const reg = await prisma.$queryRaw`
@@ -1335,6 +1436,10 @@ router.get('/hmo-queue', async (req, res) => {
     if (!['cashier', 'admin', 'doctor_secretary', 'staff'].includes(role)) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
+    // The monitoring screen is read-only. Schema setup and historical repair belong
+    // to deployment migrations, never to an interactive page request.
+    return await serveFastHmoQueue(req, res);
+
     // FIRST: run all schema warmups that the walk-in route would run: ensure tables + add missing columns
     try {
       await Promise.all([

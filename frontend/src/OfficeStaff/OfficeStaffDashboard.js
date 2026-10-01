@@ -3399,12 +3399,14 @@ export default function OfficeStaffDashboard({ mode }) {
                   const rawPatientName = String(row.patient_name || claim.patient_name || '').trim();
                   const isFallbackName = !rawPatientName
                     || rawPatientName.toLowerCase() === 'patient'
+                    || rawPatientName.toLowerCase() === 'patient name unavailable'
                     || rawPatientName.toLowerCase().startsWith('patient (click')
                     || rawPatientName.toLowerCase().startsWith('patient of')
                     || rawPatientName.toLowerCase().startsWith('patient of invoice')
                     || rawPatientName.toLowerCase().includes('[pass0-auto')
                     || rawPatientName.toLowerCase().startsWith('invoice-')
                     || rawPatientName.toLowerCase().startsWith('lab order #')
+                    || rawPatientName.toLowerCase().startsWith('clinical order #')
                     || rawPatientName.toLowerCase().startsWith('walk-in')
                     || rawPatientName.toLowerCase().startsWith('nurse walk-in')
                     || rawPatientName.toLowerCase().startsWith('nurse walk')
