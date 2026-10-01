@@ -701,7 +701,7 @@ router.get('/invoices', async (req, res) => {
     await ensureBillingAdjustmentsTableExist().catch(() => {});
     await ensureBillingHmoClaimsTableExist().catch(() => {});
 
-    const { status, patientId, q, take, skip, from, to } = req.query;
+    const { status, patientId, q, take, skip, from, to, validPatientsOnly } = req.query;
     const limit = parseLimit(take, { min: 1, max: 200, fallback: 50 });
     const offset = parseOffset(skip, { min: 0, max: 5000, fallback: 0 });
 
@@ -709,6 +709,20 @@ router.get('/invoices', async (req, res) => {
     const st = String(status || '').trim();
     if (st) andFilters.push({ status: st });
     if (patientId) andFilters.push({ patient_id: String(patientId) });
+    if (String(validPatientsOnly || '') === '1') {
+      andFilters.push({ patient_id: { not: null } });
+      andFilters.push({ patients: { is: { first_name: { not: '' }, last_name: { not: '' } } } });
+      andFilters.push({
+        NOT: {
+          patients: {
+            is: {
+              first_name: { equals: 'Pascual', mode: 'insensitive' },
+              last_name: { equals: 'Doctor', mode: 'insensitive' }
+            }
+          }
+        }
+      });
+    }
     const fromDate = from ? new Date(String(from)) : null;
     const toDate = to ? new Date(String(to)) : null;
     if (fromDate && !Number.isNaN(fromDate.getTime())) andFilters.push({ created_at: { gte: fromDate } });

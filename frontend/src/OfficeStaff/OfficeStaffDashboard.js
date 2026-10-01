@@ -522,6 +522,7 @@ export default function OfficeStaffDashboard({ mode }) {
       params.set('take', '8');
       params.set('skip', String((requestedPage - 1) * 8));
       params.set('withTotal', '1');
+      if (role === 'cashier') params.set('validPatientsOnly', '1');
       const data = await fetchJson(`/api/billing/invoices?${params.toString()}`, { apiBase: API_BASE, headers: buildHeaders(user) });
       setInvoices(Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []));
       setInvoiceTotalCount(Number(data?.totalCount ?? (Array.isArray(data) ? data.length : 0)) || 0);
@@ -952,10 +953,8 @@ export default function OfficeStaffDashboard({ mode }) {
     }).finally(() => setSavingHmoClaim(false));
   };
 
-  const openInvoice = async (invoiceId, mode = null) => {
-    if (!user) return;
+  const showInvoiceFromData = (data, mode = null) => {
     if (mode === 'view' || mode === 'payment') setInvoiceModalMode(mode);
-    setSelectedInvoiceLoading(true);
     setPaymentError('');
     setAdjustmentError('');
     setPhilhealthDeduction('');
@@ -965,28 +964,36 @@ export default function OfficeStaffDashboard({ mode }) {
     setHmoCardNumber('');
     setHmoStatus('Pending');
     setHmoNotes('');
+    setSelectedInvoice(data || null);
+    const claim = data?.hmo_claim || null;
+    if (claim) {
+      if (claim.hmo_provider || claim.provider) setHmoProvider(String(claim.hmo_provider || claim.provider));
+      if (claim.hmo_loa_number || claim.loa_number) setLoaNumber(String(claim.hmo_loa_number || claim.loa_number));
+      if (claim.hmo_card_number) setHmoCardNumber(String(claim.hmo_card_number));
+      if (claim.notes) setHmoNotes(String(claim.notes));
+      if (claim.status) setHmoStatus(String(claim.status));
+      const ph = Number(claim.philhealth_deduction || 0);
+      if (ph > 0) setPhilhealthDeduction(String(ph));
+      const hmo = Number(claim.loa_approved_amount || 0);
+      if (hmo > 0) setHmoCoverage(String(hmo));
+    }
+    const balance = Number(data?.balance_amount || 0);
+    setPayAmount(balance ? String(balance) : '');
+    setCashReceived(balance ? String(balance) : '');
+    setPayReference('');
+    setRefundAmount('');
+    setRefundReference('');
+    setRefundReason('');
+    setVoidReference('');
+    setVoidReason('');
+  };
+
+  const openInvoice = async (invoiceId, mode = null) => {
+    if (!user) return;
+    setSelectedInvoiceLoading(true);
     try {
       const data = await fetchJson(`/api/billing/invoices/${invoiceId}`, { apiBase: API_BASE, headers: buildHeaders(user) });
-      setSelectedInvoice(data);
-      const claim = data?.hmo_claim || null;
-      if (claim) {
-        if (claim.hmo_provider || claim.provider) setHmoProvider(String(claim.hmo_provider || claim.provider));
-        if (claim.hmo_loa_number || claim.loa_number) setLoaNumber(String(claim.hmo_loa_number || claim.loa_number));
-        if (claim.hmo_card_number) setHmoCardNumber(String(claim.hmo_card_number));
-        if (claim.notes) setHmoNotes(String(claim.notes));
-        if (claim.status) setHmoStatus(String(claim.status));
-        const ph = Number(claim.philhealth_deduction || 0);
-        if (ph > 0) setPhilhealthDeduction(String(ph));
-        const hmo = Number(claim.loa_approved_amount || 0);
-        if (hmo > 0) setHmoCoverage(String(hmo));
-      }
-      const balance = Number(data.balance_amount || 0);
-      setPayAmount(balance ? String(balance) : '');
-      setRefundAmount('');
-      setRefundReference('');
-      setRefundReason('');
-      setVoidReference('');
-      setVoidReason('');
+      showInvoiceFromData(data, mode);
     } catch (e) {
       setSelectedInvoice(null);
     } finally {
@@ -2441,7 +2448,10 @@ export default function OfficeStaffDashboard({ mode }) {
                         const status = inv.status || 'Draft';
                         const claim = inv?.hmo_claim && typeof inv.hmo_claim === 'object' ? inv.hmo_claim : null;
                         const hmoStatus = String(claim?.status || '').trim();
-                        const hasHmoClaim = Boolean(hmoStatus && claim);
+                        const hasHmoClaim = Boolean(claim && (
+                          claim.id || claim.provider || claim.hmo_provider || claim.loa_number || claim.hmo_loa_number ||
+                          claim.hmo_card_number || Number(claim.philhealth_deduction || 0) > 0 || Number(claim.loa_approved_amount || 0) > 0
+                        ));
                         const hmoBadge = (() => {
                           if (!hasHmoClaim) {
                             return <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>—</span>;
@@ -2505,11 +2515,11 @@ export default function OfficeStaffDashboard({ mode }) {
                             </td>
                             <td className="inc-right">
                               <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                                <button type="button" className="office-btn ghost" onClick={() => openInvoice(inv.id, 'view')}>
+                                <button type="button" className="office-btn ghost" style={{ width: 128, minHeight: 40, justifyContent: 'center' }} onClick={() => showInvoiceFromData(inv, 'view')}>
                                   View
                                 </button>
                                 {role === 'cashier' && String(status).toLowerCase() === 'ready' && Number(balanceValue) > 0.0001 ? (
-                                  <button type="button" className="office-btn primary" onClick={() => openInvoice(inv.id, 'payment')}>
+                                  <button type="button" className="office-btn primary" style={{ width: 128, minHeight: 40, justifyContent: 'center' }} onClick={() => showInvoiceFromData(inv, 'payment')}>
                                     Record Payment
                                   </button>
                                 ) : null}
