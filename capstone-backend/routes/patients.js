@@ -1606,6 +1606,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             if (desiredHmoStatus === 'Approved' && (!loaNumber || !Number.isFinite(approvedAmount) || approvedAmount <= 0)) {
                 return res.status(400).json({ message: 'Approved HMO claims require an LOA number and an approved amount greater than zero.' });
             }
+            if (desiredHmoStatus === 'Awaiting LOA' && !['temp_cash', 'guarantee'].includes(hmoPaymentModeRaw)) {
+                return res.status(400).json({ message: 'Choose how payment will be handled while the LOA is pending.' });
+            }
         }
         const paymentModeNoteTag = (() => {
           if (hmoPaymentModeRaw === 'temp_cash') return '[Patient temp paid full - refund HMO later]';
@@ -2717,10 +2720,14 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     }
                     const maxPh = Math.min(totalAmt, Math.max(0, Number(phAmt || 0)));
                     const afterPh = Math.max(0, totalAmt - maxPh);
-                    const appliedHmo = Math.min(afterPh, Math.max(0, Number(coverageAmount || 0)));
+                    const appliedHmo = Boolean(payload.hasHmo) && desiredHmoStatus === 'Approved'
+                        ? Math.min(afterPh, Math.max(0, Number(payload.hmoLoaApprovedAmount || coverageAmount || 0)))
+                        : 0;
                     const patientPay = Math.max(0, totalAmt - maxPh - appliedHmo);
                     hmoSummary = {
-                        status: 'Approved',
+                        status: Boolean(payload.hasHmo)
+                            ? (desiredHmoStatus || 'Rejected')
+                            : 'PhilHealth Only',
                         provider: hmoProv,
                         loa_number: loaNum,
                         card_number: hmoCard,
@@ -2755,12 +2762,12 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         // GUARANTEES: HMO claim row exists if patient had HMO + status approved/awaiting
         // Even if layer1 syncHmo failed silently (old bugs/crashes/.catch(()=>null)), this runs directly with fresh prisma
         // after commit, using an invoice-scoped advisory lock so duplicates never happen.
-        const hasAnyHmoFlag = Boolean(payload.hasHmo) || Boolean(payload.hasPhilhealth);
-        let hmoSync = hasAnyHmoFlag
+        const hasHmoClaim = Boolean(payload.hasHmo);
+        let hmoSync = hasHmoClaim
             ? { state: 'pending', label: 'Sync pending', invoiceId: result?.linkedInvoiceId || result?.hmoSummary?.invoice_id || null }
             : { state: 'not_required', label: 'Not required', invoiceId: null };
         try {
-            const shouldCreateClaim = hasAnyHmoFlag && desiredHmoStatus && !hmoRejectedFlag;
+            const shouldCreateClaim = hasHmoClaim && desiredHmoStatus && !hmoRejectedFlag;
             if (shouldCreateClaim && result?.patient?.id) {
                 const patientIdRaw = String(result.patient.id || '').trim();
                 const patientFullName = (() => {
@@ -2780,14 +2787,13 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 const notes = [String(payload.hmoNotes || '').trim(), paymentModeNoteTag].filter(Boolean).join(' · ') || null;
                 const requester = getRequesterEmail(req) || requesterName || null;
 
-                // Find all recent invoices for this patient created in last 5 minutes (covers all per-service walkin invoices)
-                // Use ::text match to avoid UUID cast crash if patient_id column is varchar not UUID
-                const candidateInvoices = await prisma.$queryRawUnsafe(`
-                    SELECT DISTINCT bi.id FROM public.billing_invoices bi
-                    WHERE bi.patient_id::text = $1::text
-                      AND bi.created_at >= (now() - interval '15 minutes')
-                    ORDER BY bi.id DESC
-                `, patientIdRaw).catch(() => []);
+                // Only synchronize the invoice returned by this exact intake.
+                // A patient can have another cashier invoice created moments
+                // earlier, so a time-window lookup is not safe enough.
+                const linkedInvoiceRaw = String(result?.linkedInvoiceId || result?.hmoSummary?.invoice_id || '').trim();
+                const candidateInvoices = /^\d+$/.test(linkedInvoiceRaw)
+                    ? [{ id: BigInt(linkedInvoiceRaw) }]
+                    : [];
                 let syncedClaims = 0;
                 if (Array.isArray(candidateInvoices) && candidateInvoices.length) {
                     for (const row of candidateInvoices) {
@@ -2819,7 +2825,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                 hmoSync = syncedClaims > 0
                     ? { state: 'sent', label: 'Sent to Cashier', invoiceId: String(candidateInvoices[0].id), syncedClaims }
                     : { state: 'pending', label: 'Sync pending', invoiceId: result?.linkedInvoiceId || result?.hmoSummary?.invoice_id || null, syncedClaims: 0 };
-            } else if (hasAnyHmoFlag) {
+            } else if (hasHmoClaim) {
                 hmoSync = { state: 'not_required', label: 'No HMO claim required', invoiceId: result?.linkedInvoiceId || result?.hmoSummary?.invoice_id || null };
             }
         } catch (_layer2) {

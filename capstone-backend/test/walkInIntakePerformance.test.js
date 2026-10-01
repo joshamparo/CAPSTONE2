@@ -25,11 +25,24 @@ test('walk-in intake does not scan historical invoices or wait for email deliver
   assert.doesNotMatch(handler, /await\s+Promise\.race\s*\(/i);
 });
 
-test('walk-in HMO recovery is bounded to invoices created for the current intake window', () => {
+test('walk-in HMO recovery uses only the invoice returned by the exact intake', () => {
   const handler = walkInHandlerSource();
-  assert.match(handler, /created_at\s+>=\s+\(now\(\)\s+-\s+interval\s+'15 minutes'\)/i);
+  assert.match(handler, /linkedInvoiceRaw\s*=\s*String\(result\?\.linkedInvoiceId/i);
+  assert.doesNotMatch(handler, /created_at\s+>=\s+\(now\(\)\s+-\s+interval\s+'15 minutes'\)/i);
   assert.doesNotMatch(handler, /ON CONFLICT\s+\(invoice_id\)/i);
   assert.match(handler, /upsertWalkInHmoClaim\s*\(/i);
+});
+
+test('PhilHealth-only intake cannot create an HMO monitoring claim', () => {
+  const handler = walkInHandlerSource();
+  assert.match(handler, /const hasHmoClaim = Boolean\(payload\.hasHmo\)/i);
+  assert.match(handler, /const shouldCreateClaim = hasHmoClaim && desiredHmoStatus/i);
+  assert.match(handler, /:\s*'PhilHealth Only'/i);
+});
+
+test('awaiting LOA requires an explicit temporary payment choice', () => {
+  const handler = walkInHandlerSource();
+  assert.match(handler, /desiredHmoStatus === 'Awaiting LOA'[^}]+\['temp_cash', 'guarantee'\]/i);
 });
 
 test('walk-in HMO locking does not deserialize PostgreSQL void results', () => {

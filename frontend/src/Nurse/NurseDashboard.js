@@ -11,6 +11,7 @@ import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import { getNurseModuleConfig, normalizeNurseModuleKey } from './nurseModuleConfig';
+import { hasActiveHmoCoverage, normalizeHmoDisplayStatus } from './hmoWorkflow';
 
 const RECEPTION_ROUTE_LABELS = {
   ER: 'ER', ONSITE: 'On-site', LAB: 'Laboratory', ECG: 'ECG', IMAGING: 'Imaging',
@@ -1895,7 +1896,7 @@ function NurseDashboard() {
       if (hmo) {
         lines.push('');
         lines.push('------------------- HMO -------------------');
-        lines.push(`Status: Approved${hmo.provider ? ' by ' + hmo.provider : ''}`);
+        lines.push(`Status: ${normalizeHmoDisplayStatus(hmo)}${hmo.provider ? ' by ' + hmo.provider : ''}`);
         if (hmo.loa_number) lines.push(`LOA #: ${hmo.loa_number}`);
         if (hmo.card_number) lines.push(`HMO Card #: ${hmo.card_number}`);
         lines.push(`Invoice total:   ${hmo.invoice_total || '₱0'}`);
@@ -10700,7 +10701,7 @@ function NurseDashboard() {
               {/* Old queue ticket info - HIDDEN IF HMO PATIENT, SHOW ONLY NON-HMO */}
               {(() => {
                 const hmo = walkInNextSteps?.hmo;
-                const isHmo = Boolean(hmo && typeof hmo === 'object' && (String(hmo.provider || hmo.hmo_provider || '').trim() || String(hmo.card_number || hmo.hmo_card_number || '').trim() || String(hmo.loa_number || hmo.hmo_loa_number || hmo.loaNumber || '').trim()));
+                const isHmo = hasActiveHmoCoverage(hmo);
                 if (isHmo) return null; // HMO patient: receipt document lang, no ticket
                 return (
                   <div style={{ background: '#f8fafc', padding: '9px 12px', borderRadius: '8px', width: 'min(100%, 360px)', alignSelf: 'center', marginBottom: 10, border: '1px solid #e2e8f0' }}>
@@ -11828,7 +11829,7 @@ function NurseDashboard() {
                       </div>
                     ) : null}
 
-                    {(addPatientData.hasHmo || addPatientData.hasPhilhealth) ? (
+                    {addPatientData.hasHmo ? (
                       <section className="hmo-claim-review-card" aria-labelledby="hmo-claim-review-title">
                         <div className="hmo-claim-review-header">
                           <span className="hmo-claim-review-icon" aria-hidden="true">
@@ -12320,7 +12321,7 @@ function NurseDashboard() {
                       >
                         {addPatientStep === 1 ? 'Cancel' : 'Back'}
                       </button>
-                      {(addPatientStep !== 3 || !(addPatientData.hasHmo || addPatientData.hasPhilhealth)) ? (
+                      {(addPatientStep !== 3 || !addPatientData.hasHmo) ? (
                         <button type="submit" className="btn-modal-submit" disabled={addPatientSaving}>
                           {addPatientStep === 1
                             ? 'Next: Clinical Intake'
@@ -12383,7 +12384,7 @@ function NurseDashboard() {
                   <div>
                     <div style={{fontWeight: 900, color:'#1e3a8a'}}>Patient pays full cash (refundable later)</div>
                     <div style={{fontSize: 12.5, color: '#475569', fontWeight:700}}>
-                      Recommended. Patient will settle full balance at cashier. When HMO approves later, reimburse excess automatically and adjust claim will be refunded patient. Claim still tracked in HMO Monitoring (Awaiting LOA) until Approved.
+                      Recommended. Patient will settle the balance at cashier. If HMO approves later, the cashier can review and process any required refund. The claim remains tracked as Awaiting LOA.
                     </div>
                   </div>
                 </label>
@@ -12409,7 +12410,7 @@ function NurseDashboard() {
                   <div>
                     <div style={{fontWeight: 900, color:'#6d28d9'}}>Hospital Guarantee / Charge on Account</div>
                     <div style={{fontSize: 12.5, color: '#475569', fontWeight:700}}>
-                      Hospital shoulders payment temporarily; patient signs guarantee form. Nurse will receive reminders to call HMO back for LOA approval.
+                      Hospital records the account as a temporary guarantee while HMO approval is pending. Follow-up remains visible in HMO Monitoring.
                     </div>
                   </div>
                 </label>
