@@ -374,6 +374,7 @@ export default function OfficeStaffDashboard({ mode }) {
   const [invoiceSummary, setInvoiceSummary] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [selectedInvoiceLoading, setSelectedInvoiceLoading] = useState(false);
+  const [invoiceModalMode, setInvoiceModalMode] = useState('view');
 
   const [closeoutDate, setCloseoutDate] = useState(() => toLocalDateInputValue());
   const [closeout, setCloseout] = useState(null);
@@ -951,8 +952,9 @@ export default function OfficeStaffDashboard({ mode }) {
     }).finally(() => setSavingHmoClaim(false));
   };
 
-  const openInvoice = async (invoiceId) => {
+  const openInvoice = async (invoiceId, mode = null) => {
     if (!user) return;
+    if (mode === 'view' || mode === 'payment') setInvoiceModalMode(mode);
     setSelectedInvoiceLoading(true);
     setPaymentError('');
     setAdjustmentError('');
@@ -1128,15 +1130,7 @@ export default function OfficeStaffDashboard({ mode }) {
     );
     let priorBalance = Number(selectedInvoice.balance_amount || 0);
     try {
-      let workingInvoice = selectedInvoice;
-      try {
-        const updated = await saveHmoClaim(selectedInvoice.id);
-        if (updated) {
-          workingInvoice = updated;
-        }
-      } catch (hmoErr) {
-        throw new Error(`HMO details were not saved. Payment was not posted: ${String(hmoErr?.message || 'Unknown HMO error')}`);
-      }
+      const workingInvoice = selectedInvoice;
       priorPaymentIds = new Set(
         (Array.isArray(workingInvoice.payments) ? workingInvoice.payments : [])
           .map((p) => String(p?.id || '').trim())
@@ -1199,7 +1193,6 @@ export default function OfficeStaffDashboard({ mode }) {
       const isTimeout = String(e?.name || '') === 'AbortError' || /timed out/i.test(String(e?.message || ''));
       if (isTimeout && selectedInvoice?.id) {
         try {
-          await saveHmoClaim(selectedInvoice.id).catch(() => null);
           const latest = await fetchJson(`/api/billing/invoices/${encodeURIComponent(String(selectedInvoice.id))}`, {
             apiBase: API_BASE,
             headers: buildHeaders(user),
@@ -2511,9 +2504,16 @@ export default function OfficeStaffDashboard({ mode }) {
                               ₱ {toMoney(balanceValue)}
                             </td>
                             <td className="inc-right">
-                              <button type="button" className="office-btn ghost" onClick={() => openInvoice(inv.id)}>
-                                View
-                              </button>
+                              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                                <button type="button" className="office-btn ghost" onClick={() => openInvoice(inv.id, 'view')}>
+                                  View
+                                </button>
+                                {role === 'cashier' && String(status).toLowerCase() === 'ready' && Number(balanceValue) > 0.0001 ? (
+                                  <button type="button" className="office-btn primary" onClick={() => openInvoice(inv.id, 'payment')}>
+                                    Record Payment
+                                  </button>
+                                ) : null}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -4024,7 +4024,7 @@ export default function OfficeStaffDashboard({ mode }) {
         <div className="office-modal-overlay" onClick={() => setSelectedInvoice(null)}>
           <div className="office-modal office-billing-modal" onClick={(e) => e.stopPropagation()}>
             <div className="office-modal-head">
-              <div className="office-modal-title">{role === 'cashier' ? `Cashier POS • Invoice #${selectedInvoice?.id || ''}` : `Invoice #${selectedInvoice?.id || ''}`}</div>
+              <div className="office-modal-title">{role === 'cashier' ? `${invoiceModalMode === 'payment' ? 'Record Payment' : 'Invoice Summary'} • Invoice #${selectedInvoice?.id || ''}` : `Invoice #${selectedInvoice?.id || ''}`}</div>
               <button type="button" className="office-btn ghost" onClick={() => setSelectedInvoice(null)}>Close</button>
             </div>
             <div className="office-modal-body">
@@ -4060,8 +4060,31 @@ export default function OfficeStaffDashboard({ mode }) {
                     </div>
                   </div>
 
-                  <div className="office-billing-grid">
-                    <div className="office-billing-left">
+                  {role === 'cashier' && invoiceModalMode === 'view' ? (
+                    <div className="office-billing-card" style={{ marginTop: 14 }}>
+                      <div className="office-billing-card-head">
+                        <span>Services</span>
+                        <span className="small-note">{(selectedInvoice.items || []).length} item(s)</span>
+                      </div>
+                      <div className="office-billing-card-body" style={{ display: 'grid', gap: 10 }}>
+                        {(selectedInvoice.items || []).map((item) => (
+                          <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, paddingBottom: 10, borderBottom: '1px solid #f1f5f9' }}>
+                            <span style={{ color: '#334155', fontWeight: 700 }}>{item.description}</span>
+                            <strong style={{ whiteSpace: 'nowrap' }}>₱ {toMoney(item.line_total)}</strong>
+                          </div>
+                        ))}
+                        {(selectedInvoice.items || []).length === 0 ? <span style={{ color: '#64748b' }}>No invoice items.</span> : null}
+                        {String(selectedInvoice.status || '').toLowerCase() === 'ready' && Number(selectedInvoice.balance_amount || 0) > 0 ? (
+                          <button type="button" className="office-btn primary" style={{ justifySelf: 'end' }} onClick={() => setInvoiceModalMode('payment')}>
+                            Record Payment
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="office-billing-grid" style={{ display: role === 'cashier' && invoiceModalMode === 'view' ? 'none' : undefined }}>
+                    <div className="office-billing-left" style={{ display: role === 'cashier' && invoiceModalMode === 'payment' ? 'none' : undefined }}>
                       <div className="office-billing-card">
                         <div className="office-billing-card-head">
                           <span>Invoice Items</span>
@@ -4238,7 +4261,7 @@ export default function OfficeStaffDashboard({ mode }) {
                     </div>
 
                     {role === 'cashier' ? (
-                      <div className="office-billing-right">
+                      <div className="office-billing-right" style={{ gridColumn: invoiceModalMode === 'payment' ? '1 / -1' : undefined }}>
                         <div className="office-payment-panel" style={{ padding: 0, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, flex: '1 1 auto', overflow: 'hidden' }}>
                           <div className="office-payment-panel-head" style={{ flexWrap: 'wrap' }}>
                             <div>
@@ -4292,7 +4315,7 @@ export default function OfficeStaffDashboard({ mode }) {
                             </div>
                           </div>
 
-                          <div className="office-payment-quick-cash" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <div className="office-payment-quick-cash" style={{ display: payMethod === 'Cash' ? 'flex' : 'none', gap: 8, flexWrap: 'wrap' }}>
                             {[100, 500, 1000].map(amount => (
                               <button 
                                 key={amount}
@@ -4320,7 +4343,17 @@ export default function OfficeStaffDashboard({ mode }) {
                             </button>
                           </div>
 
-                          <div className="office-hmo-card-pro" style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
+                          {selectedInvoice?.hmo_claim ? (
+                            <div style={{ padding: '12px 14px', border: '1px solid #dbeafe', borderRadius: 12, background: '#f8fafc', display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <strong style={{ color: '#0f172a' }}>Verified coverage</strong>
+                              <span>Provider: <strong>{hmoProvider || '—'}</strong></span>
+                              <span>LOA: <strong>{loaNumber || '—'}</strong></span>
+                              {Number(philhealthDeduction || 0) > 0 ? <span>PhilHealth: <strong>−₱ {toMoney(philhealthDeduction)}</strong></span> : null}
+                              {Number(hmoCoverage || 0) > 0 ? <span>HMO: <strong>−₱ {toMoney(hmoCoverage)}</strong></span> : null}
+                            </div>
+                          ) : null}
+
+                          <div className="office-hmo-card-pro" style={{ display: 'none' }}>
                             <div className="office-hmo-head-pro">
                               <div className="office-hmo-head-icon-pro">
                                 <Shield size={20} />
