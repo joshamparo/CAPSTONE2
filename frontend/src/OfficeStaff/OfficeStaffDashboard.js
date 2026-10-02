@@ -2405,6 +2405,25 @@ export default function OfficeStaffDashboard({ mode }) {
                     <option value="Paid">Paid</option>
                     <option value="Cancelled">Cancelled</option>
                   </select>
+                  {pagedDisplayedInvoices.totalCount > 0 ? (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} aria-label="Invoice pagination">
+                      <button type="button" className="office-btn ghost" aria-label="Previous invoice page"
+                        disabled={pagedDisplayedInvoices.currentPage <= 1 || invoiceLoading}
+                        onClick={() => { const next = Math.max(1, pagedDisplayedInvoices.currentPage - 1); setInvoicePage(next); refreshInvoices({ page: next }); }}
+                        style={{ width: 38, minWidth: 38, height: 38, padding: 0, justifyContent: 'center' }}>
+                        <ChevronLeft size={18} />
+                      </button>
+                      <span style={{ minWidth: 46, textAlign: 'center', color: '#475569', fontSize: '0.8rem', fontWeight: 700 }}>
+                        {pagedDisplayedInvoices.currentPage} / {pagedDisplayedInvoices.totalPages}
+                      </span>
+                      <button type="button" className="office-btn ghost" aria-label="Next invoice page"
+                        disabled={pagedDisplayedInvoices.currentPage >= pagedDisplayedInvoices.totalPages || invoiceLoading}
+                        onClick={() => { const next = Math.min(pagedDisplayedInvoices.totalPages, pagedDisplayedInvoices.currentPage + 1); setInvoicePage(next); refreshInvoices({ page: next }); }}
+                        style={{ width: 38, minWidth: 38, height: 38, padding: 0, justifyContent: 'center' }}>
+                        <ChevronRight size={18} />
+                      </button>
+                    </div>
+                  ) : null}
                   <select className="office-select" value={invoiceRange} onChange={(e) => { const value = e.target.value; setInvoiceRange(value); refreshInvoices({ page: 1, range: value }); }}>
                     <option value="All">All Dates</option>
                     <option value="Today">Today</option>
@@ -2536,47 +2555,6 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', fontSize: '0.8rem', fontWeight: 700 }}>
                     Showing {pagedDisplayedInvoices.totalCount === 0 ? 0 : pagedDisplayedInvoices.startIndex + 1}–{Math.min(pagedDisplayedInvoices.endIndex, pagedDisplayedInvoices.totalCount)} of {pagedDisplayedInvoices.totalCount}
-                  </div>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    <button
-                      type="button"
-                      aria-label="Previous page"
-                      disabled={pagedDisplayedInvoices.currentPage <= 1 || invoiceLoading}
-                      onClick={() => { const next = Math.max(1, pagedDisplayedInvoices.currentPage - 1); setInvoicePage(next); refreshInvoices({ page: next }); }}
-                      style={{
-                        width: 34, height: 34,
-                        borderRadius: 9,
-                        border: pagedDisplayedInvoices.currentPage <= 1 || invoiceLoading ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
-                        background: pagedDisplayedInvoices.currentPage <= 1 || invoiceLoading ? '#f8fafc' : '#ffffff',
-                        color: pagedDisplayedInvoices.currentPage <= 1 || invoiceLoading ? '#cbd5e1' : '#334155',
-                        fontWeight: 900,
-                        cursor: pagedDisplayedInvoices.currentPage <= 1 || invoiceLoading ? 'not-allowed' : 'pointer',
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0
-                      }}
-                    >
-                      <ChevronLeft size={18} />
-                    </button>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 10px', borderRadius: 9, background: '#ffffff', border: '1px solid #e2e8f0', color: '#334155', fontSize: '0.8rem', fontWeight: 700, minWidth: 60, justifyContent: 'center' }}>
-                      {pagedDisplayedInvoices.currentPage} / {pagedDisplayedInvoices.totalPages}
-                    </div>
-                    <button
-                      type="button"
-                      aria-label="Next page"
-                      disabled={pagedDisplayedInvoices.currentPage >= pagedDisplayedInvoices.totalPages || invoiceLoading}
-                      onClick={() => { const next = Math.min(pagedDisplayedInvoices.totalPages, pagedDisplayedInvoices.currentPage + 1); setInvoicePage(next); refreshInvoices({ page: next }); }}
-                      style={{
-                        width: 34, height: 34,
-                        borderRadius: 9,
-                        border: pagedDisplayedInvoices.currentPage >= pagedDisplayedInvoices.totalPages || invoiceLoading ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
-                        background: pagedDisplayedInvoices.currentPage >= pagedDisplayedInvoices.totalPages || invoiceLoading ? '#f8fafc' : '#ffffff',
-                        color: pagedDisplayedInvoices.currentPage >= pagedDisplayedInvoices.totalPages || invoiceLoading ? '#cbd5e1' : '#334155',
-                        fontWeight: 900,
-                        cursor: pagedDisplayedInvoices.currentPage >= pagedDisplayedInvoices.totalPages || invoiceLoading ? 'not-allowed' : 'pointer',
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0
-                      }}
-                    >
-                      <ChevronRight size={18} />
-                    </button>
                   </div>
                 </div>
               ) : null}
