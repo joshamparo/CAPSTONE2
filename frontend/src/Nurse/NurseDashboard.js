@@ -11353,7 +11353,9 @@ function NurseDashboard() {
                           <div style={{marginBottom: '14px'}}>
                             <div className="hmo-field-grid">
                               <div className="input-group">
-                                <label>PhilHealth Identification Number (PIN)</label>
+                                <label>
+                                  PhilHealth Identification Number (PIN) <span style={{ color: '#dc2626' }}>*</span>
+                                </label>
                                 <input
                                   type="text"
                                   name="philhealthNumber"
@@ -11364,12 +11366,31 @@ function NurseDashboard() {
                                   inputMode="numeric"
                                   autoComplete="off"
                                   maxLength={14}
+                                  required={addPatientData.hasPhilhealth}
+                                  pattern="[0-9]{2}-[0-9]{9}-[0-9]{1}"
+                                  title="Enter the 12-digit PIN in XX-XXXXXXXXX-X format"
+                                  aria-invalid={normalizePhilhealthPin(addPatientData.philhealthNumber).length > 0 && normalizePhilhealthPin(addPatientData.philhealthNumber).length !== 12}
                                   aria-describedby="philhealth-pin-help"
+                                  style={{
+                                    borderColor: normalizePhilhealthPin(addPatientData.philhealthNumber).length === 12
+                                      ? '#22c55e'
+                                      : normalizePhilhealthPin(addPatientData.philhealthNumber).length > 0 ? '#f59e0b' : undefined,
+                                    boxShadow: normalizePhilhealthPin(addPatientData.philhealthNumber).length === 12
+                                      ? '0 0 0 3px rgba(34,197,94,0.1)'
+                                      : undefined
+                                  }}
                                 />
-                                <div id="philhealth-pin-help" style={{ marginTop: 6, color: normalizePhilhealthPin(addPatientData.philhealthNumber).length === 12 ? '#15803d' : '#64748b', fontSize: 12, fontWeight: 700 }}>
-                                  {normalizePhilhealthPin(addPatientData.philhealthNumber).length === 12
-                                    ? '12-digit format complete. Membership still requires verification.'
-                                    : `${normalizePhilhealthPin(addPatientData.philhealthNumber).length}/12 digits · Format: XX-XXXXXXXXX-X`}
+                                <div id="philhealth-pin-help" style={{ marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', color: normalizePhilhealthPin(addPatientData.philhealthNumber).length === 12 ? '#15803d' : '#64748b', fontSize: 12, fontWeight: 800 }}>
+                                  <span>
+                                    {normalizePhilhealthPin(addPatientData.philhealthNumber).length === 12
+                                      ? '12/12 digits ✓'
+                                      : `${normalizePhilhealthPin(addPatientData.philhealthNumber).length}/12 digits · Required format: XX-XXXXXXXXX-X`}
+                                  </span>
+                                  {normalizePhilhealthPin(addPatientData.philhealthNumber).length === 12 && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 999, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', fontSize: 11 }}>
+                                      <Check size={11} /> Format Valid
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                               <div className="input-group" style={{ padding: '10px 12px', border: '1px solid #fde68a', borderRadius: 10, background: '#fffbeb' }}>
