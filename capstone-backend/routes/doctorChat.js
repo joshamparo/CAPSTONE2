@@ -213,10 +213,12 @@ router.post('/messages', async (req, res) => {
       if (!candidateValues.some(([name]) => name === 'body')) throw new Error('consultation_messages is missing the body column');
       const insertColumns = candidateValues.map(([name]) => name).join(', ');
       const placeholders = candidateValues.map((_, index) => `$${index + 1}`).join(', ');
-      rowCount = await prisma.$executeRawUnsafe(
-        `INSERT INTO public.consultation_messages (${insertColumns}) VALUES (${placeholders})`,
+      const insertedRows = await prisma.$queryRawUnsafe(
+        `INSERT INTO public.consultation_messages (${insertColumns}) VALUES (${placeholders}) RETURNING *`,
         ...candidateValues.map(([, value]) => value)
-      ) || 0;
+      );
+      rowCount = Array.isArray(insertedRows) ? insertedRows.length : 0;
+      if (Array.isArray(insertedRows) && insertedRows[0]) row = insertedRows[0];
       rowInsertedOk = true;
       hitInsertTier = 'schema-adaptive';
     } catch (adaptiveError) {
@@ -322,8 +324,10 @@ router.post('/messages', async (req, res) => {
       }
     }
 
-    // Lookup the inserted row (best effort identity based). ORDER BY id (not ordinal)
-    try {
+    // Older schemas use the legacy insert tiers above and still need a follow-up
+    // lookup. The normal schema-adaptive path already returned the inserted row
+    // in the same database round trip via INSERT ... RETURNING.
+    if (hitInsertTier !== 'schema-adaptive') try {
       const rows = await prisma.$queryRawUnsafe(`
         SELECT id, body, sender_role, sender_name, specialty, room, attachment_url, deleted, pinned
         FROM public.consultation_messages
@@ -343,13 +347,18 @@ router.post('/messages', async (req, res) => {
       }
     } catch (_e) { /* ignore lookup */ }
 
+    const normalizedRow = JSON.parse(JSON.stringify(
+      row,
+      (_key, value) => typeof value === 'bigint' ? value.toString() : value
+    ));
+
     return res.json({
       ok: true,
       source: `prisma-direct-no-rls`,
       hitInsertTier,
-      message: hitInsertTier === 'full' ? 'Inserted via Prisma direct (all RLS bypassed).' :
+      message: ['full', 'schema-adaptive'].includes(hitInsertTier) ? 'Inserted via Prisma direct (all RLS bypassed).' :
                `Inserted via Prisma direct (hit tier=${hitInsertTier}; run migration 008 for full timestamp cols)`,
-      row,
+      row: normalizedRow,
       rowCount: typeof rowCount === 'number' ? rowCount : 1,
     });
   } catch (err) {

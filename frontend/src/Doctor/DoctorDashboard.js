@@ -409,6 +409,7 @@ function DoctorDashboard() {
   const doctorChatScrollRef = useRef(null);
   const doctorChatComposeRef = useRef(null);
   const doctorChatLastSeenIdRef = useRef(null);
+  const doctorChatRefreshInFlightRef = useRef(false);
 
   const doctorChatSpecialty = useMemo(() => {
     return 'global_doctors'; // All doctors share the same chat room
@@ -485,6 +486,7 @@ function DoctorDashboard() {
   const loadDoctorChatMessages = async (opts = {}) => {
     const isOlder = opts.older === true;
     const isSilent = opts.silent === true;
+    if (!isOlder && doctorChatRefreshInFlightRef.current) return;
     const existing = Array.isArray(doctorChatMessages) ? doctorChatMessages : [];
     if (isOlder && existing.length < 20) {
       setDoctorChatOlderExhausted(true);
@@ -492,6 +494,7 @@ function DoctorDashboard() {
     }
     if (isOlder) setDoctorChatLoadingOlder(true);
     else if (!isSilent) setDoctorChatLoading(true);
+    if (!isOlder) doctorChatRefreshInFlightRef.current = true;
     setDoctorChatError('');
     try {
       const PAGE = 75;
@@ -510,7 +513,10 @@ function DoctorDashboard() {
         setDoctorChatMessages((prev) => [...rows, ...(Array.isArray(prev) ? prev : [])]);
       } else {
         if (rows.length < PAGE) setDoctorChatOlderExhausted(true);
-        setDoctorChatMessages(rows);
+        setDoctorChatMessages((prev) => {
+          const pending = (Array.isArray(prev) ? prev : []).filter((m) => m?._sendStatus === 'sending' || m?._sendStatus === 'failed');
+          return [...rows, ...pending];
+        });
         if (rows.length) doctorChatLastSeenIdRef.current = rows[rows.length - 1]?.id || null;
       }
     } catch (e) {
@@ -520,7 +526,10 @@ function DoctorDashboard() {
       }
     } finally {
       if (isOlder) setDoctorChatLoadingOlder(false);
-      else if (!isSilent) setDoctorChatLoading(false);
+      else {
+        doctorChatRefreshInFlightRef.current = false;
+        if (!isSilent) setDoctorChatLoading(false);
+      }
     }
   };
 
@@ -785,33 +794,70 @@ function DoctorDashboard() {
       setTimeout(() => setDoctorChatInputInvalid(false), 900);
       return;
     }
+    const uDept = String(currentUser?.department || currentUser?.dept || currentUser?.departmentName || '').trim();
+    const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || uDept || doctorChatSpecialty;
+    const clientId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const optimisticMessage = {
+      id: clientId,
+      body,
+      specialty,
+      room: roomValue,
+      sender_role: 'doctor',
+      sender_name: doctorChatSenderIdentity.name,
+      sender_dept: doctorChatSenderIdentity.dept,
+      sender_email: currentUser?.email || null,
+      sender_username: doctorChatSenderIdentity.username,
+      sender_id: currentUser?.id || currentUser?.uuid || null,
+      reply_to_id: doctorChatReplying?.id || null,
+      reply_to_body: doctorChatReplying?.id ? String(doctorChatReplying.body || '').slice(0, 240) : null,
+      reply_to_sender: doctorChatReplying?.id ? String(doctorChatReplying.sender || 'Doctor') : null,
+      created_at: new Date().toISOString(),
+      deleted: false,
+      pinned: false,
+      _sendStatus: 'sending'
+    };
+
+    setDoctorChatMessages((prev) => [...(Array.isArray(prev) ? prev : []), optimisticMessage]);
+    setDoctorChatText('');
+    setDoctorChatInputInvalid(false);
+    setDoctorChatReplying(null);
+    setTimeout(() => scrollDoctorChatToBottom(true), 0);
+
     try {
-      const uDept = String(currentUser?.department || currentUser?.dept || currentUser?.departmentName || '').trim();
-      const roomValue = doctorChatSenderIdentity.dept || String(doctorSpecialization || '').trim() || uDept || doctorChatSpecialty;
       const payload = {
         specialty,
         room: roomValue,
         body
       };
-      if (doctorChatReplying?.id) {
-        payload.reply_to_id = doctorChatReplying.id;
-        payload.reply_to_body = String(doctorChatReplying.body || '').slice(0, 240);
-        payload.reply_to_sender = guessDisplayName(doctorChatReplying);
+      if (optimisticMessage.reply_to_id) {
+        payload.reply_to_id = optimisticMessage.reply_to_id;
+        payload.reply_to_body = optimisticMessage.reply_to_body;
+        payload.reply_to_sender = optimisticMessage.reply_to_sender;
       }
-      await fetchJson('/api/doctor-chat/messages', {
+      const data = await fetchJson('/api/doctor-chat/messages', {
         apiBase: API_BASE,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        timeoutMs: 15000
       });
-      setDoctorChatText('');
-      setDoctorChatInputInvalid(false);
-      setDoctorChatReplying(null);
-      setTimeout(() => {
-        loadDoctorChatMessages();
-        scrollDoctorChatToBottom();
-      }, 180);
+      const saved = data?.row && data.row.id ? { ...data.row, _sendStatus: 'sent' } : null;
+      setDoctorChatMessages((prev) => {
+        const withoutPending = (Array.isArray(prev) ? prev : []).filter((m) => m?.id !== clientId);
+        if (!saved) return withoutPending;
+        const existingIndex = withoutPending.findIndex((m) => String(m?.id) === String(saved.id));
+        if (existingIndex >= 0) {
+          const next = [...withoutPending];
+          next[existingIndex] = { ...next[existingIndex], ...saved };
+          return next;
+        }
+        return [...withoutPending, saved];
+      });
+      setTimeout(() => scrollDoctorChatToBottom(true), 0);
   } catch (e) {
+    setDoctorChatMessages((prev) => (Array.isArray(prev) ? prev : []).map((m) => (
+      m?.id === clientId ? { ...m, _sendStatus: 'failed' } : m
+    )));
     setToast({ type: 'error', message: String(e?.message || 'Failed to send.') });
   }
   };
@@ -2006,6 +2052,41 @@ function DoctorDashboard() {
     const timer = setInterval(() => loadDoctorChatMessages({ silent: true }), 5000);
     return () => clearInterval(timer);
   }, [activeNav, doctorChatSpecialty, doctorChatActiveTab, doctorChatUnifiedInboxFilters]);
+
+  useEffect(() => {
+    if (activeNav !== 'doctor-chat' || !supabase) return undefined;
+    const channel = supabase
+      .channel(`doctor-chat-${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'consultation_messages' }, (event) => {
+        const incoming = event.new;
+        const messageId = String(incoming?.id || event.old?.id || '');
+        if (!messageId) return;
+        setDoctorChatMessages((prev) => {
+          const list = Array.isArray(prev) ? prev : [];
+          if (event.eventType === 'DELETE') return list.filter((m) => String(m?.id) !== messageId);
+          if (!doctorChatUnifiedInboxFilters.filterRow(incoming) || incoming?.deleted) {
+            return list.filter((m) => String(m?.id) !== messageId);
+          }
+          const index = list.findIndex((m) => String(m?.id) === messageId);
+          if (index < 0) {
+            const pendingIndex = list.findIndex((m) => (
+              m?._sendStatus === 'sending'
+              && String(m?.body || '') === String(incoming?.body || '')
+              && String(m?.sender_id || '') === String(incoming?.sender_id || '')
+            ));
+            if (pendingIndex < 0) return [...list, incoming];
+            const next = [...list];
+            next[pendingIndex] = { ...incoming, _sendStatus: 'sent' };
+            return next;
+          }
+          const next = [...list];
+          next[index] = { ...next[index], ...incoming };
+          return next;
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [activeNav, doctorChatUnifiedInboxFilters]);
 
   useEffect(() => {
     if (activeNav !== 'doctor-chat') return;
@@ -6033,7 +6114,9 @@ function DoctorDashboard() {
                             {timeText && (
                               <div className="dc-time-label" title={fullTs} style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: 5, paddingLeft: 4, paddingRight: 4, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                                 <Clock size={10} style={{ opacity: 0.8 }} /> {timeText}
-                                {mine && <Check size={10} style={{ opacity: 0.65, color: '#22c55e' }} title="Delivered" />}
+                                {mine && msg?._sendStatus === 'sending' && <span style={{ color: '#64748b' }}>Sending…</span>}
+                                {mine && msg?._sendStatus === 'failed' && <span style={{ color: '#dc2626' }}>Failed</span>}
+                                {mine && msg?._sendStatus !== 'sending' && msg?._sendStatus !== 'failed' && <Check size={10} style={{ opacity: 0.65, color: '#22c55e' }} title="Delivered" />}
                               </div>
                             )}
                             </div>
