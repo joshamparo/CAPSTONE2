@@ -31,3 +31,21 @@ test('resend OTP is immediately available without a countdown', async () => {
   ));
   expect(await screen.findByText('New code sent to staff@example.com')).toBeInTheDocument();
 });
+
+test('entering the complete OTP shows verification progress without changing resend text', async () => {
+  global.fetch = jest.fn(() => new Promise(() => {}));
+  render(<OtpPage />);
+
+  const inputs = screen.getAllByRole('textbox');
+  ['1', '2', '3', '4', '5', '6'].forEach((digit, index) => {
+    fireEvent.change(inputs[index], { target: { value: digit } });
+  });
+
+  expect(await screen.findByText('Verifying code...')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /resend code/i })).toHaveTextContent('Resend Code');
+  expect(screen.queryByText(/sending new code/i)).not.toBeInTheDocument();
+  expect(global.fetch).toHaveBeenCalledWith(
+    expect.stringContaining('/api/staff/login/otp/verify'),
+    expect.objectContaining({ method: 'POST' })
+  );
+});

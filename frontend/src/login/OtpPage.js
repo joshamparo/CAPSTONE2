@@ -16,7 +16,8 @@ const OtpPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [entryTimer, setEntryTimer] = useState(60);
-  const [submitting, setSubmitting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [resending, setResending] = useState(false);
   const inputRefs = useRef([]);
   const navigate = useNavigate();
 
@@ -39,11 +40,12 @@ const OtpPage = () => {
   };
 
   const handleVerify = async (code) => {
-    if (submitting) return;
+    if (verifying || resending) return;
     const challengeId = localStorage.getItem('otpChallengeId');
     if (!challengeId) return navigate('/login', { replace: true });
-    setSubmitting(true);
+    setVerifying(true);
     setError('');
+    setSuccess('');
     try {
       const response = await fetch(`${API_BASE}/api/staff/login/otp/verify`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId, code })
@@ -67,16 +69,17 @@ const OtpPage = () => {
       setError('Cannot connect to the server. Please try again.');
       clearCode();
     } finally {
-      setSubmitting(false);
+      setVerifying(false);
     }
   };
 
   const handleResendOtp = async () => {
-    if (submitting) return;
+    if (verifying || resending) return;
     const challengeId = localStorage.getItem('otpChallengeId');
     if (!challengeId) return navigate('/login', { replace: true });
-    setSubmitting(true);
+    setResending(true);
     setError('');
+    setSuccess('');
     try {
       const response = await fetch(`${API_BASE}/api/staff/login/otp/resend`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId })
@@ -92,7 +95,7 @@ const OtpPage = () => {
     } catch (_) {
       setError('Cannot connect to the server. Please try again.');
     } finally {
-      setSubmitting(false);
+      setResending(false);
     }
   };
 
@@ -117,12 +120,15 @@ const OtpPage = () => {
         {Math.floor(entryTimer / 60)}:{String(entryTimer % 60).padStart(2, '0')}
       </p>
       <div className="otp-inputs">{otp.map((digit, index) => <input key={index} type="text" maxLength="1"
-        ref={(element) => { inputRefs.current[index] = element; }} value={digit} disabled={submitting}
+        ref={(element) => { inputRefs.current[index] = element; }} value={digit} disabled={verifying || resending}
         onChange={(event) => handleChange(event.target, index)}
         onKeyDown={(event) => { if (event.key === 'Backspace' && !otp[index] && index > 0) inputRefs.current[index - 1]?.focus(); }}
         inputMode="numeric" pattern="\d*" autoComplete={index === 0 ? 'one-time-code' : 'off'} />)}</div>
+      <div className="otp-status" role="status" aria-live="polite">
+        {verifying ? 'Verifying code...' : ''}
+      </div>
       <div className="refresh-section"><p>Didn't receive a sign-in request?</p>
-        <button className="resend-link" onClick={handleResendOtp} disabled={submitting}>{submitting ? 'Sending...' : 'Resend Code'}</button>
+        <button className="resend-link" onClick={handleResendOtp} disabled={verifying || resending}>{resending ? 'Sending new code...' : 'Resend Code'}</button>
       </div>
       <button className="reset-btn" onClick={() => navigate('/recovery')}>Reset your password</button>
     </div></div>

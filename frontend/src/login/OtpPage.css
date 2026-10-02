@@ -97,6 +97,20 @@
   box-shadow: 0 8px 20px rgba(196, 106, 0, 0.2);
 }
 
+.otp-status {
+  min-height: 20px;
+  margin: -16px 0 10px;
+  color: #c2410c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.otp-inputs input:disabled,
+.resend-link:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .refresh-section:hover {
   background-color: #fff7ed;
   box-shadow: 0 4px 12px rgba(234, 88, 12, 0.1);
