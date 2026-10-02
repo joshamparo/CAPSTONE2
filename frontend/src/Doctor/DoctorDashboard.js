@@ -174,6 +174,8 @@ function DoctorDashboard() {
   const [approvalSuggest, setApprovalSuggest] = useState({ date: '', time: '', note: '' });
   const [approvalPage, setApprovalPage] = useState(1);
   const approvalPageSize = 8;
+  const approvalInboxFetchRef = useRef(null);
+  const approvalInboxFetchedAtRef = useRef(0);
 
   const [staffSettings, setStaffSettings] = useState({ prefs: {}, updatedAt: null });
   const [loadingStaffSettings, setLoadingStaffSettings] = useState(false);
@@ -1907,9 +1909,10 @@ function DoctorDashboard() {
 
   const fetchApprovalInbox = async ({ resetPage = false } = {}) => {
     if (!doctorInboxName) return;
+    if (approvalInboxFetchRef.current) return approvalInboxFetchRef.current;
     setApprovalInboxLoading(true);
     setApprovalInboxError('');
-    try {
+    const request = (async () => { try {
       const name = encodeURIComponent(doctorInboxName);
       const doctorUuid = currentDoctorUuid;
       const json = await fetchJson(`/api/approval-requests/inbox?role=doctor&doctorId=${encodeURIComponent(doctorUuid)}&name=${name}&take=50`, {
@@ -1923,13 +1926,16 @@ function DoctorDashboard() {
         return bTime - aTime;
       });
       setApprovalInbox(rows);
+      approvalInboxFetchedAtRef.current = Date.now();
       if (resetPage) setApprovalPage(1);
     } catch (e) {
-      setApprovalInbox([]);
       setApprovalInboxError(String(e?.message || 'Failed to load approval inbox'));
     } finally {
       setApprovalInboxLoading(false);
-    }
+      approvalInboxFetchRef.current = null;
+    } })();
+    approvalInboxFetchRef.current = request;
+    return request;
   };
 
   const openApprovalThread = async (requestId) => {
@@ -2032,8 +2038,16 @@ function DoctorDashboard() {
   };
 
   useEffect(() => {
-    if (activeNav === 'approval-inbox') fetchApprovalInbox({ resetPage: true });
+    if (activeNav !== 'approval-inbox') return;
+    const cacheIsFresh = Date.now() - approvalInboxFetchedAtRef.current < 30_000;
+    if (!cacheIsFresh) fetchApprovalInbox({ resetPage: true });
   }, [activeNav, doctorInboxName]);
+
+  useEffect(() => {
+    if (!doctorInboxName || !allowedDoctorNav.has('approval-inbox') || approvalInboxFetchedAtRef.current) return undefined;
+    const timer = setTimeout(() => fetchApprovalInbox(), 250);
+    return () => clearTimeout(timer);
+  }, [doctorInboxName, currentDoctorUuid, allowedDoctorNav]);
 
   useEffect(() => {
     if (activeNav !== 'approval-inbox') return undefined;
@@ -5369,8 +5383,8 @@ function DoctorDashboard() {
         )}
 
         {activeNav === 'approval-inbox' && (
-          <div className="doctor-grid doc-section">
-            <div className="doc-card">
+          <div className="doctor-grid doctor-grid-2 doc-section doc-approval-inbox-page">
+            <div className="doc-card doc-approval-inbox-card">
               <div className="doc-card-header">
                 <div>
                   <div className="doc-card-title">
@@ -5388,9 +5402,11 @@ function DoctorDashboard() {
                   <button className="doc-btn" type="button" onClick={() => fetchApprovalInbox({ resetPage: true })} disabled={approvalInboxLoading}><RotateCw size={16} /> Refresh</button>
                 </div>
               </div>
-              {approvalInboxLoading ? (
-                <div className="doc-muted">Loading…</div>
-              ) : approvalInboxError ? (
+              {approvalInboxLoading && approvalInbox.length === 0 ? (
+                <div className="doc-approval-loading" aria-label="Loading approval requests">
+                  {[0, 1, 2, 3, 4].map((item) => <div className="doc-approval-skeleton" key={item} />)}
+                </div>
+              ) : approvalInboxError && approvalInbox.length === 0 ? (
                 <div className="doc-muted">{approvalInboxError}</div>
               ) : approvalInbox.length === 0 ? (
                 <div className="doc-empty">No approval requests.</div>
@@ -5402,13 +5418,17 @@ function DoctorDashboard() {
                       {approvalInbox.slice((approvalPage - 1) * approvalPageSize, approvalPage * approvalPageSize).map((r) => {
                         const created = r.createdAt || r.created_at;
                         const requested = r.requestedDate || r.requested_date;
+                        const serviceRaw = String(r.serviceName || r.serviceType || r.reason || 'Consultation');
+                        const serviceParts = serviceRaw.split('|').map((part) => part.trim()).filter(Boolean);
+                        const serviceTitle = serviceParts[0] || 'Consultation';
+                        const serviceDetail = serviceParts.slice(1).join(' · ');
                         return (
                           <tr key={r.id} className={String(r.id) === String(selectedApprovalId) ? 'active' : ''} onClick={() => openApprovalThread(r.id)}>
                             <td><button type="button" className="doc-approval-patient-btn" onClick={(event) => { event.stopPropagation(); openApprovalThread(r.id); }}>{r.patientName || 'Patient'}</button>{Number(r.unreadCount || 0) > 0 ? <span className="doc-approval-unread">{r.unreadCount} new</span> : null}</td>
-                            <td>{r.serviceName || r.serviceType || r.reason || 'Consultation'}</td>
-                            <td>{requested ? new Date(requested).toLocaleDateString() : 'No date'}{r.requestedTime ? `, ${new Date(r.requestedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}</td>
+                            <td><div className="doc-approval-service-title">{serviceTitle}</div>{serviceDetail ? <div className="doc-approval-service-detail" title={serviceDetail}>{serviceDetail}</div> : null}</td>
+                            <td><div className="doc-approval-date">{requested ? new Date(requested).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : 'No date'}</div>{r.requestedTime ? <div className="doc-approval-time">{new Date(r.requestedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div> : null}</td>
                             <td><span className="doc-badge">{r.status || 'Pending'}</span></td>
-                            <td>{created ? new Date(created).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                            <td>{created ? <><div className="doc-approval-date">{new Date(created).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</div><div className="doc-approval-time">{new Date(created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div></> : '—'}</td>
                           </tr>
                         );
                       })}
