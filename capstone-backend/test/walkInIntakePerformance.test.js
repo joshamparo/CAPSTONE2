@@ -40,6 +40,19 @@ test('PhilHealth-only intake cannot create an HMO monitoring claim', () => {
   assert.match(handler, /:\s*'PhilHealth Only'/i);
 });
 
+test('walk-in intake validates PhilHealth identity and never trusts a client deduction', () => {
+  const handler = walkInHandlerSource();
+  assert.match(handler, /philhealthDigits[\s\S]+\^\\d\{12\}\$/i);
+  assert.match(handler, /payload\.philhealthNumber\s*=\s*hasPhilhealth\s*\?\s*philhealthDigits\s*:\s*null/i);
+  assert.match(handler, /payload\.philhealthDeduction\s*=\s*0/i);
+  assert.match(handler, /PhilHealth Pending Verification/i);
+});
+
+test('PhilHealth-only intake cannot declare HMO services as covered', () => {
+  const handler = walkInHandlerSource();
+  assert.match(handler, /if\s*\(payload\.hasHmo\s*!==\s*true\)\s*payload\.hmoCoveredServices\s*=\s*null/i);
+});
+
 test('awaiting LOA requires an explicit temporary payment choice', () => {
   const handler = walkInHandlerSource();
   assert.match(handler, /desiredHmoStatus === 'Awaiting LOA'[^}]+\['temp_cash', 'guarantee'\]/i);

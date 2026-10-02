@@ -21,6 +21,14 @@ import StatusBadge from '../components/StatusBadge';
 import ModalShell from '../components/ModalShell';
 import { buildPatientWatchlist, getMedicationActionSuccessMessage } from './nurseClinicalUtils';
 
+const normalizePhilhealthPin = (value) => String(value || '').replace(/\D/g, '').slice(0, 12);
+const formatPhilhealthPin = (value) => {
+  const digits = normalizePhilhealthPin(value);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 11) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}-${digits.slice(2, 11)}-${digits.slice(11)}`;
+};
+
 const LAB_SERVICES = ["Urinalysis", "Blood Chemistry", "Complete Blood Count (CBC)", "Fecalysis", "Hepa Screening", "Dengue Duo + NS1 Antigen (Package)"];
 const IMAGING_SERVICES = ["Standard 12-Lead ECG", "Stress Test", "Holter Monitoring", "Chest X-Ray"];
 
@@ -932,7 +940,12 @@ function NurseDashboard() {
   const handleAddPatientChange = (e) => {
     const { name, value } = e.target;
     setAddPatientData((prev) => {
-      const next = { ...prev, [name]: value };
+      const nextValue = name === 'philhealthNumber' ? formatPhilhealthPin(value) : value;
+      const next = { ...prev, [name]: nextValue };
+      if (name === 'hasPhilhealth' && !value) {
+        next.philhealthNumber = '';
+        next.philhealthDeduction = '';
+      }
       if (name === 'patientMode') {
         if (value === 'new') {
           next.existingPatientId = '';
@@ -1369,6 +1382,10 @@ function NurseDashboard() {
         setAddPatientError('Please enter the HMO provider and card number.');
         return;
       }
+      if (addPatientData.hasPhilhealth && normalizePhilhealthPin(addPatientData.philhealthNumber).length !== 12) {
+        setAddPatientError('Enter the complete 12-digit PhilHealth Identification Number (PIN).');
+        return;
+      }
       setAddPatientStep(2);
       return;
     }
@@ -1419,6 +1436,11 @@ function NurseDashboard() {
         setAddPatientError("Select the existing patient first before submitting. If you cleared the patient, pick one again from Existing Patient list.");
         return;
       }
+    }
+
+    if (addPatientData.hasPhilhealth && normalizePhilhealthPin(addPatientData.philhealthNumber).length !== 12) {
+      setAddPatientError('Enter the complete 12-digit PhilHealth Identification Number (PIN).');
+      return;
     }
 
     if (addPatientData.hasHmo) {
@@ -1492,8 +1514,8 @@ function NurseDashboard() {
           hmoCardNumber: addPatientData.hmoCardNumber || null,
           hmoNotes: addPatientData.hmoNotes || null,
           hasPhilhealth: addPatientData.hasPhilhealth,
-          philhealthNumber: addPatientData.philhealthNumber || null,
-          philhealthDeduction: Number(addPatientData.philhealthDeduction) || 0,
+          philhealthNumber: addPatientData.hasPhilhealth ? normalizePhilhealthPin(addPatientData.philhealthNumber) : null,
+          philhealthDeduction: 0,
           hmoCoveredServices: addPatientData.hmoCoveredServices || null,
           hmoApprovalStatus: options?.hmoApprovalStatus || null,
           hmoPaymentMode: options?.hmoPaymentMode || null,
@@ -1551,7 +1573,7 @@ function NurseDashboard() {
         loa_number: addPatientData.hmoLoaNumber || response?.hmo?.loa_number || null,
         card_number: addPatientData.hmoCardNumber || response?.hmo?.card_number || null,
         approved_amount: Number(addPatientData.hmoLoaApprovedAmount || response?.hmo?.hmo_coverage || 0),
-        philhealth_deduction: Number(addPatientData.philhealthDeduction || 0),
+        philhealth_deduction: 0,
         coverage: addPatientData.hmoCoveredServices || null,
         status: String(options?.hmoApprovalStatus || (addPatientData.hasHmo ? 'Approved' : '')).trim() || null
       };
@@ -11236,7 +11258,7 @@ function NurseDashboard() {
                     <div className="hmo-card-header">
                       <div className="hmo-card-title">
                         <Shield size={18} />
-                        <span>HMO / PhilHealth Coverage <span className="hmo-badge-optional">Optional</span></span>
+                        <span>Coverage Information <span className="hmo-badge-optional">Optional</span></span>
                       </div>
                     </div>
 
@@ -11331,34 +11353,37 @@ function NurseDashboard() {
                           <div style={{marginBottom: '14px'}}>
                             <div className="hmo-field-grid">
                               <div className="input-group">
-                                <label>PhilHealth Member #</label>
+                                <label>PhilHealth Identification Number (PIN)</label>
                                 <input
                                   type="text"
                                   name="philhealthNumber"
                                   value={addPatientData.philhealthNumber || ''}
                                   onChange={handleAddPatientChange}
                                   className="white-input"
-                                  placeholder="e.g., 12-3456789-0"
+                                  placeholder="e.g., 12-345678901-2"
+                                  inputMode="numeric"
+                                  autoComplete="off"
+                                  maxLength={14}
+                                  aria-describedby="philhealth-pin-help"
                                 />
+                                <div id="philhealth-pin-help" style={{ marginTop: 6, color: normalizePhilhealthPin(addPatientData.philhealthNumber).length === 12 ? '#15803d' : '#64748b', fontSize: 12, fontWeight: 700 }}>
+                                  {normalizePhilhealthPin(addPatientData.philhealthNumber).length === 12
+                                    ? '12-digit format complete. Membership still requires verification.'
+                                    : `${normalizePhilhealthPin(addPatientData.philhealthNumber).length}/12 digits · Format: XX-XXXXXXXXX-X`}
+                                </div>
                               </div>
-                              <div className="input-group">
-                                <label>Est. Deduction Amount (₱)</label>
-                                <input
-                                  type="number"
-                                  name="philhealthDeduction"
-                                  value={addPatientData.philhealthDeduction || ''}
-                                  onChange={handleAddPatientChange}
-                                  className="white-input"
-                                  placeholder="0.00"
-                                  min="0"
-                                  step="0.01"
-                                />
+                              <div className="input-group" style={{ padding: '10px 12px', border: '1px solid #fde68a', borderRadius: 10, background: '#fffbeb' }}>
+                                <label style={{ color: '#92400e' }}>Verification status</label>
+                                <div style={{ color: '#92400e', fontSize: 12.5, fontWeight: 800, lineHeight: 1.5 }}>Pending Billing verification</div>
+                                <div style={{ marginTop: 4, color: '#a16207', fontSize: 11.5, lineHeight: 1.45 }}>
+                                  Eligibility, covered benefits, and the approved deduction are assessed separately. A PIN alone does not confirm coverage.
+                                </div>
                               </div>
                             </div>
                           </div>
                         )}
 
-                        <div style={{marginBottom: '4px'}}>
+                        {addPatientData.hasHmo && <div style={{marginBottom: '4px'}}>
                           <label style={{fontWeight: 900, color: '#0f172a', display: 'block', marginBottom: '8px'}}>
                             <ClipboardList size={15} style={{display: 'inline', verticalAlign: '-2px', marginRight: '6px'}} />
                             Services Covered by HMO <span style={{color:'#64748b', fontWeight: 600, fontSize: '0.78rem'}}>(check all applicable)</span>
@@ -11410,7 +11435,7 @@ function NurseDashboard() {
                               <span>Admission Eval</span>
                             </button>
                           </div>
-                        </div>
+                        </div>}
                       </div>
                     )}
                   </div>
@@ -11756,10 +11781,10 @@ function NurseDashboard() {
                           </div>
                         )}
 
-                        {(addPatientData.hasHmo || addPatientData.hasPhilhealth) && (
+                        {addPatientData.hasHmo && (
                           <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 12, border: '1px solid #c7d2fe', background: '#eef2ff' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#3730a3', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>
-                              <Shield size={14} /> HMO / PhilHealth Coverage
+                              <Shield size={14} /> HMO Coverage
                             </div>
                             {addPatientData.hasHmo && addPatientData.hmoProvider && (
                               <div style={{ fontSize: 13, color: '#312e81', lineHeight: 1.7 }}>
@@ -11767,15 +11792,6 @@ function NurseDashboard() {
                                 {addPatientData.hmoLoaNumber && (
                                   <> · <span style={{ color: '#6366f1', fontWeight: 800 }}>LOA:</span> {addPatientData.hmoLoaNumber}</>
                                 )}
-                              </div>
-                            )}
-                            {addPatientData.hasPhilhealth && (
-                              <div style={{ fontSize: 13, color: '#312e81', lineHeight: 1.7 }}>
-                                <span style={{ color: '#6366f1', fontWeight: 800 }}>PhilHealth:</span>{' '}
-                                {addPatientData.philhealthNumber || 'Member'}
-                                {addPatientData.philhealthDeduction ? (
-                                  <> · <span style={{ color: '#6366f1', fontWeight: 800 }}>Deduct:</span> ₱ {toMoney(addPatientData.philhealthDeduction)}</>
-                                ) : null}
                               </div>
                             )}
                             {(() => {
@@ -11793,6 +11809,24 @@ function NurseDashboard() {
                                 </div>
                               );
                             })()}
+                          </div>
+                        )}
+
+                        {addPatientData.hasPhilhealth && (
+                          <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 12, border: '1px solid #fde68a', background: '#fffbeb' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#92400e', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>
+                              <ShieldAlert size={14} /> PhilHealth Coverage
+                            </div>
+                            <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.7 }}>
+                              <span style={{ color: '#a16207', fontWeight: 800 }}>PIN:</span>{' '}
+                              {formatPhilhealthPin(addPatientData.philhealthNumber)}
+                            </div>
+                            <div style={{ marginTop: 4, fontSize: 12, color: '#92400e', fontWeight: 800 }}>
+                              Verification: Pending Billing assessment
+                            </div>
+                            <div style={{ marginTop: 3, fontSize: 12, color: '#a16207' }}>
+                              Eligible benefits and approved deduction have not yet been confirmed.
+                            </div>
                           </div>
                         )}
                       </div>

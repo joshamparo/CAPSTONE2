@@ -1588,6 +1588,17 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         const hmoApprovalStatusRaw = String(payload.hmoApprovalStatus || '').trim().toLowerCase();
         const hmoPaymentModeRaw = String(payload.hmoPaymentMode || '').trim().toLowerCase();
         const hmoRejectedFlag = Boolean(payload.hmoRejected === true || hmoApprovalStatusRaw === 'rejected');
+        const hasPhilhealth = payload.hasPhilhealth === true;
+        const philhealthDigits = String(payload.philhealthNumber || '').replace(/\D/g, '');
+        if (hasPhilhealth && !/^\d{12}$/.test(philhealthDigits)) {
+            return res.status(400).json({ message: 'PhilHealth Identification Number (PIN) must contain exactly 12 digits.' });
+        }
+        // Intake captures identity only. Eligibility and deductions must be
+        // assessed by Billing instead of trusting a nurse-entered client value.
+        payload.hasPhilhealth = hasPhilhealth;
+        payload.philhealthNumber = hasPhilhealth ? philhealthDigits : null;
+        payload.philhealthDeduction = 0;
+        if (payload.hasHmo !== true) payload.hmoCoveredServices = null;
         let desiredHmoStatus = null;
         if (hmoRejectedFlag) desiredHmoStatus = null; // EXPLICITLY REJECTED → skip ALL claim inserts, no HMO monitoring row
         else if (hmoApprovalStatusRaw === 'approved') desiredHmoStatus = 'Approved';
@@ -2010,7 +2021,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     const coverageJson = payload.hmoCoveredServices && typeof payload.hmoCoveredServices === 'object'
                         ? JSON.stringify(payload.hmoCoveredServices)
                         : null;
-                    const finalHmoStatus = desiredHmoStatus || 'Awaiting LOA';
+                    const finalHmoStatus = desiredHmoStatus || (payload.hasPhilhealth ? 'PhilHealth Pending Verification' : 'Awaiting LOA');
                     await tx.$executeRawUnsafe(`
                         UPDATE public.appointments
                         SET hmo_provider = ($1::text),
