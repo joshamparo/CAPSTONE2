@@ -356,6 +356,7 @@ export default function OfficeStaffDashboard({ mode }) {
 
   const [patients, setPatients] = useState([]);
   const [patientQuery, setPatientQuery] = useState('');
+  const [patientPage, setPatientPage] = useState(1);
   const [patientsLoading, setPatientsLoading] = useState(false);
   const [patientsError, setPatientsError] = useState('');
 
@@ -468,6 +469,7 @@ export default function OfficeStaffDashboard({ mode }) {
       if (patientQuery.trim()) params.set('q', patientQuery.trim());
       const data = await fetchJson(`/api/patients?${params.toString()}`, { apiBase: API_BASE, headers: buildHeaders(user) });
       setPatients(Array.isArray(data) ? data : []);
+      setPatientPage(1);
     } catch (e) {
       setPatients([]);
       setPatientsError(String(e.message || 'Failed to load patients'));
@@ -1558,6 +1560,18 @@ export default function OfficeStaffDashboard({ mode }) {
     return list.filter((inv) => inRange(inv.created_at || inv.createdAt || null));
   }, [invoiceRange, invoices]);
 
+  const pagedPatients = useMemo(() => {
+    const perPage = 8;
+    const totalPages = Math.max(1, Math.ceil(patients.length / perPage));
+    const currentPage = Math.min(Math.max(1, patientPage), totalPages);
+    const startIndex = (currentPage - 1) * perPage;
+    return {
+      currentPage,
+      totalPages,
+      items: patients.slice(startIndex, startIndex + perPage)
+    };
+  }, [patientPage, patients]);
+
   useEffect(() => {
     setInvoicePage(1);
   }, [invoiceStatus, invoiceRange]);
@@ -2060,6 +2074,33 @@ export default function OfficeStaffDashboard({ mode }) {
                   Search
                 </button>
               </div>
+              {patients.length > 0 ? (
+                <div className="office-row" aria-label="Patient pagination" style={{ gap: 6 }}>
+                  <button
+                    type="button"
+                    className="office-btn ghost"
+                    aria-label="Previous patient page"
+                    disabled={pagedPatients.currentPage <= 1 || patientsLoading}
+                    onClick={() => setPatientPage((page) => Math.max(1, page - 1))}
+                    style={{ width: 38, minWidth: 38, height: 38, padding: 0, justifyContent: 'center' }}
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <span style={{ minWidth: 46, textAlign: 'center', color: '#475569', fontSize: '0.8rem', fontWeight: 700 }}>
+                    {pagedPatients.currentPage} / {pagedPatients.totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="office-btn ghost"
+                    aria-label="Next patient page"
+                    disabled={pagedPatients.currentPage >= pagedPatients.totalPages || patientsLoading}
+                    onClick={() => setPatientPage((page) => Math.min(pagedPatients.totalPages, page + 1))}
+                    style={{ width: 38, minWidth: 38, height: 38, padding: 0, justifyContent: 'center' }}
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              ) : null}
             </div>
 
             <div className="logs-table-container" style={{ marginTop: 14, maxHeight: '520px' }}>
@@ -2087,7 +2128,7 @@ export default function OfficeStaffDashboard({ mode }) {
                       <td colSpan="5" className="text-center py-8 text-slate-500">No patients found.</td>
                     </tr>
                   ) : (
-                    patients.slice(0, 100).map((p) => (
+                    pagedPatients.items.map((p) => (
                       <tr key={p.id}>
                         <td className="text-sm font-medium text-slate-700">{`${p.first_name || ''} ${p.last_name || ''}`.trim() || '—'}</td>
                         <td className="text-sm text-slate-600">{p.email || '—'}</td>
