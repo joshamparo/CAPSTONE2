@@ -332,7 +332,7 @@ function HomePage() {
 
         elements.forEach((element) => observer.observe(element));
         return () => observer.disconnect();
-      }, [showAllServices, activeServiceGroup]);
+      }, [showAllServices, activeServiceGroup, newsLoading, newsCursor, newsItems]);
 
   const visibleNews = useMemo(() => {
     if (newsLoading) return [{}, {}, {}];
