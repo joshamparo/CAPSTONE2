@@ -58,3 +58,11 @@ test('PhilHealth article parser uses its real article image and summary', () => 
   assert.equal(parsed.summary, 'Official article summary for patients.');
   assert.equal(parsed.imageUrl, 'https://www.philhealth.gov.ph/news/images/article.jpg');
 });
+
+test('official article parser uses the image declared by the linked article', () => {
+  const item = { url: 'https://www.who.int/news/item/sample', imageUrl: '' };
+  const html = '<html><head><meta property="og:image" content="/images/default-source/news/article-photo.jpg"></head></html>';
+  const parsed = _newsTest.enrichOfficialArticleImage(item, html);
+
+  assert.equal(parsed.imageUrl, 'https://www.who.int/images/default-source/news/article-photo.jpg');
+});

@@ -145,15 +145,6 @@ const slides = [
   }
 ];
 
-const NEWS_FALLBACK_IMAGES = [
-  '/images/hospital-main-800.jpg',
-  '/images/hospital-emergency-800.jpg',
-  '/images/hospital-pharmacy-800.jpg',
-  '/images/hospital-interior-800.jpg',
-  '/images/hospital-service-window-800.jpg',
-  '/images/hospital-about-700.jpg'
-];
-
 const OFFICIAL_NEWS_FALLBACK = [
   { id: 'philhealth-partnership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth and St. Luke’s formalize landmark health-care partnership', summary: 'Official PhilHealth update on expanding access to quality health care.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8e8005e1b93.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PR-2026-22.png', publishedAt: '2026-08-25T00:00:00.000Z' },
   { id: 'who-obesity-guidelines-2026', category: 'Global Health', label: 'WHO', source: 'World Health Organization', title: 'WHO issues first global guidelines on child and adolescent obesity', summary: 'New evidence-based guidance supports timely, people-centred obesity care for children and adolescents.', url: 'https://www.who.int/news/item/07-10-2026-who-issues-first-global-guidelines-on-child-and-adolescent-obesity', imageUrl: '', publishedAt: '2026-10-07T00:00:00.000Z' },
@@ -181,10 +172,37 @@ function isOfficialNewsLink(raw) {
   }
 }
 
-function pickNewsImage(item, index) {
+function pickNewsImage(item) {
   const directImage = String(item?.imageUrl || '').trim();
   if (/^https:\/\//i.test(directImage)) return directImage;
-  return NEWS_FALLBACK_IMAGES[index % NEWS_FALLBACK_IMAGES.length];
+  return '';
+}
+
+function NewsCardImage({ item, title }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const imageUrl = pickNewsImage(item);
+  const sourceLabel = String(item?.label || item?.source || 'Health News');
+
+  if (!imageUrl || imageFailed) {
+    const isWHO = /who|world health organization/i.test(`${item?.label || ''} ${item?.source || ''}`);
+    return (
+      <div className={`news-card-image-placeholder ${isWHO ? 'news-card-image-placeholder-who' : 'news-card-image-placeholder-local'}`}>
+        <span>{sourceLabel}</span>
+        <strong>Official health update</strong>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imageUrl}
+      alt={`${title || sourceLabel} article`}
+      loading="lazy"
+      width="900"
+      height="480"
+      onError={() => setImageFailed(true)}
+    />
+  );
 }
 
 function formatNewsDate(value) {
@@ -773,7 +791,6 @@ function HomePage() {
               const title = String(n?.title || '');
               const summary = String(n?.summary || '');
               const url = String(n?.url || '').trim();
-              const img = pickNewsImage(n, idx);
               const publishedDate = formatNewsDate(n?.publishedAt);
 
               const badgeStyleByCategory = {
@@ -785,7 +802,7 @@ function HomePage() {
               return (
                 <div key={n?.id || idx} className={`news-card reveal-on-scroll reveal-delay-${(idx % 3) + 1}`}>
                   <div className="news-card-image">
-                    <img src={img} alt={`${title || cat || 'Official health'} news`} loading="lazy" width="900" height="480" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = NEWS_FALLBACK_IMAGES[idx % NEWS_FALLBACK_IMAGES.length]; }} />
+                    <NewsCardImage item={n} title={title || cat} />
                   </div>
                   <div className="news-card-body">
                     <div className="news-card-meta">

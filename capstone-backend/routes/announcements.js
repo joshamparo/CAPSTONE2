@@ -260,7 +260,31 @@ async function fetchRssSource(source) {
     }
 
     const xml = await res.text();
-    return parseRssItems(xml, source);
+    const items = parseRssItems(xml, source);
+    return Promise.all(items.slice(0, 6).map(async (item) => {
+        if (item.imageUrl) return item;
+        try {
+            const articleResponse = await fetch(item.url, {
+                headers: { Accept: 'text/html,*/*;q=0.8', 'User-Agent': 'PascualingaNewsBot/1.0' }
+            });
+            return articleResponse.ok ? enrichOfficialArticleImage(item, await articleResponse.text()) : item;
+        } catch (_) { return item; }
+    }));
+}
+
+function enrichOfficialArticleImage(item, html) {
+    const metaTags = String(html || '').match(/<meta\b[^>]*>/gi) || [];
+    for (const tag of metaTags) {
+        const key = tag.match(/(?:property|name)=(?:"([^"]+)"|'([^']+)')/i);
+        if (!/^(?:og:image|twitter:image(?::src)?)$/i.test(key?.[1] || key?.[2] || '')) continue;
+        const content = tag.match(/content=(?:"([^"]+)"|'([^']+)')/i);
+        const candidate = decodeXmlEntities(content?.[1] || content?.[2] || '').trim();
+        try {
+            const imageUrl = firstValidImageUrl(new URL(candidate, item.url).toString());
+            if (imageUrl) return { ...item, imageUrl };
+        } catch (_) {}
+    }
+    return item;
 }
 
 function parsePhilHealthDate(value) {
@@ -794,5 +818,5 @@ router.delete('/:id', requireRole(['admin']), announcementWriteRateLimit, async 
 });
 
 module.exports = router;
-module.exports._newsTest = { decodeXmlEntities, stripHtml, compactSummary, fallbackLiveNews, isOfficialNewsUrl, parsePhilHealthListing, enrichPhilHealthArticle, selectBalancedNews };
+module.exports._newsTest = { decodeXmlEntities, stripHtml, compactSummary, fallbackLiveNews, isOfficialNewsUrl, parsePhilHealthListing, enrichPhilHealthArticle, enrichOfficialArticleImage, selectBalancedNews };
 
