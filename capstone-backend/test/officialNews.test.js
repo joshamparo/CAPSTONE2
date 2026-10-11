@@ -10,6 +10,17 @@ test('official news fallback contains only allowlisted official domains', () => 
     assert.ok(item.title && item.summary);
     assert.ok(allowed.has(new URL(item.url).hostname), item.url);
   }
+  assert.equal(items.filter((item) => new URL(item.url).hostname.includes('philhealth')).length, 3);
+  assert.equal(items.filter((item) => new URL(item.url).hostname.includes('who.int')).length, 3);
+});
+
+test('official news selection alternates Philippine and international health updates', () => {
+  const mixed = _newsTest.selectBalancedNews(_newsTest.fallbackLiveNews(), 6);
+  assert.equal(mixed.length, 6);
+  assert.match(new URL(mixed[0].url).hostname, /philhealth/);
+  assert.match(new URL(mixed[1].url).hostname, /who\.int/);
+  assert.match(new URL(mixed[2].url).hostname, /philhealth/);
+  assert.match(new URL(mixed[3].url).hostname, /who\.int/);
 });
 
 test('news XML decoder removes non-breaking-space entities', () => {

@@ -5,7 +5,7 @@ import "../components/AccountHeaderActions.css";
 import SignOutConfirmModal from "../components/SignOutConfirmModal";
 import PrivacyConsentModal, { hasPrivacyConsent } from "../components/PrivacyConsentModal";
 import LegalInformationModal from "../components/LegalInformationModal";
-import { Phone, Bone, Stethoscope, MapPin, Mail, Clock, Facebook, MessageCircle, Scissors, Syringe, Baby, Ear, Microscope, Smile, Eye, Scan, Droplet, Sparkles, ShieldCheck, Users, HeartPulse, Building2, BadgeCheck, ChevronLeft, ChevronRight, Pause, Play, Menu, X } from "lucide-react";
+import { Phone, Bone, Stethoscope, MapPin, Mail, Clock, Facebook, MessageCircle, Scissors, Syringe, Baby, Ear, Microscope, Smile, Eye, Scan, Droplet, Sparkles, ShieldCheck, Users, HeartPulse, Building2, BadgeCheck, Menu, X } from "lucide-react";
 import { buildAuthHeaders } from "../utils/api";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
@@ -156,11 +156,11 @@ const NEWS_FALLBACK_IMAGES = [
 
 const OFFICIAL_NEWS_FALLBACK = [
   { id: 'philhealth-partnership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth and St. Luke’s formalize landmark health-care partnership', summary: 'Official PhilHealth update on expanding access to quality health care.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8e8005e1b93.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PR-2026-22.png', publishedAt: '2026-08-25T00:00:00.000Z' },
+  { id: 'who-obesity-guidelines-2026', category: 'Global Health', label: 'WHO', source: 'World Health Organization', title: 'WHO issues first global guidelines on child and adolescent obesity', summary: 'New evidence-based guidance supports timely, people-centred obesity care for children and adolescents.', url: 'https://www.who.int/news/item/07-10-2026-who-issues-first-global-guidelines-on-child-and-adolescent-obesity', imageUrl: '', publishedAt: '2026-10-07T00:00:00.000Z' },
   { id: 'philhealth-leadership-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth’s new President and CEO vows to accelerate national health gains', summary: 'Official leadership update on the national health agenda.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8bd5523ff79.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PR-2026-21.png', publishedAt: '2026-08-20T00:00:00.000Z' },
-  { id: 'philhealth-human-right-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth and CHR champion health care as a fundamental human right', summary: 'An official update on equitable access to quality health care for Filipinos.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a3b405bdfbb6.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PR-2026-18.jpg', publishedAt: '2026-06-23T00:00:00.000Z' },
+  { id: 'who-pregnancy-hypertension-2026', category: 'Global Health', label: 'WHO', source: 'World Health Organization', title: 'Global roadmap targets hypertension in pregnancy', summary: 'WHO and partners launched a roadmap to reduce maternal and newborn deaths linked to hypertensive disorders of pregnancy.', url: 'https://www.who.int/news/item/08-10-2026-new-global-roadmap-launched-to-tackle-hypertension-in-pregnancy-a-leading-cause-of-maternal-and-newborn-deaths', imageUrl: '', publishedAt: '2026-10-08T00:00:00.000Z' },
   { id: 'philhealth-gamot-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'PhilHealth launches GAMOT in Zamboanga Sibugay', summary: 'Official details on expanded access to essential outpatient medicines.', url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a2634094e2bd.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PROXI-PR2026-004.jpg', publishedAt: '2026-06-04T00:00:00.000Z' },
-  { id: 'who-philippines-latest', category: 'Philippine Health', label: 'WHO Philippines', source: 'World Health Organization', title: 'Latest official health releases from WHO Philippines', summary: 'Verified public-health releases from the WHO Philippines country office.', url: 'https://www.who.int/philippines/news/releases', imageUrl: '', publishedAt: null },
-  { id: 'philhealth-latest', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth', title: 'Latest official PhilHealth news and advisories', summary: 'Browse current official PhilHealth updates.', url: 'https://www.philhealth.gov.ph/news/', imageUrl: '', publishedAt: null }
+  { id: 'who-global-headlines', category: 'Global Health', label: 'WHO', source: 'World Health Organization', title: 'Latest global health headlines from WHO', summary: 'Read current official updates spanning mental health, infectious disease, maternal care, nutrition, and health systems.', url: 'https://www.who.int/news-room/headlines', imageUrl: '', publishedAt: null }
 ];
 
 function isOfficialNewsLink(raw) {
@@ -203,7 +203,6 @@ function HomePage() {
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState('');
   const [newsCursor, setNewsCursor] = useState(0);
-  const [newsPaused, setNewsPaused] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(() => !hasPrivacyConsent());
   const [privacyRequiresConsent, setPrivacyRequiresConsent] = useState(() => !hasPrivacyConsent());
@@ -299,14 +298,15 @@ function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (newsLoading || newsPaused) return;
+    if (newsLoading) return;
     const len = Array.isArray(newsItems) ? newsItems.length : 0;
     if (len <= 3) return;
     const t = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       setNewsCursor((prev) => (prev + 1) % len);
-    }, 8000);
+    }, 6500);
     return () => clearInterval(t);
-  }, [newsItems, newsLoading, newsPaused]);
+  }, [newsItems, newsLoading]);
 
   useEffect(() => {
         const elements = Array.from(document.querySelectorAll('.reveal-on-scroll, .reveal-on-zoom'));
@@ -332,7 +332,7 @@ function HomePage() {
 
         elements.forEach((element) => observer.observe(element));
         return () => observer.disconnect();
-      }, [showAllServices, activeServiceGroup]);
+      }, [showAllServices, activeServiceGroup, newsLoading, newsCursor, newsItems]);
 
   const visibleNews = useMemo(() => {
     if (newsLoading) return [{}, {}, {}];
@@ -745,7 +745,7 @@ function HomePage() {
       </section>
 
       {/* News & Updates Section */}
-      <section className="news-section page-section" id="news" onMouseEnter={() => setNewsPaused(true)} onMouseLeave={() => setNewsPaused(false)}>
+      <section className="news-section page-section" id="news">
         <div className="page-shell">
           <div className="news-head reveal-on-scroll">
             <div className="eyebrow">Current Updates</div>
@@ -758,15 +758,6 @@ function HomePage() {
           <div className="news-grid">
             {newsError ? (
               <div className="news-error-msg" role="status">{newsError}</div>
-            ) : null}
-
-            {!newsLoading && newsItems.length > 3 ? (
-              <div className="news-controls" aria-label="News carousel controls">
-                <button type="button" onClick={() => setNewsCursor((current) => (current - 1 + newsItems.length) % newsItems.length)} aria-label="Previous news articles"><ChevronLeft size={18} /></button>
-                <span>{newsCursor + 1} / {newsItems.length}</span>
-                <button type="button" onClick={() => setNewsPaused((paused) => !paused)} aria-label={newsPaused ? 'Resume news rotation' : 'Pause news rotation'}>{newsPaused ? <Play size={16} /> : <Pause size={16} />}</button>
-                <button type="button" onClick={() => setNewsCursor((current) => (current + 1) % newsItems.length)} aria-label="Next news articles"><ChevronRight size={18} /></button>
-              </div>
             ) : null}
 
             {!newsLoading && !visibleNews.length ? (

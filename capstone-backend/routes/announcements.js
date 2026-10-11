@@ -340,30 +340,47 @@ function fallbackLiveNews() {
             url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a8bd5523ff79.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PR-2026-21.png', publishedAt: '2026-08-20T00:00:00.000Z'
         },
         {
-            id: 'official-philhealth-human-right-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth',
-            title: 'PhilHealth and CHR champion health care as a fundamental human right',
-            summary: 'PhilHealth and the Commission on Human Rights reinforce equitable access to quality health care for Filipinos.',
-            url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a3b405bdfbb6.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PR-2026-18.jpg', publishedAt: '2026-06-23T00:00:00.000Z'
-        },
-        {
             id: 'official-philhealth-gamot-2026', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth',
             title: 'PhilHealth launches GAMOT in Zamboanga Sibugay',
             summary: 'The official GAMOT program update explains expanded access to essential outpatient medicines for eligible members.',
             url: 'https://www.philhealth.gov.ph/news/up/article/2026/news_6a2634094e2bd.php', imageUrl: 'https://www.philhealth.gov.ph/news/images/PROXI-PR2026-004.jpg', publishedAt: '2026-06-04T00:00:00.000Z'
         },
         {
-            id: 'official-who-philippines-releases', category: 'Philippine Health', label: 'WHO Philippines', source: 'World Health Organization',
-            title: 'Latest official health releases from WHO Philippines',
-            summary: 'Read verified public-health releases, statements, and joint updates from the WHO country office in the Philippines.',
-            url: 'https://www.who.int/philippines/news/releases', imageUrl: '', publishedAt: null
+            id: 'official-who-obesity-guidelines-2026', category: 'Global Health', label: 'WHO', source: 'World Health Organization',
+            title: 'WHO issues first global guidelines on child and adolescent obesity',
+            summary: 'New evidence-based guidance supports timely, people-centred obesity care for children and adolescents.',
+            url: 'https://www.who.int/news/item/07-10-2026-who-issues-first-global-guidelines-on-child-and-adolescent-obesity', imageUrl: '', publishedAt: '2026-10-07T00:00:00.000Z'
         },
         {
-            id: 'official-philhealth-news', category: 'Philippine Health', label: 'PhilHealth', source: 'PhilHealth',
-            title: 'Latest official PhilHealth news and advisories',
-            summary: 'Browse current benefit, primary-care, medicine-access, and member-service updates directly from PhilHealth.',
-            url: 'https://www.philhealth.gov.ph/news/', imageUrl: '', publishedAt: null
+            id: 'official-who-pregnancy-hypertension-2026', category: 'Global Health', label: 'WHO', source: 'World Health Organization',
+            title: 'Global roadmap targets hypertension in pregnancy',
+            summary: 'WHO and partners launched a roadmap to reduce maternal and newborn deaths linked to hypertensive disorders of pregnancy.',
+            url: 'https://www.who.int/news/item/08-10-2026-new-global-roadmap-launched-to-tackle-hypertension-in-pregnancy-a-leading-cause-of-maternal-and-newborn-deaths', imageUrl: '', publishedAt: '2026-10-08T00:00:00.000Z'
+        },
+        {
+            id: 'official-who-global-headlines', category: 'Global Health', label: 'WHO', source: 'World Health Organization',
+            title: 'Latest global health headlines from WHO',
+            summary: 'Read current official updates spanning mental health, infectious disease, maternal care, nutrition, and health systems.',
+            url: 'https://www.who.int/news-room/headlines', imageUrl: '', publishedAt: null
         }
     ];
+}
+
+function selectBalancedNews(items, limit) {
+    const target = Math.max(1, Math.min(6, Number(limit) || 3));
+    const local = [];
+    const international = [];
+    for (const item of Array.isArray(items) ? items : []) {
+        const host = safeUrl(item?.url)?.hostname?.toLowerCase() || '';
+        if (host === 'philhealth.gov.ph' || host === 'www.philhealth.gov.ph') local.push(item);
+        else international.push(item);
+    }
+    const selected = [];
+    while (selected.length < target && (local.length || international.length)) {
+        if (local.length) selected.push(local.shift());
+        if (selected.length < target && international.length) selected.push(international.shift());
+    }
+    return selected.slice(0, target);
 }
 
 async function getLiveNews(limit) {
@@ -404,7 +421,7 @@ async function getLiveNews(limit) {
         return isOfficialNewsUrl(item.url) && key && items.findIndex((candidate) => String(candidate.url || '').toLowerCase() === key) === index;
     });
     merged.sort((a, b) => (Date.parse(b.publishedAt || '') || 0) - (Date.parse(a.publishedAt || '') || 0));
-    const finalItems = merged.slice(0, target)
+    const finalItems = selectBalancedNews(merged, target)
         .map(({ relevanceScore, ...item }) => item);
 
     liveNewsCache = {
@@ -777,5 +794,5 @@ router.delete('/:id', requireRole(['admin']), announcementWriteRateLimit, async 
 });
 
 module.exports = router;
-module.exports._newsTest = { decodeXmlEntities, stripHtml, compactSummary, fallbackLiveNews, isOfficialNewsUrl, parsePhilHealthListing, enrichPhilHealthArticle };
+module.exports._newsTest = { decodeXmlEntities, stripHtml, compactSummary, fallbackLiveNews, isOfficialNewsUrl, parsePhilHealthListing, enrichPhilHealthArticle, selectBalancedNews };
 
