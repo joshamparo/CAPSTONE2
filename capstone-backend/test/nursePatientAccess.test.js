@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { nursePatientScope, isCentralIntakeRequest } = require('../utils/nursePatientAccess');
 
 test('core nurse departments produce restrictive patient scopes', () => {
@@ -26,4 +28,11 @@ test('central nurse reception intake does not require a clinical department assi
   assert.equal(isCentralIntakeRequest('POST', '/er-registration'), true);
   assert.equal(isCentralIntakeRequest('GET', '/'), false);
   assert.equal(isCentralIntakeRequest('POST', '/audit-access/report'), false);
+
+  const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'patients.js'), 'utf8');
+  const middlewareStart = source.indexOf("router.use(requireRole(['admin', 'nurse'");
+  const middlewareEnd = source.indexOf('function getRequesterRole', middlewareStart);
+  const middleware = source.slice(middlewareStart, middlewareEnd);
+  assert.match(middleware, /req\.auth\?\.role !== 'nurse' \|\| isCentralIntakeRequest\(req\.method, req\.path\)/);
+  assert.doesNotMatch(middleware, /nurseDepartment\s*!==\s*'ER'/);
 });

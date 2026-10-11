@@ -240,11 +240,12 @@ async function enforceDoctorAvailability({ doctorId, dateKey, mode = 'onsite', r
 
 router.use(requireRole(['admin', 'nurse', 'doctor', 'pharmacist', 'staff', 'cashier', 'doctor_secretary', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'patient']));
 router.use((req, res, next) => {
-    if (req.auth?.role !== 'nurse') return next();
-    return requireNurseDepartment(req, res, () => {
-        if (isCentralIntakeRequest(req.method, req.path) && req.nurseDepartment !== 'ER') return res.status(403).json({ message: 'Central patient intake is handled by the ER nurse.' });
-        next();
-    });
+    // Registration is a central-reception action exposed by the shared Nurse
+    // dashboard. It creates and routes a record; it does not grant access to
+    // the destination department's patient list. Department authorization is
+    // still required for every read/update route below.
+    if (req.auth?.role !== 'nurse' || isCentralIntakeRequest(req.method, req.path)) return next();
+    return requireNurseDepartment(req, res, next);
 });
 
 function getRequesterRole(req) {
