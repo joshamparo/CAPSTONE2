@@ -6103,7 +6103,7 @@ function AdminDashboard() {
               </div>
             </div>
 
-            <div className="form-actions-row staff-registration-actions">
+            <div className="form-actions-row account-profile-actions">
               {updateNotice && (
                 <p className="form-notice-error form-notice-error-text">{updateNotice}</p>
               )}

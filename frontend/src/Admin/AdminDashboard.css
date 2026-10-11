@@ -1492,6 +1492,10 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.form-actions-row.account-profile-actions {
+  justify-content: flex-end;
+}
+
 .form-actions-row.staff-registration-actions {
   justify-content: flex-end;
   gap: 10px;
