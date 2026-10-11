@@ -52,36 +52,57 @@ const formatDaysLabel = (days) => {
   return `${days} day${days === 1 ? '' : 's'} left`;
 };
 
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+
 const toIsoDate = (d) => {
-  const yyyy = String(d.getUTCFullYear());
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const manila = new Date(d.getTime() + MANILA_OFFSET_MS);
+  const yyyy = String(manila.getUTCFullYear());
+  const mm = String(manila.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(manila.getUTCDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+};
+
+const manilaDateStartUtc = (year, month, day) => (
+  new Date(Date.UTC(year, month, day, 0, 0, 0) - MANILA_OFFSET_MS)
+);
+
+const manilaDateKeyStartUtc = (value) => {
+  const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return manilaDateStartUtc(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 };
 
 const buildUtcRange = (preset, fromRaw, toRaw) => {
   const now = new Date();
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
+  const manilaNow = new Date(now.getTime() + MANILA_OFFSET_MS);
+  const year = manilaNow.getUTCFullYear();
+  const month = manilaNow.getUTCMonth();
+  const dayOfMonth = manilaNow.getUTCDate();
+  const todayStart = manilaDateStartUtc(year, month, dayOfMonth);
+  const tomorrowStart = manilaDateStartUtc(year, month, dayOfMonth + 1);
   if (preset === 'yesterday') {
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
+    const start = manilaDateStartUtc(year, month, dayOfMonth - 1);
     const end = todayStart;
-    return { from: start.toISOString(), to: end.toISOString(), fromDate: toIsoDate(start), toDate: toIsoDate(end) };
+    return { from: start.toISOString(), to: end.toISOString(), fromDate: toIsoDate(start), toDate: toIsoDate(start) };
   }
   if (preset === 'week') {
-    const day = todayStart.getUTCDay();
+    const day = manilaNow.getUTCDay();
     const diff = (day + 6) % 7;
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff, 0, 0, 0));
-    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
-    return { from: start.toISOString(), to: end.toISOString(), fromDate: toIsoDate(start), toDate: toIsoDate(end) };
+    const start = manilaDateStartUtc(year, month, dayOfMonth - diff);
+    return { from: start.toISOString(), to: tomorrowStart.toISOString(), fromDate: toIsoDate(start), toDate: toIsoDate(todayStart) };
   }
   if (preset === 'custom') {
-    const from = fromRaw ? new Date(`${String(fromRaw).trim()}T00:00:00.000Z`) : todayStart;
-    const to = toRaw ? new Date(`${String(toRaw).trim()}T00:00:00.000Z`) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
-    const end = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate() + 1, 0, 0, 0));
-    return { from: from.toISOString(), to: end.toISOString(), fromDate: toIsoDate(from), toDate: toIsoDate(end) };
+    const from = manilaDateKeyStartUtc(fromRaw) || todayStart;
+    const selectedTo = manilaDateKeyStartUtc(toRaw) || todayStart;
+    const selectedToManila = new Date(selectedTo.getTime() + MANILA_OFFSET_MS);
+    const end = manilaDateStartUtc(
+      selectedToManila.getUTCFullYear(),
+      selectedToManila.getUTCMonth(),
+      selectedToManila.getUTCDate() + 1
+    );
+    return { from: from.toISOString(), to: end.toISOString(), fromDate: toIsoDate(from), toDate: toIsoDate(selectedTo) };
   }
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
-  return { from: todayStart.toISOString(), to: end.toISOString(), fromDate: toIsoDate(todayStart), toDate: toIsoDate(end) };
+  return { from: todayStart.toISOString(), to: tomorrowStart.toISOString(), fromDate: toIsoDate(todayStart), toDate: toIsoDate(todayStart) };
 };
 
 function PharmacistDashboard() {
