@@ -54,6 +54,16 @@ test('ER intake stores a legacy-constraint-compatible patient admission status',
   assert.doesNotMatch(handler, /admission_status:\s*routeMeta\.type === 'er_consult' \? 'ER Observation'/);
 });
 
+test('ER registration defers billing and HMO claims until care is rendered', () => {
+  const handler = walkInHandlerSource();
+  assert.match(handler, /const deferErBilling = routeMeta\.type === 'er_consult'/);
+  assert.match(handler, /if \(Boolean\(payload\.hasHmo\) && !deferErBilling\)/);
+  assert.match(handler, /if \(hasServices && !deferErBilling\)/);
+  assert.match(handler, /if \(!deferErBilling && Boolean\(payload\.hasHmo\)/);
+  assert.match(handler, /const hasHmoClaim = hasHmoCoverage && !deferErBilling/);
+  assert.match(handler, /state: 'deferred', label: 'Deferred until ER billing'/);
+});
+
 test('walk-in HMO recovery uses only the invoice returned by the exact intake', () => {
   const handler = walkInHandlerSource();
   assert.match(handler, /linkedInvoiceRaw\s*=\s*String\(result\?\.linkedInvoiceId/i);
@@ -64,7 +74,8 @@ test('walk-in HMO recovery uses only the invoice returned by the exact intake', 
 
 test('PhilHealth-only intake cannot create an HMO monitoring claim', () => {
   const handler = walkInHandlerSource();
-  assert.match(handler, /const hasHmoClaim = Boolean\(payload\.hasHmo\)/i);
+  assert.match(handler, /const hasHmoCoverage = Boolean\(payload\.hasHmo\)/i);
+  assert.match(handler, /const hasHmoClaim = hasHmoCoverage && !deferErBilling/i);
   assert.match(handler, /const shouldCreateClaim = hasHmoClaim && desiredHmoStatus/i);
   assert.match(handler, /:\s*'PhilHealth Only'/i);
 });

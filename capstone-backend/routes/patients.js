@@ -1583,6 +1583,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             return res.status(400).json({ message: 'Select a valid walk-in destination.' });
         }
         let routeMeta = getWalkInRouteMeta(routeTypeRaw);
+        const deferErBilling = routeMeta.type === 'er_consult';
         const patientMode = String(payload.patientMode || 'new').trim().toLowerCase() === 'existing' ? 'existing' : 'new';
         const now = new Date();
         const manilaDateKey = manilaDateKeyFromNow(now);
@@ -1625,7 +1626,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         if (hmoRejectedFlag) desiredHmoStatus = null; // EXPLICITLY REJECTED → skip ALL claim inserts, no HMO monitoring row
         else if (hmoApprovalStatusRaw === 'approved') desiredHmoStatus = 'Approved';
         else if (hmoApprovalStatusRaw === 'awaiting_loa') desiredHmoStatus = 'Awaiting LOA';
-        if (Boolean(payload.hasHmo)) {
+        if (Boolean(payload.hasHmo) && !deferErBilling) {
             const provider = String(payload.hmoProvider || '').trim();
             const cardNumber = String(payload.hmoCardNumber || '').trim();
             const loaNumber = String(payload.hmoLoaNumber || '').trim();
@@ -1758,6 +1759,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         };
         const intakeEntry = buildWalkInClinicalRecordEntry({ routeMeta, requesterName, now, payload, triage });
 
+        // Emergency registration must never become a cashier gate. ER intake
+        // records routing, triage, coverage details and any requested orders;
+        // billing is created later from services actually rendered.
         const syncHmoInsideCoreTransaction = false;
         const result = await prisma.$transaction(async (tx) => {
             let patient = null;
@@ -2369,7 +2373,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     const covered = hmoActiveExtra && (realPh + realLoa > 0.0099);
                     const patientPayNow = patientPayable > 0.0099;
                     const baseStatus = pricing?.configured && configuredUnitPrice > 0 ? 'For Payment' : 'Pending';
-                    const status = !covered
+                    const status = deferErBilling
+                        ? 'Pending'
+                        : !covered
                         ? baseStatus
                         : patientPayNow
                             ? 'For Payment'
@@ -2396,7 +2402,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     });
 
                     // PROMPT L13: per-lab invoice create so counted properly
-                    if (pricing?.configured && configuredUnitPrice > 0) {
+                    if (!deferErBilling && pricing?.configured && configuredUnitPrice > 0) {
                         try {
                             await ensureBillingTablesExist(tx).catch(() => null);
                             const unitPriceMoney = toMoney(configuredUnitPrice);
@@ -2473,7 +2479,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     const covered = hmoActiveExtra && (realPh + realLoa > 0.0099);
                     const patientPayNow = patientPayable > 0.0099;
                     const baseStatus = pricing?.configured && configuredUnitPrice > 0 ? 'For Payment' : 'Pending';
-                    const status = !covered
+                    const status = deferErBilling
+                        ? 'Pending'
+                        : !covered
                         ? baseStatus
                         : patientPayNow
                             ? 'For Payment'
@@ -2500,7 +2508,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                     });
 
                     // PROMPT L13: per-imaging invoice create
-                    if (pricing?.configured && configuredUnitPrice > 0) {
+                    if (!deferErBilling && pricing?.configured && configuredUnitPrice > 0) {
                         try {
                             await ensureBillingTablesExist(tx).catch(() => null);
                             const unitPriceMoney = toMoney(configuredUnitPrice);
@@ -2566,7 +2574,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
 
             // Fixed 100 pesos billing for selected services (flat: regardless of count = ₱100 total)
             const hasServices = (payload.selectedLabServices?.length > 0) || (payload.selectedImagingServices?.length > 0);
-            if (hasServices) {
+            if (hasServices && !deferErBilling) {
                 await ensureBillingTablesExist(tx).catch(() => null);
                 const totalServices = Number(payload.selectedLabServices?.length || 0) + Number(payload.selectedImagingServices?.length || 0);
                 const amountMoney = toMoney(100);
@@ -2606,7 +2614,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
 
             // Always leave the committed intake with an invoice anchor for the
             // post-commit HMO sync, including routes without selected add-ons.
-            if (Boolean(payload.hasHmo) && desiredHmoStatus && !linkedInvoiceId) {
+            if (!deferErBilling && Boolean(payload.hasHmo) && desiredHmoStatus && !linkedInvoiceId) {
                 const onSiteAmount = hasServices ? 100 : 0;
                 const impliedTotal = onSiteAmount + mainClinicalOrderHmoCoveredCents + extraHmoTotalCents;
                 const invoice = await tx.billing_invoices.create({
@@ -2799,8 +2807,11 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         // GUARANTEES: HMO claim row exists if patient had HMO + status approved/awaiting
         // Even if layer1 syncHmo failed silently (old bugs/crashes/.catch(()=>null)), this runs directly with fresh prisma
         // after commit, using an invoice-scoped advisory lock so duplicates never happen.
-        const hasHmoClaim = Boolean(payload.hasHmo);
-        let hmoSync = hasHmoClaim
+        const hasHmoCoverage = Boolean(payload.hasHmo);
+        const hasHmoClaim = hasHmoCoverage && !deferErBilling;
+        let hmoSync = deferErBilling && hasHmoCoverage
+            ? { state: 'deferred', label: 'Deferred until ER billing', invoiceId: null }
+            : hasHmoClaim
             ? { state: 'pending', label: 'Sync pending', invoiceId: result?.linkedInvoiceId || result?.hmoSummary?.invoice_id || null }
             : { state: 'not_required', label: 'Not required', invoiceId: null };
         try {

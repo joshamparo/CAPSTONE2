@@ -1443,7 +1443,7 @@ function NurseDashboard() {
       return;
     }
 
-    if (addPatientData.hasHmo) {
+    if (addPatientData.hasHmo && String(addPatientData.routeType || '').toLowerCase() !== 'er_consult') {
       const approvalStatus = String(options?.hmoApprovalStatus || '').trim().toLowerCase();
       if (!approvalStatus) {
         setAddPatientError('Select the HMO result before completing the intake.');
@@ -1528,6 +1528,7 @@ function NurseDashboard() {
       const routeTarget = String(response?.routing?.target || '').trim();
       const routeId = String(response?.routing?.id || '').trim();
       const routeTicket = String(response?.routing?.ticket || '').trim();
+      const isErIntake = String(response?.routeType || addPatientData.routeType || '').trim().toLowerCase() === 'er_consult';
       const patientId = String(response?.patient?.id || response?.patient?._id || '').trim();
       const invoiceIdRaw = String(response?.billing?.invoice_id || response?.hmoSync?.invoiceId || response?.hmo?.invoice_id || response?.invoiceId || response?.invoice_id || response?.routing?.invoice_id || '').trim();
       const patientName = response?.patient
@@ -1552,20 +1553,22 @@ function NurseDashboard() {
       // ✅ NEW: GENERATE PATIENT REFERENCE NUMBER BEFORE OPENING MODAL
       // Returns format PGHYYMMDD-NNNNN (ex: PGH260817-00042) and saves to DB automatically
       let generatedRef = '';
-      try {
-        const params = new URLSearchParams();
-        if (patientId) params.append('patient_id', patientId);
-        if (appointmentId) params.append('appointment_id', appointmentId);
-        if (invoiceIdRaw) params.append('invoice_id', invoiceIdRaw);
-        const refRes = await fetchJson(`/api/billing/generate-ref?${params.toString()}`, {
-          apiBase: API_BASE,
-          headers: { ...getAuthHeaders() }
-        }).catch(() => null);
-        if (refRes && refRes.ok && String(refRes.reference || '').trim() !== '') {
-          generatedRef = String(refRes.reference).trim();
-          setWalkInPatientReference(generatedRef);
-        }
-      } catch (_refErr) { /* ignore - never break flow */ }
+      if (!isErIntake) {
+        try {
+          const params = new URLSearchParams();
+          if (patientId) params.append('patient_id', patientId);
+          if (appointmentId) params.append('appointment_id', appointmentId);
+          if (invoiceIdRaw) params.append('invoice_id', invoiceIdRaw);
+          const refRes = await fetchJson(`/api/billing/generate-ref?${params.toString()}`, {
+            apiBase: API_BASE,
+            headers: { ...getAuthHeaders() }
+          }).catch(() => null);
+          if (refRes && refRes.ok && String(refRes.reference || '').trim() !== '') {
+            generatedRef = String(refRes.reference).trim();
+            setWalkInPatientReference(generatedRef);
+          }
+        } catch (_refErr) { /* ignore - never break flow */ }
+      }
 
       const patientHmo = {
         hasHmo: !!addPatientData.hasHmo,
@@ -1575,7 +1578,9 @@ function NurseDashboard() {
         approved_amount: Number(addPatientData.hmoLoaApprovedAmount || response?.hmo?.hmo_coverage || 0),
         philhealth_deduction: 0,
         coverage: addPatientData.hmoCoveredServices || null,
-        status: String(options?.hmoApprovalStatus || (addPatientData.hasHmo ? 'Approved' : '')).trim() || null
+        status: isErIntake && addPatientData.hasHmo
+          ? 'Pending verification'
+          : String(options?.hmoApprovalStatus || (addPatientData.hasHmo ? 'Approved' : '')).trim() || null
       };
 
       setWalkInNextSteps({
@@ -1585,14 +1590,18 @@ function NurseDashboard() {
         patientContact: patientContact || null,
         appointmentId: appointmentId || null,
         ticket: routeTicket || null,
-        routeType: addPatientData.routeType,
+        routeType: response?.routeType || addPatientData.routeType,
         routeLabel,
         routeTarget: services ? services : (routeTarget || null),
         routeKind: routeKind || null,
         invoiceId: invoiceIdRaw || null,
-        hmoSync: response?.hmoSync || (patientHmo.hasHmo ? { state: 'pending', label: 'Sync pending', invoiceId: invoiceIdRaw || null } : { state: 'not_required', label: 'Not required' }),
+        hmoSync: response?.hmoSync || (isErIntake && patientHmo.hasHmo
+          ? { state: 'deferred', label: 'Deferred until ER billing', invoiceId: null }
+          : patientHmo.hasHmo
+            ? { state: 'pending', label: 'Sync pending', invoiceId: invoiceIdRaw || null }
+            : { state: 'not_required', label: 'Not required' }),
         patient_reference: generatedRef || null,
-        referencePending: !generatedRef,
+        referencePending: !isErIntake && !generatedRef,
         vitals: vitalsSave,
         hmo: patientHmo.hasHmo ? patientHmo : (response?.hmo && typeof response.hmo === 'object' ? response.hmo : null),
         created_at: new Date().toISOString()
@@ -10515,31 +10524,32 @@ function NurseDashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
               {(() => {
                 const sync = walkInNextSteps?.hmoSync || { state: 'not_required', label: 'Not required' };
+                const isErIntake = String(walkInNextSteps?.routeType || '').trim().toLowerCase() === 'er_consult';
                 const isPending = sync.state === 'pending' || sync.state === 'failed';
                 const isSent = sync.state === 'sent';
                 return (
                   <div style={{ width: 'min(100%, 360px)', alignSelf: 'center', marginBottom: 12, padding: '11px 12px', borderRadius: 10, border: `1px solid ${isSent ? '#bbf7d0' : isPending ? '#fed7aa' : '#e2e8f0'}`, background: isSent ? '#f0fdf4' : isPending ? '#fff7ed' : '#f8fafc' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                       <div>
-                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13 }}>Intake completed</div>
+                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13 }}>{isErIntake ? 'ER intake completed' : 'Intake completed'}</div>
                         <div style={{ marginTop: 2, color: isSent ? '#15803d' : isPending ? '#c2410c' : '#64748b', fontSize: 12, fontWeight: 700 }}>
-                          HMO: {walkInHmoRetrying ? 'Syncing…' : sync.label}
+                          {isErIntake ? 'Billing: Deferred until ER services are recorded' : `HMO: ${walkInHmoRetrying ? 'Syncing…' : sync.label}`}
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        {isPending ? (
+                        {!isErIntake && isPending ? (
                           <button type="button" onClick={retryWalkInHmoSync} disabled={walkInHmoRetrying} style={{ border: 0, borderRadius: 7, padding: '7px 9px', background: '#f97316', color: '#fff', fontSize: 11, fontWeight: 800, cursor: walkInHmoRetrying ? 'wait' : 'pointer' }}>
                             {walkInHmoRetrying ? 'Retrying…' : 'Retry Sync'}
                           </button>
                         ) : null}
-                        {walkInNextSteps?.invoiceId ? (
+                        {!isErIntake && walkInNextSteps?.invoiceId ? (
                           <button type="button" onClick={() => setWalkInBillingDetailsOpen((open) => !open)} style={{ border: '1px solid #cbd5e1', borderRadius: 7, padding: '7px 9px', background: '#fff', color: '#334155', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>
                             View Billing
                           </button>
                         ) : null}
                       </div>
                     </div>
-                    {walkInBillingDetailsOpen && walkInNextSteps?.invoiceId ? (
+                    {!isErIntake && walkInBillingDetailsOpen && walkInNextSteps?.invoiceId ? (
                       <div style={{ marginTop: 9, paddingTop: 8, borderTop: '1px solid #e2e8f0', color: '#475569', fontSize: 12 }}>
                         <div>Invoice #{walkInNextSteps.invoiceId} · Cashier reference: {walkInNextSteps?.patient_reference || 'Pending'}</div>
                         {!walkInNextSteps?.patient_reference ? (
@@ -10575,11 +10585,14 @@ function NurseDashboard() {
               }}>
                 <div style={{ textAlign: 'center', marginBottom: 10, paddingBottom: 9, borderBottom: '1px dashed #000000' }}>
                   <div style={{ fontWeight: 900, fontSize: '14px', letterSpacing: '0.03em', textTransform: 'uppercase', color: '#000000' }}>Pascual General Hospital</div>
-                  <div style={{ fontWeight: 700, fontSize: '11.5px', marginTop: 2, color: '#000000' }}>PATIENT INTAKE RECEIPT</div>
+                  <div style={{ fontWeight: 700, fontSize: '11.5px', marginTop: 2, color: '#000000' }}>
+                    {String(walkInNextSteps?.routeType || '').toLowerCase() === 'er_consult' ? 'ER TRIAGE & INTAKE SLIP' : 'PATIENT INTAKE RECEIPT'}
+                  </div>
                 </div>
 
                 {/* REFERENCE NUMBER: boxed, biggest text, center */}
                 {(() => {
+                  if (String(walkInNextSteps?.routeType || '').toLowerCase() === 'er_consult') return null;
                   const refNum = String(walkInNextSteps?.patient_reference || walkInPatientReference || '').trim();
                   return (
                     <div style={{
@@ -10711,10 +10724,10 @@ function NurseDashboard() {
 
                 <div style={{ textAlign: 'center', paddingTop: 10, borderTop: '3px double #000000' }}>
                   <div style={{ fontWeight: 900, fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>
-                    PRESENT THIS RECEIPT TO CASHIER
+                    {String(walkInNextSteps?.routeType || '').toLowerCase() === 'er_consult' ? 'PROCEED IMMEDIATELY TO ER ASSESSMENT' : 'PRESENT THIS RECEIPT TO CASHIER'}
                   </div>
                   <div style={{ fontWeight: 700, fontSize: '10px', marginTop: 3, color: '#000000' }}>
-                    for final settlement BEFORE any procedure or exam.
+                    {String(walkInNextSteps?.routeType || '').toLowerCase() === 'er_consult' ? 'Present this slip to the ER nurse or doctor.' : 'for final settlement BEFORE any procedure or exam.'}
                   </div>
                 </div>
               </div>
@@ -10724,7 +10737,8 @@ function NurseDashboard() {
               {(() => {
                 const hmo = walkInNextSteps?.hmo;
                 const isHmo = hasActiveHmoCoverage(hmo);
-                if (isHmo) return null; // HMO patient: receipt document lang, no ticket
+                const isErIntake = String(walkInNextSteps?.routeType || '').toLowerCase() === 'er_consult';
+                if (isHmo && !isErIntake) return null; // ER always needs its queue/triage ticket.
                 return (
                   <div style={{ background: '#f8fafc', padding: '9px 12px', borderRadius: '8px', width: 'min(100%, 360px)', alignSelf: 'center', marginBottom: 10, border: '1px solid #e2e8f0' }}>
                     {walkInNextSteps.ticket && (
@@ -10775,6 +10789,7 @@ function NurseDashboard() {
                       const hmoStatus = hmo ? String(hmo.status || '').trim() : '';
                       const routeLabel = walkInNextSteps?.routeLabel || '';
                       const routeTarget = walkInNextSteps?.routeTarget || '';
+                      const isErIntake = String(walkInNextSteps?.routeType || '').trim().toLowerCase() === 'er_consult';
                       const v = walkInNextSteps?.vitals || walkInIntakeVitals || null;
                       const vitalsLine = v ? [
                         v.temperature ? `T:${v.temperature}°C` : null,
@@ -10811,12 +10826,12 @@ function NurseDashboard() {
                         '</style></head><body>',
                         '<div class="header">',
                         '  <div class="hospital">Pascual General Hospital</div>',
-                        '  <div class="sub">PATIENT INTAKE RECEIPT</div>',
+                        '  <div class="sub">' + (isErIntake ? 'ER TRIAGE &amp; INTAKE SLIP' : 'PATIENT INTAKE RECEIPT') + '</div>',
                         '</div>',
-                        '<div class="ref">',
-                        '  <div class="ref-label">CASHIER REFERENCE</div>',
-                        '  <div class="ref-num">' + (refNum || 'Pending cashier assignment') + '</div>',
-                        '</div>',
+                        isErIntake ? '' : '<div class="ref">',
+                        isErIntake ? '' : '  <div class="ref-label">CASHIER REFERENCE</div>',
+                        isErIntake ? '' : '  <div class="ref-num">' + (refNum || 'Pending cashier assignment') + '</div>',
+                        isErIntake ? '' : '</div>',
                         '<div class="section">',
                         '  <div class="row"><b>Patient:</b><span>' + pName + '</span></div>',
                         company ? ('  <div class="row"><b>Company:</b><span>' + company + '</span></div>') : '',
@@ -10846,8 +10861,8 @@ function NurseDashboard() {
                         '  <div class="row"><b>Date / Time:</b><span>' + dateStr + '</span></div>',
                         '</div>',
                         '<div class="footer">',
-                        '  <div class="warn">PRESENT THIS RECEIPT TO CASHIER</div>',
-                        '  <div class="foot-sub">for final settlement BEFORE any procedure or exam.</div>',
+                        '  <div class="warn">' + (isErIntake ? 'PROCEED IMMEDIATELY TO ER ASSESSMENT' : 'PRESENT THIS RECEIPT TO CASHIER') + '</div>',
+                        '  <div class="foot-sub">' + (isErIntake ? 'Present this slip to the ER nurse or doctor.' : 'for final settlement BEFORE any procedure or exam.') + '</div>',
                         '</div>',
                         '</body></html>'
                       ].filter(Boolean).join('\n');
