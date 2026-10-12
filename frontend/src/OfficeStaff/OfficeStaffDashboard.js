@@ -386,6 +386,7 @@ export default function OfficeStaffDashboard({ mode }) {
   const [invoiceItems, setInvoiceItems] = useState([{ description: '', quantity: 1, unitPrice: '' }]);
   const [invoiceNotes, setInvoiceNotes] = useState('');
   const [createInvoiceLoading, setCreateInvoiceLoading] = useState(false);
+  const invoiceIdempotencyKeyRef = useRef('');
   const [createInvoiceError, setCreateInvoiceError] = useState('');
 
   const [payMethod, setPayMethod] = useState('Cash');
@@ -1071,13 +1072,17 @@ export default function OfficeStaffDashboard({ mode }) {
       await fetchJson(`/api/billing/invoices`, {
         apiBase: API_BASE,
         method: 'POST',
-        headers: buildHeaders(user),
+        headers: {
+          ...buildHeaders(user),
+          'x-idempotency-key': invoiceIdempotencyKeyRef.current || (invoiceIdempotencyKeyRef.current = (globalThis.crypto?.randomUUID?.() || `invoice-${Date.now()}`))
+        },
         body: JSON.stringify({
           patientId: newInvoicePatient.id,
           items,
           notes: invoiceNotes || null
         })
       });
+      invoiceIdempotencyKeyRef.current = '';
 
       setInvoiceItems([{ description: '', quantity: 1, unitPrice: '' }]);
       setInvoiceNotes('');

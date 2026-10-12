@@ -1,5 +1,5 @@
 import MedicalFileLink from '../components/MedicalFileLink';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, RefreshCw, ShieldAlert, Upload, UserRound, X, XCircle, Menu, User, Mail, Briefcase, Key, Save, Shield, Eye, EyeOff, Check, Video } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import './ClinicalStaffDashboard.css';
@@ -166,6 +166,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
   const [orderFormOpen, setOrderFormOpen] = useState(false);
   const [orderCreating, setOrderCreating] = useState(false);
+  const orderIdempotencyKeyRef = useRef('');
   const [orderCreateError, setOrderCreateError] = useState('');
   const [orderForm, setOrderForm] = useState({
     patientId: '',
@@ -755,7 +756,10 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       await fetchJson(`/api/clinical-orders`, {
         apiBase: API_BASE,
         method: 'POST',
-        headers: buildJsonAuthHeaders(user),
+        headers: {
+          ...buildJsonAuthHeaders(user),
+          'x-idempotency-key': orderIdempotencyKeyRef.current || (orderIdempotencyKeyRef.current = (globalThis.crypto?.randomUUID?.() || `clinical-order-${Date.now()}`))
+        },
         body: JSON.stringify({
           patientId,
           patientName: patientName || null,
@@ -772,6 +776,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
           actorRole: role
         })
       });
+      orderIdempotencyKeyRef.current = '';
 
       setOrderForm({ patientId: '', service: '', priority: 'Routine', notes: '', scheduledAt: '' });
       setOrderFormOpen(false);

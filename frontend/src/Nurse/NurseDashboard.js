@@ -705,6 +705,7 @@ function NurseDashboard() {
   const [showAddPatientModal, setShowAddPatientModal] = useState(false);
   const [addPatientStep, setAddPatientStep] = useState(1);
   const [addPatientSaving, setAddPatientSaving] = useState(false);
+  const walkInIdempotencyKeyRef = useRef('');
   const [addPatientError, setAddPatientError] = useState("");
   const [walkInDoctorOptions, setWalkInDoctorOptions] = useState([]);
   const [walkInDoctorLoading, setWalkInDoctorLoading] = useState(false);
@@ -1469,6 +1470,7 @@ function NurseDashboard() {
         timeoutMs: 180000,
         headers: {
           'Content-Type': 'application/json',
+          'x-idempotency-key': walkInIdempotencyKeyRef.current || (walkInIdempotencyKeyRef.current = (globalThis.crypto?.randomUUID?.() || `walkin-${Date.now()}`)),
           ...getAuthHeaders()
         },
         body: JSON.stringify({
@@ -1522,6 +1524,7 @@ function NurseDashboard() {
           hmoRejected: Boolean(options?.hmoRejected)
         })
       });
+      walkInIdempotencyKeyRef.current = '';
 
       const routeLabel = String(response?.routeLabel || 'Walk-In Intake').trim();
       const routeKind = String(response?.routing?.kind || '').trim().toLowerCase();
@@ -4619,7 +4622,11 @@ function NurseDashboard() {
         const assignedRole = inferAssignedRoleForLab(orderFormData.item);
         res = await fetch(`${API_BASE}/api/clinical-orders`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+            'x-idempotency-key': clinicalOrderIdempotencyKeyRef.current || (clinicalOrderIdempotencyKeyRef.current = (globalThis.crypto?.randomUUID?.() || `nurse-order-${Date.now()}`))
+          },
           body: JSON.stringify({
             patientId: orderFormData.patientId || null,
             patientName: patientText,
@@ -4698,6 +4705,7 @@ function NurseDashboard() {
 
       if (!res.ok) throw new Error('Failed');
       await res.json().catch(() => null);
+      if (type === 'Lab') clinicalOrderIdempotencyKeyRef.current = '';
       await refreshRecentOrders({ silent: true });
       setSuccessMessage(`${type} order submitted successfully!`);
       setModalType("success");
@@ -4765,6 +4773,7 @@ function NurseDashboard() {
   const [pharmacyCatalogError, setPharmacyCatalogError] = useState('');
   const [pharmacyCatalogSearch, setPharmacyCatalogSearch] = useState('');
   const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const clinicalOrderIdempotencyKeyRef = useRef('');
 
   const refreshPharmacyCatalog = async () => {
     setPharmacyCatalogLoading(true);

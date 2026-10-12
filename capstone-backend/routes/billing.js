@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const requireIdempotency = require('../middleware/requireIdempotency');
 const { resolveOwnedPatient } = require('../utils/patientOwnership');
 const { normalizeEmail, parseLimit, parseOffset } = require('../utils/normalize');
 const { syncHmoDataFromAppointmentToInvoice } = require('../utils/billingLedger');
@@ -990,7 +991,7 @@ router.get('/invoices/:id', async (req, res) => {
   }
 });
 
-router.post('/invoices', async (req, res) => {
+router.post('/invoices', requireIdempotency('billing-invoice-create'), async (req, res) => {
   try {
     await ensureBillingTablesExist();
     const role = String(req.headers['x-user-role'] || '').toLowerCase();

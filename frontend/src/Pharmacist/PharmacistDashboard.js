@@ -361,6 +361,7 @@ function PharmacistDashboard() {
   const [rxModal, setRxModal] = useState(null);
   const [rxQuantities, setRxQuantities] = useState({});
   const [rxSaving, setRxSaving] = useState(false);
+  const saleIdempotencyKeyRef = useRef('');
 
   useEffect(() => {
     let u = null;
@@ -2182,7 +2183,10 @@ function PharmacistDashboard() {
       const saleData = await fetchJson(`/api/sales`, {
         apiBase: API_BASE,
         method: 'POST',
-        headers: buildJsonHeaders(),
+        headers: {
+          ...buildJsonHeaders(),
+          'x-idempotency-key': saleIdempotencyKeyRef.current || (saleIdempotencyKeyRef.current = (globalThis.crypto?.randomUUID?.() || `pharmacy-sale-${Date.now()}`))
+        },
         body: JSON.stringify({
           items: cart,
           total: receiptDraft.totalDue,
@@ -2203,6 +2207,7 @@ function PharmacistDashboard() {
           paymentReference: receiptDraft.discountRef
         })
       });
+      saleIdempotencyKeyRef.current = '';
 
       setShowReceipt({
         ...receiptDraft,

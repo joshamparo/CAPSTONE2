@@ -3,6 +3,7 @@ const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const requireRole = require('../middleware/requireRole');
+const requireIdempotency = require('../middleware/requireIdempotency');
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
@@ -534,7 +535,7 @@ router.get('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
 });
 
 // POST Log Sale
-router.post('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
+router.post('/', requireRole(['pharmacist', 'admin']), requireIdempotency('pharmacy-sale-create'), async (req, res) => {
     try {
         await ensureSalesLinkColumns();
         const { items, total, payment, change, pharmacist, discountType, discountValue, discountRef, patientId, createInvoice, paymentMethod, paymentReference, bulkOrder, bulkMeta } = req.body;

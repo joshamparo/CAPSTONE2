@@ -194,6 +194,7 @@ function DoctorDashboard() {
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [orderForm, setOrderForm] = useState({ kind: 'Laboratory', service: '', notes: '', priority: 'Routine', assignedRole: 'medtech' });
   const [savingOrder, setSavingOrder] = useState(false);
+  const clinicalOrderIdempotencyKeyRef = useRef('');
   const [erOrders, setErOrders] = useState([]);
   const [erOrdersLoading, setErOrdersLoading] = useState(false);
   const [erOrdersError, setErOrdersError] = useState('');
@@ -201,6 +202,8 @@ function DoctorDashboard() {
   const [billOutItems, setBillOutItems] = useState([]);
   const [billOutNotes, setBillOutNotes] = useState('');
   const [billOutSaving, setBillOutSaving] = useState(false);
+  const billOutIdempotencyKeyRef = useRef('');
+  const dispositionIdempotencyKeyRef = useRef('');
   const [disposition, setDisposition] = useState('Treatment'); // Treatment, Admit, Discharge, Transfer
   const [finalizingVisit, setFinalizingVisit] = useState(false);
 
@@ -1632,7 +1635,11 @@ function DoctorDashboard() {
       await fetchJson(`/api/billing/invoices`, {
         apiBase: API_BASE,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+          'x-idempotency-key': billOutIdempotencyKeyRef.current || (billOutIdempotencyKeyRef.current = (globalThis.crypto?.randomUUID?.() || `doctor-invoice-${Date.now()}`))
+        },
         body: JSON.stringify({
           patientId: selectedPatient._id,
           items,
@@ -1640,6 +1647,7 @@ function DoctorDashboard() {
           status: 'Ready'
         })
       });
+      billOutIdempotencyKeyRef.current = '';
 
       setToast({ type: 'success', message: 'Bill out sent to cashier.' });
       setBillOutOpen(false);
@@ -1658,7 +1666,11 @@ function DoctorDashboard() {
       const createdOrder = await fetchJson(`/api/clinical-orders`, {
         apiBase: API_BASE,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+          'x-idempotency-key': clinicalOrderIdempotencyKeyRef.current || (clinicalOrderIdempotencyKeyRef.current = (globalThis.crypto?.randomUUID?.() || `doctor-order-${Date.now()}`))
+        },
         body: JSON.stringify({
           patientId: selectedPatient._id,
           patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
@@ -1672,6 +1684,7 @@ function DoctorDashboard() {
           orderedByRole: 'Doctor'
         })
       });
+      clinicalOrderIdempotencyKeyRef.current = '';
       const admissionOrder = String(orderForm.kind || '').trim().toLowerCase() === 'admission request';
       setToast({
         type: 'success',
@@ -1748,7 +1761,11 @@ function DoctorDashboard() {
         await fetchJson(`/api/clinical-orders`, {
           apiBase: API_BASE,
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders,
+            'x-idempotency-key': dispositionIdempotencyKeyRef.current || (dispositionIdempotencyKeyRef.current = (globalThis.crypto?.randomUUID?.() || `doctor-disposition-${Date.now()}`))
+          },
           body: JSON.stringify({
             patientId: selectedPatient._id,
             patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
@@ -1762,6 +1779,7 @@ function DoctorDashboard() {
             orderedByRole: 'Doctor'
           })
         });
+        dispositionIdempotencyKeyRef.current = '';
       } else if (disposition === 'Discharge') {
         await fetchJson(`/api/patients/${selectedPatient._id}`, {
           apiBase: API_BASE,

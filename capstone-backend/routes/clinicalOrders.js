@@ -9,6 +9,7 @@ const { recordLabOrderPayment, ensureBillingTablesExist, toMoney } = require('..
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
 const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+const requireIdempotency = require('../middleware/requireIdempotency');
 const { resolveDoctorNurseDepartment, resolveNursePatientScope } = require('../utils/nurseScope');
 const { approvalRequestIdFromOrderNotes } = require('../utils/onsiteDiagnosticPayment');
 
@@ -579,7 +580,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requireIdempotency('clinical-order-create'), async (req, res) => {
   try {
     const actorFromHeaders = inferActor(req);
     if (!actorFromHeaders.actorRole) return res.status(401).json({ message: 'Unauthorized' });

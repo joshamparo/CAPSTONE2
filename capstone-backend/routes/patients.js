@@ -11,6 +11,7 @@ const { sendEmail } = require('../utils/mailer');
 const { appointmentEmail } = require('../utils/emailTemplates');
 const { patientUpdateAccess, sanitizePatientUpdateForRole } = require('../utils/patientUpdateAccess');
 const requireNurseDepartment = require('../middleware/requireNurseDepartment');
+const requireIdempotency = require('../middleware/requireIdempotency');
 const { sendError } = require('../utils/httpErrors');
 const { isCentralIntakeRequest } = require('../utils/nursePatientAccess');
 const { resolveNursePatientScope } = require('../utils/nurseScope');
@@ -1572,7 +1573,7 @@ router.post('/er-registration', requireRole(['admin', 'nurse']), async (req, res
     }
 });
 
-router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res) => {
+router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempotency('walk-in-intake'), async (req, res) => {
     try {
         // Schema is installed by the prestart bootstrap. Keep request handling
         // focused on the intake itself; DDL here previously made the first
