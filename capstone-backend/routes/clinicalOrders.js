@@ -104,10 +104,35 @@ router.use((req, res, next) => {
   });
 });
 
+router.use(async (req, res, next) => {
+  try {
+    if (req.auth?.role === 'nurse') {
+      req.clinicalActorName = String(req.nurseIdentity?.name || '').trim() || null;
+    } else if (req.auth?.role === 'doctor') {
+      const doctor = await prisma.doctors.findFirst({
+        where: { email: { equals: normalizeEmail(req.auth.email), mode: 'insensitive' } },
+        select: { first_name: true, last_name: true }
+      });
+      if (!doctor) return res.status(403).json({ message: 'Doctor account was not found.' });
+      req.clinicalActorName = `${String(doctor.first_name || '').trim()} ${String(doctor.last_name || '').trim()}`.trim() || null;
+    }
+    next();
+  } catch (error) {
+    console.error('[clinical-orders] Unable to resolve signed actor:', error?.message || error);
+    return res.status(503).json({ message: 'Unable to verify clinical-order access right now.' });
+  }
+});
+
 function inferActor(req) {
-  const actorRole = normalizeRole(req.headers['x-user-role'] || '') || null;
-  const actorName = String(req.headers['x-user-name'] || '').trim() || null;
-  const actorEmail = normalizeEmail(req.headers['x-user-email'] || '') || null;
+  // Authorization identity is established by requireRole. Never trust caller-
+  // supplied role/email headers here; the middleware overwrites them today, but
+  // using req.auth directly keeps this route fail-closed if that changes.
+  const actorRole = normalizeRole(req.auth?.role || '') || null;
+  const requiresVerifiedName = actorRole === 'doctor' || actorRole === 'nurse';
+  const actorName = String(
+    (requiresVerifiedName ? req.clinicalActorName : req.headers['x-user-name']) || ''
+  ).trim() || null;
+  const actorEmail = normalizeEmail(req.auth?.email || '') || null;
   return { actorName, actorRole, actorEmail };
 }
 
@@ -135,16 +160,19 @@ function canAccessOrderRow(order, actor) {
     const actorName = String(actor?.actorName || '').trim();
     const own = actorName && orderedByRole === expectedRole && orderedByName === actorName;
     if (own) return true;
+    // A claimed order belongs only to its exact assignee. The ordering clinician
+    // retains read/update access through the verified `own` check above.
+    if (assignedTo) return Boolean(assignedRole === role && actor?.actorEmail && assignedTo === actor.actorEmail);
     if (assignedRole && assignedRole === role) {
-      if (role === 'nurse' && assignedTo) return Boolean(actor?.actorEmail && assignedTo === actor.actorEmail);
       return true;
     }
-    if (assignedTo && actor?.actorEmail && assignedTo === actor.actorEmail) return true;
     return false;
   }
 
+  // Department queues are shared only while unclaimed. Once assigned_to is set,
+  // another employee with the same role must not be able to view or mutate it.
+  if (assignedTo) return Boolean(assignedRole === role && actor?.actorEmail && assignedTo === actor.actorEmail);
   if (assignedRole && assignedRole === role) return true;
-  if (assignedTo && actor?.actorEmail && assignedTo === actor.actorEmail) return true;
   return false;
 }
 
@@ -329,12 +357,17 @@ router.get('/', async (req, res) => {
         } else {
         if (roleNorm && roleNorm !== actor.actorRole) return res.status(403).json({ message: 'Forbidden' });
         if (assignedRoleNorm && assignedRoleNorm !== actor.actorRole) return res.status(403).json({ message: 'Forbidden' });
-        if (actor.actorEmail) {
-          where.OR = [{ assigned_role: actor.actorRole }, { assigned_to: actor.actorEmail }];
-          delete where.assigned_role;
-        } else {
-          where.assigned_role = actor.actorRole;
-        }
+        where.AND = [
+          ...(where.AND || []),
+          {
+            assigned_role: actor.actorRole,
+            OR: [
+              { assigned_to: null },
+              ...(actor.actorEmail ? [{ assigned_to: actor.actorEmail }] : [])
+            ]
+          }
+        ];
+        delete where.assigned_role;
         }
       }
     }
@@ -1147,6 +1180,7 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+router.__test = { canAccessOrderRow, inferActor };
 module.exports = router;
 
 
