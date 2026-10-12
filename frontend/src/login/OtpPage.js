@@ -46,9 +46,11 @@ const OtpPage = () => {
     setVerifying(true);
     setError('');
     setSuccess('');
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 15000);
     try {
       const response = await fetch(`${API_BASE}/api/staff/login/otp/verify`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId, code })
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId, code }), signal: controller.signal
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -63,12 +65,12 @@ const OtpPage = () => {
       localStorage.setItem('currentUser', JSON.stringify({ ...data, role }));
       ['otpChallengeId', 'tempLoginEmail', 'tempLoginRole', 'generatedOTP', 'tempUserDetails', 'otpEmailFailed', 'displayOtpCode']
         .forEach((key) => localStorage.removeItem(key));
-      setSuccess('Sign-in verified. Redirecting...');
-      window.setTimeout(() => navigate(routeForRole(role), { replace: true }), 400);
-    } catch (_) {
-      setError('Cannot connect to the server. Please try again.');
+      navigate(routeForRole(role), { replace: true });
+    } catch (error) {
+      setError(error?.name === 'AbortError' ? 'Verification is taking too long. Please try again.' : 'Cannot connect to the server. Please try again.');
       clearCode();
     } finally {
+      window.clearTimeout(timeoutId);
       setVerifying(false);
     }
   };

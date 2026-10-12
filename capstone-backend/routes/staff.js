@@ -428,12 +428,13 @@ async function findUserByModelAndId(model, id) {
 
 async function authenticatedUserResponse(user, modelType) {
     const { password: _password, reset_password_token: _resetToken, reset_password_expires: _resetExpiry, ...userData } = user;
-    const avatarUrl = await getAvatarUrl(modelType, user.id).catch(() => null);
+    // findUserByModelAndId already returns these columns. Reading them again
+    // added one or two cross-service database round trips to every login.
+    const avatarUrl = user.avatar_url || null;
     const role = String(user.account_type || user.roles || (modelType === 'doctors' ? 'doctor' : modelType === 'nurses' ? 'nurse' : 'staff')).trim().toLowerCase();
     const sessionToken = createSessionToken({ id: user.id, email: user.email, role, sessionVersion: user.session_version });
     if (modelType !== 'accounts') return { ...userData, avatarUrl, sessionToken };
-    const linkRows = await prisma.$queryRawUnsafe(`SELECT linked_doctor_id FROM accounts WHERE id = $1 LIMIT 1`, user.id).catch(() => null);
-    const linkedDoctorId = Array.isArray(linkRows) && linkRows[0]?.linked_doctor_id ? String(linkRows[0].linked_doctor_id) : null;
+    const linkedDoctorId = user.linked_doctor_id ? String(user.linked_doctor_id) : null;
     const firstName = user.name || '';
     return { id: String(user.id), email: user.email, name: user.name, firstName, first_name: firstName, last_name: '', roles: user.roles,
         account_type: user.roles || 'staff', linkedDoctorId, linked_doctor_id: linkedDoctorId, avatarUrl, sessionToken };
@@ -1104,6 +1105,7 @@ router.post('/resend-invitation', requireRole(['admin']), invitationRateLimit, a
 });
 
 router.post('/login/otp/verify', otpVerifyRateLimit, async (req, res) => {
+    const verifyStartedAt = Date.now();
     try {
         const challengeId = String(req.body?.challengeId || '').trim();
         const code = String(req.body?.code || '').trim();
@@ -1132,12 +1134,26 @@ router.post('/login/otp/verify', otpVerifyRateLimit, async (req, res) => {
         if (!consumed?.[0]) return res.status(400).json({ message: 'This verification request is no longer valid. Please sign in again.' });
         const user = await findUserByModelAndId(challenge.user_model, challenge.user_id);
         if (!user || user.is_active === false) return res.status(403).json({ message: 'This account is unavailable. Contact an administrator.' });
-        await setPresenceOnline(challenge.user_model, user.id).catch(() => {});
-        await prisma.activity_logs.create({ data: {
+        const responseBody = await authenticatedUserResponse(user, challenge.user_model);
+
+        // Presence and audit logging are important operational side effects,
+        // but neither is required to issue the already-verified signed session.
+        // Start both after preparing the response and do not put them on the
+        // user's critical login path.
+        res.json(responseBody);
+        void Promise.allSettled([
+            setPresenceOnline(challenge.user_model, user.id),
+            prisma.activity_logs.create({ data: {
             actor_name: user.first_name || user.last_name ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : (user.name || challenge.email.split('@')[0]),
             role: challenge.role.charAt(0).toUpperCase() + challenge.role.slice(1), action: 'Login', details: 'Signed in using a one-time password.', target: 'System'
-        }}).catch((error) => console.error('Login logging failed:', error?.message || error));
-        return res.json(await authenticatedUserResponse(user, challenge.user_model));
+            }})
+        ]).then((results) => {
+            results.forEach((result, index) => {
+                if (result.status === 'rejected') console.error(index === 0 ? 'Login presence update failed:' : 'Login logging failed:', result.reason?.message || result.reason);
+            });
+        });
+        console.log('[OTP timing]', { status: 200, durationMs: Date.now() - verifyStartedAt });
+        return;
     } catch (error) {
         console.error('[OTP] Verification failed:', error?.message || error);
         return res.status(500).json({ message: 'Unable to verify the code right now. Please try again.' });

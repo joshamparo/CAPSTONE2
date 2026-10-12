@@ -49,3 +49,22 @@ test('entering the complete OTP shows verification progress without changing res
     expect.objectContaining({ method: 'POST' })
   );
 });
+
+test('successful OTP verification redirects immediately with a bounded request', async () => {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ id: 'admin-1', account_type: 'admin', sessionToken: 'signed-session' })
+  });
+  render(<OtpPage />);
+
+  const inputs = screen.getAllByRole('textbox');
+  ['1', '2', '3', '4', '5', '6'].forEach((digit, index) => {
+    fireEvent.change(inputs[index], { target: { value: digit } });
+  });
+
+  await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/admin', { replace: true }));
+  expect(global.fetch).toHaveBeenCalledWith(
+    expect.stringContaining('/api/staff/login/otp/verify'),
+    expect.objectContaining({ signal: expect.any(AbortSignal) })
+  );
+});
