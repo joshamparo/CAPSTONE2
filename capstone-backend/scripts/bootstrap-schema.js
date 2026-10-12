@@ -49,7 +49,12 @@ async function bootstrapSchema({ strict = process.env.SCHEMA_BOOTSTRAP_STRICT ==
 
   try {
     await client.connect();
-    await client.query('SELECT pg_advisory_lock($1)', [LOCK_KEY]);
+    // A deployment must not sit behind live request locks indefinitely. If
+    // schema work cannot start promptly, fail the new deployment and leave the
+    // currently running instance serving traffic.
+    await client.query(`SET lock_timeout = '10s'`);
+    const lock = await client.query('SELECT pg_try_advisory_lock($1) AS acquired', [LOCK_KEY]);
+    if (!lock.rows[0]?.acquired) throw new Error('Another schema bootstrap is already running.');
     await client.query(`
       CREATE TABLE IF NOT EXISTS public.schema_bootstrap_migrations (
         filename text PRIMARY KEY,
@@ -100,7 +105,7 @@ async function bootstrapSchema({ strict = process.env.SCHEMA_BOOTSTRAP_STRICT ==
 }
 
 if (require.main === module) {
-  bootstrapSchema().catch((error) => {
+  bootstrapSchema({ strict: true }).catch((error) => {
     console.error('[Schema bootstrap] Fatal:', String(error?.message || error));
     process.exitCode = 1;
   });

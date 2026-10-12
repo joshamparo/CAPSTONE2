@@ -30,3 +30,27 @@ test('role authorization no longer mutates schema during requests', () => {
   assert.doesNotMatch(source, /ALTER\s+TABLE|CREATE\s+TABLE|CREATE\s+INDEX/i);
   assert.doesNotMatch(source, /\$executeRawUnsafe/);
 });
+
+test('staff and restock traffic does not invoke schema setup', () => {
+  const staff = fs.readFileSync(path.join(__dirname, '..', 'routes', 'staff.js'), 'utf8');
+  const restock = fs.readFileSync(path.join(__dirname, '..', 'routes', 'restockRequests.js'), 'utf8');
+
+  for (const invocation of [
+    'ensurePresenceSchemaOnce()',
+    'ensureAccountsDoctorLinkSchema()',
+    'ensureStaffActivationSchemaOnce()',
+    'ensureUserSettingsSchema()',
+    'ensureLoginOtpSchema()',
+    'ensureInventoryTimestampSchemaOnce()'
+  ]) {
+    assert.equal(staff.split(invocation).length - 1, 1, `${invocation} should only remain as its function declaration`);
+  }
+  assert.equal(restock.split('ensureTable()').length - 1, 1, 'ensureTable should only remain as its function declaration');
+  assert.equal(restock.split('ensureStockMovementsTableExist()').length - 1, 1, 'stock movement schema setup should only remain as its function declaration');
+});
+
+test('command-line schema bootstrap fails closed before application start', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'bootstrap-schema.js'), 'utf8');
+  assert.match(source, /SET lock_timeout = '10s'/);
+  assert.match(source, /bootstrapSchema\(\{ strict: true \}\)/);
+});

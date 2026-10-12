@@ -123,8 +123,6 @@ function ensurePresenceSchemaOnce() {
     return presenceSchemaPromise;
 }
 
-ensurePresenceSchemaOnce().catch(() => {});
-
 async function ensureAccountsDoctorLinkSchema() {
     try {
         await prisma.$executeRawUnsafe(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS linked_doctor_id uuid;`);
@@ -133,8 +131,6 @@ async function ensureAccountsDoctorLinkSchema() {
         await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS accounts_linked_doctor_idx ON accounts(linked_doctor_id);`);
     } catch (_) {}
 }
-
-ensureAccountsDoctorLinkSchema().catch(() => {});
 
 let staffActivationSchemaPromise = null;
 function ensureStaffActivationSchemaOnce() {
@@ -158,13 +154,6 @@ function ensureStaffActivationSchemaOnce() {
     return staffActivationSchemaPromise;
 }
 
-// Schema compatibility runs in the background. Never put login or other staff
-// requests behind runtime DDL: concurrent Railway instances can contend on
-// ALTER TABLE locks even when every required column already exists.
-ensureStaffActivationSchemaOnce().catch((error) => {
-    console.error('[Staff activation] Background schema setup failed:', error?.message || error);
-});
-
 async function ensureUserSettingsSchema() {
     try {
         await prisma.$executeRawUnsafe(`
@@ -181,8 +170,6 @@ async function ensureUserSettingsSchema() {
         await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS user_settings_user_idx ON user_settings(user_email, user_role);`);
     } catch (_) {}
 }
-
-ensureUserSettingsSchema().catch(() => {});
 
 async function ensureStorage() {
     if (storageReady) return;
@@ -411,8 +398,6 @@ function ensureLoginOtpSchema() {
     return loginOtpSchemaPromise;
 }
 
-ensureLoginOtpSchema().catch((error) => console.error('[OTP] Schema setup failed:', error?.message || error));
-
 function otpHash(challengeId, otp) {
     const secret = String(process.env.SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.DATABASE_URL || '').trim();
     if (!secret) throw new Error('SESSION_SECRET is not configured.');
@@ -514,7 +499,6 @@ router.post('/login', loginRateLimit, async (req, res) => {
             return res.status(400).json({ message: 'Invalid email or password.' });
         }
 
-        await ensureLoginOtpSchema();
         const challengeId = crypto.randomUUID();
         const otp = secureOtp();
         const expiresAt = new Date(Date.now() + 60 * 1000);
@@ -691,7 +675,6 @@ router.post('/avatar', requireRole(STAFF_ACCOUNT_TYPES), upload.single('avatar')
             return res.status(400).json({ message: 'Avatar must be a JPG, PNG, or WebP image.' });
         }
 
-        await ensurePresenceSchema().catch(() => {});
         await ensureStorage().catch(() => {});
 
         const sb = getSupabaseAdmin();
@@ -1125,7 +1108,6 @@ router.post('/login/otp/verify', otpVerifyRateLimit, async (req, res) => {
         const challengeId = String(req.body?.challengeId || '').trim();
         const code = String(req.body?.code || '').trim();
         if (!isUuid(challengeId) || !/^\d{6}$/.test(code)) return res.status(400).json({ message: 'Enter a valid 6-digit verification code.' });
-        await ensureLoginOtpSchema();
         const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.login_otp_challenges WHERE id = $1::uuid LIMIT 1`, challengeId);
         const challenge = Array.isArray(rows) ? rows[0] : null;
         if (!challenge || challenge.consumed_at) return res.status(400).json({ message: 'This verification request is no longer valid. Please sign in again.' });
@@ -1166,7 +1148,6 @@ router.post('/login/otp/resend', otpResendRateLimit, async (req, res) => {
     try {
         const challengeId = String(req.body?.challengeId || '').trim();
         if (!isUuid(challengeId)) return res.status(400).json({ message: 'Invalid verification request. Please sign in again.' });
-        await ensureLoginOtpSchema();
         const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.login_otp_challenges WHERE id = $1::uuid LIMIT 1`, challengeId);
         const challenge = Array.isArray(rows) ? rows[0] : null;
         if (!challenge || challenge.consumed_at) return res.status(400).json({ message: 'This verification request is no longer valid. Please sign in again.' });
@@ -1199,8 +1180,6 @@ router.post('/login/otp/resend', otpResendRateLimit, async (req, res) => {
 // READ All (Combine Staff, Nurses, Doctors, Accounts)
 router.get('/', requireRole(['admin']), async (req, res) => {
     try {
-        await ensurePresenceSchemaOnce().catch(() => {});
-        await ensureAccountsDoctorLinkSchema().catch(() => {});
         const take = Math.min(Math.max(parseInt(req.query.take, 10) || 100, 1), 200);
         const skip = Math.max(parseInt(req.query.skip, 10) || 0, 0);
         const recordScope = String(req.query.scope || 'active').trim().toLowerCase() === 'deactivated' ? 'deactivated' : 'active';
@@ -1302,7 +1281,6 @@ router.get('/', requireRole(['admin']), async (req, res) => {
 
 router.get('/doctor-secretaries', requireRole(['admin', 'nurse', 'doctor_secretary']), async (req, res) => {
     try {
-        await ensureAccountsDoctorLinkSchema().catch(() => {});
         const specRaw = String(req.query.specialization || req.query.spec || '').trim();
         if (!specRaw) return res.json([]);
 
@@ -1687,7 +1665,6 @@ router.get('/notifications', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) 
                 });
             }
 
-            await ensureInventoryTimestampSchemaOnce().catch(() => {});
 
             const medsRows = await prisma.$queryRaw`
                 SELECT id, name, stock, min_level, created_at, updated_at
@@ -1812,7 +1789,6 @@ router.get('/notifications', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) 
                 });
             });
 
-            await ensureInventoryTimestampSchemaOnce().catch(() => {});
             const medicineRows = await prisma.$queryRawUnsafe(
                 `
                     SELECT id::text AS id, name, stock, min_level, expiry_date, updated_at

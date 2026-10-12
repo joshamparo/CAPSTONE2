@@ -31,8 +31,6 @@ async function ensureTable() {
   `).catch(() => {});
 }
 
-ensureTable().catch(() => {});
-
 router.use(requireRole(['admin', 'pharmacist', 'nurse']));
 
 function normalizeItemType(v) {
@@ -113,7 +111,6 @@ function serializeRow(r) {
 
 router.get('/', async (req, res) => {
   try {
-    await ensureTable();
     const actorRole = String(req.headers['x-user-role'] || '').trim().toLowerCase();
     const actorName = String(req.headers['x-user-name'] || '').trim();
     const actorEmail = String(req.headers['x-user-email'] || '').trim();
@@ -200,7 +197,6 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    await ensureTable();
     const actorRole = String(req.headers['x-user-role'] || '').trim().toLowerCase();
     const actorName = String(req.headers['x-user-name'] || '').trim();
     const actorEmail = String(req.headers['x-user-email'] || '').trim();
@@ -267,7 +263,6 @@ router.post('/', async (req, res) => {
 
 router.patch('/:id', async (req, res) => {
   try {
-    await ensureTable();
     const role = String(req.headers['x-user-role'] || '').trim().toLowerCase();
     if (role.includes('nurse')) return res.status(401).json({ message: 'Unauthorized' });
 
@@ -357,7 +352,6 @@ router.patch('/:id', async (req, res) => {
 
     const itemType = normalizeItemType(existing.item_type);
     const itemId = BigInt(existing.item_id);
-    await ensureStockMovementsTableExist();
 
     const updated = await prisma.$transaction(async (tx) => {
       if (itemType === 'medicine') {
