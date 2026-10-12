@@ -1153,7 +1153,7 @@ router.post('/login/otp/verify', otpVerifyRateLimit, async (req, res) => {
         await setPresenceOnline(challenge.user_model, user.id).catch(() => {});
         await prisma.activity_logs.create({ data: {
             actor_name: user.first_name || user.last_name ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : (user.name || challenge.email.split('@')[0]),
-            role: challenge.role.charAt(0).toUpperCase() + challenge.role.slice(1), action: 'Login', details: 'User logged in with OTP', target: 'System'
+            role: challenge.role.charAt(0).toUpperCase() + challenge.role.slice(1), action: 'Login', details: 'Signed in using a one-time password.', target: 'System'
         }}).catch((error) => console.error('Login logging failed:', error?.message || error));
         return res.json(await authenticatedUserResponse(user, challenge.user_model));
     } catch (error) {
