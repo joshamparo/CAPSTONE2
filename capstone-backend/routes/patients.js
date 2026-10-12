@@ -1,4 +1,5 @@
 const router = require('express').Router();
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
@@ -1555,7 +1556,6 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
         // Schema is installed by the prestart bootstrap. Keep request handling
         // focused on the intake itself; DDL here previously made the first
         // submission slow and could consume most of the transaction timeout.
-        await ensureBillingTablesExist(prisma);
         const payload = req.body || {};
         const routeTypeRaw = String(payload.routeType || '').trim();
         if (routeTypeRaw && !WALK_IN_ROUTE_INPUTS.has(routeTypeRaw.toLowerCase())) {
@@ -2886,7 +2886,15 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
             hmoSync
         });
     } catch (err) {
-        sendError(res, err, 'Unable to process walk-in intake.');
+        const reference = crypto.randomUUID().slice(0, 8);
+        console.error('[Walk-in intake] Failed', {
+            reference,
+            code: String(err?.code || 'UNCLASSIFIED'),
+            name: String(err?.name || 'Error'),
+            model: String(err?.meta?.modelName || ''),
+            target: Array.isArray(err?.meta?.target) ? err.meta.target.map(String) : String(err?.meta?.target || '')
+        });
+        sendError(res, err, `Unable to process walk-in intake. Reference: ${reference}`, 500, { reference });
     }
 });
 

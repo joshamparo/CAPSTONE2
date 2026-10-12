@@ -62,3 +62,8 @@ test('schema bootstrap prefers the Railway-reachable pooled database URL', () =>
   const directUrl = source.indexOf('process.env.DIRECT_URL', pooledUrl);
   assert.ok(schemaUrl >= 0 && pooledUrl > schemaUrl && directUrl > pooledUrl);
 });
+
+test('appointment routes no longer invoke runtime schema setup', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'appointments.js'), 'utf8');
+  assert.equal(source.split('ensureAppointmentsSchema()').length - 1, 1, 'schema setup should only remain as its function declaration');
+});

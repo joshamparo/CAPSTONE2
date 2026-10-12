@@ -16,6 +16,16 @@ function walkInHandlerSource() {
 test('walk-in intake does not run schema DDL during a patient request', () => {
   const handler = walkInHandlerSource();
   assert.doesNotMatch(handler, /\b(?:CREATE|ALTER)\s+(?:TABLE|INDEX)\b/i);
+  const beforePayload = handler.slice(0, handler.indexOf('const payload'));
+  assert.doesNotMatch(beforePayload, /ensureBillingTablesExist/i);
+});
+
+test('walk-in failures are traceable without exposing database errors', () => {
+  const handler = walkInHandlerSource();
+  assert.match(handler, /crypto\.randomUUID\(\)\.slice\(0, 8\)/);
+  assert.match(handler, /\[Walk-in intake\] Failed/);
+  assert.match(handler, /Unable to process walk-in intake\. Reference:/);
+  assert.doesNotMatch(handler, /message:\s*String\(err\?\.message/);
 });
 
 test('walk-in intake does not scan historical invoices or wait for email delivery', () => {

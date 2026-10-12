@@ -398,8 +398,6 @@ function ensureAppointmentsSchema() {
     return ensurePromise;
 }
 
-ensureAppointmentsSchema().catch(() => {});
-
 function parseTimeValue(v) {
     if (!v) return null;
     if (v instanceof Date) return v;
@@ -1414,7 +1412,6 @@ router.get('/debug/video-apts', async (req, res) => {
 
 router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'cashier', 'staff', 'physical_therapist']), authorizeNurseAppointment, async (req, res) => {
     try {
-        await ensureAppointmentsSchema();
         const { date, start, end, take, skip, q, status, consultationMode, doctorUuid } = req.query;
         let where = req.nurseAppointmentScope ? { AND: [req.nurseAppointmentScope] } : {};
 
@@ -1585,7 +1582,6 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
 
 router.get('/mine', requireRole(['patient']), async (req, res) => {
     try {
-        await ensureAppointmentsSchema();
         const email = inferEmail(req);
         const patientId = inferUserId(req);
         if (!email && !patientId) return res.status(401).json({ message: 'Missing user email or patient id.' });
@@ -2581,7 +2577,6 @@ router.get('/:id/audit', requireRole(['admin', 'nurse', 'doctor', 'doctor_secret
 
 router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), async (req, res) => {
     try {
-        await ensureAppointmentsSchema();
         const idRaw = String(req.params.id || '').trim();
         if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid appointment id.' });
         const id = BigInt(idRaw);
@@ -2814,7 +2809,6 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
 
 router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therapist']), async (req, res) => {
     try {
-        await ensureAppointmentsSchema();
         const idRaw = String(req.params.id || '').trim();
         if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid appointment id.' });
         const id = BigInt(idRaw);
@@ -2952,7 +2946,6 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therap
 // Completion loop: mark appointment as completed
 router.post('/:id/complete', requireRole(['admin', 'nurse', 'doctor']), authorizeNurseAppointment, async (req, res) => {
     try {
-        await ensureAppointmentsSchema();
         const idRaw = String(req.params.id || '').trim();
         if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid appointment id.' });
         const id = BigInt(idRaw);
