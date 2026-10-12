@@ -3334,21 +3334,61 @@ router.post('/payments', async (req, res) => {
       }
     }
 
-    const fin = await computeInvoiceFinancials(prisma, invoiceId);
-    const balance = Math.max(0, Number(fin?.balance || 0));
+    const requestedAmount = req.body?.amount != null ? Number(req.body.amount) : null;
+    if (requestedAmount != null && (!Number.isFinite(requestedAmount) || requestedAmount <= 0)) {
+      return res.status(400).json({ message: 'Invalid amount' });
+    }
 
-    const amountRaw = req.body?.amount != null ? Number(req.body.amount) : balance;
-    if (!Number.isFinite(amountRaw) || amountRaw <= 0) return res.status(400).json({ message: 'Invalid amount' });
-    if (amountRaw - balance > 0.00001) return res.status(400).json({ message: 'Amount exceeds balance' });
-    const amountMoney = toMoney(amountRaw);
+    const paymentResult = await prisma.$transaction(async (tx) => {
+      // Serialize every payment attempt for this invoice. Idempotency keys protect
+      // retries of one request; the row lock also protects simultaneous requests
+      // that arrive with different keys or from different cashier sessions.
+      const lockedInvoices = await tx.$queryRaw`
+        SELECT id
+        FROM public.billing_invoices
+        WHERE id = ${invoiceId}
+        FOR UPDATE
+      `;
+      if (!Array.isArray(lockedInvoices) || lockedInvoices.length === 0) {
+        const error = new Error('Invoice not found');
+        error.statusCode = 404;
+        throw error;
+      }
 
-    const created = await prisma.$transaction(async (tx) => {
       if (idempotencyKey) {
         const existing = await tx.billing_payments
           .findFirst({ where: { invoice_id: invoiceId, idempotency_key: idempotencyKey }, orderBy: { id: 'desc' } })
           .catch(() => null);
-        if (existing) return existing;
+        if (existing) return { payment: existing, reused: true };
       }
+
+      // The balance must be read after the lock is acquired. Computing it before
+      // the transaction permits two cashiers to pay the same outstanding balance.
+      const lockedFinancials = await computeInvoiceFinancials(tx, invoiceId);
+      if (!lockedFinancials) {
+        const error = new Error('Invoice not found');
+        error.statusCode = 404;
+        throw error;
+      }
+      const lockedStatus = String(lockedFinancials.inv?.status || '').trim().toLowerCase();
+      if (lockedStatus === 'voided' || lockedStatus === 'cancelled') {
+        const error = new Error(`Cannot collect payment for a ${lockedStatus} invoice.`);
+        error.statusCode = 409;
+        throw error;
+      }
+      const lockedBalance = Math.max(0, Number(lockedFinancials.balance || 0));
+      if (lockedBalance <= 0.00001) {
+        const error = new Error('Invoice is already fully paid.');
+        error.statusCode = 409;
+        throw error;
+      }
+      const amountRaw = requestedAmount == null ? lockedBalance : requestedAmount;
+      if (amountRaw - lockedBalance > 0.00001) {
+        const error = new Error('Amount exceeds balance');
+        error.statusCode = 409;
+        throw error;
+      }
+      const amountMoney = toMoney(amountRaw);
 
       const p = await tx.billing_payments.create({
         data: {
@@ -3361,14 +3401,18 @@ router.post('/payments', async (req, res) => {
         }
       });
 
-      await recomputeInvoiceStatus(tx, invoiceId).catch(() => null);
+      await recomputeInvoiceStatus(tx, invoiceId);
 
-      return p;
+      return { payment: p, reused: false };
     });
+    const created = paymentResult.payment;
 
-    res.status(201).json(serialize(created));
+    res.status(paymentResult.reused ? 200 : 201).json(serialize({
+      ...created,
+      ...(paymentResult.reused ? { idempotency_reused: true } : {})
+    }));
 
-    setImmediate(async () => {
+    if (!paymentResult.reused) setImmediate(async () => {
       try {
         const updatedInvoice = await prisma.billing_invoices.findUnique({ where: { id: invoiceId } }).catch(() => null);
         const isPaid = String(updatedInvoice?.status || '') === 'Paid';
@@ -3397,6 +3441,9 @@ router.post('/payments', async (req, res) => {
     });
   } catch (err) {
     const msg = String(err && err.message ? err.message : '');
+    if (Number.isInteger(err?.statusCode)) {
+      return res.status(err.statusCode).json({ message: msg || 'Unable to record payment.' });
+    }
     if (msg.includes('Billing tables are not installed')) {
       return res.status(500).json({ message: msg });
     }
