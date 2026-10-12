@@ -48,8 +48,10 @@ test('walk-in tickets use the same daily scope as the database uniqueness rule',
 
 test('ER intake stores a legacy-constraint-compatible patient admission status', () => {
   const handler = walkInHandlerSource();
-  assert.match(handler, /routeMeta\.type === 'er_consult' \? 'ER Observation'/);
+  assert.match(handler, /routeMeta\.type === 'er_consult' \? 'Outpatient'/);
+  assert.match(handler, /admission_status:\s*'Outpatient'/);
   assert.doesNotMatch(handler, /admission_status:\s*routeMeta\.type === 'er_consult' \? 'Emergency'/);
+  assert.doesNotMatch(handler, /admission_status:\s*routeMeta\.type === 'er_consult' \? 'ER Observation'/);
 });
 
 test('walk-in HMO recovery uses only the invoice returned by the exact intake', () => {
