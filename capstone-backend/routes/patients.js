@@ -1777,7 +1777,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                         email: normalizedEmail || patient.email || null,
                         street: String(payload.address || '').trim() || patient.street || null,
                         blood_type: String(payload.bloodType || '').trim() || patient.blood_type || null,
-                        admission_status: routeMeta.type === 'er_consult' ? 'Emergency' : patient.admission_status,
+                        // The legacy patients constraint permits ER Observation,
+                        // while the reception response derives the display label
+                        // "Emergency" from the linked ER appointment.
+                        admission_status: routeMeta.type === 'er_consult' ? 'ER Observation' : patient.admission_status,
                         clinical_records: updatedClinicalRecords
                     }
                 });
@@ -1801,7 +1804,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), async (req, res)
                         email: normalizedEmail || null,
                         street: String(payload.address || '').trim() || null,
                         blood_type: String(payload.bloodType || '').trim() || null,
-                        admission_status: routeMeta.type === 'er_consult' ? 'Emergency' : 'Outpatient',
+                        admission_status: routeMeta.type === 'er_consult' ? 'ER Observation' : 'Outpatient',
                         clinical_records: mergeWalkInClinicalRecords(null, intakeEntry)
                     }
                 });
