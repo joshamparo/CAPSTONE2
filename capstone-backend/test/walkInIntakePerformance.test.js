@@ -35,6 +35,17 @@ test('walk-in intake does not scan historical invoices or wait for email deliver
   assert.doesNotMatch(handler, /await\s+Promise\.race\s*\(/i);
 });
 
+test('walk-in tickets use the same daily scope as the database uniqueness rule', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'patients.js'), 'utf8');
+  const start = source.indexOf('async function nextWalkInTicket');
+  const end = source.indexOf('async function sendAppointmentSummaryEmail', start);
+  assert.ok(start >= 0 && end > start, 'ticket generator must remain discoverable');
+  const generator = source.slice(start, end);
+  assert.match(generator, /VALUES\s*\(\s*\$1::date,\s*''/i);
+  assert.match(generator, /MAX\(walkin_ticket_seq\)[\s\S]+walkin_ticket_date\s*=\s*\$1::date/i);
+  assert.doesNotMatch(generator, /\$2/);
+});
+
 test('walk-in HMO recovery uses only the invoice returned by the exact intake', () => {
   const handler = walkInHandlerSource();
   assert.match(handler, /linkedInvoiceRaw\s*=\s*String\(result\?\.linkedInvoiceId/i);

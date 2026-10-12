@@ -300,18 +300,39 @@ function ensureWalkInCounterSchemaOnce() {
     return walkInCounterSchemaPromise;
 }
 
-async function nextWalkInTicket(tx, dateKey, doctorKey = null) {
-    // Atomic counter per date (+ optional doctor key) to prevent duplicates under concurrency.
+async function nextWalkInTicket(tx, dateKey) {
+    // Tickets are unique per date in appointments, so the counter must use the
+    // same scope. A per-doctor counter could issue W-001 more than once on the
+    // same day and make the appointment insert violate its unique index.
+    // Seed/catch up from appointments so legacy per-doctor counters cannot
+    // leave the shared daily counter behind already-issued ticket numbers.
     const rows = await tx.$queryRawUnsafe(
         `
             INSERT INTO public.walkin_ticket_counters (ticket_date, doctor_key, last_seq, updated_at)
-            VALUES ($1::date, $2, 1, now())
+            VALUES (
+                $1::date,
+                '',
+                COALESCE((
+                    SELECT MAX(walkin_ticket_seq)
+                    FROM public.appointments
+                    WHERE walkin_ticket_date = $1::date
+                ), 0) + 1,
+                now()
+            )
             ON CONFLICT (ticket_date, doctor_key)
-            DO UPDATE SET last_seq = public.walkin_ticket_counters.last_seq + 1, updated_at = now()
+            DO UPDATE SET
+                last_seq = GREATEST(
+                    public.walkin_ticket_counters.last_seq + 1,
+                    COALESCE((
+                        SELECT MAX(walkin_ticket_seq)
+                        FROM public.appointments
+                        WHERE walkin_ticket_date = $1::date
+                    ), 0) + 1
+                ),
+                updated_at = now()
             RETURNING last_seq::int AS seq
         `,
-        dateKey,
-        doctorKey ? String(doctorKey) : ''
+        dateKey
     );
     const row = Array.isArray(rows) ? rows[0] : null;
     const seq = row?.seq != null ? Number(row.seq) : 0;
