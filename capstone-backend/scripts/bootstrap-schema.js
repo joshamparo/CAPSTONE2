@@ -27,7 +27,16 @@ function isSafeAutomaticMigration(sql) {
 }
 
 function databaseUrl() {
-  return String(process.env.DIRECT_URL || process.env.DATABASE_URL || '').trim();
+  // Railway cannot reach Supabase's IPv6-only direct database endpoint in
+  // every region. Prefer an explicitly configured migration URL, otherwise
+  // use the same reachable pooler URL as the application. DIRECT_URL remains
+  // a final fallback for environments that support it.
+  return String(
+    process.env.SCHEMA_DATABASE_URL ||
+    process.env.DATABASE_URL ||
+    process.env.DIRECT_URL ||
+    ''
+  ).trim();
 }
 
 async function bootstrapSchema({ strict = process.env.SCHEMA_BOOTSTRAP_STRICT === 'true' } = {}) {

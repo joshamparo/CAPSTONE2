@@ -54,3 +54,11 @@ test('command-line schema bootstrap fails closed before application start', () =
   assert.match(source, /SET lock_timeout = '10s'/);
   assert.match(source, /bootstrapSchema\(\{ strict: true \}\)/);
 });
+
+test('schema bootstrap prefers the Railway-reachable pooled database URL', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'bootstrap-schema.js'), 'utf8');
+  const schemaUrl = source.indexOf('process.env.SCHEMA_DATABASE_URL');
+  const pooledUrl = source.indexOf('process.env.DATABASE_URL', schemaUrl);
+  const directUrl = source.indexOf('process.env.DIRECT_URL', pooledUrl);
+  assert.ok(schemaUrl >= 0 && pooledUrl > schemaUrl && directUrl > pooledUrl);
+});
