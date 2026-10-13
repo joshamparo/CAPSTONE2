@@ -1025,13 +1025,23 @@ function DoctorDashboard() {
       // Re-read through the same canonical join route used by patients. The
       // mobile approval flow may persist its room immediately around Start;
       // opening only this fresh persisted value prevents provider/app drift.
-      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/join`, {
+      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/join?_=${Date.now()}`, {
         apiBase: API_BASE,
-        headers: { ...authHeaders }
+        headers: { ...authHeaders },
+        cache: 'no-store'
       });
 
       const meetingUrl = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();
       if (!meetingUrl) throw new Error(data?.message || data?.error || 'Failed to retrieve video room URL');
+      const expectedRoom = String(apt?.meetingRoomId || apt?.meeting_room_id || '').trim();
+      const returnedRoom = String(data?.canonicalRoomId || data?.roomId || '').trim();
+      const roomName = (value) => {
+        try { return decodeURIComponent(new URL(value).pathname.replace(/^\/+|\/+$/g, '')); }
+        catch (_) { return String(value || '').replace(/^\/+|\/+$/g, ''); }
+      };
+      if (expectedRoom && returnedRoom && roomName(expectedRoom) !== roomName(returnedRoom)) {
+        throw new Error('The video room changed while opening. Refresh the queue and start the call again.');
+      }
       // #region debug-point A:web-start-response
       reportVideoRoomDebug({
         hypothesisId: 'A',

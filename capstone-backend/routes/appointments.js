@@ -2639,6 +2639,7 @@ router.get('/:id/audit', requireRole(['admin', 'nurse', 'doctor', 'doctor_secret
 
 router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), async (req, res) => {
     try {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         const idRaw = String(req.params.id || '').trim();
         if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid appointment id.' });
         const id = BigInt(idRaw);
@@ -2896,6 +2897,11 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
 
 router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therapist']), async (req, res) => {
     try {
+        // Video-room lifecycle is live state. Never replay an older room after
+        // the mobile booking has persisted the appointment's canonical room.
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
         const idRaw = String(req.params.id || '').trim();
         if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid appointment id.' });
         const id = BigInt(idRaw);

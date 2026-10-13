@@ -42,6 +42,19 @@ test('all web providers re-read the persisted room through join after start', ()
   }
 });
 
+test('provider joins bypass caches and refuse mismatched rooms', () => {
+  const doctorSource = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'frontend', 'src', 'Doctor', 'DoctorDashboard.js'),
+    'utf8'
+  );
+  assert.match(appointmentSource, /Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate/);
+  for (const source of [doctorSource, clinicalStaffSource]) {
+    assert.match(source, /video\/join\?_=/);
+    assert.match(source, /cache:\s*'no-store'/);
+    assert.match(source, /The video room changed while opening/);
+  }
+});
+
 test('mobile PT procedure names retain their Physical Therapy video routing', () => {
   for (const procedure of ['therapeutic exercise', 'manual therapy', 'post-op rehabilitation']) {
     assert.match(videoConsultSource.toLowerCase(), new RegExp(procedure));

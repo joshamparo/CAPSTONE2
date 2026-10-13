@@ -340,12 +340,22 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       // Providers and patients must resolve the room through one authoritative
       // read after Start. This avoids opening a stale response if the mobile
       // booking flow persisted the appointment room concurrently.
-      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/join`, {
+      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/join?_=${Date.now()}`, {
         apiBase: API_BASE,
-        headers: { ...buildJsonAuthHeaders(user), 'x-user-role': role }
+        headers: { ...buildJsonAuthHeaders(user), 'x-user-role': role },
+        cache: 'no-store'
       });
       const url = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();
       if (!url) throw new Error(data?.message || 'Unable to retrieve the video room.');
+      const expectedRoom = String(appointment?.meetingRoomId || appointment?.meeting_room_id || '').trim();
+      const returnedRoom = String(data?.canonicalRoomId || data?.roomId || '').trim();
+      const roomName = (value) => {
+        try { return decodeURIComponent(new URL(value).pathname.replace(/^\/+|\/+$/g, '')); }
+        catch (_) { return String(value || '').replace(/^\/+|\/+$/g, ''); }
+      };
+      if (expectedRoom && returnedRoom && roomName(expectedRoom) !== roomName(returnedRoom)) {
+        throw new Error('The video room changed while opening. Refresh and start the call again.');
+      }
       const patientName = `${appointment.firstName || appointment.first_name || ''} ${appointment.lastName || appointment.last_name || ''}`.trim();
       setVideoMeeting({ url, title: `Video Consultation • ${patientName || 'Patient'}` });
       // Opening the room must never wait for a background list refresh.
