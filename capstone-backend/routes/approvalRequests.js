@@ -1,5 +1,4 @@
 const express = require('express');
-const crypto = require('crypto');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
@@ -734,23 +733,9 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   }
 
   if (consultationMode === 'video') {
-    // Establish the appointment-owned room once. The mobile app can load this
-    // value immediately after approval, so rotating it on a repeated approval
-    // would strand the patient in a different Jitsi conference from the provider.
-    const approvalRoomId = `apt-${String(appt.id)}-${crypto.randomBytes(5).toString('base64url')}`;
-    await prisma.appointments.updateMany({
-      where: {
-        id: BigInt(appt.id),
-        meeting_room_id: null
-      },
-      data: {
-        meeting_room_id: approvalRoomId,
-        meeting_created_at: new Date(),
-        meeting_started_at: null,
-        meeting_ended_at: null,
-        meeting_expires_at: null
-      }
-    });
+    // The patient app owns room materialization and persists the exact Jitsi
+    // URL it opens. Do not race it with a second random room during approval.
+    // Provider Start still creates a fallback when no client room was saved.
     if (String(requestRow.payment_status || '').toLowerCase() === 'paid') {
       await recordVideoConsultationPayment(prisma, {
         appointmentId: BigInt(appt.id),

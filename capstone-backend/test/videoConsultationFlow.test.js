@@ -87,9 +87,10 @@ test('duplicate app and web appointment IDs resolve through the same payment ref
   assert.ok(appointmentSource.split('apt = await resolveCanonicalVideoAppointment(apt);').length - 1 >= 2);
 });
 
-test('provider reuses the exact approval room already exposed to the patient', () => {
-  assert.match(approvalSource, /meeting_room_id:\s*null/);
-  assert.match(approvalSource, /const approvalRoomId = `apt-\$\{String\(appt\.id\)\}-\$\{crypto\.randomBytes/);
+test('approval does not race the patient app with a competing random room', () => {
+  assert.match(approvalSource, /patient app owns room materialization/);
+  assert.doesNotMatch(approvalSource, /const approvalRoomId/);
+  assert.doesNotMatch(approvalSource, /meeting_room_id:\s*approvalRoomId/);
   assert.match(appointmentSource, /if \(!currentRoomId\) \{/);
   assert.equal(appointmentSource.split('meetingRoomId: apt.meeting_room_id ? toClientRoomId(apt.meeting_room_id) : null').length - 1, 2);
   assert.doesNotMatch(appointmentSource, /currentRoomId !== canonicalRoomId/);
