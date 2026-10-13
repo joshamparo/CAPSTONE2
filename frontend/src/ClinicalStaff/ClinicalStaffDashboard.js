@@ -333,6 +333,11 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     if (videoActionId === appointmentId) return;
     setVideoActionId(appointmentId);
     setVideoActionError('');
+    setVideoMeeting({
+      url: '',
+      title: `Video Consultation - ${appointment.patientName || appointment.patient_name || 'Patient'}`,
+      preparing: true
+    });
     try {
       await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/start`, {
         apiBase: API_BASE,
@@ -370,7 +375,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
         throw new Error('The video room changed while opening. Refresh and start the call again.');
       }
       const patientName = `${appointment.firstName || appointment.first_name || ''} ${appointment.lastName || appointment.last_name || ''}`.trim();
-      setVideoMeeting({ url, title: `Video Consultation • ${patientName || 'Patient'}` });
+      setVideoMeeting({ url, title: `Video Consultation • ${patientName || 'Patient'}`, preparing: false });
       const syncToken = ++videoRoomSyncTokenRef.current;
       const initialRoomName = roomName(data?.roomId || data?.canonicalRoomId || url);
       void (async () => {
@@ -398,6 +403,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       // Opening the room must never wait for a background list refresh.
       void refreshVideoAppointments();
     } catch (e) {
+      setVideoMeeting(null);
       setVideoActionError(String(e?.message || 'Unable to start the video consultation.'));
     } finally {
       setVideoActionId('');
@@ -2101,7 +2107,11 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
               <button type="button" className="cs-btn secondary" onClick={() => setVideoMeeting(null)}><X size={16} /> Close</button>
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
-              <EmbeddedJitsiMeeting meetingUrl={videoMeeting.url} title={videoMeeting.title} />
+              {videoMeeting.preparing ? (
+                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32, background: '#f8fafc' }}>
+                  <div><strong>Preparing secure video room...</strong><div className="cs-muted" style={{ marginTop: 8 }}>The call has started. Waiting for the patient app to publish the shared room.</div></div>
+                </div>
+              ) : <EmbeddedJitsiMeeting meetingUrl={videoMeeting.url} title={videoMeeting.title} />}
             </div>
           </div>
         </div>

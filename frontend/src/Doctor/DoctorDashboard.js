@@ -131,6 +131,8 @@ function DoctorDashboard() {
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [videoMeetingUrl, setVideoMeetingUrl] = useState('');
   const [videoMeetingTitle, setVideoMeetingTitle] = useState('');
+  const [videoPreparing, setVideoPreparing] = useState(false);
+  const [videoStartingId, setVideoStartingId] = useState('');
   const videoStartInFlightRef = useRef(new Set());
   const videoRoomSyncTokenRef = useRef(0);
 
@@ -1042,6 +1044,11 @@ function DoctorDashboard() {
     const appointmentKey = String(apt.id);
     if (videoStartInFlightRef.current.has(appointmentKey)) return;
     videoStartInFlightRef.current.add(appointmentKey);
+    setVideoStartingId(appointmentKey);
+    setVideoPreparing(true);
+    setVideoMeetingUrl('');
+    setVideoMeetingTitle(`Video Consultation - ${apt.firstName || ''} ${apt.lastName || ''}`.trim());
+    setVideoModalOpen(true);
     try {
       // #region debug-point D:web-start-click
       reportVideoRoomDebug({
@@ -1110,6 +1117,7 @@ function DoctorDashboard() {
       // #endregion
 
       openVideoMeeting(meetingUrl, `Video Consultation • ${apt.firstName || ''} ${apt.lastName || ''}`.trim());
+      setVideoPreparing(false);
       void reconcileVideoRoomAfterStart(apt.id, data?.roomId || data?.canonicalRoomId || meetingUrl);
     } catch (e) {
       // #region debug-point C:web-start-error
@@ -1123,9 +1131,12 @@ function DoctorDashboard() {
         }
       });
       // #endregion
+      setVideoPreparing(false);
+      setVideoModalOpen(false);
       setToast({ type: 'error', message: String(e?.message || 'Unable to start call.') });
     } finally {
       videoStartInFlightRef.current.delete(appointmentKey);
+      setVideoStartingId('');
     }
   };
 
@@ -3775,11 +3786,11 @@ function DoctorDashboard() {
                             }
                             startVideoCall(apt);
                           }}
-                          disabled={!joinGate.allowed}
+                          disabled={!joinGate.allowed || videoStartingId === String(apt.id)}
                           style={{ padding: '6px 8px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                         >
                           <Video size={16} />
-                          <span style={{ fontSize: 12, fontWeight: 800 }}>{label}</span>
+                          <span style={{ fontSize: 12, fontWeight: 800 }}>{videoStartingId === String(apt.id) ? 'Starting...' : label}</span>
                         </button>
                       );
                     })()}
@@ -6764,6 +6775,7 @@ function DoctorDashboard() {
               setVideoModalOpen(false);
               setVideoMeetingUrl('');
               setVideoMeetingTitle('');
+              setVideoPreparing(false);
             }}
           >
             <div
@@ -6814,6 +6826,7 @@ function DoctorDashboard() {
                     setVideoModalOpen(false);
                     setVideoMeetingUrl('');
                     setVideoMeetingTitle('');
+                    setVideoPreparing(false);
                   }}
                   title="Close"
                 >
@@ -6824,6 +6837,17 @@ function DoctorDashboard() {
                 {(() => {
                   const url = String(videoMeetingUrl || '').trim();
                   const looksValid = /^https?:\/\//i.test(url) && /[a-z0-9\-]+\.[a-z]{2,}/i.test(url);
+                  if (videoPreparing) {
+                    return (
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(180deg,#f8fafc,#eef2f7)', padding: 32 }}>
+                        <div style={{ maxWidth: 520, textAlign: 'center' }}>
+                          <Video size={30} color="#ea580c" />
+                          <div style={{ marginTop: 18, fontSize: '1.08rem', fontWeight: 800, color: '#0f172a' }}>Preparing secure video room...</div>
+                          <div style={{ marginTop: 8, color: '#475569', lineHeight: 1.55, fontSize: '0.9rem' }}>The call has started. Waiting for the patient app to publish the shared room. Keep this window open.</div>
+                        </div>
+                      </div>
+                    );
+                  }
                   if (!looksValid) {
                     return (
                       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(180deg,#f8fafc,#eef2f7)', padding: 'clamp(20px, 4vh, 60px)' }}>
