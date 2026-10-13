@@ -382,7 +382,9 @@ export default function AccountHeaderActions({
     if (!rawRole || !userEmail) return;
     fetchNotifications({ silent: true });
     fetchSettings();
-    const t = setInterval(() => fetchNotifications({ silent: true }), 30000);
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchNotifications({ silent: true });
+    }, 60000);
     return () => clearInterval(t);
   }, [rawRole, userEmail, authHeaders]);
 
@@ -506,7 +508,9 @@ export default function AccountHeaderActions({
 
     const startPolling = () => {
       if (announcementPollRef.current) return;
-      announcementPollRef.current = setInterval(() => fetchAnnouncementToast({ initialize: false }), 15000);
+      announcementPollRef.current = setInterval(() => {
+        if (document.visibilityState === 'visible') fetchAnnouncementToast({ initialize: false });
+      }, 60000);
     };
 
     const stopPolling = () => {

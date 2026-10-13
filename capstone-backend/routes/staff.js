@@ -2188,6 +2188,7 @@ router.get('/notifications/stream', requireRole(STAFF_ACCOUNT_TYPES), async (req
     const found = await findUserByEmail(email).catch(() => null);
     const displayName = explicitName || inferDisplayNameFromUser(found, email);
     let lastSig = '';
+    let tickRunning = false;
 
     const computeSig = async () => {
         try {
@@ -2324,12 +2325,16 @@ router.get('/notifications/stream', requireRole(STAFF_ACCOUNT_TYPES), async (req
     };
 
     const tick = async () => {
-        if (closed) return;
-        const sig = await computeSig();
-        if (!sig) return;
-        if (sig === lastSig) return;
-        lastSig = sig;
-        safeSend('notif', { sig });
+        if (closed || tickRunning) return;
+        tickRunning = true;
+        try {
+            const sig = await computeSig();
+            if (!sig || sig === lastSig) return;
+            lastSig = sig;
+            safeSend('notif', { sig });
+        } finally {
+            tickRunning = false;
+        }
     };
 
     keepAlive = setInterval(() => {
@@ -2342,7 +2347,9 @@ router.get('/notifications/stream', requireRole(STAFF_ACCOUNT_TYPES), async (req
     }, 25000);
 
     await tick();
-    timer = setInterval(tick, 8000);
+    // This is a recovery signal, not clinical telemetry. A slower single-flight
+    // check prevents one slow Nano query from piling up behind the next tick.
+    timer = setInterval(tick, 30000);
 });
 
 router.post('/notifications/mark-all-read', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {

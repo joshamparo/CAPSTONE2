@@ -1,10 +1,34 @@
 const { PrismaClient } = require('@prisma/client');
+require('dotenv').config();
+
+function boundedDatabaseUrl(rawUrl = process.env.DATABASE_URL) {
+  const raw = String(rawUrl || '').trim();
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    // Nano has a small direct-connection allowance. Keep each Railway process
+    // from reserving Prisma's CPU-derived default pool while still permitting
+    // a few concurrent requests. Operators can tune this without a code change.
+    const params = [];
+    if (!url.searchParams.has('connection_limit')) {
+      const requested = Number(process.env.PRISMA_CONNECTION_LIMIT || 3);
+      params.push(`connection_limit=${Math.max(1, Math.min(5, Number.isFinite(requested) ? requested : 3))}`);
+    }
+    if (!url.searchParams.has('pool_timeout')) params.push('pool_timeout=15');
+    // Never serialize the parsed URL: doing so can re-encode percent-escaped
+    // credentials. Append only controlled query parameters to the exact input.
+    return params.length ? `${raw}${raw.includes('?') ? '&' : '?'}${params.join('&')}` : raw;
+  } catch (_) {
+    return raw;
+  }
+}
 
 const globalForPrisma = globalThis;
 
 const prisma =
   globalForPrisma.__pascualingaPrisma ||
   new PrismaClient({
+    ...(boundedDatabaseUrl() ? { datasources: { db: { url: boundedDatabaseUrl() } } } : {}),
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error']
   });
 
@@ -130,3 +154,4 @@ if (!prisma.__pascualingaPatched) {
 }
 
 module.exports = prisma;
+module.exports.__test = { boundedDatabaseUrl };
