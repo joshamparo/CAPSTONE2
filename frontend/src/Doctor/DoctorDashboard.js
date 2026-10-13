@@ -1031,11 +1031,21 @@ function DoctorDashboard() {
       // Re-read through the same canonical join route used by patients. The
       // mobile approval flow may persist its room immediately around Start;
       // opening only this fresh persisted value prevents provider/app drift.
-      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/join?_=${Date.now()}`, {
-        apiBase: API_BASE,
-        headers: { ...authHeaders },
-        cache: 'no-store'
-      });
+      const joinDeadline = Date.now() + 30000;
+      let data = null;
+      while (!data) {
+        try {
+          data = await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/join?_=${Date.now()}`, {
+            apiBase: API_BASE,
+            headers: { ...authHeaders },
+            cache: 'no-store'
+          });
+        } catch (joinError) {
+          const waitingForCanonicalRoom = /not started|room.*not.*available/i.test(String(joinError?.message || ''));
+          if (!waitingForCanonicalRoom || Date.now() >= joinDeadline) throw joinError;
+          await new Promise((resolve) => setTimeout(resolve, 750));
+        }
+      }
 
       const meetingUrl = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();
       if (!meetingUrl) throw new Error(data?.message || data?.error || 'Failed to retrieve video room URL');

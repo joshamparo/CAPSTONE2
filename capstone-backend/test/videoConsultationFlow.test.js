@@ -120,10 +120,15 @@ test('approval does not race the patient app with a competing random room', () =
   assert.doesNotMatch(appointmentSource, /roomNeedsUpgrade/);
 });
 
-test('provider start waits for the mobile room before creating a fallback', () => {
+test('provider start waits for the mobile room without creating a competing fallback', () => {
   assert.match(appointmentSource, /async function waitForPersistedVideoRoom/);
   assert.match(appointmentSource, /meeting_started_at = COALESCE\(meeting_started_at/);
   const waitIndex = appointmentSource.indexOf('await waitForPersistedVideoRoom(resolvedAppointmentId)');
-  const fallbackIndex = appointmentSource.indexOf('const fallbackRoom = makeRoomId', waitIndex);
-  assert.ok(waitIndex >= 0 && fallbackIndex > waitIndex, 'mobile room wait must precede fallback generation');
+  assert.ok(waitIndex >= 0, 'provider start must wait for the mobile room');
+  assert.doesNotMatch(appointmentSource, /fallbackRoom|function makeRoomId/);
+  assert.match(appointmentSource, /status\(202\)\.json\(\{[\s\S]{0,160}pending: true/);
+  for (const source of [clinicalStaffSource, fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'src', 'Doctor', 'DoctorDashboard.js'), 'utf8')]) {
+    assert.match(source, /joinDeadline = Date\.now\(\) \+ 30000/);
+    assert.match(source, /setTimeout\(resolve, 750\)/);
+  }
 });

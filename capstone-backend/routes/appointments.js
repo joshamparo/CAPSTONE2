@@ -1131,12 +1131,6 @@ async function autoAssignUnassignedVideoAppointmentsForDate(dateStr) {
     }
 }
 
-function makeRoomId(appointmentId) {
-    const raw = String(appointmentId || '').trim();
-    if (!/^\d+$/.test(raw)) throw new Error('Invalid appointment id for video room.');
-    return `apt-${raw}-${crypto.randomBytes(5).toString('base64url')}`;
-}
-
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitForPersistedVideoRoom(appointmentId, timeoutMs = 8000) {
@@ -2824,12 +2818,18 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
 
             let persistedRoom = await waitForPersistedVideoRoom(resolvedAppointmentId);
             if (!persistedRoom) {
-                const fallbackRoom = makeRoomId(resolvedAppointmentIdRaw);
-                await prisma.appointments.updateMany({
-                    where: { id: resolvedAppointmentId, meeting_room_id: null },
-                    data: { meeting_room_id: fallbackRoom, meeting_created_at: now }
+                // The mobile client owns room materialization. Creating a web
+                // fallback here races the app and strands both sides in rooms
+                // with the same appointment prefix but different suffixes.
+                // Keep Start successful and let the provider poll Join until
+                // the app's canonical room has been persisted.
+                return res.status(202).json({
+                    pending: true,
+                    roomId: null,
+                    canonicalRoomId: null,
+                    url: null,
+                    startedAt: started?.meeting_started_at || now
                 });
-                persistedRoom = await waitForPersistedVideoRoom(resolvedAppointmentId, 0);
             }
             const updated = await prisma.appointments.findUnique({ where: { id: resolvedAppointmentId } });
             if (!updated?.meeting_room_id) {

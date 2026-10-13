@@ -342,11 +342,21 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       // Providers and patients must resolve the room through one authoritative
       // read after Start. This avoids opening a stale response if the mobile
       // booking flow persisted the appointment room concurrently.
-      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/join?_=${Date.now()}`, {
-        apiBase: API_BASE,
-        headers: { ...buildJsonAuthHeaders(user), 'x-user-role': role },
-        cache: 'no-store'
-      });
+      const joinDeadline = Date.now() + 30000;
+      let data = null;
+      while (!data) {
+        try {
+          data = await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/join?_=${Date.now()}`, {
+            apiBase: API_BASE,
+            headers: { ...buildJsonAuthHeaders(user), 'x-user-role': role },
+            cache: 'no-store'
+          });
+        } catch (joinError) {
+          const waitingForCanonicalRoom = /not started|room.*not.*available/i.test(String(joinError?.message || ''));
+          if (!waitingForCanonicalRoom || Date.now() >= joinDeadline) throw joinError;
+          await new Promise((resolve) => setTimeout(resolve, 750));
+        }
+      }
       const url = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();
       if (!url) throw new Error(data?.message || 'Unable to retrieve the video room.');
       const expectedRoom = String(appointment?.meetingRoomId || appointment?.meeting_room_id || '').trim();
