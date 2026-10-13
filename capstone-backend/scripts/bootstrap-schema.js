@@ -9,7 +9,10 @@ const { Client } = require('pg');
 
 const MIGRATION_DIRECTORY = path.join(__dirname, '..', 'prisma');
 const MIGRATION_PATTERN = /^manual_migration_[a-z0-9_]+\.sql$/i;
-const LOCK_KEY = 2077461107;
+// Versioned once when moving away from the old session-scoped lock. A session
+// lock can survive client release when DATABASE_URL points at a transaction
+// pooler. Transaction locks are always released by COMMIT/ROLLBACK.
+const LOCK_KEY = 2077461108;
 
 function migrationFiles() {
   return fs.readdirSync(MIGRATION_DIRECTORY)
@@ -55,6 +58,7 @@ async function bootstrapSchema({ strict = process.env.SCHEMA_BOOTSTRAP_STRICT ==
   const applied = [];
   const skipped = [];
   const manual = [];
+  let transactionStarted = false;
 
   try {
     await client.connect();
@@ -62,7 +66,9 @@ async function bootstrapSchema({ strict = process.env.SCHEMA_BOOTSTRAP_STRICT ==
     // schema work cannot start promptly, fail the new deployment and leave the
     // currently running instance serving traffic.
     await client.query(`SET lock_timeout = '10s'`);
-    const lock = await client.query('SELECT pg_try_advisory_lock($1) AS acquired', [LOCK_KEY]);
+    await client.query('BEGIN');
+    transactionStarted = true;
+    const lock = await client.query('SELECT pg_try_advisory_xact_lock($1) AS acquired', [LOCK_KEY]);
     if (!lock.rows[0]?.acquired) throw new Error('Another schema bootstrap is already running.');
     await client.query(`
       CREATE TABLE IF NOT EXISTS public.schema_bootstrap_migrations (
@@ -101,14 +107,19 @@ async function bootstrapSchema({ strict = process.env.SCHEMA_BOOTSTRAP_STRICT ==
       applied.push(filename);
     }
 
+    await client.query('COMMIT');
+    transactionStarted = false;
     console.log(`[Schema bootstrap] Ready: ${applied.length} applied, ${skipped.length} already current, ${manual.length} manual.`);
     return { ok: true, applied, skipped, manual };
   } catch (error) {
+    if (transactionStarted) {
+      await client.query('ROLLBACK').catch(() => {});
+      transactionStarted = false;
+    }
     console.error('[Schema bootstrap] Migration check failed:', String(error?.message || error));
     if (strict) throw error;
     return { ok: false, applied, skipped, manual, reason: 'migration_failed' };
   } finally {
-    await client.query('SELECT pg_advisory_unlock($1)', [LOCK_KEY]).catch(() => {});
     await client.end().catch(() => {});
   }
 }

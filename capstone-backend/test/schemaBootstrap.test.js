@@ -52,6 +52,10 @@ test('staff and restock traffic does not invoke schema setup', () => {
 test('command-line schema bootstrap fails closed before application start', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'bootstrap-schema.js'), 'utf8');
   assert.match(source, /SET lock_timeout = '10s'/);
+  assert.match(source, /pg_try_advisory_xact_lock/);
+  assert.match(source, /client\.query\('COMMIT'\)/);
+  assert.match(source, /client\.query\('ROLLBACK'\)/);
+  assert.doesNotMatch(source, /pg_try_advisory_lock\(/);
   assert.match(source, /bootstrapSchema\(\{ strict: true \}\)/);
 });
 
