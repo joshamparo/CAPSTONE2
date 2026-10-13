@@ -996,7 +996,9 @@ function DoctorDashboard() {
     const now = new Date();
     const diffMin = (now.getTime() - startAt.getTime()) / 60000;
     if (diffMin < -10) return { allowed: false, reason: 'You can start/join 10 mins before schedule' };
-    if (diffMin > 120) return { allowed: false, reason: 'Call window ended' };
+    const endOfScheduledDay = new Date(startAt);
+    endOfScheduledDay.setHours(23, 59, 59, 999);
+    if (now.getTime() > endOfScheduledDay.getTime()) return { allowed: false, reason: 'Call window ended' };
     return { allowed: true, reason: '' };
   };
 
@@ -3786,7 +3788,7 @@ function DoctorDashboard() {
                             }
                             startVideoCall(apt);
                           }}
-                          disabled={!joinGate.allowed || videoStartingId === String(apt.id)}
+                          disabled={videoStartingId === String(apt.id)}
                           style={{ padding: '6px 8px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                         >
                           <Video size={16} />

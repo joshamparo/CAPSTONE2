@@ -1051,7 +1051,8 @@ function getVideoScheduleWindow(apt, now = new Date()) {
     if (Number.isNaN(scheduledAt.getTime())) return { allowed: false, message: 'Appointment schedule is invalid.' };
     const minutesAfterStart = (now.getTime() - scheduledAt.getTime()) / 60000;
     if (minutesAfterStart < -10) return { allowed: false, message: 'The call can start 10 minutes before the scheduled time.' };
-    if (minutesAfterStart > 120) return { allowed: false, message: 'The video consultation window has ended.' };
+    const endOfScheduledDay = new Date(`${dateKey}T23:59:59${timezoneOffset}`);
+    if (now.getTime() > endOfScheduledDay.getTime()) return { allowed: false, message: 'The video consultation window has ended.' };
     return { allowed: true, scheduledAt };
 }
 

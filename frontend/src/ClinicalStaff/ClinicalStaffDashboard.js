@@ -291,7 +291,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     if (Number.isNaN(scheduledAt.getTime())) return { allowed: false, reason: 'Invalid schedule' };
     const diffMinutes = (Date.now() - scheduledAt.getTime()) / 60000;
     if (diffMinutes < -10) return { allowed: false, reason: 'Available 10 minutes before schedule' };
-    if (diffMinutes > 120) return { allowed: false, reason: 'Call window ended' };
+    const endOfScheduledDay = new Date(`${dateKey}T23:59:59+08:00`);
+    if (Date.now() > endOfScheduledDay.getTime()) return { allowed: false, reason: 'Call window ended' };
     return { allowed: true, reason: '' };
   };
 
@@ -1497,7 +1498,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     const status = String(appointment.status || 'Confirmed');
                     const unavailable = /cancel|complete|done|no.?show/i.test(status);
                     const joinWindow = getVideoJoinWindowState(appointment);
-                    const actionUnavailable = unavailable || !joinWindow.allowed;
+                    const actionUnavailable = unavailable;
                     const actionLabel = appointment.meetingActive ? 'Join Call' : 'Start Call';
                     return (
                       <tr key={String(appointment.id)}>
@@ -1505,7 +1506,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                         <td>{scheduleLabel || '—'}</td>
                         <td>{appointment.reason || appointment.mainConcern || 'Physical Therapy consultation'}</td>
                         <td><span className={statusBadgeClass(status)}>{status}</span></td>
-                        <td><button type="button" className="cs-btn" disabled={actionUnavailable || videoActionId === String(appointment.id)} title={actionUnavailable ? joinWindow.reason : actionLabel} onClick={() => startVideoConsultation(appointment)}><Video size={16} /> {videoActionId === String(appointment.id) ? 'Opening…' : actionLabel}</button></td>
+                        <td><button type="button" className="cs-btn" disabled={actionUnavailable || videoActionId === String(appointment.id)} title={!joinWindow.allowed ? joinWindow.reason : actionLabel} onClick={() => { if (!joinWindow.allowed) { setVideoActionError(joinWindow.reason); return; } startVideoConsultation(appointment); }}><Video size={16} /> {videoActionId === String(appointment.id) ? 'Opening…' : actionLabel}</button></td>
                       </tr>
                     );
                   })}
