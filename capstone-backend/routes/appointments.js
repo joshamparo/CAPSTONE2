@@ -1154,6 +1154,9 @@ function getJaasConfig() {
 function toClientRoomId(roomId) {
     const raw = String(roomId || '').trim().replace(/^\/+|\/+$/g, '');
     if (!raw) return '';
+    // Mobile bookings may already persist the complete Jitsi URL. It is
+    // already client-ready and must never be prefixed with a JaaS app id.
+    if (/^https?:\/\//i.test(raw)) return raw;
     const jaas = getJaasConfig();
     if (!jaas) return raw;
     return raw.startsWith(`${jaas.appId}/`) ? raw : `${jaas.appId}/${raw}`;

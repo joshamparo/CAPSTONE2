@@ -52,7 +52,9 @@ test('provider joins bypass caches and refuse mismatched rooms', () => {
     assert.match(source, /video\/join\?_=/);
     assert.match(source, /cache:\s*'no-store'/);
     assert.match(source, /The video room changed while opening/);
+    assert.match(source, /data\?\.roomId \|\| data\?\.canonicalRoomId/);
   }
+  assert.ok(appointmentSource.includes("if (/^https?:\\/\\//i.test(raw)) return raw;"));
 });
 
 test('mobile PT procedure names retain their Physical Therapy video routing', () => {

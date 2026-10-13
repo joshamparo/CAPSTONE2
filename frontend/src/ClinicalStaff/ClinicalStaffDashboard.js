@@ -348,7 +348,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       const url = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();
       if (!url) throw new Error(data?.message || 'Unable to retrieve the video room.');
       const expectedRoom = String(appointment?.meetingRoomId || appointment?.meeting_room_id || '').trim();
-      const returnedRoom = String(data?.canonicalRoomId || data?.roomId || '').trim();
+      const returnedRoom = String(data?.roomId || data?.canonicalRoomId || '').trim();
       const roomName = (value) => {
         try { return decodeURIComponent(new URL(value).pathname.replace(/^\/+|\/+$/g, '')); }
         catch (_) { return String(value || '').replace(/^\/+|\/+$/g, ''); }

@@ -1036,7 +1036,9 @@ function DoctorDashboard() {
       const meetingUrl = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();
       if (!meetingUrl) throw new Error(data?.message || data?.error || 'Failed to retrieve video room URL');
       const expectedRoom = String(apt?.meetingRoomId || apt?.meeting_room_id || '').trim();
-      const returnedRoom = String(data?.canonicalRoomId || data?.roomId || '').trim();
+      // meetingRoomId in queue rows is client-facing (and may include the JaaS
+      // app prefix), so compare it with the response's client-facing roomId.
+      const returnedRoom = String(data?.roomId || data?.canonicalRoomId || '').trim();
       const roomName = (value) => {
         try { return decodeURIComponent(new URL(value).pathname.replace(/^\/+|\/+$/g, '')); }
         catch (_) { return String(value || '').replace(/^\/+|\/+$/g, ''); }
