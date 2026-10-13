@@ -73,6 +73,18 @@ test('mobile PT appointment reasons do not need to repeat the video label', () =
   assert.ok(ptReturn >= 0 && earlyVideoGuard > ptReturn, 'PT routing must run before the legacy video-label guard');
 });
 
+test('new triage reasons retain Pathology video routing without a legacy video label', () => {
+  assert.match(appointmentSource, /const triageSpecialty = raw\.match/);
+  assert.match(appointmentSource, /if \(triageSpecialty\) return triageSpecialty/);
+
+  const doctorSource = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'frontend', 'src', 'Doctor', 'DoctorDashboard.js'),
+    'utf8'
+  );
+  assert.match(doctorSource, /if \(triageSpecialty\) return normalizeSpecKey\(triageSpecialty\)/);
+  assert.match(doctorSource, /compact\.includes\('patholog'\)/);
+});
+
 test('PT queue reads do not run reconciliation and call opening does not await refresh', () => {
   assert.match(appointmentSource, /start && end && role !== 'physical_therapist'/);
   assert.match(clinicalStaffSource, /timeoutMs: 15000/);

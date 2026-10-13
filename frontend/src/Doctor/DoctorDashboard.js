@@ -948,6 +948,10 @@ function DoctorDashboard() {
   const inferVideoSpecialization = (reason) => {
     const raw = String(reason || '').trim();
     const lower = raw.toLowerCase();
+    // New mobile bookings put the department after the TRIAGE marker and keep
+    // the video/onsite flag in consultation_mode rather than the reason text.
+    const triageSpecialty = raw.match(/^\s*\[triage[^\]]*\]\s*([^:|]+)\s*:/i)?.[1]?.trim();
+    if (triageSpecialty) return normalizeSpecKey(triageSpecialty);
     if (!lower.includes('video consultation')) return '';
     let tail = raw;
     const idx = lower.indexOf('video consultation');

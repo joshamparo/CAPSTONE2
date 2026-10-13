@@ -955,6 +955,14 @@ function inferSpecializationFromVideoReason(reason) {
         || lower.includes('post-op rehabilitation')
         || lower.includes('post op rehabilitation');
     if (isPhysicalTherapyReason) return 'Physical Therapy';
+
+    // Current mobile video bookings use
+    // "[TRIAGE ...] Pathology: <service> | PAYREF:..." and carry the video
+    // distinction in consultation_mode. Resolve that department before the
+    // legacy display-label guard so assignment/reassignment works for every
+    // doctor specialty, including Pathology.
+    const triageSpecialty = raw.match(/^\s*\[triage[^\]]*\]\s*([^:|]+)\s*:/i)?.[1]?.trim();
+    if (triageSpecialty) return triageSpecialty;
     if (!lower.includes('video consultation')) return '';
 
     let tail = raw;
