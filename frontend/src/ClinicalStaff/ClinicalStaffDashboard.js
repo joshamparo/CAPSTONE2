@@ -129,6 +129,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const videoRefreshInFlight = useRef(false);
   const [videoActionId, setVideoActionId] = useState('');
   const [videoMeeting, setVideoMeeting] = useState(null);
+  const videoRoomSyncTokenRef = useRef(0);
   const [profileForm, setProfileForm] = useState(() => ({
     firstName: user.firstName || user.first_name || '',
     lastName: user.lastName || user.last_name || '',
@@ -370,6 +371,30 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       }
       const patientName = `${appointment.firstName || appointment.first_name || ''} ${appointment.lastName || appointment.last_name || ''}`.trim();
       setVideoMeeting({ url, title: `Video Consultation • ${patientName || 'Patient'}` });
+      const syncToken = ++videoRoomSyncTokenRef.current;
+      const initialRoomName = roomName(data?.roomId || data?.canonicalRoomId || url);
+      void (async () => {
+        const deadline = Date.now() + 60000;
+        while (videoRoomSyncTokenRef.current === syncToken && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          if (videoRoomSyncTokenRef.current !== syncToken) return;
+          try {
+            const latest = await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/join?_=${Date.now()}`, {
+              apiBase: API_BASE,
+              headers: { ...buildJsonAuthHeaders(user), 'x-user-role': role },
+              cache: 'no-store'
+            });
+            const latestUrl = String(latest?.url || latest?.roomUrl || latest?.meetingUrl || '').trim();
+            const latestRoom = String(latest?.roomId || latest?.canonicalRoomId || latestUrl).trim();
+            if (latestUrl && roomName(latestRoom) !== initialRoomName) {
+              setVideoMeeting({ url: latestUrl, title: `Video Consultation • ${patientName || 'Patient'}` });
+              return;
+            }
+          } catch (_) {
+            // Start succeeded; retry only during this short reconciliation window.
+          }
+        }
+      })();
       // Opening the room must never wait for a background list refresh.
       void refreshVideoAppointments();
     } catch (e) {
@@ -378,6 +403,10 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       setVideoActionId('');
     }
   };
+
+  useEffect(() => {
+    if (!videoMeeting) videoRoomSyncTokenRef.current += 1;
+  }, [videoMeeting]);
 
   useEffect(() => {
     refreshOrders();

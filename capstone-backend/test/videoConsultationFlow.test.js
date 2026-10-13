@@ -141,3 +141,16 @@ test('doctor video queue places newly booked consultations first', () => {
   );
   assert.match(doctorSource, /if \(queueFilter === 'video'\)[\s\S]{0,260}createdB - createdA/);
 });
+
+test('provider call modals reconcile a late mobile room overwrite', () => {
+  const doctorSource = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'frontend', 'src', 'Doctor', 'DoctorDashboard.js'),
+    'utf8'
+  );
+  for (const source of [doctorSource, clinicalStaffSource]) {
+    assert.match(source, /videoRoomSyncTokenRef/);
+    assert.match(source, /Date\.now\(\) \+ 60000/);
+    assert.match(source, /setTimeout\(resolve, 2000\)/);
+    assert.match(source, /setVideoMeeting(?:Url)?\(/);
+  }
+});

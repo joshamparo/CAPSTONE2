@@ -132,6 +132,7 @@ function DoctorDashboard() {
   const [videoMeetingUrl, setVideoMeetingUrl] = useState('');
   const [videoMeetingTitle, setVideoMeetingTitle] = useState('');
   const videoStartInFlightRef = useRef(new Set());
+  const videoRoomSyncTokenRef = useRef(0);
 
   // Queue State
   const [appointments, setAppointments] = useState([]);
@@ -1003,6 +1004,39 @@ function DoctorDashboard() {
     setVideoModalOpen(true);
   };
 
+  const reconcileVideoRoomAfterStart = async (appointmentId, initialRoom) => {
+    const token = ++videoRoomSyncTokenRef.current;
+    const roomName = (value) => {
+      try { return decodeURIComponent(new URL(value).pathname.replace(/^\/+|\/+$/g, '')); }
+      catch (_) { return String(value || '').replace(/^\/+|\/+$/g, ''); }
+    };
+    const initialName = roomName(initialRoom);
+    const deadline = Date.now() + 60000;
+    while (videoRoomSyncTokenRef.current === token && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (videoRoomSyncTokenRef.current !== token) return;
+      try {
+        const latest = await fetchJson(`/api/appointments/${encodeURIComponent(String(appointmentId))}/video/join?_=${Date.now()}`, {
+          apiBase: API_BASE,
+          headers: { ...authHeaders },
+          cache: 'no-store'
+        });
+        const latestUrl = String(latest?.url || latest?.roomUrl || latest?.meetingUrl || '').trim();
+        const latestRoom = String(latest?.roomId || latest?.canonicalRoomId || latestUrl).trim();
+        if (latestUrl && roomName(latestRoom) !== initialName) {
+          setVideoMeetingUrl(latestUrl);
+          return;
+        }
+      } catch (_) {
+        // Start succeeded; retry only during this short reconciliation window.
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!videoModalOpen) videoRoomSyncTokenRef.current += 1;
+  }, [videoModalOpen]);
+
   const startVideoCall = async (apt) => {
     if (!apt?.id) return;
     const appointmentKey = String(apt.id);
@@ -1076,6 +1110,7 @@ function DoctorDashboard() {
       // #endregion
 
       openVideoMeeting(meetingUrl, `Video Consultation • ${apt.firstName || ''} ${apt.lastName || ''}`.trim());
+      void reconcileVideoRoomAfterStart(apt.id, data?.roomId || data?.canonicalRoomId || meetingUrl);
     } catch (e) {
       // #region debug-point C:web-start-error
       reportVideoRoomDebug({
