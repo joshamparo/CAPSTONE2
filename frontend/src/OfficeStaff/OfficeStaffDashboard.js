@@ -929,6 +929,8 @@ export default function OfficeStaffDashboard({ mode }) {
     const statusRaw = String(opts.status ?? hmoStatus ?? 'Pending').trim();
     const notesRaw = String(opts.notes ?? hmoNotes ?? '').trim();
     const philhealth = Number(opts.philhealthDeduction ?? philhealthDeduction ?? 0) || 0;
+    const philhealthStatusRaw = String(opts.philhealthStatus ?? selectedInvoice?.hmo_claim?.philhealth_claim?.status ?? 'Pending Verification').trim();
+    const philhealthReferenceRaw = String(opts.philhealthReference ?? selectedInvoice?.hmo_claim?.philhealth_claim?.reference_number ?? '').trim();
     const loaApproved = Number(opts.loaApprovedAmount ?? hmoCoverage ?? 0) || 0;
 
     const hasAnything = Boolean(
@@ -951,6 +953,8 @@ export default function OfficeStaffDashboard({ mode }) {
         status: statusRaw || 'Pending',
         notes: notesRaw || null,
         philhealthDeduction: philhealth,
+        philhealthStatus: philhealthStatusRaw,
+        philhealthReference: philhealthReferenceRaw,
         loaApprovedAmount: loaApproved
       })
     }).finally(() => setSavingHmoClaim(false));
@@ -3790,6 +3794,37 @@ export default function OfficeStaffDashboard({ mode }) {
                 </div>
                 <div className="office-hmo-field-pro">
                   <label className="office-hmo-field-label-pro">
+                    <span className="label-dot-ph"></span> PhilHealth Status
+                  </label>
+                  <div className="office-hmo-input-wrap-pro">
+                    <ClipboardList size={15} className="office-hmo-input-icon-pro" />
+                    <select
+                      className="office-hmo-select-pro"
+                      value={hmoQuickEdit._phStatus ?? String(hmoQuickEdit?.hmo_claim?.philhealth_claim?.status || 'Pending Verification')}
+                      onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _phStatus: e.target.value })}
+                    >
+                      <option value="Pending Verification">Pending Verification</option>
+                      <option value="Approved">Verified &amp; Approved</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="office-hmo-field-pro">
+                  <label className="office-hmo-field-label-pro">
+                    <span className="label-dot-ph"></span> PhilHealth Reference No.
+                  </label>
+                  <div className="office-hmo-input-wrap-pro">
+                    <FileText size={15} className="office-hmo-input-icon-pro" />
+                    <input
+                      className="office-hmo-input-pro"
+                      value={hmoQuickEdit._phReference ?? String(hmoQuickEdit?.hmo_claim?.philhealth_claim?.reference_number || '')}
+                      onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _phReference: e.target.value })}
+                      placeholder="Required before applying benefit"
+                    />
+                  </div>
+                </div>
+                <div className="office-hmo-field-pro">
+                  <label className="office-hmo-field-label-pro">
                     <span className="label-dot-st"></span> Claim Status
                   </label>
                   <div className="office-hmo-input-wrap-pro">
@@ -3844,7 +3879,7 @@ export default function OfficeStaffDashboard({ mode }) {
                     <input
                       className="office-hmo-input-pro"
                       type="number"
-                      value={hmoQuickEdit._ph ?? (hmoQuickEdit?._ph === 0 ? 0 : String(hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? ''))}
+                      value={hmoQuickEdit._ph ?? (hmoQuickEdit?._ph === 0 ? 0 : String(hmoQuickEdit?.hmo_claim?.philhealth_claim?.approved_amount ?? hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? ''))}
                       onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _ph: e.target.value })}
                       placeholder="₱ 0.00"
                     />
@@ -3884,8 +3919,11 @@ export default function OfficeStaffDashboard({ mode }) {
               <div className="office-hmo-modal-summary-pro">
                 {(() => {
                   const total = Number(hmoQuickEdit.total_amount || 0);
-                  const phRaw = Number(hmoQuickEdit._ph ?? hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? 0) || 0;
-                  const phSafe = Math.max(0, Math.min(total, phRaw));
+                  const phRaw = Number(hmoQuickEdit._ph ?? hmoQuickEdit?.hmo_claim?.philhealth_claim?.approved_amount ?? hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? 0) || 0;
+                  const phStatus = String(hmoQuickEdit._phStatus ?? hmoQuickEdit?.hmo_claim?.philhealth_claim?.status ?? 'Pending Verification');
+                  const phReference = String(hmoQuickEdit._phReference ?? hmoQuickEdit?.hmo_claim?.philhealth_claim?.reference_number ?? '').trim();
+                  const phApproved = phStatus === 'Approved' && Boolean(phReference) && phRaw > 0;
+                  const phSafe = phApproved ? Math.max(0, Math.min(total, phRaw)) : 0;
                   const phClamped = Number.isFinite(phRaw) && phRaw > 0 && Math.abs(phRaw - phSafe) > 0.0001;
                   const afterPH = Math.max(0, total - phSafe);
                   const statusQ = String(hmoQuickEdit._status ?? hmoQuickEdit?.hmo_claim?.status ?? 'Pending');
@@ -3904,6 +3942,12 @@ export default function OfficeStaffDashboard({ mode }) {
                         <div className="office-hmo-warn-pro">
                           <ShieldAlert size={15} />
                           PhilHealth was clamped — it cannot exceed the total bill.
+                        </div>
+                      ) : null}
+                      {!phApproved && phRaw > 0 ? (
+                        <div className="office-hmo-warn-pro">
+                          <ShieldAlert size={15} />
+                          PhilHealth not deducted — verify the claim and enter its reference number first.
                         </div>
                       ) : null}
                       {hmoClamped ? (
@@ -3976,7 +4020,9 @@ export default function OfficeStaffDashboard({ mode }) {
                       hmoCardNumber: hmoQuickEdit._hmoCardNumber ?? String(hmoQuickEdit?.hmo_claim?.hmo_card_number || ''),
                       status: hmoQuickEdit._status ?? String(hmoQuickEdit?.hmo_claim?.status || 'Pending'),
                       notes: hmoQuickEdit._notes ?? String(hmoQuickEdit?.hmo_claim?.notes || ''),
-                      philhealthDeduction: Number(hmoQuickEdit._ph ?? hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? 0) || 0,
+                      philhealthDeduction: Number(hmoQuickEdit._ph ?? hmoQuickEdit?.hmo_claim?.philhealth_claim?.approved_amount ?? hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? 0) || 0,
+                      philhealthStatus: hmoQuickEdit._phStatus ?? String(hmoQuickEdit?.hmo_claim?.philhealth_claim?.status || 'Pending Verification'),
+                      philhealthReference: hmoQuickEdit._phReference ?? String(hmoQuickEdit?.hmo_claim?.philhealth_claim?.reference_number || ''),
                       loaApprovedAmount: Number(hmoQuickEdit._hmoAmt ?? hmoQuickEdit?.hmo_claim?.loa_approved_amount ?? 0) || 0
                     });
                     setHmoQuickEdit(null);

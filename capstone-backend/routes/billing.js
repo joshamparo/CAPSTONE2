@@ -8,6 +8,7 @@ const { normalizeEmail, parseLimit, parseOffset } = require('../utils/normalize'
 const { syncHmoDataFromAppointmentToInvoice } = require('../utils/billingLedger');
 const { sendError } = require('../utils/httpErrors');
 const { buildHmoQueueRows } = require('../utils/hmoQueueView');
+const { normalizePhilhealthStatus, summarizePhilhealthClaim } = require('../utils/philhealthClaim');
 
 
 const STAFF_ROLE_SET = new Set(['doctor_secretary', 'cashier', 'admin', 'doctor']);
@@ -270,7 +271,11 @@ async function ensureBillingHmoClaimsTableExist() {
       prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_card_number text NULL`),
       prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS coverage_json jsonb NULL`),
       prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_id uuid NULL`),
-      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_name text NULL`)
+      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_name text NULL`),
+      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_status text NOT NULL DEFAULT 'Pending Verification'`),
+      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_reference text NULL`),
+      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_verified_by text NULL`),
+      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_verified_at timestamptz NULL`)
     ]);
     billingSchemaEnsureState.hmoClaimsCheckedAt = now;
     return;
@@ -285,6 +290,10 @@ async function ensureBillingHmoClaimsTableExist() {
     hmo_card_number text NULL,
     coverage_json jsonb NULL,
     philhealth_deduction numeric(12,2) NOT NULL DEFAULT 0,
+    philhealth_status text NOT NULL DEFAULT 'Pending Verification',
+    philhealth_reference text NULL,
+    philhealth_verified_by text NULL,
+    philhealth_verified_at timestamptz NULL,
     loa_approved_amount numeric(12,2) NOT NULL DEFAULT 0,
       status text NOT NULL DEFAULT 'Pending',
       notes text NULL,
@@ -294,6 +303,12 @@ async function ensureBillingHmoClaimsTableExist() {
       updated_at timestamptz NOT NULL DEFAULT now()
     );
   `);
+  await Promise.all([
+    prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_status text NOT NULL DEFAULT 'Pending Verification'`),
+    prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_reference text NULL`),
+    prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_verified_by text NULL`),
+    prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_verified_at timestamptz NULL`)
+  ]);
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_status ON public.billing_hmo_claims(status, updated_at DESC);
   `);
@@ -383,6 +398,7 @@ function summarizeHmoClaim(row, totalAmount) {
       hmo_loa_number: '',
       hmo_card_number: '',
       philhealth_deduction: 0,
+      philhealth_claim: summarizePhilhealthClaim({}, total),
       loa_approved_amount: 0,
       status: 'Pending',
       notes: '',
@@ -395,7 +411,8 @@ function summarizeHmoClaim(row, totalAmount) {
     };
   }
 
-  const philhealthDeduction = Math.min(total, Math.max(0, Number(row.philhealth_deduction || 0)));
+  const philhealthClaim = summarizePhilhealthClaim(row, total);
+  const philhealthDeduction = philhealthClaim.applied_amount;
   const maxAfterPhilhealth = Math.max(0, total - philhealthDeduction);
   const approvedAmount = Math.max(0, Number(row.loa_approved_amount || 0));
   const appliedHmoAmount = isHmoCoverageApplied(row.status)
@@ -415,6 +432,7 @@ function summarizeHmoClaim(row, totalAmount) {
     hmo_loa_number: String(row.hmo_loa_number || row.loa_number || '').trim(),
     hmo_card_number: String(row.hmo_card_number || '').trim(),
     philhealth_deduction: philhealthDeduction,
+    philhealth_claim: philhealthClaim,
     loa_approved_amount: approvedAmount,
     status: normalizeHmoStatus(row.status),
     notes: String(row.notes || '').trim(),
@@ -436,7 +454,8 @@ async function fetchHmoClaimsByInvoiceIds(tx, invoiceIds) {
   return tx
     .$queryRawUnsafe(
       `
-        SELECT id, invoice_id, hmo_provider, hmo_loa_number, hmo_card_number, philhealth_deduction, loa_approved_amount,
+        SELECT id, invoice_id, hmo_provider, hmo_loa_number, hmo_card_number, philhealth_deduction,
+               philhealth_status, philhealth_reference, philhealth_verified_by, philhealth_verified_at, loa_approved_amount,
                status, notes, requested_by, updated_by, created_at, updated_at
         FROM public.billing_hmo_claims
         WHERE invoice_id = ANY($1::bigint[])
@@ -1139,6 +1158,8 @@ router.put('/invoices/:id/hmo', async (req, res) => {
     const cardNumber = String(req.body?.cardNumber || req.body?.hmo_card_number || req.body?.card_number || '').trim();
     const notes = String(req.body?.notes || '').trim();
     const status = normalizeHmoStatus(req.body?.status);
+    const philhealthStatus = normalizePhilhealthStatus(req.body?.philhealthStatus ?? req.body?.philhealth_status);
+    const philhealthReference = String(req.body?.philhealthReference ?? req.body?.philhealth_reference ?? '').trim();
     const requestedBy = normalizeEmail(req.headers['x-user-email'] || req.body?.requestedBy || '');
     const updatedBy = normalizeEmail(req.headers['x-user-email'] || req.body?.updatedBy || '');
     const rawPhilhealth = Math.max(0, Number(req.body?.philhealthDeduction ?? req.body?.philhealth_deduction ?? 0));
@@ -1153,6 +1174,9 @@ router.put('/invoices/:id/hmo', async (req, res) => {
     } else if (Math.abs(rawPhilhealth - philhealthDeduction) > 0.0001) {
       warnings.push('PhilHealth deduction was clamped to the total bill.');
     }
+    if (philhealthStatus === 'Approved' && (!philhealthReference || philhealthDeduction <= 0)) {
+      return res.status(400).json({ message: 'Approved PhilHealth benefits require a reference number and an approved amount greater than zero.' });
+    }
     if (!Number.isFinite(rawLoaApproved)) {
       loaApprovedAmount = 0;
       warnings.push('Invalid LOA approved amount. Reset to 0.');
@@ -1164,6 +1188,8 @@ router.put('/invoices/:id/hmo', async (req, res) => {
       loaNumber ||
       notes ||
       philhealthDeduction > 0 ||
+      philhealthReference ||
+      philhealthStatus !== 'Pending Verification' ||
       loaApprovedAmount > 0 ||
       status !== 'Pending'
     );
@@ -1180,10 +1206,12 @@ router.put('/invoices/:id/hmo', async (req, res) => {
     } else {
       await prisma.$queryRaw`
         INSERT INTO public.billing_hmo_claims (
-          invoice_id, hmo_provider, hmo_loa_number, hmo_card_number, philhealth_deduction, loa_approved_amount, status, notes, requested_by, updated_by, created_at, updated_at
+          invoice_id, hmo_provider, hmo_loa_number, hmo_card_number, philhealth_deduction, philhealth_status,
+          philhealth_reference, philhealth_verified_by, philhealth_verified_at, loa_approved_amount, status, notes, requested_by, updated_by, created_at, updated_at
         )
         VALUES (
-          ${invoiceId}, ${provider || null}, ${loaNumber || null}, ${cardNumber || null}, ${toMoney(philhealthDeduction)}::numeric, ${toMoney(loaApprovedAmount)}::numeric,
+          ${invoiceId}, ${provider || null}, ${loaNumber || null}, ${cardNumber || null}, ${toMoney(philhealthDeduction)}::numeric, ${philhealthStatus},
+          ${philhealthReference || null}, ${philhealthStatus === 'Approved' ? updatedBy || null : null}, ${philhealthStatus === 'Approved' ? new Date() : null}, ${toMoney(loaApprovedAmount)}::numeric,
           ${status}, ${notes || null}, ${requestedBy || null}, ${updatedBy || null}, now(), now()
         )
         ON CONFLICT (invoice_id)
@@ -1192,6 +1220,10 @@ router.put('/invoices/:id/hmo', async (req, res) => {
           hmo_loa_number = EXCLUDED.hmo_loa_number,
           hmo_card_number = EXCLUDED.hmo_card_number,
           philhealth_deduction = EXCLUDED.philhealth_deduction,
+          philhealth_status = EXCLUDED.philhealth_status,
+          philhealth_reference = EXCLUDED.philhealth_reference,
+          philhealth_verified_by = EXCLUDED.philhealth_verified_by,
+          philhealth_verified_at = EXCLUDED.philhealth_verified_at,
           loa_approved_amount = EXCLUDED.loa_approved_amount,
           status = EXCLUDED.status,
           notes = EXCLUDED.notes,
@@ -1695,6 +1727,10 @@ router.get('/hmo-queue', async (req, res) => {
         ['hmo_loa_number', 'hmo_loa_number'],
         ['hmo_card_number', 'hmo_card_number'],
         ['philhealth_deduction', 'philhealth_deduction'],
+        ['philhealth_status', 'philhealth_status'],
+        ['philhealth_reference', 'philhealth_reference'],
+        ['philhealth_verified_by', 'philhealth_verified_by'],
+        ['philhealth_verified_at', 'philhealth_verified_at'],
         ['loa_approved_amount', 'loa_approved_amount'],
         ['status', 'status'],
         ['notes', 'notes'],
@@ -1747,6 +1783,10 @@ router.get('/hmo-queue', async (req, res) => {
     const hHmoLoa = pickNotNull(claimsCols, 'hmo_loa_number', 'NULL');
     const hHmoCard = pickNotNull(claimsCols, 'hmo_card_number', 'NULL');
     const hPhilDed = pick(claimsCols, 'philhealth_deduction', '0');
+    const hPhilStatus = pickNotNull(claimsCols, 'philhealth_status', "'Pending Verification'");
+    const hPhilReference = pickNotNull(claimsCols, 'philhealth_reference', 'NULL');
+    const hPhilVerifiedBy = pickNotNull(claimsCols, 'philhealth_verified_by', 'NULL');
+    const hPhilVerifiedAt = pick(claimsCols, 'philhealth_verified_at', 'NULL');
     const hLoaAppr = pick(claimsCols, 'loa_approved_amount', '0');
     const hStatus = pickNotNull(claimsCols, 'status', 'NULL');
     const hNotes = pickNotNull(claimsCols, 'notes', 'NULL');
@@ -2091,6 +2131,10 @@ router.get('/hmo-queue', async (req, res) => {
             ${hHmoLoa} AS hmo_loa_number,
             ${hHmoCard} AS hmo_card_number,
             ${hPhilDed} AS philhealth_deduction,
+            ${hPhilStatus} AS philhealth_status,
+            ${hPhilReference} AS philhealth_reference,
+            ${hPhilVerifiedBy} AS philhealth_verified_by,
+            ${hPhilVerifiedAt} AS philhealth_verified_at,
             ${hLoaAppr} AS loa_approved_amount,
             ${hStatus} AS status,
             ${hNotes} AS notes,
@@ -2139,6 +2183,10 @@ router.get('/hmo-queue', async (req, res) => {
             ${aHmoLoa} AS hmo_loa_number,
             ${aHmoCard} AS hmo_card_number,
             ${aPhilDed} AS philhealth_deduction,
+            'Pending Verification' AS philhealth_status,
+            NULL AS philhealth_reference,
+            NULL AS philhealth_verified_by,
+            NULL AS philhealth_verified_at,
             COALESCE(${aLoaAppr1}, ${aLoaAppr2}, 0) AS loa_approved_amount,
             COALESCE(${aHmoStatus}, 'Awaiting LOA') AS status,
             CONCAT_WS(' • ', 'Walk-in HMO Intake', ${aPurpose}, ${aRouteType}) AS notes,
@@ -2181,6 +2229,10 @@ router.get('/hmo-queue', async (req, res) => {
             NULL AS hmo_loa_number,
             ${pHmoCard} AS hmo_card_number,
             COALESCE(${pPhilAmt}, 0) AS philhealth_deduction,
+            'Pending Verification' AS philhealth_status,
+            NULL AS philhealth_reference,
+            NULL AS philhealth_verified_by,
+            NULL AS philhealth_verified_at,
             0 AS loa_approved_amount,
             'Awaiting LOA' AS status,
             'Patient flagged HMO-active — no linked invoice/appointment claim yet' AS notes,

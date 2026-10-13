@@ -25,3 +25,23 @@ test('pending HMO amounts are not treated as approved coverage', () => {
   assert.equal(row.hmo_covered_amount, '0.00');
   assert.equal(row.patient_pays, '100.00');
 });
+
+test('pending PhilHealth amount is not treated as a deduction in the queue', () => {
+  const [row] = buildHmoQueueRows([{
+    id: 3, invoice_id: 161, registry_patient_name: 'Ana Reyes', total_amount: 1000,
+    philhealth_deduction: 400, philhealth_status: 'Pending Verification'
+  }]);
+  assert.equal(row.philhealth_amount, '0.00');
+  assert.equal(row.patient_pays, '1000.00');
+});
+
+test('verified PhilHealth amount is deducted before approved HMO coverage', () => {
+  const [row] = buildHmoQueueRows([{
+    id: 4, invoice_id: 162, registry_patient_name: 'Ana Reyes', total_amount: 1000,
+    philhealth_deduction: 400, philhealth_status: 'Approved', philhealth_reference: 'PH-100',
+    loa_approved_amount: 400, claim_status: 'Approved'
+  }]);
+  assert.equal(row.philhealth_amount, '400.00');
+  assert.equal(row.hmo_covered_amount, '400.00');
+  assert.equal(row.patient_pays, '200.00');
+});

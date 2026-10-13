@@ -1,4 +1,5 @@
 const badPatientName = /^(?:patient(?: name unavailable| of|$)|invoice-|(?:clinical|lab) order\s*#|walk-in|nurse walk|onsite consultation|online consultation|video consultation)/i;
+const { summarizePhilhealthClaim } = require('./philhealthClaim');
 
 function cleanPatientName(...candidates) {
   for (const candidate of candidates) {
@@ -15,7 +16,8 @@ function hmoStatusApplies(status) {
 function buildHmoQueueRows(rows = []) {
   const mapped = (Array.isArray(rows) ? rows : []).map((row) => {
     const total = Math.max(0, Number(row.total_amount || 0));
-    const philhealth = Math.min(total, Math.max(0, Number(row.philhealth_deduction || 0)));
+    const philhealthClaim = summarizePhilhealthClaim(row, total);
+    const philhealth = philhealthClaim.applied_amount;
     const hmoApproved = Math.max(0, Number(row.loa_approved_amount || 0));
     const hmoCovered = hmoStatusApplies(row.claim_status)
       ? Math.min(Math.max(0, total - philhealth), hmoApproved)
@@ -40,6 +42,7 @@ function buildHmoQueueRows(rows = []) {
       hmo_loa_number: loaNumber,
       hmo_card_number: cardNumber,
       philhealth_deduction: philhealth,
+      philhealth_claim: philhealthClaim,
       loa_approved_amount: hmoApproved,
       applied_hmo_amount: hmoCovered,
       patient_payable: patientPays,

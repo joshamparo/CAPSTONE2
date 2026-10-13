@@ -91,6 +91,10 @@ CREATE TABLE IF NOT EXISTS public.billing_hmo_claims (
   hmo_amount numeric(12,2) NOT NULL DEFAULT 0,
   philhealth_amount numeric(12,2) NOT NULL DEFAULT 0,
   philhealth_deduction numeric(12,2) NOT NULL DEFAULT 0,
+  philhealth_status text NOT NULL DEFAULT 'Pending Verification',
+  philhealth_reference text NULL,
+  philhealth_verified_by text NULL,
+  philhealth_verified_at timestamptz NULL,
   loa_approved_amount numeric(12,2) NOT NULL DEFAULT 0,
   claim_status text NOT NULL DEFAULT 'Pending - Nurse Intake',
   status text NOT NULL DEFAULT 'Pending',
@@ -112,6 +116,10 @@ ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_provider text
 ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_loa_number text NULL;
 ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_card_number text NULL;
 ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_deduction numeric(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_status text NOT NULL DEFAULT 'Pending Verification';
+ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_reference text NULL;
+ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_verified_by text NULL;
+ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_verified_at timestamptz NULL;
 ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS loa_approved_amount numeric(12,2) NOT NULL DEFAULT 0;
 ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'Pending';
 ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS coverage_json jsonb NULL;
