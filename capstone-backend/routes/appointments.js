@@ -1227,6 +1227,7 @@ function buildJitsiUrl(roomId, displayName, options = {}) {
     const rawRoom = String(roomId || '').trim();
     const name = String(displayName || '').trim();
     const hash = [
+        'config.prejoinConfig.enabled=false',
         'config.prejoinPageEnabled=false',
         'config.disableInviteFunctions=true',
         'config.startWithAudioMuted=false',
@@ -1239,7 +1240,9 @@ function buildJitsiUrl(roomId, displayName, options = {}) {
     ].filter(Boolean).join('&');
 
     if (rawRoom.startsWith('http://') || rawRoom.startsWith('https://')) {
-        return `${rawRoom}#${hash}`;
+        // Mobile may persist a complete Jitsi URL that already has hash
+        // options. A second '#' makes every option after it inert.
+        return `${rawRoom}${rawRoom.includes('#') ? '&' : '#'}${hash}`;
     }
 
     const jaas = getJaasConfig();

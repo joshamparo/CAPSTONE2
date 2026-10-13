@@ -14,6 +14,10 @@ const patientSource = fs.readFileSync(
 );
 const videoConsultSource = fs.readFileSync(path.join(__dirname, '..', 'routes', 'videoConsults.js'), 'utf8');
 const approvalSource = fs.readFileSync(path.join(__dirname, '..', 'routes', 'approvalRequests.js'), 'utf8');
+const embeddedJitsiSource = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'frontend', 'src', 'components', 'EmbeddedJitsiMeeting.js'),
+  'utf8'
+);
 
 test('physical therapy video bookings are shared before start and private after claim', () => {
   assert.match(appointmentSource, /\{ meeting_started_at: null \}/);
@@ -28,6 +32,13 @@ test('provider and patient clients converge on the backend-owned video room', ()
   assert.match(patientSource, /\/video\/join/);
   assert.match(patientSource, /visibilityState === 'visible'[\s\S]{0,100}loadAppointments\(\{ silent: true \}\)[\s\S]{0,40}30000/);
   assert.doesNotMatch(patientSource, /makeRoomId|create.*meeting.*room/i);
+});
+
+test('provider start enters the shared room without stopping on Jitsi prejoin', () => {
+  assert.match(embeddedJitsiSource, /prejoinConfig:\s*\{ enabled: false \}/);
+  assert.match(embeddedJitsiSource, /prejoinPageEnabled:\s*false/);
+  assert.match(appointmentSource, /config\.prejoinConfig\.enabled=false/);
+  assert.match(appointmentSource, /rawRoom\.includes\('#'\) \? '&' : '#'/);
 });
 
 test('all web providers re-read the persisted room through join after start', () => {

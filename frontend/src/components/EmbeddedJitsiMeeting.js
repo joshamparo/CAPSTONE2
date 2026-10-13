@@ -81,6 +81,7 @@ export default function EmbeddedJitsiMeeting({ meetingUrl, title = 'Video Consul
           ...(meeting.jwt ? { jwt: meeting.jwt } : {}),
           userInfo: { displayName: meeting.displayName },
           configOverwrite: {
+            prejoinConfig: { enabled: false },
             prejoinPageEnabled: false,
             disableInviteFunctions: true,
             startWithAudioMuted: false,
