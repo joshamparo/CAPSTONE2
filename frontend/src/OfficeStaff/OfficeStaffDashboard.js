@@ -439,6 +439,7 @@ export default function OfficeStaffDashboard({ mode }) {
   const [hmoRefSearchLoading, setHmoRefSearchLoading] = useState(false);
 
   const [labOrders, setLabOrders] = useState([]);
+  const [labOrdersTotal, setLabOrdersTotal] = useState(0);
   const [labOrdersLoading, setLabOrdersLoading] = useState(false);
   const [labOrdersError, setLabOrdersError] = useState('');
   const [labOrdersRange, setLabOrdersRange] = useState('All');
@@ -576,23 +577,27 @@ export default function OfficeStaffDashboard({ mode }) {
     }
   };
 
-  const refreshLabOrders = useCallback(async () => {
+  const refreshLabOrders = useCallback(async (options = {}) => {
     if (!user || role !== 'cashier') return;
     setLabOrdersLoading(true);
     setLabOrdersError('');
     try {
       const params = new URLSearchParams();
       params.set('status', 'hmo_lab_queue');
-      params.set('take', '200');
+      params.set('take', String(options.take || (view === 'dashboard' ? 8 : 200)));
+      params.set('withTotal', '1');
       const data = await fetchJson(`/api/clinical-orders?${params.toString()}`, { apiBase: API_BASE, headers: buildHeaders(user) });
-      setLabOrders(Array.isArray(data) ? data : []);
+      const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
+      setLabOrders(items);
+      setLabOrdersTotal(Number(data?.totalCount ?? items.length) || 0);
     } catch (e) {
       setLabOrders([]);
+      setLabOrdersTotal(0);
       setLabOrdersError(`Clinical payments: ${String(e.message || 'Failed to load lab payments')}`);
     } finally {
       setLabOrdersLoading(false);
     }
-  }, [role, user]);
+  }, [role, user, view]);
 
   const refreshPaymentHistory = useCallback(async (options = {}) => {
     if (!user || role !== 'cashier') return;
@@ -1799,7 +1804,7 @@ export default function OfficeStaffDashboard({ mode }) {
               </div>
               <div className="office-kpi">
                 <div className="office-kpi-k">Clinical Payments Waiting</div>
-                <div className="office-kpi-v">{displayedLabOrders.length}</div>
+                <div className="office-kpi-v">{labOrdersTotal}</div>
                 <div className="office-kpi-meta">Pay-before-exam queue</div>
               </div>
             </div>

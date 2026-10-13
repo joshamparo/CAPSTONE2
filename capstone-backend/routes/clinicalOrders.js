@@ -385,12 +385,7 @@ router.get('/', async (req, res) => {
       }
     }
 
-    const rows = await prisma.clinical_orders.findMany({
-      where,
-      take: limit,
-      skip: offset,
-      orderBy: [{ scheduled_at: 'asc' }, { created_at: 'desc' }],
-      select: {
+    const orderSelect = {
         id: true,
         patient_id: true,
         patient_name: true,
@@ -412,8 +407,18 @@ router.get('/', async (req, res) => {
         patients: {
           select: { first_name: true, last_name: true }
         }
-      }
-    });
+    };
+    const wantsTotal = String(req.query.withTotal || '') === '1';
+    const [rows, totalCount] = await Promise.all([
+      prisma.clinical_orders.findMany({
+        where,
+        take: limit,
+        skip: offset,
+        orderBy: [{ scheduled_at: 'asc' }, { created_at: 'desc' }],
+        select: orderSelect
+      }),
+      wantsTotal ? prisma.clinical_orders.count({ where }) : Promise.resolve(null)
+    ]);
 
     const orderIdsForLookup = (Array.isArray(rows) ? rows : [])
       .map((r) => String(r.id || ''))
@@ -507,6 +512,9 @@ router.get('/', async (req, res) => {
       });
     });
 
+    if (wantsTotal) {
+      return res.json({ items: mapped, totalCount, take: limit, skip: offset });
+    }
     res.json(mapped);
   } catch (err) {
     const msg = String(err && err.message ? err.message : '');

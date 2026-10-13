@@ -44,4 +44,13 @@ test('cashier dashboard does not preload hidden payment and closeout queries', (
   assert.match(source, /if \(!\['payments', 'closeout'\]\.includes\(view\)\) return/);
   assert.match(source, /if \(!\['billing', 'lab-payments', 'closeout'\]\.includes\(view\)\) return/);
   assert.doesNotMatch(source, /\['dashboard', 'payments', 'closeout'\]/);
+  assert.match(source, /view === 'dashboard' \? 8 : 200/);
+  assert.match(source, /params\.set\('withTotal', '1'\)/);
+});
+
+test('clinical order list supports lightweight total-count responses', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'clinicalOrders.js'), 'utf8');
+  assert.match(source, /wantsTotal = String\(req\.query\.withTotal \|\| ''\) === '1'/);
+  assert.match(source, /clinical_orders\.count\(\{ where \}\)/);
+  assert.match(source, /return res\.json\(\{ items: mapped, totalCount, take: limit, skip: offset \}\)/);
 });
