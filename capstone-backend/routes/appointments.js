@@ -924,7 +924,9 @@ function inferSpecializationFromVideoReason(reason) {
     const cleaned = head.replace(/\(online\)/gi, '').trim();
     const low = cleaned.toLowerCase();
     if (low.includes('pedia') || low.includes('pedi')) return 'Pediatrics';
-    if (low.includes('physical therapy') || low === 'pt' || low.includes('physiotherapy')) return 'Physical Therapy';
+    if (low.includes('physical therapy') || low === 'pt' || low.includes('physiotherapy')
+        || low.includes('therapeutic exercise') || low.includes('manual therapy')
+        || low.includes('post-op rehabilitation') || low.includes('post op rehabilitation')) return 'Physical Therapy';
     if (low.includes('ob-gyn') || low.includes('obgyn') || low === 'ob') return 'OB-GYN';
     if (low.includes('cardio')) return 'Cardiology';
     if (low.includes('derma')) return 'Dermatology';
@@ -1446,7 +1448,10 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
                     OR: [
                         { reason: { contains: 'Physical Therapy', mode: 'insensitive' } },
                         { reason: { contains: 'Physiotherapy', mode: 'insensitive' } },
-                        { reason: { contains: 'Video Consultation - PT', mode: 'insensitive' } }
+                        { reason: { contains: 'Video Consultation - PT', mode: 'insensitive' } },
+                        { reason: { contains: 'Therapeutic Exercise', mode: 'insensitive' } },
+                        { reason: { contains: 'Manual Therapy', mode: 'insensitive' } },
+                        { reason: { contains: 'Post-Op Rehabilitation', mode: 'insensitive' } }
                     ]
                 },
                 {

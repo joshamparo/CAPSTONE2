@@ -295,6 +295,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const refreshVideoAppointments = async () => {
     if (!isPhysicalTherapist || videoRefreshInFlight.current) return;
     videoRefreshInFlight.current = true;
+    setVideoActionError('');
     setVideoAppointmentsLoading(true);
     setVideoAppointmentsError('');
     try {

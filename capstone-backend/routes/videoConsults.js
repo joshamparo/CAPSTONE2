@@ -152,7 +152,9 @@ function inferSpecializationFromServiceType(serviceType) {
 
   if (low.includes('pedi')) return 'Pediatrics';
   if (low.includes('pedia')) return 'Pediatrics';
-  if (low.includes('physical therapy') || low === 'pt' || low.includes('physiotherapy')) return 'Physical Therapy';
+  if (low.includes('physical therapy') || low === 'pt' || low.includes('physiotherapy')
+      || low.includes('therapeutic exercise') || low.includes('manual therapy')
+      || low.includes('post-op rehabilitation') || low.includes('post op rehabilitation')) return 'Physical Therapy';
   if (low.includes('ob') || low.includes('ob-gyn') || low.includes('obgyn')) return 'OB-GYN';
   if (low.includes('derma')) return 'Dermatology';
   if (low.includes('ophthalm') || low.includes('opthalm') || low.includes('optha')) return 'Ophthalmology';

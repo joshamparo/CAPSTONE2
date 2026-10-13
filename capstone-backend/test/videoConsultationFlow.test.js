@@ -12,6 +12,8 @@ const patientSource = fs.readFileSync(
   path.join(__dirname, '..', '..', 'frontend', 'src', 'Patient', 'PatientDashboard.js'),
   'utf8'
 );
+const videoConsultSource = fs.readFileSync(path.join(__dirname, '..', 'routes', 'videoConsults.js'), 'utf8');
+const approvalSource = fs.readFileSync(path.join(__dirname, '..', 'routes', 'approvalRequests.js'), 'utf8');
 
 test('physical therapy video bookings are shared before start and private after claim', () => {
   assert.match(appointmentSource, /\{ meeting_started_at: null \}/);
@@ -25,4 +27,12 @@ test('provider and patient clients converge on the backend-owned video room', ()
   assert.match(patientSource, /\/video\/join/);
   assert.match(patientSource, /setInterval\(\(\) => loadAppointments\(\{ silent: true \}\), 10000\)/);
   assert.doesNotMatch(patientSource, /makeRoomId|create.*meeting.*room/i);
+});
+
+test('mobile PT procedure names retain their Physical Therapy video routing', () => {
+  for (const procedure of ['therapeutic exercise', 'manual therapy', 'post-op rehabilitation']) {
+    assert.match(videoConsultSource.toLowerCase(), new RegExp(procedure));
+    assert.match(appointmentSource.toLowerCase(), new RegExp(procedure));
+    assert.match(approvalSource.toLowerCase(), new RegExp(procedure));
+  }
 });

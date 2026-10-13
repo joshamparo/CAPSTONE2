@@ -273,6 +273,17 @@ const ROLE_SERVICE_KEYS = {
   physical_therapist: ['physical therapy']
 };
 
+function isPhysicalTherapyRoutingText(value) {
+  const text = String(value || '').toLowerCase();
+  return text.includes('physical therapy')
+    || text.includes('physiotherapy')
+    || /(^|[^a-z])pt([^a-z]|$)/i.test(text)
+    || text.includes('therapeutic exercise')
+    || text.includes('manual therapy')
+    || text.includes('post-op rehabilitation')
+    || text.includes('post op rehabilitation');
+}
+
 function requestMatchesClinicalRole(requestRow, role) {
   const expected = ROLE_SERVICE_KEYS[role];
   if (!expected) return true;
@@ -288,7 +299,7 @@ function requestMatchesClinicalRole(requestRow, role) {
   if (role === 'medtech') return routingText.includes('laboratory') || /(^|\s)lab(\s|$)/.test(routingText);
   if (role === 'radiographer') return routingText.includes('radiology') || routingText.includes('x-ray') || routingText.includes('xray') || routingText.includes('imaging');
   if (role === 'ecg_operator') return /(^|\s)ecg(\s|$)/.test(routingText) || routingText.includes('electrocardio');
-  if (role === 'physical_therapist') return routingText.includes('physical therapy') || routingText.includes('physiotherapy') || /(^|\s)pt(\s|$)/.test(routingText);
+  if (role === 'physical_therapist') return isPhysicalTherapyRoutingText(routingText);
   return false;
 }
 
@@ -1051,6 +1062,10 @@ router.get('/inbox', async (req, res) => {
               ${routingExpr} LIKE '%physical therapy%'
               OR ${routingExpr} LIKE '%physiotherapy%'
               OR ${routingExpr} ~ '(^|[^a-z])pt([^a-z]|$)'
+              OR ${routingExpr} LIKE '%therapeutic exercise%'
+              OR ${routingExpr} LIKE '%manual therapy%'
+              OR ${routingExpr} LIKE '%post-op rehabilitation%'
+              OR ${routingExpr} LIKE '%post op rehabilitation%'
             )
         `;
       } else {
@@ -1679,9 +1694,7 @@ router.patch('/:id', async (req, res) => {
         requestRow.service_type,
         requestRow.reason
       ].map((value) => String(value || '').toLowerCase()).join(' ');
-      const isPhysicalTherapyRequest = routingText.includes('physical therapy')
-        || routingText.includes('physiotherapy')
-        || /(^|[^a-z])pt([^a-z]|$)/i.test(routingText);
+      const isPhysicalTherapyRequest = isPhysicalTherapyRoutingText(routingText);
       if (!isPhysicalTherapyRequest) {
         return res.status(403).json({ message: 'This request is not assigned to Physical Therapy.' });
       }
