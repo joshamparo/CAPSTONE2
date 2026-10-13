@@ -737,7 +737,7 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
     // Establish the appointment-owned room once. The mobile app can load this
     // value immediately after approval, so rotating it on a repeated approval
     // would strand the patient in a different Jitsi conference from the provider.
-    const approvalRoomId = `apt-${String(appt.id)}`;
+    const approvalRoomId = `apt-${String(appt.id)}-${crypto.randomBytes(5).toString('base64url')}`;
     await prisma.appointments.updateMany({
       where: {
         id: BigInt(appt.id),
