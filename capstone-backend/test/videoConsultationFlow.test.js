@@ -58,3 +58,9 @@ test('duplicate app and web appointment IDs resolve through the same payment ref
   assert.match(appointmentSource, /async function resolveCanonicalVideoAppointment/);
   assert.ok(appointmentSource.split('apt = await resolveCanonicalVideoAppointment(apt);').length - 1 >= 2);
 });
+
+test('an appointment video room is assigned once and never rotated at call start', () => {
+  assert.match(approvalSource, /meeting_room_id:\s*null/);
+  assert.match(appointmentSource, /if \(!currentRoomId\) \{/);
+  assert.doesNotMatch(appointmentSource, /roomNeedsUpgrade/);
+});

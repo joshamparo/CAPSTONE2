@@ -2766,16 +2766,14 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
 
         const existingRoomExpired = apt.meeting_expires_at && new Date(apt.meeting_expires_at).getTime() <= Date.now();
         const currentRoomId = String(apt.meeting_room_id || '').trim();
-        const roomNeedsUpgrade = currentRoomId.toLowerCase().startsWith('pascualinga-')
-            || /^apt-\d+$/i.test(currentRoomId);
-        if (!currentRoomId || roomNeedsUpgrade) {
+        if (!currentRoomId) {
             // Persist one appointment-owned room before returning it. Both doctor
             // and patient subsequently resolve this same room through this API.
             const roomId = makeRoomId(resolvedAppointmentIdRaw);
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-            // Compare-and-set the room against the value this request read.
-            // If two Start requests race, only the first may replace it; the
+            // Compare-and-set the empty room against the value this request read.
+            // If two Start requests race, only the first may create it; the
             // loser reloads and returns the exact room chosen by the winner.
             const claimedRows = await prisma.$queryRaw`
                 UPDATE appointments

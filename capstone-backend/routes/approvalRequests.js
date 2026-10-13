@@ -734,14 +734,15 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   }
 
   if (consultationMode === 'video') {
-    // Establish a fresh appointment-owned room before the approved appointment
-    // becomes visible to the patient. Reset lifecycle fields as legacy/reused
-    // appointment rows can retain an expired or ended call; leaving those values
-    // behind would make the web start endpoint rotate the room after the app had
-    // already loaded it.
+    // Establish the appointment-owned room once. The mobile app can load this
+    // value immediately after approval, so rotating it on a repeated approval
+    // would strand the patient in a different Jitsi conference from the provider.
     const approvalRoomId = `apt-${String(appt.id)}-${crypto.randomBytes(5).toString('base64url')}`;
-    await prisma.appointments.update({
-      where: { id: BigInt(appt.id) },
+    await prisma.appointments.updateMany({
+      where: {
+        id: BigInt(appt.id),
+        meeting_room_id: null
+      },
       data: {
         meeting_room_id: approvalRoomId,
         meeting_created_at: new Date(),
