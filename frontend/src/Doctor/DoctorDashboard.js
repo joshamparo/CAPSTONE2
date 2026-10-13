@@ -95,7 +95,9 @@ function DoctorDashboard() {
       setBackendHealth({ checked: true, ok: r.ok, error: r.ok ? '' : (r.error || 'Backend offline') });
     };
     run();
-    const t = setInterval(run, 15000);
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') run();
+    }, 60000);
     return () => {
       cancelled = true;
       clearInterval(t);
@@ -2087,7 +2089,9 @@ function DoctorDashboard() {
 
   useEffect(() => {
     if (activeNav !== 'approval-inbox') return undefined;
-    const timer = setInterval(() => fetchApprovalInbox(), 15000);
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchApprovalInbox();
+    }, 30000);
     return () => clearInterval(timer);
   }, [activeNav, doctorInboxName, currentDoctorUuid]);
 
@@ -2099,7 +2103,10 @@ function DoctorDashboard() {
   useEffect(() => {
     if (activeNav !== 'doctor-chat') return;
     loadDoctorChatMessages();
-    const timer = setInterval(() => loadDoctorChatMessages({ silent: true }), 5000);
+    // Realtime delivers new chat rows; this slower poll is recovery only.
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') loadDoctorChatMessages({ silent: true });
+    }, 30000);
     return () => clearInterval(timer);
   }, [activeNav, doctorChatSpecialty, doctorChatActiveTab, doctorChatUnifiedInboxFilters]);
 

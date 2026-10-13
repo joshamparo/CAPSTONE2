@@ -3291,13 +3291,15 @@ function NurseDashboard() {
       }
     };
 
-    // Poll every 10 seconds
-    const interval = setInterval(fetchAnnouncements, 10000);
+    // Notifications are not clinical telemetry; avoid hammering a Nano DB.
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchAnnouncements();
+    }, 60000);
     fetchAnnouncements(); // Initial fetch
 
     const verifyInterval = setInterval(() => {
-        pollMyLabResultVerifications();
-    }, 15000);
+        if (document.visibilityState === 'visible') pollMyLabResultVerifications();
+    }, 30000);
     pollMyLabResultVerifications();
 
     // Poll for Appointments & Approvals
@@ -5115,7 +5117,7 @@ function NurseDashboard() {
     };
 
     fetchStats();
-    const interval = setInterval(fetchStats, 5000); // Poll every 5s for real-time updates
+    const interval = setInterval(fetchStats, 30000);
     return () => clearInterval(interval);
   }, [API_BASE]);
 

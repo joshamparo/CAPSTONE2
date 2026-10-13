@@ -257,10 +257,11 @@ function AppShell() {
       if (cancelled) return;
       runSystemHealthCheck(mark);
     }, 250);
-    // Poll every 15 seconds
+    // Health is advisory and shared by every dashboard tab. Keep it light on
+    // the small database tier; online events and manual actions still retry.
     const intv = setInterval(() => {
       runSystemHealthCheck({ current: 0 });
-    }, 15000);
+    }, 60000);
     const onLine = () => runSystemHealthCheck({ current: 0 });
     try { window.addEventListener('online', onLine); } catch (_) {}
     return () => {

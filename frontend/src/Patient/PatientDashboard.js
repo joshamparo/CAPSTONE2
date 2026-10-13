@@ -75,7 +75,9 @@ function PatientDashboard() {
       setBackendHealth({ checked: true, ok: r.ok, error: r.ok ? '' : (r.error || 'Backend offline') });
     };
     run();
-    const t = setInterval(run, 15000);
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') run();
+    }, 60000);
     return () => {
       cancelled = true;
       clearInterval(t);
@@ -509,7 +511,9 @@ function PatientDashboard() {
       }
     };
     loadAppointments();
-    const timer = setInterval(() => loadAppointments({ silent: true }), 10000);
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') loadAppointments({ silent: true });
+    }, 30000);
     const onVisible = () => {
       if (document.visibilityState === 'visible') loadAppointments({ silent: true });
     };

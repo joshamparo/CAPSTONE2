@@ -96,7 +96,9 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     };
 
     ping();
-    const t = setInterval(ping, 20000);
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') ping();
+    }, 60000);
     return () => {
       stopped = true;
       clearInterval(t);

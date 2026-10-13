@@ -26,7 +26,7 @@ test('provider and patient clients converge on the backend-owned video room', ()
   assert.match(clinicalStaffSource, /\/video\/start/);
   assert.match(clinicalStaffSource, /\/video\/join/);
   assert.match(patientSource, /\/video\/join/);
-  assert.match(patientSource, /setInterval\(\(\) => loadAppointments\(\{ silent: true \}\), 10000\)/);
+  assert.match(patientSource, /visibilityState === 'visible'[\s\S]{0,100}loadAppointments\(\{ silent: true \}\)[\s\S]{0,40}30000/);
   assert.doesNotMatch(patientSource, /makeRoomId|create.*meeting.*room/i);
 });
 
