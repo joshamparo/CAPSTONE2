@@ -120,13 +120,13 @@ test('approval does not race the patient app with a competing random room', () =
   assert.doesNotMatch(appointmentSource, /roomNeedsUpgrade/);
 });
 
-test('provider start signals mobile and waits for its canonical room', () => {
-  assert.doesNotMatch(appointmentSource, /const generatedRoomId = makeRoomId\(resolvedAppointmentIdRaw\)/);
-  assert.doesNotMatch(appointmentSource, /meeting_room_id = COALESCE\(meeting_room_id, \$\{generatedRoomId\}\)/);
+test('provider start immediately publishes a mobile-compatible canonical URL', () => {
+  assert.match(appointmentSource, /const generatedRoomUrl = `https:\/\/meet\.jit\.si\/\$\{makeRoomId\(resolvedAppointmentIdRaw\)\}`/);
+  assert.match(appointmentSource, /meeting_room_id = COALESCE\(meeting_room_id, \$\{generatedRoomUrl\}\)/);
+  assert.match(appointmentSource, /meeting_created_at = COALESCE\(meeting_created_at, \$\{now\}\)/);
   assert.match(appointmentSource, /meeting_started_at = COALESCE\(meeting_started_at/);
   assert.doesNotMatch(appointmentSource, /waitForPersistedVideoRoom/);
-  assert.match(appointmentSource, /status\(202\)\.json\(\{[\s\S]{0,160}pending: true/);
-  assert.match(appointmentSource, /patient app is preparing it/);
+  assert.doesNotMatch(appointmentSource, /status\(202\)\.json\(\{[\s\S]{0,160}pending: true/);
   for (const source of [clinicalStaffSource, fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'src', 'Doctor', 'DoctorDashboard.js'), 'utf8')]) {
     assert.match(source, /joinDeadline = Date\.now\(\) \+ 90000/);
     assert.match(source, /setTimeout\(resolve, 750\)/);

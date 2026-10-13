@@ -2783,15 +2783,17 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         const existingRoomExpired = apt.meeting_expires_at && new Date(apt.meeting_expires_at).getTime() <= Date.now();
         const currentRoomId = String(apt.meeting_room_id || '').trim();
         if (!currentRoomId) {
-            // The installed mobile client is the canonical room producer. It
-            // creates and persists the room after observing meeting_started_at.
-            // Do not generate a second provider-side room here: doing so races
-            // mobile and can strand the two participants in different rooms.
+            // Publish the same complete meet.jit.si URL shape used by mobile.
+            // A bare room id is treated as incomplete by the installed app and
+            // causes it to replace the provider room with a new random room.
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+            const generatedRoomUrl = `https://meet.jit.si/${makeRoomId(resolvedAppointmentIdRaw)}`;
             const startedRows = await prisma.$queryRaw`
                 UPDATE appointments
-                SET meeting_started_at = COALESCE(meeting_started_at, ${now}),
+                SET meeting_room_id = COALESCE(meeting_room_id, ${generatedRoomUrl}),
+                    meeting_created_at = COALESCE(meeting_created_at, ${now}),
+                    meeting_started_at = COALESCE(meeting_started_at, ${now}),
                     meeting_ended_at = NULL,
                     meeting_expires_at = ${expiresAt},
                     doctor_uuid = CASE WHEN ${isPhysicalTherapyQueue} THEN ${String(req.auth?.id || '')}::uuid ELSE doctor_uuid END,
@@ -2807,18 +2809,8 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             if (isPhysicalTherapyQueue && String(started?.doctor_uuid || '') !== String(req.auth?.id || '')) {
                 return res.status(409).json({ message: 'Another physical therapist has already started this consultation.' });
             }
-            // A concurrent mobile write may already have supplied the room by
-            // the time UPDATE returns. If not, tell the provider to keep polling
-            // the canonical join endpoint instead of opening a local fallback.
             if (!started?.meeting_room_id) {
-                await logAppointmentActivity(req, resolvedAppointmentIdRaw, 'Video Call Started', 'Doctor started the video consultation; waiting for the patient app room.');
-                return res.status(202).json({
-                    pending: true,
-                    roomId: null,
-                    canonicalRoomId: null,
-                    startedAt: started?.meeting_started_at || now,
-                    message: 'Video room is being prepared by the patient app.'
-                });
+                return res.status(409).json({ message: 'Unable to publish the video room. Please try again.' });
             }
             const url = buildJitsiUrl(started.meeting_room_id, doctorName, {
                 moderator: true,
