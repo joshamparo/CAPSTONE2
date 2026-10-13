@@ -36,3 +36,12 @@ test('header fallback polling pauses in hidden tabs and uses a one-minute cadenc
   assert.match(source, /fetchNotifications[\s\S]{0,120}, 60000\)/);
   assert.match(source, /visibilityState === 'visible'[\s\S]{0,120}fetchAnnouncementToast/);
 });
+
+test('cashier dashboard does not preload hidden payment and closeout queries', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'src', 'OfficeStaff', 'OfficeStaffDashboard.js'), 'utf8');
+  assert.match(source, /if \(view === 'dashboard'\) refreshDashboardKpis\(\)/);
+  assert.match(source, /if \(view === 'billing'\) refreshInvoices\(\)/);
+  assert.match(source, /if \(!\['payments', 'closeout'\]\.includes\(view\)\) return/);
+  assert.match(source, /if \(!\['billing', 'lab-payments', 'closeout'\]\.includes\(view\)\) return/);
+  assert.doesNotMatch(source, /\['dashboard', 'payments', 'closeout'\]/);
+});

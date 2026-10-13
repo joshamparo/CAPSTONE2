@@ -534,7 +534,7 @@ export default function OfficeStaffDashboard({ mode }) {
       setInvoicePage(requestedPage);
     } catch (e) {
       setInvoices([]);
-      setInvoiceError(String(e.message || 'Failed to load invoices'));
+      setInvoiceError(`Invoices: ${String(e.message || 'Failed to load invoices')}`);
     } finally {
       setInvoiceLoading(false);
     }
@@ -542,6 +542,7 @@ export default function OfficeStaffDashboard({ mode }) {
 
   const refreshDashboardKpis = async () => {
     if (!user || role !== 'cashier') return;
+    setInvoiceError('');
     try {
       const data = await fetchJson(`/api/billing/invoices/summary?date=${encodeURIComponent(toLocalDateInputValue())}`, {
         apiBase: API_BASE,
@@ -549,7 +550,7 @@ export default function OfficeStaffDashboard({ mode }) {
       });
       setInvoiceSummary(data && typeof data === 'object' ? data : null);
     } catch (e) {
-      setInvoiceError(String(e?.message || 'Failed to load invoice summary'));
+      setInvoiceError(`Dashboard summary: ${String(e?.message || 'Failed to load invoice summary')}`);
     }
   };
 
@@ -587,7 +588,7 @@ export default function OfficeStaffDashboard({ mode }) {
       setLabOrders(Array.isArray(data) ? data : []);
     } catch (e) {
       setLabOrders([]);
-      setLabOrdersError(String(e.message || 'Failed to load lab payments'));
+      setLabOrdersError(`Clinical payments: ${String(e.message || 'Failed to load lab payments')}`);
     } finally {
       setLabOrdersLoading(false);
     }
@@ -617,7 +618,7 @@ export default function OfficeStaffDashboard({ mode }) {
       setPaymentsPage(requestedPage);
     } catch (e) {
       setPaymentHistory([]);
-      setPaymentHistoryError(String(e.message || 'Failed to load payment history'));
+      setPaymentHistoryError(`Payment history: ${String(e.message || 'Failed to load payment history')}`);
     } finally {
       setPaymentHistoryLoading(false);
     }
@@ -1425,9 +1426,13 @@ export default function OfficeStaffDashboard({ mode }) {
 
   useEffect(() => {
     if (!user) return;
+    if (role === 'cashier') {
+      if (view === 'dashboard') refreshDashboardKpis();
+      if (view === 'billing') refreshInvoices();
+      return;
+    }
     refreshInvoices();
-    if (role === 'cashier') refreshDashboardKpis();
-  }, [user]);
+  }, [role, user, view]);
 
   useEffect(() => {
     if (!user || role !== 'cashier') return;
@@ -1437,14 +1442,14 @@ export default function OfficeStaffDashboard({ mode }) {
 
   useEffect(() => {
     if (!user || role !== 'cashier') return;
-    if (!['dashboard', 'payments', 'closeout'].includes(view)) return;
+    if (!['payments', 'closeout'].includes(view)) return;
     refreshPaymentHistory();
   }, [refreshPaymentHistory, role, user, view]);
 
   useEffect(() => {
     if (!user) return;
     if (role !== 'cashier') return;
-    if (!['dashboard', 'billing', 'lab-payments', 'closeout'].includes(view)) return;
+    if (!['billing', 'lab-payments', 'closeout'].includes(view)) return;
     fetchCloseout({ date: closeoutDate });
   }, [closeoutDate, role, user, view]);
 
@@ -1760,6 +1765,8 @@ export default function OfficeStaffDashboard({ mode }) {
                       await refreshLabOrders();
                     } else if (view === 'appointments') {
                       await refreshAppointments();
+                    } else if (view === 'dashboard' && role === 'cashier') {
+                      await Promise.all([refreshDashboardKpis(), refreshLabOrders()]);
                     } else {
                       await Promise.all([refreshInvoices(), refreshDashboardKpis()]);
                     }
@@ -1797,17 +1804,15 @@ export default function OfficeStaffDashboard({ mode }) {
               </div>
             </div>
 
-            {role === 'cashier' && (invoiceError || labOrdersError || paymentHistoryError) ? (
+            {role === 'cashier' && (invoiceError || labOrdersError) ? (
               <div className="admin-alert error" style={{ marginTop: 16 }}>
-                <span>{invoiceError || labOrdersError || paymentHistoryError}</span>
+                <span>{invoiceError || labOrdersError}</span>
                 <button
                   type="button"
                   className="office-btn ghost"
                   onClick={() => Promise.all([
-                    refreshInvoices(),
                     refreshDashboardKpis(),
-                    refreshLabOrders(),
-                    refreshPaymentHistory()
+                    refreshLabOrders()
                   ])}
                 >
                   Retry loading data
