@@ -451,6 +451,8 @@ export default function OfficeStaffDashboard({ mode }) {
   const [labPaymentReference, setLabPaymentReference] = useState('');
   const [labPaymentLoading, setLabPaymentLoading] = useState(false);
   const [labPaymentError, setLabPaymentError] = useState('');
+  const [philhealthQuickEdit, setPhilhealthQuickEdit] = useState(null);
+  const [philhealthQuickSaving, setPhilhealthQuickSaving] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [paymentHistoryTotal, setPaymentHistoryTotal] = useState(0);
   const [paymentHistoryCollected, setPaymentHistoryCollected] = useState(0);
@@ -653,6 +655,11 @@ export default function OfficeStaffDashboard({ mode }) {
   }, []);
 
   const openLabOrderPos = useCallback(async (order) => {
+    const ph = order?.philhealthIndicators && typeof order.philhealthIndicators === 'object' ? order.philhealthIndicators : {};
+    if (ph.hasPhilhealth && String(ph.status || 'Pending Verification') === 'Pending Verification') {
+      setPhilhealthQuickEdit({ order, status: 'Pending Verification', reference: String(ph.referenceNumber || ''), amount: String(ph.approvedAmount || '') });
+      return;
+    }
     const isPaid = String(order?.status || '').trim().toLowerCase() === 'paid';
     const due = isPaid ? 0 : Number(order?.patientPayable ?? order?.amountDue ?? order?.unitPrice ?? 0);
     setSelectedLabOrder(order || null);
@@ -936,6 +943,7 @@ export default function OfficeStaffDashboard({ mode }) {
     const hasAnything = Boolean(
       providerRaw || loaNumberRaw || cardNumberRaw || notesRaw ||
       philhealth > 0 || loaApproved > 0 ||
+      philhealthReferenceRaw || philhealthStatusRaw !== 'Pending Verification' ||
       (statusRaw && statusRaw !== 'Pending')
     );
     if (!hasAnything) return Promise.resolve(null);
@@ -2631,6 +2639,17 @@ export default function OfficeStaffDashboard({ mode }) {
                   <RefreshCw size={16} />
                   Refresh
                 </button>
+                {pagedLabOrders.totalCount > 0 ? (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+                    <button type="button" className="office-btn ghost" aria-label="Previous page" disabled={pagedLabOrders.currentPage <= 1 || labOrdersLoading} onClick={() => setLabPage((page) => Math.max(1, page - 1))}>
+                      <ChevronLeft size={18} />
+                    </button>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#475569' }}>{pagedLabOrders.currentPage} / {pagedLabOrders.totalPages}</span>
+                    <button type="button" className="office-btn ghost" aria-label="Next page" disabled={pagedLabOrders.currentPage >= pagedLabOrders.totalPages || labOrdersLoading} onClick={() => setLabPage((page) => Math.min(pagedLabOrders.totalPages, page + 1))}>
+                      <ChevronRight size={18} />
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -2671,6 +2690,8 @@ export default function OfficeStaffDashboard({ mode }) {
                       const servicePrice = Number(o.configuredUnitPrice ?? o.unitPrice ?? o.amountDue ?? 0);
                       const rowPatientDue = paymentStatus.patientPayable;
                       const hmo = o.hmoIndicators && typeof o.hmoIndicators === 'object' ? o.hmoIndicators : {};
+                      const ph = o.philhealthIndicators && typeof o.philhealthIndicators === 'object' ? o.philhealthIndicators : {};
+                      const phPending = Boolean(ph.hasPhilhealth) && String(ph.status || 'Pending Verification') === 'Pending Verification';
                       const phNow = Number(o.philhealthApplied || 0);
                       const hmoNow = Number(o.hmoCoverageApplied || 0);
                       return (
@@ -2717,7 +2738,7 @@ export default function OfficeStaffDashboard({ mode }) {
                           ₱ {toMoney(servicePrice)}
                         </td>
                         <td className="text-sm" style={{ color: phNow > 0 ? '#0f172a' : '#94a3b8', textAlign: 'right', fontWeight: 600 }}>
-                          {phNow > 0 ? `₱ ${toMoney(phNow)}` : '—'}
+                          {phNow > 0 ? `₱ ${toMoney(phNow)}` : (phPending ? 'Pending verification' : '—')}
                         </td>
                         <td className="text-sm" style={{ color: hmoNow > 0 ? '#15803d' : '#94a3b8', textAlign: 'right', fontWeight: 700 }}>
                           {hmoNow > 0 ? `₱ ${toMoney(hmoNow)}` : '—'}
@@ -2730,6 +2751,8 @@ export default function OfficeStaffDashboard({ mode }) {
                             <span className={`status-badge-table status-duty`} style={{ fontWeight: 900, background: '#e2e8f0', color: '#0f172a', border: '1px solid #cbd5e1' }}>
                               {paymentStatus.statusLabel}
                             </span>
+                          ) : phPending ? (
+                            <span className="status-badge-table status-upcoming">PH Pending</span>
                           ) : (
                             <span className={`status-badge-table ${
                               paymentStatus.requiresHmoSettlement ? 'status-duty' :
@@ -2772,7 +2795,7 @@ export default function OfficeStaffDashboard({ mode }) {
                               className="office-btn ghost"
                               onClick={() => openLabOrderPos(o)}
                             >
-                              {paymentStatus.requiresHmoSettlement ? 'Settle HMO' : 'Record Payment'}
+                              {phPending ? 'Verify PhilHealth' : (paymentStatus.requiresHmoSettlement ? 'Settle HMO' : 'Record Payment')}
                             </button>
                           )}
                         </td>
@@ -2787,7 +2810,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 12px', borderRadius: 9, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', fontSize: '0.8rem', fontWeight: 700 }}>
                   Showing {pagedLabOrders.totalCount === 0 ? 0 : pagedLabOrders.startIndex + 1}–{Math.min(pagedLabOrders.endIndex, pagedLabOrders.totalCount)} of {pagedLabOrders.totalCount}
                 </div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'none', alignItems: 'center', gap: 8 }}>
                   <button
                     type="button"
                     aria-label="Previous page"
@@ -4036,6 +4059,69 @@ export default function OfficeStaffDashboard({ mode }) {
                 }}
               >
                 {hmoQuickSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {philhealthQuickEdit ? (
+        <div className="office-modal-overlay" onClick={() => !philhealthQuickSaving && setPhilhealthQuickEdit(null)}>
+          <div className="office-modal" style={{ maxWidth: 540 }} onClick={(e) => e.stopPropagation()}>
+            <div className="office-modal-head">
+              <div className="office-modal-title">Verify PhilHealth • Order #{String(philhealthQuickEdit.order?.id || '')}</div>
+              <button type="button" className="office-btn ghost" disabled={philhealthQuickSaving} onClick={() => setPhilhealthQuickEdit(null)}>Close</button>
+            </div>
+            <div className="office-modal-body" style={{ display: 'grid', gap: 14 }}>
+              <div className="admin-alert" style={{ margin: 0 }}>
+                Verify the benefit from the authorized PhilHealth assessment before applying it. Pending benefits do not reduce the patient balance.
+              </div>
+              {philhealthQuickEdit.error ? <div className="admin-alert error" style={{ margin: 0 }}>{philhealthQuickEdit.error}</div> : null}
+              <label className="office-hmo-field-label-pro">Verification status</label>
+              <select className="office-select" style={{ width: '100%' }} value={philhealthQuickEdit.status} onChange={(e) => setPhilhealthQuickEdit({ ...philhealthQuickEdit, status: e.target.value })}>
+                <option value="Pending Verification">Pending Verification</option>
+                <option value="Approved">Verified &amp; Approved</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+              <label className="office-hmo-field-label-pro">PhilHealth reference number</label>
+              <input className="office-input" style={{ width: '100%' }} value={philhealthQuickEdit.reference} onChange={(e) => setPhilhealthQuickEdit({ ...philhealthQuickEdit, reference: e.target.value })} placeholder="Required when approved" />
+              <label className="office-hmo-field-label-pro">Approved benefit</label>
+              <input className="office-input" style={{ width: '100%' }} type="number" min="0" step="0.01" value={philhealthQuickEdit.amount} onChange={(e) => setPhilhealthQuickEdit({ ...philhealthQuickEdit, amount: e.target.value })} placeholder="0.00" />
+            </div>
+            <div className="office-modal-actions">
+              <button type="button" className="office-btn ghost" disabled={philhealthQuickSaving} onClick={() => setPhilhealthQuickEdit(null)}>Cancel</button>
+              <button
+                type="button"
+                className="office-btn primary"
+                disabled={philhealthQuickSaving || !philhealthQuickEdit.order?.invoiceId}
+                onClick={async () => {
+                  const order = philhealthQuickEdit.order || {};
+                  const phStatus = String(philhealthQuickEdit.status || 'Pending Verification');
+                  const phReference = String(philhealthQuickEdit.reference || '').trim();
+                  const phAmount = Number(philhealthQuickEdit.amount || 0);
+                  if (phStatus === 'Approved' && (!phReference || !Number.isFinite(phAmount) || phAmount <= 0)) {
+                    setPhilhealthQuickEdit({ ...philhealthQuickEdit, error: 'Approved PhilHealth benefits require a reference number and an amount greater than zero.' });
+                    return;
+                  }
+                  setPhilhealthQuickSaving(true);
+                  setLabOrdersError('');
+                  try {
+                    const hmo = order.hmoIndicators || {};
+                    await saveHmoClaim(order.invoiceId, {
+                      provider: hmo.provider || '', loaNumber: hmo.loaNumber || '', hmoCardNumber: hmo.cardNumber || '',
+                      status: hmo.status || 'Pending', loaApprovedAmount: Number(hmo.approvedAmount || 0),
+                      philhealthStatus: phStatus, philhealthReference: phReference, philhealthDeduction: phAmount
+                    });
+                    setPhilhealthQuickEdit(null);
+                    await refreshLabOrders();
+                  } catch (error) {
+                    setPhilhealthQuickEdit((current) => current ? { ...current, error: String(error?.message || 'Unable to update the PhilHealth verification.') } : current);
+                  } finally {
+                    setPhilhealthQuickSaving(false);
+                  }
+                }}
+              >
+                {philhealthQuickSaving ? 'Saving…' : 'Save Verification'}
               </button>
             </div>
           </div>

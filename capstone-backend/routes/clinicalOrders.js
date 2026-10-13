@@ -12,6 +12,7 @@ const requireNurseDepartment = require('../middleware/requireNurseDepartment');
 const requireIdempotency = require('../middleware/requireIdempotency');
 const { resolveDoctorNurseDepartment, resolveNursePatientScope } = require('../utils/nurseScope');
 const { approvalRequestIdFromOrderNotes } = require('../utils/onsiteDiagnosticPayment');
+const { summarizePhilhealthClaim } = require('../utils/philhealthClaim');
 
 
 const SCHEDULABLE_ROLE_SET = new Set(['medtech', 'radiographer', 'ecg_operator', 'physical_therapist']);
@@ -234,10 +235,11 @@ function enrichClinicalOrder(order) {
   const hmoProvider = h && String(h.hmo_provider || '').trim();
   const hmoLoa = h && String(h.hmo_loa_number || '').trim();
   const hmoCard = h && String(h.hmo_card_number || '').trim();
-  const phDed = h ? Math.max(0, Number(h.philhealth_deduction || 0)) : 0;
+  const philhealthClaim = summarizePhilhealthClaim(h || {}, realTotal);
+  const phDed = philhealthClaim.applied_amount;
   const hmoLoaAmt = h ? Math.max(0, Number(h.loa_approved_amount || 0)) : 0;
   const hmoClaimStatus = h ? String(h.status || '') : '';
-  const hmoApplied = !!(hmoProvider || hmoLoa || hmoCard || (phDed + hmoLoaAmt > 0));
+  const hmoApplied = !!(hmoProvider || hmoLoa || hmoCard || hmoLoaAmt > 0);
   const hmoStatusApplied = ['approved', 'partially approved', 'paid'].includes(String(hmoClaimStatus || '').trim().toLowerCase());
   const maxAfterPh = Math.max(0, realTotal - phDed);
   const realHmoCovered = hmoStatusApplied && hmoApplied ? Math.min(maxAfterPh, hmoLoaAmt) : 0;
@@ -257,7 +259,16 @@ function enrichClinicalOrder(order) {
     configuredUnitPrice: realTotal,
     patientPayable: Math.max(0, patientPayable),
     originalTotal: realTotal,
+    invoiceId: row.linkedInvoiceId || null,
     philhealthApplied: phDed,
+    philhealthIndicators: {
+      hasPhilhealth: Boolean(row.hasPhilhealth || h?.philhealth_reference || Number(h?.philhealth_deduction || 0) > 0),
+      status: philhealthClaim.status,
+      referenceNumber: philhealthClaim.reference_number,
+      approvedAmount: philhealthClaim.approved_amount,
+      appliedAmount: philhealthClaim.applied_amount,
+      invoiceId: row.linkedInvoiceId || null
+    },
     hmoCoverageApplied: realHmoCovered,
     hmoIndicators: {
       isHmoPrePaid,
@@ -265,7 +276,8 @@ function enrichClinicalOrder(order) {
       provider: hmoProvider || '',
       loaNumber: hmoLoa || '',
       cardNumber: hmoCard || '',
-      status: hmoApplied ? hmoClaimStatus : ''
+      status: hmoApplied ? hmoClaimStatus : '',
+      approvedAmount: hmoLoaAmt
     }
   };
 }
@@ -411,7 +423,12 @@ router.get('/', async (req, res) => {
         const placeholders = orderIdsForLookup.map((_, i) => `$${i + 1}`).join(',');
         const params = orderIdsForLookup.map((id) => BigInt(id));
         const invRows = await prisma.$queryRawUnsafe(
-          `SELECT id::text AS invoice_id, notes, total_amount, status, patient_id::text AS patient_id
+          `SELECT id::text AS invoice_id, notes, total_amount, status, patient_id::text AS patient_id,
+                  EXISTS (
+                    SELECT 1 FROM public.patients p
+                    WHERE p.id = billing_invoices.patient_id
+                      AND regexp_replace(COALESCE(p.philhealth_number, ''), '[^0-9]', '', 'g') ~ '^[0-9]{12}$'
+                  ) AS has_philhealth
            FROM public.billing_invoices
            WHERE EXISTS (
              SELECT 1 FROM (VALUES ${placeholders
@@ -437,7 +454,9 @@ router.get('/', async (req, res) => {
           const claimPlaceholders = invoiceIds.map((_, i) => `$${i + 1}`).join(',');
           const claimParams = invoiceIds.map((id) => BigInt(id));
           const claimRows = await prisma.$queryRawUnsafe(
-            `SELECT invoice_id::text AS invoice_id, hmo_provider, hmo_loa_number, hmo_card_number, philhealth_deduction, loa_approved_amount, status
+            `SELECT invoice_id::text AS invoice_id, hmo_provider, hmo_loa_number, hmo_card_number, philhealth_deduction,
+                    philhealth_status, philhealth_reference, philhealth_verified_by, philhealth_verified_at,
+                    loa_approved_amount, status
              FROM public.billing_hmo_claims
              WHERE invoice_id IN (${claimPlaceholders})`,
             ...claimParams
@@ -478,6 +497,7 @@ router.get('/', async (req, res) => {
         linkedInvoiceId: inv?.invoice_id ? String(inv.invoice_id) : null,
         linkedInvoiceStatus: inv?.status || null,
         linkedInvoiceTotal: inv?.total_amount != null ? Number(inv.total_amount || 0) : null,
+        hasPhilhealth: Boolean(inv?.has_philhealth),
         linkedHmoClaim: hmoClaimSummary || null
       });
     });
@@ -968,8 +988,10 @@ router.patch('/:id', async (req, res) => {
           const marker = `%Clinical Order #${orderIdBigInt}%`;
           const legacyMarker = `%Lab Order #${orderIdBigInt}%`;
           const invLookup = await prisma.$queryRawUnsafe(
-            `SELECT i.id::text AS inv_id, c.philhealth_deduction, c.loa_approved_amount, c.hmo_provider, c.hmo_loa_number, c.status AS claim_status
+            `SELECT i.id::text AS inv_id, p.philhealth_number, c.philhealth_deduction, c.philhealth_status, c.philhealth_reference,
+                    c.loa_approved_amount, c.hmo_provider, c.hmo_loa_number, c.status AS claim_status
              FROM public.billing_invoices i
+             LEFT JOIN public.patients p ON p.id = i.patient_id
              LEFT JOIN public.billing_hmo_claims c ON c.invoice_id = i.id
              WHERE i.notes ILIKE $1 OR i.notes ILIKE $2 LIMIT 1`,
             marker,
@@ -977,7 +999,12 @@ router.patch('/:id', async (req, res) => {
           ).catch(() => []);
           const f = Array.isArray(invLookup) && invLookup.length ? invLookup[0] : null;
           if (f) {
-            hmoPh = Math.max(0, Number(f.philhealth_deduction || 0));
+            const hasPhilhealth = /^\d{12}$/.test(String(f.philhealth_number || '').replace(/\D/g, ''));
+            const philhealthSummary = summarizePhilhealthClaim(f, Number(pricing.unitPrice || 0));
+            if (hasPhilhealth && philhealthSummary.status === 'Pending Verification') {
+              return res.status(409).json({ message: 'PhilHealth verification is still pending. Verify or reject the benefit before collecting payment.' });
+            }
+            hmoPh = philhealthSummary.applied_amount;
             hmoLoaAmt = Math.max(0, Number(f.loa_approved_amount || 0));
             const status = String(f.claim_status || '').toLowerCase();
             const hasAny = !!(f.hmo_provider || f.hmo_loa_number || hmoPh + hmoLoaAmt > 0);
@@ -1181,7 +1208,7 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-router.__test = { canAccessOrderRow, inferActor };
+router.__test = { canAccessOrderRow, inferActor, enrichClinicalOrder };
 module.exports = router;
 
 
