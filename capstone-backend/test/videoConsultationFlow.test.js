@@ -36,3 +36,10 @@ test('mobile PT procedure names retain their Physical Therapy video routing', ()
     assert.match(approvalSource.toLowerCase(), new RegExp(procedure));
   }
 });
+
+test('PT queue reads do not run reconciliation and call opening does not await refresh', () => {
+  assert.match(appointmentSource, /start && end && role !== 'physical_therapist'/);
+  assert.match(clinicalStaffSource, /timeoutMs: 15000/);
+  assert.match(clinicalStaffSource, /void refreshVideoAppointments\(\)/);
+  assert.doesNotMatch(clinicalStaffSource, /setVideoActionError[\s\S]{0,160}catch[\s\S]{0,160}await refreshVideoAppointments/);
+});

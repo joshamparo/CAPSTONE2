@@ -302,7 +302,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       const start = new Date();
       start.setDate(start.getDate() - 7);
       const end = new Date();
-      end.setDate(end.getDate() + 365);
+      end.setDate(end.getDate() + 90);
       const params = new URLSearchParams({
         start: formatDateParam(start),
         end: formatDateParam(end),
@@ -311,7 +311,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       });
       const data = await fetchJson(`/api/appointments?${params.toString()}`, {
         apiBase: API_BASE,
-        headers: { ...buildAuthHeaders(user), 'x-user-role': role }
+        headers: { ...buildAuthHeaders(user), 'x-user-role': role },
+        timeoutMs: 15000
       });
       setVideoAppointments(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -340,10 +341,10 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       if (!url) throw new Error(data?.message || 'Unable to retrieve the video room.');
       const patientName = `${appointment.firstName || appointment.first_name || ''} ${appointment.lastName || appointment.last_name || ''}`.trim();
       setVideoMeeting({ url, title: `Video Consultation • ${patientName || 'Patient'}` });
-      await refreshVideoAppointments();
+      // Opening the room must never wait for a background list refresh.
+      void refreshVideoAppointments();
     } catch (e) {
       setVideoActionError(String(e?.message || 'Unable to start the video consultation.'));
-      await refreshVideoAppointments();
     } finally {
       setVideoActionId('');
     }

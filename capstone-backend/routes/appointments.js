@@ -1496,9 +1496,11 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
         };
 
         if (date) {
-            await finalizeApprovedVideoRequestsForDate(date);
-            await autoAssignUnassignedVideoAppointmentsForDate(date);
-            await reassignOfflineVideoAppointmentsForRange(date, date);
+            if (role !== 'physical_therapist') {
+                await finalizeApprovedVideoRequestsForDate(date);
+                await autoAssignUnassignedVideoAppointmentsForDate(date);
+                await reassignOfflineVideoAppointmentsForRange(date, date);
+            }
             const range = makeManilaRange(date);
             if (!range) return res.status(400).json({ message: 'Invalid date' });
             const { start: startDate, end: endDate } = range;
@@ -1519,7 +1521,7 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
             const startDate = startRange ? startRange.start : null;
             const endDate = endRange ? endRange.end : null;
 
-            if (start && end) {
+            if (start && end && role !== 'physical_therapist') {
                 await finalizeApprovedVideoRequestsForRange(start, end);
                 await autoAssignUnassignedVideoAppointmentsForRange(start, end);
                 await reassignOfflineVideoAppointmentsForRange(start, end);
