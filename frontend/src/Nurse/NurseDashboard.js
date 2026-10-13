@@ -324,7 +324,7 @@ function NurseDashboard() {
       setBackendHealth({ checked: true, ok: r.ok, error: r.ok ? '' : (r.error || 'Backend offline') });
     };
     run();
-    const t = setInterval(run, 15000);
+    const t = setInterval(run, 60000);
     return () => {
       cancelled = true;
       clearInterval(t);
@@ -3304,7 +3304,7 @@ function NurseDashboard() {
 
     // Poll for Appointments & Approvals
     const pollInterval = setInterval(() => {
-        if (view === 'appointments') {
+        if (document.visibilityState === 'visible' && view === 'appointments') {
             fetchApprovalInbox();
             if (selectedApproval?.id) openApprovalThread(selectedApproval);
         }
@@ -3746,15 +3746,16 @@ function NurseDashboard() {
     }
   }, [patientsList.length, settings.audibleAlerts]);
 
-  // Auto Refresh Logic
+  // Auto Refresh Logic: refresh only the data visible in the active workspace.
   useEffect(() => {
     if (!settings.autoRefresh) return;
 
     const interval = setInterval(() => {
-      if (typeof refreshPatientsList === 'function') refreshPatientsList();
-      if (typeof fetchAppointments === 'function') fetchAppointments();
-      if (typeof fetchWardRegistry === 'function') fetchWardRegistry();
-    }, 30000); // 30 seconds refresh
+      if (document.visibilityState !== 'visible') return;
+      if (['overview', 'patients', 'er-intake'].includes(view) && typeof refreshPatientsList === 'function') refreshPatientsList();
+      if (view === 'appointments' && typeof fetchAppointments === 'function') fetchAppointments();
+      if (['overview', 'ward-management'].includes(view) && typeof fetchWardRegistry === 'function') fetchWardRegistry();
+    }, 60000);
 
     return () => clearInterval(interval);
   }, [settings.autoRefresh, view]);
@@ -4346,67 +4347,6 @@ function NurseDashboard() {
       }
   }, [nurseWorkspace.type, approvalInbox.length, recentOrders.length, openTaskCount, openAppointments.length]);
 
-  // Real-time Welcome & Admin Announcements
-  useEffect(() => {
-      // 1. Welcome Message
-      const hasWelcomed = sessionStorage.getItem('hasWelcomed');
-      if (!hasWelcomed && user.name) {
-          addActivity('Welcome', `Welcome Nurse ${user.name}`, 'info');
-          sessionStorage.setItem('hasWelcomed', 'true');
-      }
-
-      // 2. Poll for Admin Announcements (API)
-      const fetchAnnouncements = async () => {
-          if (document.visibilityState !== 'visible') return;
-          try {
-              const response = await fetch(`${API_BASE}/api/announcements`, { headers: { ...getAuthHeaders() } });
-              if (response.ok) {
-                  const announcements = await response.json();
-                  // We use a simpler logic: check if we have seen this announcement ID before
-                  // For this to work robustly, we need a persisted "last seen" ID or timestamp.
-                  // Here we use localStorage to track the highest ID seen.
-                  const lastCheckedTime = localStorage.getItem('last_checked_announcement_time');
-                  const newTime = new Date().toISOString();
-                  
-                  const newAnnouncements = announcements.filter(a => {
-                      const createdAt = new Date(a.createdAt || a.created_at || 0).getTime();
-                      if (!Number.isFinite(createdAt) || createdAt <= 0) return false;
-                      // On first load show only announcements from the last day,
-                      // instead of replaying the hospital's full history.
-                      const threshold = lastCheckedTime ? new Date(lastCheckedTime).getTime() : Date.now() - 24 * 60 * 60 * 1000;
-                      return createdAt > threshold;
-                  });
-
-                  if (newAnnouncements.length > 0) {
-                      newAnnouncements.forEach(a => {
-                         // Map priority to activity type style
-                         let activityType = 'info';
-                         if (a.priority === 'Urgent') activityType = 'alert';
-                         if (a.priority === 'Normal') activityType = 'success'; // or default
-                         
-                         addActivity('Admin Announcement', `${a.title}: ${a.content}`, activityType);
-                      });
-                  }
-                  
-                  // Update check time
-                  localStorage.setItem('last_checked_announcement_time', newTime);
-              }
-          } catch (error) {
-              console.error("Error fetching announcements:", error);
-          }
-      };
-
-      // Initial fetch
-      fetchAnnouncements();
-
-      // Poll every 10 seconds
-      const interval = setInterval(fetchAnnouncements, 10000); 
-
-      return () => clearInterval(interval);
-  }, [user.name]);
-
-
-
   const onCallDirectory = [
       { id: 1, name: 'Dr. Emily Chen', role: 'Cardiology', initial: 'EC' },
       { id: 2, name: 'Dr. Michael Tan', role: 'Pediatrics', initial: 'MT' },
@@ -4602,6 +4542,8 @@ function NurseDashboard() {
       if (!silent) setRecentOrdersLoading(false);
     }
   };
+
+  const workflowRefreshInFlightRef = useRef(false);
 
   React.useEffect(() => {
     refreshRecentOrders().catch(() => {});
@@ -5095,11 +5037,19 @@ function NurseDashboard() {
 
   React.useEffect(() => {
     if (!user?.name) return undefined;
-    const interval = setInterval(() => {
-      refreshNurseWorkflow({ silent: true }).catch(() => {});
-    }, 15000);
+    if (!['overview', 'tasks', 'shifts', 'orders'].includes(view)) return undefined;
+    const interval = setInterval(async () => {
+      if (document.visibilityState !== 'visible' || workflowRefreshInFlightRef.current) return;
+      workflowRefreshInFlightRef.current = true;
+      try {
+        await refreshNurseWorkflow({ silent: true });
+      } catch (_) {
+      } finally {
+        workflowRefreshInFlightRef.current = false;
+      }
+    }, 60000);
     return () => clearInterval(interval);
-  }, [user?.name, activeDept, currentShiftLabel]);
+  }, [user?.name, activeDept, currentShiftLabel, view]);
 
   // Fetch Dashboard Stats
   React.useEffect(() => {

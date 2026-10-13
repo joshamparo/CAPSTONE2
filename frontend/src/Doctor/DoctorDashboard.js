@@ -2219,9 +2219,10 @@ function DoctorDashboard() {
 
   useEffect(() => {
     if (!userRole) return;
+    if (activeNav !== 'dashboard') return;
     fetchPatients();
     fetchAppointments();
-  }, [selectedDate, queueDateMode, userRole]);
+  }, [activeNav, selectedDate, queueDateMode, userRole]);
 
   useEffect(() => {
     if (isERDoctor) return;
@@ -2233,12 +2234,18 @@ function DoctorDashboard() {
   useEffect(() => {
     if (!userRole) return;
     const t = setInterval(() => {
-      fetchPatients();
-      fetchAppointments();
-      if (activeNav === 'patient-records') fetchRecordList();
-      if (activeNav === 'labs' && selectedPatient?._id) fetchLabResults(selectedPatient._id);
-      if (activeNav === 'certificates' && selectedPatient?._id) fetchCertificates(selectedPatient._id);
-    }, 20000);
+      if (document.visibilityState !== 'visible') return;
+      if (activeNav === 'dashboard') {
+        fetchPatients();
+        fetchAppointments();
+      } else if (activeNav === 'patient-records') {
+        fetchRecordList();
+      } else if (activeNav === 'labs' && selectedPatient?._id) {
+        fetchLabResults(selectedPatient._id);
+      } else if (activeNav === 'certificates' && selectedPatient?._id) {
+        fetchCertificates(selectedPatient._id);
+      }
+    }, 60000);
     return () => clearInterval(t);
   }, [activeNav, selectedPatient?._id, selectedDate, queueDateMode, userRole, patientQuery, recordScope, recordQuery]);
 

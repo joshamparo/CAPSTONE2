@@ -54,3 +54,38 @@ test('clinical order list supports lightweight total-count responses', () => {
   assert.match(source, /clinical_orders\.count\(\{ where \}\)/);
   assert.match(source, /return res\.json\(\{ items: mapped, totalCount, take: limit, skip: offset \}\)/);
 });
+
+test('high-traffic dashboards pause and scope their recovery polling', () => {
+  const frontendRoot = path.join(__dirname, '..', '..', 'frontend', 'src');
+  const nurse = fs.readFileSync(path.join(frontendRoot, 'Nurse', 'NurseDashboard.js'), 'utf8');
+  const admin = fs.readFileSync(path.join(frontendRoot, 'Admin', 'AdminDashboard.js'), 'utf8');
+  const doctor = fs.readFileSync(path.join(frontendRoot, 'Doctor', 'DoctorDashboard.js'), 'utf8');
+  const secretary = fs.readFileSync(path.join(frontendRoot, 'DoctorSecretary', 'DoctorSecretaryDashboard.js'), 'utf8');
+
+  assert.doesNotMatch(nurse, /setInterval\(fetchAnnouncements, 10000\)/);
+  assert.match(nurse, /\['overview', 'patients', 'er-intake'\]\.includes\(view\)/);
+  assert.match(nurse, /\['overview', 'tasks', 'shifts', 'orders'\]\.includes\(view\)/);
+  assert.match(nurse, /workflowRefreshInFlightRef\.current/);
+  assert.match(admin, /if \(view !== 'dashboard'\) return undefined/);
+  assert.match(admin, /document\.visibilityState === 'visible'[\s\S]{0,100}fetchDashboardData/);
+  assert.match(doctor, /if \(activeNav === 'dashboard'\)[\s\S]{0,100}fetchPatients\(\)[\s\S]{0,100}fetchAppointments\(\)/);
+  assert.match(doctor, /document\.visibilityState !== 'visible'/);
+  assert.doesNotMatch(secretary, /refreshOnsiteInbox\(\{ silent: true \}\)[\s\S]{0,80}, 8000\)/);
+});
+
+test('role health probes use a visible-tab one-minute cadence', () => {
+  const frontendRoot = path.join(__dirname, '..', '..', 'frontend', 'src');
+  for (const relative of [
+    ['Admin', 'AdminDashboard.js'],
+    ['ClinicalStaff', 'ClinicalStaffDashboard.js'],
+    ['Pharmacist', 'PharmacistDashboard.js'],
+    ['DoctorSecretary', 'DoctorSecretaryDashboard.js'],
+    ['OfficeStaff', 'OfficeStaffDashboard.js'],
+    ['Nurse', 'NurseDashboard.js']
+  ]) {
+    const source = fs.readFileSync(path.join(frontendRoot, ...relative), 'utf8');
+    assert.match(source, /document\.visibilityState/);
+    assert.match(source, /setInterval[\s\S]{0,220}60000/);
+    assert.doesNotMatch(source, /setInterval\(run, 15000\)/);
+  }
+});

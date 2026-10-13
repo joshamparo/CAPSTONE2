@@ -85,7 +85,9 @@ function AdminDashboard() {
       setBackendHealth({ checked: true, ok: r.ok, error: r.ok ? '' : (r.error || 'Backend offline') });
     };
     run();
-    const t = setInterval(run, 15000);
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') run();
+    }, 60000);
     return () => {
       cancelled = true;
       clearInterval(t);
@@ -1247,13 +1249,16 @@ function AdminDashboard() {
   }, [salesMonitorDate, view]);
 
   useEffect(() => {
+    if (view !== 'dashboard') return undefined;
     fetchDashboardData(); // Initial fetch
-    const interval = setInterval(fetchDashboardData, 30000); // Keep dashboard sections synchronized without excessive polling
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchDashboardData();
+    }, 120000);
     return () => {
       clearInterval(interval);
       patientListRequestSequenceRef.current += 1;
     };
-  }, []); // Refetch when selectedDate changes
+  }, [view]);
 
   useEffect(() => {
     fetchSystemSettings();
@@ -1818,63 +1823,66 @@ function AdminDashboard() {
       }
     };
 
-    sendHeartbeat(); // Initial heartbeat
-    const hbInterval = setInterval(sendHeartbeat, 30000); // Every 30 seconds
-
-    fetchStaff();
-    fetchActivityLogs();
-    fetchAnnouncements();
-    fetchDashboardStats();
-    fetchInventory();
-    // Poll for dashboard updates every 30 seconds
-    const interval = setInterval(() => {
-        fetchActivityLogs();
-        fetchAnnouncements();
-        fetchDashboardStats();
-        fetchRestockRequests();
-        fetchInventory();
-    }, 30000);
+    sendHeartbeat();
+    const hbInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') sendHeartbeat();
+    }, 60000);
     return () => {
-      clearInterval(interval);
       clearInterval(hbInterval);
     };
   }, []);
 
   useEffect(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (view === 'dashboard') {
+      fetchDashboardStats();
+      fetchInventory();
+      fetchRestockRequests();
+      fetchAnnouncements();
+    } else if (view === 'staff-management') {
+      fetchStaff();
+    } else if (view === 'activity-logs') {
+      fetchActivityLogs();
+    } else if (view === 'reports') {
+      fetchDashboardStats();
+    }
+  }, [view]);
+
+  useEffect(() => {
     if (!supabase) {
       const t = setInterval(() => {
-        fetchStaff();
-        fetchDashboardStats();
-      }, 20000);
+        if (document.visibilityState === 'visible' && view === 'staff-management') fetchStaff();
+      }, 60000);
       return () => clearInterval(t);
     }
 
-    const t = setInterval(() => {
-      fetchStaff();
-      fetchDashboardStats();
-    }, 20000);
+    let refreshTimer = null;
+    const scheduleStaffRefresh = () => {
+      if (view !== 'staff-management' || document.visibilityState !== 'visible' || refreshTimer) return;
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        fetchStaff();
+      }, 3000);
+    };
 
     const channel = supabase
       .channel('presence-online')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'staff' }, () => {
-        fetchStaff();
-        fetchDashboardStats();
+        scheduleStaffRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'nurses' }, () => {
-        fetchStaff();
-        fetchDashboardStats();
+        scheduleStaffRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'doctors' }, () => {
-        fetchStaff();
-        fetchDashboardStats();
+        scheduleStaffRefresh();
       })
       .subscribe();
 
     return () => {
-      clearInterval(t);
+      if (refreshTimer) clearTimeout(refreshTimer);
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [view]);
 
   const [editingStaff, setEditingStaff] = useState(null);
   const [editFormData, setEditFormData] = useState({

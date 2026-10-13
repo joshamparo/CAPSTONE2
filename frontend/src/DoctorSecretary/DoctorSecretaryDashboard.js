@@ -275,7 +275,9 @@ export default function DoctorSecretaryDashboard() {
       setBackendHealth({ checked: true, ok: r.ok, error: r.ok ? '' : (r.error || 'Backend offline') });
     };
     run();
-    const t = setInterval(run, 15000);
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') run();
+    }, 60000);
     return () => {
       cancelled = true;
       clearInterval(t);
@@ -1242,7 +1244,9 @@ export default function DoctorSecretaryDashboard() {
     refreshRecords({ silent: true }).catch(() => {});
     refreshSales({ silent: true }).catch(() => {});
     refreshServiceFees({ silent: true }).catch(() => {});
-    const t = setInterval(() => refreshInbox(), 20000);
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') refreshInbox();
+    }, 60000);
     return () => clearInterval(t);
   }, [linkedDoctorId]);
 
@@ -1256,7 +1260,9 @@ export default function DoctorSecretaryDashboard() {
     if (activeTab !== 'onsite-inbox') return;
     refreshOnsiteDoctors({ silent: true }).catch(() => {});
     refreshOnsiteInbox({ silent: true }).catch(() => {});
-    const timer = setInterval(() => refreshOnsiteInbox({ silent: true }).catch(() => {}), 8000);
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') refreshOnsiteInbox({ silent: true }).catch(() => {});
+    }, 30000);
     return () => clearInterval(timer);
   }, [activeTab, linkedDoctor?.specialization]);
 
@@ -1271,7 +1277,9 @@ export default function DoctorSecretaryDashboard() {
   useEffect(() => {
     if (activeTab !== 'availability') return;
     refreshAvailability().catch(() => {});
-    const t = setInterval(() => refreshAvailability({ silent: true }).catch(() => {}), 20000);
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') refreshAvailability({ silent: true }).catch(() => {});
+    }, 60000);
     return () => clearInterval(t);
   }, [activeTab, linkedDoctorId]);
 
