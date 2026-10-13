@@ -733,9 +733,8 @@ async function createAppointmentFromSecretaryApproval({ id, hdr, requestRow, sec
   }
 
   if (consultationMode === 'video') {
-    // The patient app owns room materialization and persists the exact Jitsi
-    // URL it opens. Do not race it with a second random room during approval.
-    // Provider Start still creates a fallback when no client room was saved.
+    // Approval creates the appointment only. Provider Start atomically creates
+    // the canonical room and lifecycle state so web and mobile observe one room.
     if (String(requestRow.payment_status || '').toLowerCase() === 'paid') {
       await recordVideoConsultationPayment(prisma, {
         appointmentId: BigInt(appt.id),

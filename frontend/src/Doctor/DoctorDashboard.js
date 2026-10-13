@@ -3590,6 +3590,12 @@ function DoctorDashboard() {
 
               return aptDoctor === target;
             }).sort((a, b) => {
+              if (queueFilter === 'video') {
+                const createdA = new Date(a.created_at || a.createdAt || 0).getTime() || 0;
+                const createdB = new Date(b.created_at || b.createdAt || 0).getTime() || 0;
+                if (createdA !== createdB) return createdB - createdA;
+                return Number(b.id || 0) - Number(a.id || 0);
+              }
               if (isERDoctor) {
                 const lvA = a.triageLevel || a.triage_level || 99;
                 const lvB = b.triageLevel || b.triage_level || 99;

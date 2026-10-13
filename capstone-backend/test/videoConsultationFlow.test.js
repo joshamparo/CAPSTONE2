@@ -111,7 +111,7 @@ test('duplicate app and web appointment IDs resolve through the same payment ref
 });
 
 test('approval does not race the patient app with a competing random room', () => {
-  assert.match(approvalSource, /patient app owns room materialization/);
+  assert.match(approvalSource, /Approval creates the appointment only/);
   assert.doesNotMatch(approvalSource, /const approvalRoomId/);
   assert.doesNotMatch(approvalSource, /meeting_room_id:\s*approvalRoomId/);
   assert.match(appointmentSource, /if \(!currentRoomId\) \{/);
@@ -120,15 +120,24 @@ test('approval does not race the patient app with a competing random room', () =
   assert.doesNotMatch(appointmentSource, /roomNeedsUpgrade/);
 });
 
-test('provider start waits for the mobile room without creating a competing fallback', () => {
-  assert.match(appointmentSource, /async function waitForPersistedVideoRoom/);
+test('provider start atomically publishes one canonical room before mobile observes Start', () => {
+  assert.match(appointmentSource, /function makeRoomId/);
+  assert.match(appointmentSource, /const generatedRoomId = makeRoomId\(resolvedAppointmentIdRaw\)/);
+  assert.match(appointmentSource, /meeting_room_id = COALESCE\(meeting_room_id, \$\{generatedRoomId\}\)/);
+  assert.match(appointmentSource, /meeting_created_at = COALESCE\(meeting_created_at, \$\{now\}\)/);
   assert.match(appointmentSource, /meeting_started_at = COALESCE\(meeting_started_at/);
-  const waitIndex = appointmentSource.indexOf('await waitForPersistedVideoRoom(resolvedAppointmentId)');
-  assert.ok(waitIndex >= 0, 'provider start must wait for the mobile room');
-  assert.doesNotMatch(appointmentSource, /fallbackRoom|function makeRoomId/);
-  assert.match(appointmentSource, /status\(202\)\.json\(\{[\s\S]{0,160}pending: true/);
+  assert.doesNotMatch(appointmentSource, /waitForPersistedVideoRoom/);
+  assert.doesNotMatch(appointmentSource, /status\(202\)\.json\(\{[\s\S]{0,160}pending: true/);
   for (const source of [clinicalStaffSource, fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'src', 'Doctor', 'DoctorDashboard.js'), 'utf8')]) {
     assert.match(source, /joinDeadline = Date\.now\(\) \+ 30000/);
     assert.match(source, /setTimeout\(resolve, 750\)/);
   }
+});
+
+test('doctor video queue places newly booked consultations first', () => {
+  const doctorSource = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'frontend', 'src', 'Doctor', 'DoctorDashboard.js'),
+    'utf8'
+  );
+  assert.match(doctorSource, /if \(queueFilter === 'video'\)[\s\S]{0,260}createdB - createdA/);
 });

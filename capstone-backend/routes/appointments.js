@@ -1131,20 +1131,10 @@ async function autoAssignUnassignedVideoAppointmentsForDate(dateStr) {
     }
 }
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitForPersistedVideoRoom(appointmentId, timeoutMs = 8000) {
-    const deadline = Date.now() + Math.max(0, Number(timeoutMs) || 0);
-    do {
-        const row = await prisma.appointments.findUnique({
-            where: { id: appointmentId },
-            select: { meeting_room_id: true }
-        });
-        if (String(row?.meeting_room_id || '').trim()) return String(row.meeting_room_id).trim();
-        if (Date.now() >= deadline) break;
-        await wait(400);
-    } while (Date.now() < deadline);
-    return '';
+function makeRoomId(appointmentId) {
+    const raw = String(appointmentId || '').trim();
+    if (!/^\d+$/.test(raw)) throw new Error('Invalid appointment id for video room.');
+    return `apt-${raw}-${crypto.randomBytes(5).toString('base64url').toLowerCase()}`;
 }
 
 function getJitsiBaseUrl() {
@@ -2792,14 +2782,17 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         const existingRoomExpired = apt.meeting_expires_at && new Date(apt.meeting_expires_at).getTime() <= Date.now();
         const currentRoomId = String(apt.meeting_room_id || '').trim();
         if (!currentRoomId) {
-            // Signal Start first. The mobile client observes this lifecycle
-            // change and persists the exact Jitsi URL it opens. Waiting here
-            // avoids racing it with a different random provider room.
+            // Persist the room and Start state in one atomic update. The mobile
+            // client observes a fully materialized canonical room instead of a
+            // started appointment with an empty room that it may replace.
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+            const generatedRoomId = makeRoomId(resolvedAppointmentIdRaw);
             const startedRows = await prisma.$queryRaw`
                 UPDATE appointments
-                SET meeting_started_at = COALESCE(meeting_started_at, ${now}),
+                SET meeting_room_id = COALESCE(meeting_room_id, ${generatedRoomId}),
+                    meeting_created_at = COALESCE(meeting_created_at, ${now}),
+                    meeting_started_at = COALESCE(meeting_started_at, ${now}),
                     meeting_ended_at = NULL,
                     meeting_expires_at = ${expiresAt},
                     doctor_uuid = CASE WHEN ${isPhysicalTherapyQueue} THEN ${String(req.auth?.id || '')}::uuid ELSE doctor_uuid END,
@@ -2815,23 +2808,7 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             if (isPhysicalTherapyQueue && String(started?.doctor_uuid || '') !== String(req.auth?.id || '')) {
                 return res.status(409).json({ message: 'Another physical therapist has already started this consultation.' });
             }
-
-            let persistedRoom = await waitForPersistedVideoRoom(resolvedAppointmentId);
-            if (!persistedRoom) {
-                // The mobile client owns room materialization. Creating a web
-                // fallback here races the app and strands both sides in rooms
-                // with the same appointment prefix but different suffixes.
-                // Keep Start successful and let the provider poll Join until
-                // the app's canonical room has been persisted.
-                return res.status(202).json({
-                    pending: true,
-                    roomId: null,
-                    canonicalRoomId: null,
-                    url: null,
-                    startedAt: started?.meeting_started_at || now
-                });
-            }
-            const updated = await prisma.appointments.findUnique({ where: { id: resolvedAppointmentId } });
+            const updated = started;
             if (!updated?.meeting_room_id) {
                 return res.status(409).json({ message: 'The video room changed while starting. Please try again.' });
             }
