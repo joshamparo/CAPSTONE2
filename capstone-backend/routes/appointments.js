@@ -1129,6 +1129,22 @@ function makeRoomId(appointmentId) {
     return `apt-${raw}-${crypto.randomBytes(5).toString('base64url')}`;
 }
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForPersistedVideoRoom(appointmentId, timeoutMs = 8000) {
+    const deadline = Date.now() + Math.max(0, Number(timeoutMs) || 0);
+    do {
+        const row = await prisma.appointments.findUnique({
+            where: { id: appointmentId },
+            select: { meeting_room_id: true }
+        });
+        if (String(row?.meeting_room_id || '').trim()) return String(row.meeting_room_id).trim();
+        if (Date.now() >= deadline) break;
+        await wait(400);
+    } while (Date.now() < deadline);
+    return '';
+}
+
 function getJitsiBaseUrl() {
     if (getJaasConfig()) return 'https://8x8.vc';
     const base = String(process.env.JITSI_BASE_URL || '').trim();
@@ -2771,19 +2787,14 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         const existingRoomExpired = apt.meeting_expires_at && new Date(apt.meeting_expires_at).getTime() <= Date.now();
         const currentRoomId = String(apt.meeting_room_id || '').trim();
         if (!currentRoomId) {
-            // Persist one appointment-owned room before returning it. Both doctor
-            // and patient subsequently resolve this same room through this API.
-            const roomId = makeRoomId(resolvedAppointmentIdRaw);
+            // Signal Start first. The mobile client observes this lifecycle
+            // change and persists the exact Jitsi URL it opens. Waiting here
+            // avoids racing it with a different random provider room.
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-            // Compare-and-set the empty room against the value this request read.
-            // If two Start requests race, only the first may create it; the
-            // loser reloads and returns the exact room chosen by the winner.
-            const claimedRows = await prisma.$queryRaw`
+            const startedRows = await prisma.$queryRaw`
                 UPDATE appointments
-                SET meeting_room_id = ${roomId},
-                    meeting_created_at = ${now},
-                    meeting_started_at = ${now},
+                SET meeting_started_at = COALESCE(meeting_started_at, ${now}),
                     meeting_ended_at = NULL,
                     meeting_expires_at = ${expiresAt},
                     doctor_uuid = CASE WHEN ${isPhysicalTherapyQueue} THEN ${String(req.auth?.id || '')}::uuid ELSE doctor_uuid END,
@@ -2792,11 +2803,24 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
                     assigned_at = CASE WHEN ${isPhysicalTherapyQueue} THEN ${now} ELSE assigned_at END,
                     assigned_by = CASE WHEN ${isPhysicalTherapyQueue} THEN ${inferActorLabel(req)} ELSE assigned_by END
                 WHERE id = ${resolvedAppointmentId}
-                  AND meeting_room_id IS NOT DISTINCT FROM ${currentRoomId || null}
                 RETURNING *
             `;
-            const claimed = Array.isArray(claimedRows) ? claimedRows[0] : null;
-            const updated = claimed || await prisma.appointments.findUnique({ where: { id: resolvedAppointmentId } });
+            const started = (Array.isArray(startedRows) ? startedRows[0] : null)
+                || await prisma.appointments.findUnique({ where: { id: resolvedAppointmentId } });
+            if (isPhysicalTherapyQueue && String(started?.doctor_uuid || '') !== String(req.auth?.id || '')) {
+                return res.status(409).json({ message: 'Another physical therapist has already started this consultation.' });
+            }
+
+            let persistedRoom = await waitForPersistedVideoRoom(resolvedAppointmentId);
+            if (!persistedRoom) {
+                const fallbackRoom = makeRoomId(resolvedAppointmentIdRaw);
+                await prisma.appointments.updateMany({
+                    where: { id: resolvedAppointmentId, meeting_room_id: null },
+                    data: { meeting_room_id: fallbackRoom, meeting_created_at: now }
+                });
+                persistedRoom = await waitForPersistedVideoRoom(resolvedAppointmentId, 0);
+            }
+            const updated = await prisma.appointments.findUnique({ where: { id: resolvedAppointmentId } });
             if (!updated?.meeting_room_id) {
                 return res.status(409).json({ message: 'The video room changed while starting. Please try again.' });
             }
