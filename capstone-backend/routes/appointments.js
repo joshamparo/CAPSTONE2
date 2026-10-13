@@ -1125,8 +1125,12 @@ async function autoAssignUnassignedVideoAppointmentsForDate(dateStr) {
 
 function makeRoomId(appointmentId) {
     const raw = String(appointmentId || '').trim();
-    const suffix = crypto.randomBytes(5).toString('base64url');
-    return `apt-${raw}-${suffix}`;
+    if (!/^\d+$/.test(raw)) throw new Error('Invalid appointment id for video room.');
+    // Appointment IDs are globally unique. Using the ID as the room key makes
+    // every backend/client path converge even when a mobile client loaded the
+    // appointment before the provider clicked Start. JaaS JWT authorization,
+    // rather than an unstable random suffix, protects access to the room.
+    return `apt-${raw}`;
 }
 
 function getJitsiBaseUrl() {
@@ -1609,7 +1613,7 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
             doctorUuid: apt.doctor_uuid || null,
             patientId: apt.patient_id || null,
             consultationMode: apt.consultation_mode || 'onsite',
-            meetingRoomId: apt.meeting_room_id ? toClientRoomId(apt.meeting_room_id) : null,
+            meetingRoomId: isVideoAppointment(apt) ? toClientRoomId(makeRoomId(apt.id)) : null,
             meetingStartedAt: apt.meeting_started_at || null,
             meetingEndedAt: apt.meeting_ended_at || null,
             meetingExpiresAt: apt.meeting_expires_at || null,
@@ -1682,7 +1686,7 @@ router.get('/mine', requireRole(['patient']), async (req, res) => {
             symptomsStart: apt.symptoms_start,
             doctor: apt.doctor_id,
             consultationMode: apt.consultation_mode || 'onsite',
-            meetingRoomId: apt.meeting_room_id ? toClientRoomId(apt.meeting_room_id) : null,
+            meetingRoomId: isVideoAppointment(apt) ? toClientRoomId(makeRoomId(apt.id)) : null,
             meetingStartedAt: apt.meeting_started_at || null,
             meetingEndedAt: apt.meeting_ended_at || null,
             meetingExpiresAt: apt.meeting_expires_at || null,
@@ -2766,14 +2770,16 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
 
         const existingRoomExpired = apt.meeting_expires_at && new Date(apt.meeting_expires_at).getTime() <= Date.now();
         const currentRoomId = String(apt.meeting_room_id || '').trim();
-        if (!currentRoomId) {
+        const canonicalRoomId = makeRoomId(resolvedAppointmentIdRaw);
+        if (currentRoomId !== canonicalRoomId) {
             // Persist one appointment-owned room before returning it. Both doctor
             // and patient subsequently resolve this same room through this API.
-            const roomId = makeRoomId(resolvedAppointmentIdRaw);
+            const roomId = canonicalRoomId;
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-            // Compare-and-set the empty room against the value this request read.
-            // If two Start requests race, only the first may create it; the
+            // Compare-and-set the room against the value this request read.
+            // This also repairs old random rooms. If two Start requests race,
+            // only the first may normalize it; the
             // loser reloads and returns the exact room chosen by the winner.
             const claimedRows = await prisma.$queryRaw`
                 UPDATE appointments
@@ -2789,7 +2795,6 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
                     assigned_by = CASE WHEN ${isPhysicalTherapyQueue} THEN ${inferActorLabel(req)} ELSE assigned_by END
                 WHERE id = ${resolvedAppointmentId}
                   AND meeting_room_id IS NOT DISTINCT FROM ${currentRoomId || null}
-                  AND meeting_started_at IS NULL
                 RETURNING *
             `;
             const claimed = Array.isArray(claimedRows) ? claimedRows[0] : null;

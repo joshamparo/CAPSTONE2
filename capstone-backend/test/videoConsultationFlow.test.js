@@ -59,8 +59,11 @@ test('duplicate app and web appointment IDs resolve through the same payment ref
   assert.ok(appointmentSource.split('apt = await resolveCanonicalVideoAppointment(apt);').length - 1 >= 2);
 });
 
-test('an appointment video room is assigned once and never rotated at call start', () => {
+test('provider and patient derive one deterministic room from the appointment id', () => {
   assert.match(approvalSource, /meeting_room_id:\s*null/);
-  assert.match(appointmentSource, /if \(!currentRoomId\) \{/);
+  assert.match(approvalSource, /const approvalRoomId = `apt-\$\{String\(appt\.id\)\}`/);
+  assert.match(appointmentSource, /return `apt-\$\{raw\}`/);
+  assert.match(appointmentSource, /currentRoomId !== canonicalRoomId/);
+  assert.equal(appointmentSource.split('meetingRoomId: isVideoAppointment(apt) ? toClientRoomId(makeRoomId(apt.id)) : null').length - 1, 2);
   assert.doesNotMatch(appointmentSource, /roomNeedsUpgrade/);
 });
