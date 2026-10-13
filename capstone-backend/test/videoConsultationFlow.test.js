@@ -37,6 +37,14 @@ test('mobile PT procedure names retain their Physical Therapy video routing', ()
   }
 });
 
+test('mobile PT appointment reasons do not need to repeat the video label', () => {
+  assert.match(appointmentSource, /The mobile app persists the selected PT service/);
+  assert.match(appointmentSource, /if \(isPhysicalTherapyReason\) return 'Physical Therapy'/);
+  const earlyVideoGuard = appointmentSource.indexOf("if (!lower.includes('video consultation')) return '';");
+  const ptReturn = appointmentSource.indexOf("if (isPhysicalTherapyReason) return 'Physical Therapy';");
+  assert.ok(ptReturn >= 0 && earlyVideoGuard > ptReturn, 'PT routing must run before the legacy video-label guard');
+});
+
 test('PT queue reads do not run reconciliation and call opening does not await refresh', () => {
   assert.match(appointmentSource, /start && end && role !== 'physical_therapist'/);
   assert.match(clinicalStaffSource, /timeoutMs: 15000/);

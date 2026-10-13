@@ -907,6 +907,19 @@ function inferSpecializationFromVideoReason(reason) {
     const raw = String(reason || '').trim();
     if (!raw) return '';
     const lower = raw.toLowerCase();
+
+    // The mobile app persists the selected PT service as
+    // "Physical Therapy: <procedure>" while consultation_mode carries the
+    // authoritative video/onsite distinction. Do not require the display
+    // reason itself to repeat "Video Consultation".
+    const isPhysicalTherapyReason = lower.includes('physical therapy')
+        || lower.includes('physiotherapy')
+        || /(^|[^a-z])pt([^a-z]|$)/i.test(lower)
+        || lower.includes('therapeutic exercise')
+        || lower.includes('manual therapy')
+        || lower.includes('post-op rehabilitation')
+        || lower.includes('post op rehabilitation');
+    if (isPhysicalTherapyReason) return 'Physical Therapy';
     if (!lower.includes('video consultation')) return '';
 
     let tail = raw;
