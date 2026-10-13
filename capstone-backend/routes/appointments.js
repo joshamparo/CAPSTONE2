@@ -2782,17 +2782,15 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         const existingRoomExpired = apt.meeting_expires_at && new Date(apt.meeting_expires_at).getTime() <= Date.now();
         const currentRoomId = String(apt.meeting_room_id || '').trim();
         if (!currentRoomId) {
-            // Persist the room and Start state in one atomic update. The mobile
-            // client observes a fully materialized canonical room instead of a
-            // started appointment with an empty room that it may replace.
+            // The installed mobile client is the canonical room producer. It
+            // creates and persists the room after observing meeting_started_at.
+            // Do not generate a second provider-side room here: doing so races
+            // mobile and can strand the two participants in different rooms.
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-            const generatedRoomId = makeRoomId(resolvedAppointmentIdRaw);
             const startedRows = await prisma.$queryRaw`
                 UPDATE appointments
-                SET meeting_room_id = COALESCE(meeting_room_id, ${generatedRoomId}),
-                    meeting_created_at = COALESCE(meeting_created_at, ${now}),
-                    meeting_started_at = COALESCE(meeting_started_at, ${now}),
+                SET meeting_started_at = COALESCE(meeting_started_at, ${now}),
                     meeting_ended_at = NULL,
                     meeting_expires_at = ${expiresAt},
                     doctor_uuid = CASE WHEN ${isPhysicalTherapyQueue} THEN ${String(req.auth?.id || '')}::uuid ELSE doctor_uuid END,
@@ -2808,14 +2806,20 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             if (isPhysicalTherapyQueue && String(started?.doctor_uuid || '') !== String(req.auth?.id || '')) {
                 return res.status(409).json({ message: 'Another physical therapist has already started this consultation.' });
             }
-            const updated = started;
-            if (!updated?.meeting_room_id) {
-                return res.status(409).json({ message: 'The video room changed while starting. Please try again.' });
+            // A concurrent mobile write may already have supplied the room by
+            // the time UPDATE returns. If not, tell the provider to keep polling
+            // the canonical join endpoint instead of opening a local fallback.
+            if (!started?.meeting_room_id) {
+                await logAppointmentActivity(req, resolvedAppointmentIdRaw, 'Video Call Started', 'Doctor started the video consultation; waiting for the patient app room.');
+                return res.status(202).json({
+                    pending: true,
+                    roomId: null,
+                    canonicalRoomId: null,
+                    startedAt: started?.meeting_started_at || now,
+                    message: 'Video room is being prepared by the patient app.'
+                });
             }
-            if (isPhysicalTherapyQueue && String(updated.doctor_uuid || '') !== String(req.auth?.id || '')) {
-                return res.status(409).json({ message: 'Another physical therapist has already started this consultation.' });
-            }
-            const url = buildJitsiUrl(updated.meeting_room_id, doctorName, {
+            const url = buildJitsiUrl(started.meeting_room_id, doctorName, {
                 moderator: true,
                 email: requesterEmail,
                 userId: reqDoctorUuid || requesterEmail
@@ -2827,14 +2831,14 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
                 msg: '[DEBUG] doctor start returned created room',
                 data: {
                     appointmentId: idRaw,
-                    roomId: updated.meeting_room_id || null,
+                    roomId: started.meeting_room_id || null,
                     url,
-                    startedAt: updated.meeting_started_at ? new Date(updated.meeting_started_at).toISOString() : null
+                    startedAt: started.meeting_started_at ? new Date(started.meeting_started_at).toISOString() : null
                 }
             });
             // #endregion
             await logAppointmentActivity(req, resolvedAppointmentIdRaw, 'Video Call Started', 'Doctor started the video consultation.');
-            return res.json({ roomId: toClientRoomId(updated.meeting_room_id), canonicalRoomId: updated.meeting_room_id, url, startedAt: updated.meeting_started_at });
+            return res.json({ roomId: toClientRoomId(started.meeting_room_id), canonicalRoomId: started.meeting_room_id, url, startedAt: started.meeting_started_at });
         }
 
         // Once a secure room has been exposed to either client it is immutable
@@ -2967,7 +2971,7 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therap
 
         // The doctor must explicitly start the call first so both web and app join the
         // same appointment-owned room from the backend record.
-        if (!roomId || !startedAt) {
+        if (!startedAt) {
             // #region debug-point D:join-blocked
             reportVideoRoomDebug({
                 hypothesisId: 'D',
@@ -2977,6 +2981,9 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therap
             });
             // #endregion
             return res.status(409).json({ message: 'Doctor has not started this video consultation yet.' });
+        }
+        if (!roomId) {
+            return res.status(409).json({ message: 'Video room is not available yet. The patient app is preparing it.' });
         }
         if (!isMeetingActive(apt)) {
             return res.status(410).json({ message: 'This video consultation room has ended or expired.' });

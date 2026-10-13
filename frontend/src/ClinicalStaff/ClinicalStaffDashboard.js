@@ -343,7 +343,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       // Providers and patients must resolve the room through one authoritative
       // read after Start. This avoids opening a stale response if the mobile
       // booking flow persisted the appointment room concurrently.
-      const joinDeadline = Date.now() + 30000;
+      const joinDeadline = Date.now() + 90000;
       let data = null;
       while (!data) {
         try {
@@ -353,7 +353,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
             cache: 'no-store'
           });
         } catch (joinError) {
-          const waitingForCanonicalRoom = /not started|room.*not.*available/i.test(String(joinError?.message || ''));
+          const waitingForCanonicalRoom = /not started|room.*(?:not.*available|prepar)/i.test(String(joinError?.message || ''));
           if (!waitingForCanonicalRoom || Date.now() >= joinDeadline) throw joinError;
           await new Promise((resolve) => setTimeout(resolve, 750));
         }

@@ -1065,7 +1065,7 @@ function DoctorDashboard() {
       // Re-read through the same canonical join route used by patients. The
       // mobile approval flow may persist its room immediately around Start;
       // opening only this fresh persisted value prevents provider/app drift.
-      const joinDeadline = Date.now() + 30000;
+      const joinDeadline = Date.now() + 90000;
       let data = null;
       while (!data) {
         try {
@@ -1075,7 +1075,7 @@ function DoctorDashboard() {
             cache: 'no-store'
           });
         } catch (joinError) {
-          const waitingForCanonicalRoom = /not started|room.*not.*available/i.test(String(joinError?.message || ''));
+          const waitingForCanonicalRoom = /not started|room.*(?:not.*available|prepar)/i.test(String(joinError?.message || ''));
           if (!waitingForCanonicalRoom || Date.now() >= joinDeadline) throw joinError;
           await new Promise((resolve) => setTimeout(resolve, 750));
         }
