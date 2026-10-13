@@ -443,12 +443,22 @@ function PharmacistDashboard() {
   };
 
   const printSalesReport = (title, htmlBody) => {
-    const w = window.open('', '_blank', 'noopener,noreferrer');
-    if (!w) return;
+    // `noopener` may make window.open return null even when the browser creates
+    // the tab. That leaves a real, but permanently blank, print tab because we
+    // no longer have a document reference to populate. Open a writable local
+    // document first, then detach its opener before adding report content.
+    const w = window.open('', '_blank', 'width=1100,height=800,scrollbars=yes');
+    if (!w) {
+      setToast({ type: 'error', text: 'The sales report was blocked. Allow pop-ups and try Print again.' });
+      return;
+    }
+    try { w.opener = null; } catch (_) {}
     w.document.open();
     w.document.write(`
+      <!doctype html>
       <html>
         <head>
+          <meta charset="utf-8" />
           <title>${String(title || 'Sales Report')}</title>
           <style>
             body{font-family:Arial, sans-serif; padding:24px; color:#0f172a;}
@@ -457,15 +467,28 @@ function PharmacistDashboard() {
             table{width:100%; border-collapse:collapse; font-size:12px;}
             th,td{border:1px solid #e2e8f0; padding:8px; text-align:left;}
             th{background:#f8fafc;}
+            .print-actions{display:flex;justify-content:flex-end;gap:8px;margin-bottom:16px;}
+            .print-actions button{border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:9px 14px;font-weight:700;cursor:pointer;}
+            .print-actions .primary{border-color:#ea580c;background:#ea580c;color:#fff;}
+            @media print{.print-actions{display:none!important;}body{padding:0;}}
           </style>
         </head>
         <body>
+          <div class="print-actions">
+            <button type="button" onclick="window.close()">Close</button>
+            <button type="button" class="primary" onclick="window.print()">Print Report</button>
+          </div>
           ${htmlBody || ''}
-          <script>window.onload = () => { window.print(); };</script>
+          <script>
+            window.addEventListener('load', function () {
+              window.setTimeout(function () { window.focus(); window.print(); }, 150);
+            });
+          </script>
         </body>
       </html>
     `);
     w.document.close();
+    w.focus();
   };
 
   const notifyApiDown = (fallbackText) => {
