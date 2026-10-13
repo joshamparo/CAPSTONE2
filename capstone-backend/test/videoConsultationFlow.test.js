@@ -24,9 +24,22 @@ test('physical therapy video bookings are shared before start and private after 
 
 test('provider and patient clients converge on the backend-owned video room', () => {
   assert.match(clinicalStaffSource, /\/video\/start/);
+  assert.match(clinicalStaffSource, /\/video\/join/);
   assert.match(patientSource, /\/video\/join/);
   assert.match(patientSource, /setInterval\(\(\) => loadAppointments\(\{ silent: true \}\), 10000\)/);
   assert.doesNotMatch(patientSource, /makeRoomId|create.*meeting.*room/i);
+});
+
+test('all web providers re-read the persisted room through join after start', () => {
+  const doctorSource = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'frontend', 'src', 'Doctor', 'DoctorDashboard.js'),
+    'utf8'
+  );
+  for (const source of [doctorSource, clinicalStaffSource]) {
+    const start = source.indexOf('/video/start');
+    const join = source.indexOf('/video/join', start);
+    assert.ok(start >= 0 && join > start, 'provider must call join after start');
+  }
 });
 
 test('mobile PT procedure names retain their Physical Therapy video routing', () => {

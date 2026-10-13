@@ -1015,11 +1015,19 @@ function DoctorDashboard() {
       });
       // #endregion
       const sourceTable = String(apt?.sourceTable || apt?.source_table || 'appointments').trim() || 'appointments';
-      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/start`, {
+      await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/start`, {
         apiBase: API_BASE,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ action: 'start', sourceTable })
+      });
+
+      // Re-read through the same canonical join route used by patients. The
+      // mobile approval flow may persist its room immediately around Start;
+      // opening only this fresh persisted value prevents provider/app drift.
+      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(apt.id))}/video/join`, {
+        apiBase: API_BASE,
+        headers: { ...authHeaders }
       });
 
       const meetingUrl = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();

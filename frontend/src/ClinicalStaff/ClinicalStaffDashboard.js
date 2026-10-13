@@ -331,11 +331,18 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     setVideoActionId(appointmentId);
     setVideoActionError('');
     try {
-      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/start`, {
+      await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/start`, {
         apiBase: API_BASE,
         method: 'POST',
         headers: { ...buildJsonAuthHeaders(user), 'x-user-role': role },
         body: JSON.stringify({ action: 'start', sourceTable: 'appointments' })
+      });
+      // Providers and patients must resolve the room through one authoritative
+      // read after Start. This avoids opening a stale response if the mobile
+      // booking flow persisted the appointment room concurrently.
+      const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/join`, {
+        apiBase: API_BASE,
+        headers: { ...buildJsonAuthHeaders(user), 'x-user-role': role }
       });
       const url = String(data?.url || data?.roomUrl || data?.meetingUrl || '').trim();
       if (!url) throw new Error(data?.message || 'Unable to retrieve the video room.');
