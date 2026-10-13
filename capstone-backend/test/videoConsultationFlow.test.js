@@ -121,7 +121,8 @@ test('approval does not race the patient app with a competing random room', () =
 });
 
 test('provider start immediately publishes a mobile-compatible canonical URL', () => {
-  assert.match(appointmentSource, /const generatedRoomUrl = `https:\/\/meet\.jit\.si\/\$\{makeRoomId\(resolvedAppointmentIdRaw\)\}`/);
+  assert.match(appointmentSource, /const generatedRoomId = makeRoomId\(resolvedAppointmentIdRaw\)/);
+  assert.match(appointmentSource, /const generatedRoomUrl = `\$\{getJitsiBaseUrl\(\)/);
   assert.match(appointmentSource, /meeting_room_id = COALESCE\(meeting_room_id, \$\{generatedRoomUrl\}\)/);
   assert.match(appointmentSource, /meeting_created_at = COALESCE\(meeting_created_at, \$\{now\}\)/);
   assert.match(appointmentSource, /meeting_started_at = COALESCE\(meeting_started_at/);
@@ -131,6 +132,13 @@ test('provider start immediately publishes a mobile-compatible canonical URL', (
     assert.match(source, /joinDeadline = Date\.now\(\) \+ 90000/);
     assert.match(source, /setTimeout\(resolve, 750\)/);
   }
+});
+
+test('a stored full JaaS URL still receives the provider moderator token', () => {
+  assert.match(appointmentSource, /parsed\.hostname\.toLowerCase\(\) === '8x8\.vc'/);
+  assert.match(appointmentSource, /parsed\.searchParams\.set\('jwt', jwt\)/);
+  assert.match(appointmentSource, /moderator: Boolean\(options\.moderator\)/);
+  assert.match(appointmentSource, /Upgrade rooms created by the short-lived public-Jitsi deployment/);
 });
 
 test('doctor video queue places newly booked consultations first', () => {

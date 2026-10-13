@@ -1225,8 +1225,26 @@ function buildJitsiUrl(roomId, displayName, options = {}) {
     ].filter(Boolean).join('&');
 
     if (rawRoom.startsWith('http://') || rawRoom.startsWith('https://')) {
-        // Mobile may persist a complete Jitsi URL that already has hash
-        // options. A second '#' makes every option after it inert.
+        const parsed = new URL(rawRoom);
+        const jaas = getJaasConfig();
+        // Canonical JaaS URLs are stored in full so mobile opens the same host.
+        // The provider still needs its signed moderator token added at read
+        // time; otherwise both clients enter the lobby as guests forever.
+        if (jaas && parsed.hostname.toLowerCase() === '8x8.vc') {
+            const pathParts = decodeURIComponent(parsed.pathname).replace(/^\/+|\/+$/g, '').split('/');
+            const tokenRoomId = pathParts[0] === jaas.appId ? pathParts.slice(1).join('/') : pathParts.join('/');
+            const jwt = createJaasJwt({
+                roomId: tokenRoomId,
+                displayName: name,
+                email: options.email,
+                userId: options.userId,
+                moderator: Boolean(options.moderator)
+            });
+            if (jwt) parsed.searchParams.set('jwt', jwt);
+            parsed.hash = hash;
+            return parsed.toString();
+        }
+        // Non-JaaS mobile URLs have no server-issued moderator capability.
         return `${rawRoom}${rawRoom.includes('#') ? '&' : '#'}${hash}`;
     }
 
@@ -2781,14 +2799,38 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         }
 
         const existingRoomExpired = apt.meeting_expires_at && new Date(apt.meeting_expires_at).getTime() <= Date.now();
-        const currentRoomId = String(apt.meeting_room_id || '').trim();
+        let currentRoomId = String(apt.meeting_room_id || '').trim();
+        const jaasConfig = getJaasConfig();
+        if (currentRoomId && jaasConfig && /^https?:\/\/meet\.jit\.si\//i.test(currentRoomId)) {
+            // Upgrade rooms created by the short-lived public-Jitsi deployment
+            // while preserving their room name. Both clients then converge on
+            // JaaS, where the provider can authenticate as moderator.
+            const publicRoomUrl = new URL(currentRoomId);
+            const publicRoomName = decodeURIComponent(publicRoomUrl.pathname).replace(/^\/+|\/+$/g, '');
+            if (publicRoomName) {
+                const upgradedRoomUrl = `https://8x8.vc/${jaasConfig.appId}/${publicRoomName}`;
+                const upgradedRows = await prisma.$queryRaw`
+                    UPDATE appointments
+                    SET meeting_room_id = ${upgradedRoomUrl}
+                    WHERE id = ${resolvedAppointmentId}
+                      AND meeting_room_id = ${currentRoomId}
+                    RETURNING *
+                `;
+                const upgraded = Array.isArray(upgradedRows) ? upgradedRows[0] : null;
+                if (upgraded) {
+                    apt = upgraded;
+                    currentRoomId = upgradedRoomUrl;
+                }
+            }
+        }
         if (!currentRoomId) {
             // Publish the same complete meet.jit.si URL shape used by mobile.
             // A bare room id is treated as incomplete by the installed app and
             // causes it to replace the provider room with a new random room.
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-            const generatedRoomUrl = `https://meet.jit.si/${makeRoomId(resolvedAppointmentIdRaw)}`;
+            const generatedRoomId = makeRoomId(resolvedAppointmentIdRaw);
+            const generatedRoomUrl = `${getJitsiBaseUrl().replace(/\/+$/, '')}/${toClientRoomId(generatedRoomId)}`;
             const startedRows = await prisma.$queryRaw`
                 UPDATE appointments
                 SET meeting_room_id = COALESCE(meeting_room_id, ${generatedRoomUrl}),
