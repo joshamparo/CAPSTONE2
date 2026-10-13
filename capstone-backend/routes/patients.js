@@ -1787,7 +1787,8 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
                         // reception response derives "Emergency" from that ER
                         // appointment without weakening the database constraint.
                         admission_status: routeMeta.type === 'er_consult' ? 'Outpatient' : patient.admission_status,
-                        clinical_records: updatedClinicalRecords
+                        clinical_records: updatedClinicalRecords,
+                        ...(hasPhilhealth ? { philhealth_number: philhealthDigits } : {})
                     }
                 });
             } else {
@@ -1810,6 +1811,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
                         email: normalizedEmail || null,
                         street: String(payload.address || '').trim() || null,
                         blood_type: String(payload.bloodType || '').trim() || null,
+                        philhealth_number: hasPhilhealth ? philhealthDigits : null,
                         admission_status: 'Outpatient',
                         clinical_records: mergeWalkInClinicalRecords(null, intakeEntry)
                     }

@@ -86,6 +86,8 @@ test('walk-in intake validates PhilHealth identity and never trusts a client ded
   assert.match(handler, /payload\.philhealthNumber\s*=\s*hasPhilhealth\s*\?\s*philhealthDigits\s*:\s*null/i);
   assert.match(handler, /payload\.philhealthDeduction\s*=\s*0/i);
   assert.match(handler, /PhilHealth Pending Verification/i);
+  assert.match(handler, /philhealth_number:\s*hasPhilhealth\s*\?\s*philhealthDigits\s*:\s*null/i);
+  assert.match(handler, /\.\.\.\(hasPhilhealth\s*\?\s*\{\s*philhealth_number:\s*philhealthDigits\s*\}\s*:\s*\{\}\)/i);
 });
 
 test('PhilHealth-only intake cannot declare HMO services as covered', () => {

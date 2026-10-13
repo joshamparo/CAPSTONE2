@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const router = require('../routes/clinicalOrders');
 
 const { enrichClinicalOrder } = router.__test;
@@ -28,4 +30,11 @@ test('verified PhilHealth benefit reduces a clinical order without creating HMO 
   assert.equal(order.philhealthApplied, 60);
   assert.equal(order.patientPayable, 40);
   assert.equal(order.hmoIndicators.hasHmo, false);
+});
+
+test('cashier clinical orders prefer the canonical patient record name', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'clinicalOrders.js'), 'utf8');
+  assert.match(source, /patients:\s*\{\s*select:\s*\{\s*first_name:\s*true,\s*last_name:\s*true\s*\}/);
+  assert.match(source, /r\.patients\?\.first_name/);
+  assert.match(source, /r\.patients\?\.last_name/);
 });

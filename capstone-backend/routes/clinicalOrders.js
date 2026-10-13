@@ -408,7 +408,10 @@ router.get('/', async (req, res) => {
         acknowledged_at: true,
         acknowledged_by: true,
         created_at: true,
-        updated_at: true
+        updated_at: true,
+        patients: {
+          select: { first_name: true, last_name: true }
+        }
       }
     });
 
@@ -478,7 +481,9 @@ router.get('/', async (req, res) => {
       return enrichClinicalOrder({
         id: idStr,
         patientId: r.patient_id || null,
-        patientName: r.patient_name || null,
+        patientName: `${String(r.patients?.first_name || '').trim()} ${String(r.patients?.last_name || '').trim()}`.trim()
+          || r.patient_name
+          || null,
         kind: r.kind || null,
         service: r.service || null,
         priority: r.priority || null,
