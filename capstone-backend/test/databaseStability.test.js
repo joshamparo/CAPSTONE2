@@ -8,7 +8,7 @@ const { boundedDatabaseUrl } = require('../utils/prisma').__test;
 
 test('Prisma uses a bounded connection pool suitable for small database compute', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'utils', 'prisma.js'), 'utf8');
-  assert.match(source, /PRISMA_CONNECTION_LIMIT\s*\|\|\s*3/);
+  assert.match(source, /PRISMA_CONNECTION_LIMIT\s*\|\|\s*5/);
   assert.match(source, /Math\.max\(1,\s*Math\.min\(5/);
   assert.match(source, /pool_timeout/);
   assert.match(source, /datasources:\s*\{\s*db:\s*\{\s*url:/);
@@ -16,7 +16,8 @@ test('Prisma uses a bounded connection pool suitable for small database compute'
   const bounded = boundedDatabaseUrl(escapedCredential);
   assert.match(bounded, /p%26%26word/);
   assert.doesNotMatch(bounded, /p%2526%2526word/);
-  assert.match(bounded, /connection_limit=3/);
+  assert.match(bounded, /connection_limit=5/);
+  assert.match(bounded, /pool_timeout=45/);
 });
 
 test('notification stream polling is single-flight and not an eight-second query loop', () => {

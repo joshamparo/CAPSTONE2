@@ -1797,6 +1797,24 @@ export default function OfficeStaffDashboard({ mode }) {
               </div>
             </div>
 
+            {role === 'cashier' && (invoiceError || labOrdersError || paymentHistoryError) ? (
+              <div className="admin-alert error" style={{ marginTop: 16 }}>
+                <span>{invoiceError || labOrdersError || paymentHistoryError}</span>
+                <button
+                  type="button"
+                  className="office-btn ghost"
+                  onClick={() => Promise.all([
+                    refreshInvoices(),
+                    refreshDashboardKpis(),
+                    refreshLabOrders(),
+                    refreshPaymentHistory()
+                  ])}
+                >
+                  Retry loading data
+                </button>
+              </div>
+            ) : null}
+
             {role === 'cashier' ? (
               <div className="office-card" style={{ marginTop: 16 }}>
                 <div className="office-billing-section-head">

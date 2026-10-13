@@ -11,10 +11,10 @@ function boundedDatabaseUrl(rawUrl = process.env.DATABASE_URL) {
     // a few concurrent requests. Operators can tune this without a code change.
     const params = [];
     if (!url.searchParams.has('connection_limit')) {
-      const requested = Number(process.env.PRISMA_CONNECTION_LIMIT || 3);
-      params.push(`connection_limit=${Math.max(1, Math.min(5, Number.isFinite(requested) ? requested : 3))}`);
+      const requested = Number(process.env.PRISMA_CONNECTION_LIMIT || 5);
+      params.push(`connection_limit=${Math.max(1, Math.min(5, Number.isFinite(requested) ? requested : 5))}`);
     }
-    if (!url.searchParams.has('pool_timeout')) params.push('pool_timeout=15');
+    if (!url.searchParams.has('pool_timeout')) params.push('pool_timeout=45');
     // Never serialize the parsed URL: doing so can re-encode percent-escaped
     // credentials. Append only controlled query parameters to the exact input.
     return params.length ? `${raw}${raw.includes('?') ? '&' : '?'}${params.join('&')}` : raw;
