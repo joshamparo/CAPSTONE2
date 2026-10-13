@@ -51,3 +51,10 @@ test('PT queue reads do not run reconciliation and call opening does not await r
   assert.match(clinicalStaffSource, /void refreshVideoAppointments\(\)/);
   assert.doesNotMatch(clinicalStaffSource, /setVideoActionError[\s\S]{0,160}catch[\s\S]{0,160}await refreshVideoAppointments/);
 });
+
+test('duplicate app and web appointment IDs resolve through the same payment reference', () => {
+  assert.match(appointmentSource, /function extractVideoPaymentReference/);
+  assert.match(appointmentSource, /PAYREF\\s\*:\\s\*/);
+  assert.match(appointmentSource, /async function resolveCanonicalVideoAppointment/);
+  assert.ok(appointmentSource.split('apt = await resolveCanonicalVideoAppointment(apt);').length - 1 >= 2);
+});

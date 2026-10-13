@@ -903,6 +903,41 @@ function isVideoAppointment(apt) {
     return reason.includes('video consultation') || reason.startsWith('video:') || reason.includes('(online)');
 }
 
+function extractVideoPaymentReference(reason) {
+    const match = String(reason || '').match(/PAYREF\s*:\s*([A-Za-z0-9_-]+)/i);
+    return match?.[1] ? String(match[1]).trim() : '';
+}
+
+async function resolveCanonicalVideoAppointment(apt) {
+    if (!apt || !isVideoAppointment(apt)) return apt;
+    const paymentRef = extractVideoPaymentReference(apt.reason);
+    if (!paymentRef) return apt;
+
+    const identity = apt.patient_id
+        ? { patient_id: apt.patient_id }
+        : (apt.email ? { email: { equals: String(apt.email), mode: 'insensitive' } } : null);
+    if (!identity) return apt;
+
+    const matches = await prisma.appointments.findMany({
+        where: {
+            ...identity,
+            consultation_mode: 'video',
+            reason: { contains: `PAYREF:${paymentRef}`, mode: 'insensitive' }
+        },
+        orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
+        take: 10
+    }).catch(() => []);
+    if (!matches.length) return apt;
+
+    // Prefer a room that has already started; otherwise keep the oldest room
+    // exposed for this immutable payment reference. This repairs legacy races
+    // where approval and mobile materialization created adjacent appointment IDs.
+    return matches.find((row) => row.meeting_started_at && !row.meeting_ended_at)
+        || matches.find((row) => row.meeting_room_id)
+        || matches[0]
+        || apt;
+}
+
 function inferSpecializationFromVideoReason(reason) {
     const raw = String(reason || '').trim();
     if (!raw) return '';
@@ -2642,6 +2677,8 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
             }
         }
 
+        apt = await resolveCanonicalVideoAppointment(apt);
+
         // #region debug-point B:start-appointment
         reportVideoRoomDebug({
             hypothesisId: 'B',
@@ -2885,6 +2922,7 @@ router.get('/:id/video/join', requireRole(['patient', 'doctor', 'physical_therap
                 apt = await prisma.appointments.findUnique({ where: { id: hold[0].appointment_id } });
             }
         }
+        apt = await resolveCanonicalVideoAppointment(apt);
         
         if (!apt) return res.status(404).json({ message: 'Appointment not found.' });
 
