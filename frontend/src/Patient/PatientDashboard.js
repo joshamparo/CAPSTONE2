@@ -489,22 +489,36 @@ function PatientDashboard() {
 
   useEffect(() => {
     if (!user?.email) return;
-    setLoadingAppointments(true);
-    setAppointmentsError('');
-    (async () => {
+    let cancelled = false;
+    const loadAppointments = async ({ silent = false } = {}) => {
+      if (!silent) setLoadingAppointments(true);
+      if (!silent) setAppointmentsError('');
       try {
         const data = await fetchJson(`/api/appointments/mine?take=50`, {
           apiBase: API_BASE,
           headers: { ...getAuthHeaders() }
         });
-        setAppointments(Array.isArray(data) ? data : []);
+        if (!cancelled) setAppointments(Array.isArray(data) ? data : []);
       } catch (e) {
-        setAppointments([]);
-        setAppointmentsError(String(e?.message || 'Unable to load appointments.'));
+        if (!cancelled && !silent) {
+          setAppointments([]);
+          setAppointmentsError(String(e?.message || 'Unable to load appointments.'));
+        }
       } finally {
-        setLoadingAppointments(false);
+        if (!cancelled && !silent) setLoadingAppointments(false);
       }
-    })();
+    };
+    loadAppointments();
+    const timer = setInterval(() => loadAppointments({ silent: true }), 10000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadAppointments({ silent: true });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [user?.email]);
 
   const joinVideoCall = async (apt) => {

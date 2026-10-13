@@ -1442,12 +1442,19 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
             where.consultation_mode = 'video';
             where.AND = [
                 ...(Array.isArray(where.AND) ? where.AND : []),
-                { doctor_uuid: String(req.auth?.id || '') },
                 {
                     OR: [
                         { reason: { contains: 'Physical Therapy', mode: 'insensitive' } },
                         { reason: { contains: 'Physiotherapy', mode: 'insensitive' } },
                         { reason: { contains: 'Video Consultation - PT', mode: 'insensitive' } }
+                    ]
+                },
+                {
+                    // PT bookings are shared until one therapist starts the call;
+                    // active calls remain private to the therapist who claimed it.
+                    OR: [
+                        { meeting_started_at: null },
+                        { doctor_uuid: String(req.auth?.id || '') }
                     ]
                 }
             ];
@@ -2652,13 +2659,19 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         const resolvedAppointmentIdRaw = String(apt.id);
 
         let isAssigned = false;
+        const isPhysicalTherapyQueue = requesterRole === 'physical_therapist'
+            && inferSpecializationFromVideoReason(apt.reason) === 'Physical Therapy';
 
         // PT accounts live in the staff table while mobile video bookings are
         // represented as appointment/provider records. Treat PT video bookings
         // as a protected department queue, but never allow PT staff to start a
         // consultation belonging to another specialty.
-        if (requesterRole === 'physical_therapist' && inferSpecializationFromVideoReason(apt.reason) === 'Physical Therapy') {
-            isAssigned = Boolean(req.auth?.id && apt.doctor_uuid && String(apt.doctor_uuid) === String(req.auth.id));
+        if (isPhysicalTherapyQueue) {
+            // PT mobile bookings form a department queue. The first authenticated
+            // PT who starts an unstarted call claims it atomically below. Once the
+            // room is active, only that PT may reopen it.
+            isAssigned = !apt.meeting_started_at
+                || Boolean(req.auth?.id && apt.doctor_uuid && String(apt.doctor_uuid) === String(req.auth.id));
         }
 
         // 1. Check UUID match (most reliable)
@@ -2713,15 +2726,24 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
                     meeting_created_at = ${now},
                     meeting_started_at = ${now},
                     meeting_ended_at = NULL,
-                    meeting_expires_at = ${expiresAt}
+                    meeting_expires_at = ${expiresAt},
+                    doctor_uuid = CASE WHEN ${isPhysicalTherapyQueue} THEN ${String(req.auth?.id || '')}::uuid ELSE doctor_uuid END,
+                    doctor_id = CASE WHEN ${isPhysicalTherapyQueue} THEN ${doctorName} ELSE doctor_id END,
+                    assignment_status = CASE WHEN ${isPhysicalTherapyQueue} THEN 'ASSIGNED' ELSE assignment_status END,
+                    assigned_at = CASE WHEN ${isPhysicalTherapyQueue} THEN ${now} ELSE assigned_at END,
+                    assigned_by = CASE WHEN ${isPhysicalTherapyQueue} THEN ${inferActorLabel(req)} ELSE assigned_by END
                 WHERE id = ${resolvedAppointmentId}
                   AND meeting_room_id IS NOT DISTINCT FROM ${currentRoomId || null}
+                  AND meeting_started_at IS NULL
                 RETURNING *
             `;
             const claimed = Array.isArray(claimedRows) ? claimedRows[0] : null;
             const updated = claimed || await prisma.appointments.findUnique({ where: { id: resolvedAppointmentId } });
             if (!updated?.meeting_room_id) {
                 return res.status(409).json({ message: 'The video room changed while starting. Please try again.' });
+            }
+            if (isPhysicalTherapyQueue && String(updated.doctor_uuid || '') !== String(req.auth?.id || '')) {
+                return res.status(409).json({ message: 'Another physical therapist has already started this consultation.' });
             }
             const url = buildJitsiUrl(updated.meeting_room_id, doctorName, {
                 moderator: true,
@@ -2752,14 +2774,25 @@ router.post('/:id/video/start', requireRole(['doctor', 'physical_therapist']), a
         if (!apt.meeting_started_at || apt.meeting_ended_at || existingRoomExpired) {
             const now = new Date();
             const expiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-            const updated = await prisma.appointments.update({
-                where: { id: resolvedAppointmentId },
-                data: {
-                    meeting_started_at: now,
-                    meeting_ended_at: null,
-                    meeting_expires_at: expiresAt
-                }
-            });
+            const startedRows = await prisma.$queryRaw`
+                UPDATE appointments
+                SET meeting_started_at = ${now},
+                    meeting_ended_at = NULL,
+                    meeting_expires_at = ${expiresAt},
+                    doctor_uuid = CASE WHEN ${isPhysicalTherapyQueue} THEN ${String(req.auth?.id || '')}::uuid ELSE doctor_uuid END,
+                    doctor_id = CASE WHEN ${isPhysicalTherapyQueue} THEN ${doctorName} ELSE doctor_id END,
+                    assignment_status = CASE WHEN ${isPhysicalTherapyQueue} THEN 'ASSIGNED' ELSE assignment_status END,
+                    assigned_at = CASE WHEN ${isPhysicalTherapyQueue} THEN ${now} ELSE assigned_at END,
+                    assigned_by = CASE WHEN ${isPhysicalTherapyQueue} THEN ${inferActorLabel(req)} ELSE assigned_by END
+                WHERE id = ${resolvedAppointmentId}
+                  AND (meeting_started_at IS NULL OR meeting_ended_at IS NOT NULL OR meeting_expires_at <= ${now})
+                RETURNING *
+            `;
+            const updated = (Array.isArray(startedRows) ? startedRows[0] : null)
+                || await prisma.appointments.findUnique({ where: { id: resolvedAppointmentId } });
+            if (isPhysicalTherapyQueue && String(updated?.doctor_uuid || '') !== String(req.auth?.id || '')) {
+                return res.status(409).json({ message: 'Another physical therapist has already started this consultation.' });
+            }
             const url = buildJitsiUrl(updated.meeting_room_id, doctorName, {
                 moderator: true,
                 email: requesterEmail,

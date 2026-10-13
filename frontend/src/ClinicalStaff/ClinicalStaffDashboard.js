@@ -125,6 +125,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   const [videoAppointments, setVideoAppointments] = useState([]);
   const [videoAppointmentsLoading, setVideoAppointmentsLoading] = useState(false);
   const [videoAppointmentsError, setVideoAppointmentsError] = useState('');
+  const [videoActionError, setVideoActionError] = useState('');
+  const videoRefreshInFlight = useRef(false);
   const [videoActionId, setVideoActionId] = useState('');
   const [videoMeeting, setVideoMeeting] = useState(null);
   const [profileForm, setProfileForm] = useState(() => ({
@@ -291,7 +293,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   };
 
   const refreshVideoAppointments = async () => {
-    if (!isPhysicalTherapist) return;
+    if (!isPhysicalTherapist || videoRefreshInFlight.current) return;
+    videoRefreshInFlight.current = true;
     setVideoAppointmentsLoading(true);
     setVideoAppointmentsError('');
     try {
@@ -314,6 +317,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       setVideoAppointments([]);
       setVideoAppointmentsError(String(e?.message || 'Unable to load video consultations.'));
     } finally {
+      videoRefreshInFlight.current = false;
       setVideoAppointmentsLoading(false);
     }
   };
@@ -323,7 +327,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     const appointmentId = String(appointment.id);
     if (videoActionId === appointmentId) return;
     setVideoActionId(appointmentId);
-    setVideoAppointmentsError('');
+    setVideoActionError('');
     try {
       const data = await fetchJson(`/api/appointments/${encodeURIComponent(String(appointment.id))}/video/start`, {
         apiBase: API_BASE,
@@ -337,7 +341,8 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       setVideoMeeting({ url, title: `Video Consultation • ${patientName || 'Patient'}` });
       await refreshVideoAppointments();
     } catch (e) {
-      setVideoAppointmentsError(String(e?.message || 'Unable to start the video consultation.'));
+      setVideoActionError(String(e?.message || 'Unable to start the video consultation.'));
+      await refreshVideoAppointments();
     } finally {
       setVideoActionId('');
     }
@@ -1410,6 +1415,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
               </button>
             </div>
             {videoAppointmentsError ? <div className="cs-muted" style={{ color: '#b91c1c', marginBottom: 12 }}>{videoAppointmentsError}</div> : null}
+            {videoActionError ? <div className="cs-muted" style={{ color: '#b91c1c', marginBottom: 12 }}>{videoActionError}</div> : null}
             {videoAppointmentsLoading ? (
               <div className="cs-muted">Loading video consultations…</div>
             ) : videoAppointments.length === 0 ? (
