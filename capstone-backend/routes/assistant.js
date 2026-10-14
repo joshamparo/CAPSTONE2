@@ -12,7 +12,7 @@ const OPENAI_TIMEOUT_MS = Math.max(3000, Math.trunc(Number(process.env.OPENAI_TI
 const ASSISTANT_RATE_LIMIT_WINDOW_MS = Math.max(5000, Math.trunc(Number(process.env.ASSISTANT_RATE_LIMIT_WINDOW_MS || 15_000)));
 const ASSISTANT_RATE_LIMIT_MAX = Math.max(1, Math.trunc(Number(process.env.ASSISTANT_RATE_LIMIT_MAX || 8)));
 const assistantRateState = new Map(); // key -> { count, resetAt }
-const ASSISTANT_ROLES = new Set(['admin', 'doctor', 'nurse', 'pharmacist', 'cashier', 'doctor_secretary', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'staff']);
+const ASSISTANT_ROLES = new Set(['admin', 'doctor', 'nurse', 'pharmacist', 'cashier', 'doctor_secretary', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'staff', 'patient']);
 const MAX_MESSAGE_CHARS = 1000;
 const MAX_CONVERSATION_CHARS = 5000;
 
@@ -318,7 +318,7 @@ const PUBLIC_PRICES = [
   { category: 'OTHER SERVICES', key: 'birth_cert', name: 'Certificate of Live Birth processing assistance', pricePHP: 350, notes: 'Hospital registration only' },
   { category: 'OTHER SERVICES', key: 'med_cert', name: 'Medical Certificate / Fit to Work / Fit to Travel', pricePHP: 250, notes: 'After physical exam + valid ID' },
   { category: 'OTHER SERVICES', key: 'barangay_medical', name: 'Barangay / Police medical request consult', pricePHP: 300, notes: 'OPD PE + clearance form stamping' },
-  { category: 'OTHER SERVICES', key: 'senior_disc', name: 'Senior Citizen / PWD Discount note', pricePHP: 0, notes: '20% discount mandatorily applied to all above items upon presentation of valid SC/PWD ID' }
+  { category: 'OTHER SERVICES', key: 'senior_disc', name: 'Senior Citizen / PWD Discount note', pricePHP: 0, notes: 'Present a valid SC/PWD ID and ask Billing to confirm eligibility, covered items, and the final applicable discount.' }
 ];
 
 const DEPARTMENT_HINTS = [
@@ -566,11 +566,11 @@ const ROLE_QUICK_ANSWERS = {
     'symptom_triage::GREEN': '🟢 Ang symptoms na ito ay karaniwang kayang tingnan sa regular OPD consultation schedule. Para sa pinakamadaling proseso: MAAARI PO KAYONG MAG-WALK-IN sa OPD ng Pascual General Hospital tuwing 8:00AM — 5:00PM (Monday-Saturday) para sa regular Out-Patient check up. O tumawag muna sa 0915 312 7144 para makakuha ng queue number.',
     'symptom_triage::PEDIA_YELLOW': '🟡 Pediatric / Baby case — Mangyaring magpatingin AGAD sa Pediatric OPD area ng Pascual General Hospital ngayong araw or bukas ng umaga. Ang mga sanggol at bata ay mabilis lumala ang kondisyon kaya kailangan ng agarang pagsusuri. Pumunta nang maaga sa OPD Pediatrics section (8AM opening), o tumawag muna sa 0915 312 7144 para mabigyan ng pedia queue number.',
     'symptom_triage::PREGNANCY_YELLOW': '🟡 Pregnancy / OB-Gyne case — Pumunta po agad sa OB-Gyne Out-Patient Department ng Pascual General Hospital para sa prenatal check. Ang mga buntis ay priority sa OPD tuwing 8AM-5PM Monday-Saturday. Magdala ng ultrasound results at prenatal records kung meron. Tumawag muna sa 0915 312 7144 para sa OB-Gyne availability.',
-    'price_list_overview': '💸 Ipinapakita rito ang HIGHLIGHT na presyo ng mga serbisyo (accurate as of current posting): OPD consultations (₱300 Dental / ₱500 General Medicine & Pediatrics / ₱600 OB-Gyne, Derma, ENT, Ophtha / ₱700 Surgery, Ortho, Urology / ₱800 Anesthesia). Laboratory: CBC ₱380, Urinalysis ₱180, FBS ₱200, Lipid Profile ₱680, ECG ₱350, Chest X-ray ₱600, Abdominal UTZ ₱1600. Dental: Cleaning ₱800, Pasta/Filling ₱600, Bunot/Simple Extraction ₱1500. Packages: Basic Annual Physical ₱2300 / Pre-employment Local ₱2600. Rooms: Ward ₱1,800/day → Private ₱4,800/day. Kung specific service ang hanap itanong lang (e.g., "Magkano ang CBC?"), at Senior/PWD 20% discount automatically apply sa lahat kapag nag-present ng valid ID!',
-    'senior_pwd_discount': '✅ TANGGAP PO ANG 20% SENIOR CITIZEN AT PWD DISCOUNT SA LAHAT NG SERBISYO SA PASCUAL GENERAL HOSPITAL! Mandatory po ito sa lahat ng item sa itaas (OPD fees, labs, x-ray, ultrasound, procedures, dental, room accommodation, packages). Kailangan lamang pong mag-present ng VALID na Senior Citizen ID o PWD Identification Card sa pagbabayad ng bill sa Billing Department / Cashier. Available din ang discount para sa PhilHealth accredited members at mga HMO/health card partners.',
-    'appointment_booking': '📅 PAANO MAGPA-APPOINTMENT O MAG-WALK-IN SA PASCUAL GENERAL HOSPITAL:\n\nOption 1 — WALK-IN (Pinakamadali & 100% Accepted): Maaari pong dumiretso sa OPD Building tuwing Monday-Saturday, 8:00AM-5:00PM. First-come, first-served ang queue number sa triage.\n\nOption 2 — PHONE INQUIRY: Para malaman ang current queue o availability ng department, tumawag muna sa main line: 0915 312 7144 bago pumunta.\n\nOption 3 — Admission / Surgery / Prenatal schedule: Para sa major procedures na kailangan ng prior schedule, magpakonsulta muna sa OPD para bigyan ng Referral / OR booking slip ng doctor.\n\nDahil ang current public website ay hindi pa nag-ooffer ng 1-click online appointment booking, ang WALK-IN & CALL ay ang pinakatiyakang paraan para makakuha ng OPD slot. Magdala lamang po ng VALID ID at PhilHealth/HMO card kung meron. Salamat!',
-    'appointment_queue': '⏱️ PARA SA CURRENT QUEUE / PILA NGAYONG ARAW:\nAng OPD triage ng Pascual General Hospital ay nagbibigay ng sequential queue number pagdating sa first-come-first-served basis. Para makuha ang pinaka-accurate na number ng pila at estimated waiting time NGAYON: MANGYARING TUMAWAG MUNA SA MAIN HOSPITAL LINE 0915 312 7144 (8AM-9PM daily). Ang typical OPD waiting time tuwing weekday morning (peak) ay 45 min to 1.5 hrs para sa unang 50 queue numbers; tuwing hapon at Sabado ay mas mabilis. Para sa pinakamabilis na pila, dumating nang maaga (7:30AM-8:00AM opening).',
-    'lab_result_status': '🔬 STATUS NG LAB / XRAY / ECG / ULTRASOUND RESULTS (SAFE GUIDE):\n\nTypical turnaround oras ng mga resulta (pwedeng makuha sa Laboratory / Radiology Department):\n• CBC / Urinalysis / Fecalysis / Routine labs: 3–6 hours (same day kung before 12PM submitted)\n• X-ray plain films (chest, extremity, spine): 2–4 hours\n• ECG 12 lead: ~15–30 mins sa OPD\n• Ultrasound (Abdomen / OB / Breast / Thyroid): may preliminary impression agad pagkatapos ng procedure; typed report 2–4 hours\n• Dengue combo / COVID Antigen rapid: ~20 mins\n• COVID RT-PCR, Blood culture, Urine culture & sensitivity: 24–48 HOURS\n• Hepa B / HIV / VDRL / Thyroid TSH / HbA1c / Lipid profile: 4–8 hours (next day pag after 3pm)\n• Histopathology / biopsy: 5–7 working days\n\nPANO KUNIN:\na) Walk-in sa Laboratory / Radiology Releasing window (Magdala ng Valid ID + resibo / payment slip)\nb) Patient Portal account (kung meron ka nang login): Buksan ang My Lab Results section. Kung WALA KA PONG account at gustong magkaroon: Mag-register sa OPD Registration area sa inyong next consult.\n\nNote: Para sa privacy, HINDI namin ibinibigay ang actual numeric values / results sa AI chatbot para maiwasan ang maling pagkakakilanlan ng pasyente. Ang nasa itaas ay STATUS at TYPICAL TURNAROUND TIME lamang — accurate & grounded 100%. 📌',
+    'price_list_overview': '💸 Reference prices ito mula sa kasalukuyang service list: OPD consultations (₱300 Dental / ₱500 General Medicine & Pediatrics / ₱600 OB-Gyne, Derma, ENT, Ophtha / ₱700 Surgery, Ortho, Urology / ₱800 Anesthesia). Laboratory: CBC ₱380, Urinalysis ₱180, FBS ₱200, Lipid Profile ₱680, ECG ₱350, Chest X-ray ₱600, Abdominal UTZ ₱1600. Dental: Cleaning ₱800, Pasta/Filling ₱600, Bunot/Simple Extraction ₱1500. Packages: Basic Annual Physical ₱2300 / Pre-employment Local ₱2600. Rooms: Ward ₱1,800/day → Private ₱4,800/day. Maaaring magbago ang presyo; ipa-confirm ang final charge, discount, at coverage sa Billing Department.',
+    'senior_pwd_discount': 'Mag-present ng valid Senior Citizen ID o PWD Identification Card sa Billing Department / Cashier. Billing ang magko-confirm ng eligibility, covered items, at final applicable discount. Ipa-confirm din sa Billing ang PhilHealth o HMO coverage dahil nakadepende ito sa service at account.',
+    'appointment_booking': '📅 Para sa appointment o walk-in, tumawag muna sa main hospital line na 0915 312 7144 upang kumpirmahin ang department availability, schedule, at kasalukuyang proseso. Para sa admission, surgery, o prenatal scheduling, maaaring kailanganin muna ang OPD consultation at referral. Magdala ng valid ID at PhilHealth/HMO card kung meron.',
+    'appointment_queue': '⏱️ Wala pang access ang chatbot sa live queue o kasalukuyang waiting time. Para sa totoong pila at availability ngayon, tumawag sa main hospital line na 0915 312 7144 bago pumunta.',
+    'lab_result_status': '🔬 ESTIMATED LAB / XRAY / ECG / ULTRASOUND TURNAROUND:\n\n• Routine laboratory tests: often same day\n• X-ray, ECG, and ultrasound reports: timing depends on workload and review\n• Cultures, RT-PCR, and histopathology: may require additional days\n\nPara sa actual release status, tingnan ang Patient Portal kung available o magtanong sa Laboratory / Radiology releasing area gamit ang valid ID at resibo. Hindi nagbibigay ang chatbot ng actual result values. Estimates lamang ito; kumpirmahin ang release time sa hospital department.',
   },
   admin: {
     'how do i post announcements?': 'Open the admin dashboard and go to the announcements area. From there, create or manage announcements using the admin-only controls, then confirm the post details before saving.',
@@ -687,7 +687,7 @@ function safeAssistantPath(role, value) {
   const roleRoots = {
     admin: '/admin', doctor: '/doctor', nurse: '/nurse', pharmacist: '/pharmacist',
     cashier: '/cashier', doctor_secretary: '/doctor-secretary', medtech: '/medtech',
-    radiographer: '/radiographer', ecg_operator: '/ecg', physical_therapist: '/pt', staff: '/staff'
+    radiographer: '/radiographer', ecg_operator: '/ecg', physical_therapist: '/pt', staff: '/staff', patient: '/patient'
   };
   const root = roleRoots[role];
   return root && (raw === root || raw.startsWith(`${root}/`)) ? raw : (root || '/');
@@ -775,15 +775,15 @@ function detectPriceIntent(normalized) {
       (lower.includes(' cbc ') && p.key === 'lab_cbc') ||
       (lower.includes(' urinalysis ') && p.key === 'lab_urinalysis') ||
       (lower.includes(' fecalysis ') && p.key === 'lab_stool') ||
-      (lower.includes(' xray chest ') || (lower.includes(' chest xray ') && p.key === 'lab_xray_chest')) ||
+      ((lower.includes(' xray chest ') || lower.includes(' chest xray ')) && p.key === 'lab_xray_chest') ||
       (p.key !== 'lab_xray_chest' && lower.includes(' xray ') && p.key.startsWith('lab_xray_')) ||
       (lower.includes(' ecg ') && p.key === 'lab_ecg') ||
       (lower.includes(' cleaning ') && p.key === 'den_cleaning') ||
-      (lower.includes(' bunot ') || lower.includes(' tooth extraction ') && p.key === 'den_extract') ||
-      (lower.includes(' pasta ng ngipin ') || (lower.includes(' filling ') && p.key.startsWith('den_pasta'))) ||
-      (lower.includes(' pregnancy test ') || (lower.includes(' buntis test ') && p.key.startsWith('lab_pregnancy'))) ||
-      (lower.includes(' fasting sugar ') || (lower.includes(' fbs ') && p.key === 'lab_fbs')) ||
-      (lower.includes(' random sugar ') || (lower.includes(' rbs ') && p.key === 'lab_rbs')) ||
+      ((lower.includes(' bunot ') || lower.includes(' tooth extraction ')) && p.key === 'den_extract') ||
+      ((lower.includes(' pasta ng ngipin ') || lower.includes(' filling ')) && p.key.startsWith('den_pasta')) ||
+      ((lower.includes(' pregnancy test ') || lower.includes(' buntis test ')) && p.key.startsWith('lab_pregnancy')) ||
+      ((lower.includes(' fasting sugar ') || lower.includes(' fbs ')) && p.key === 'lab_fbs') ||
+      ((lower.includes(' random sugar ') || lower.includes(' rbs ')) && p.key === 'lab_rbs') ||
       (lower.includes(' cholesterol ') && p.key.startsWith('lab_chol_')) ||
       (lower.includes(' lipid profile ') && p.key === 'lab_lipid') ||
       (lower.includes(' creatinine ') && p.key === 'lab_creatinine') ||
@@ -799,36 +799,36 @@ function detectPriceIntent(normalized) {
       (lower.includes(' blood culture ') && p.key === 'lab_blood_culture') ||
       (lower.includes(' urine culture ') && p.key === 'lab_urine_culture') ||
       (lower.includes(' gram stain ') && p.key === 'lab_gram_stain') ||
-      (lower.includes(' prothrombin ') || (lower.includes(' pt ') && p.key === 'lab_pt')) ||
+      ((lower.includes(' prothrombin ') || lower.includes(' pt ')) && p.key === 'lab_pt') ||
       (lower.includes(' ptt ') && p.key === 'lab_ptt') ||
-      (lower.includes(' hepa ') || (lower.includes(' hepatitis b ') && p.key === 'lab_hbsag')) ||
+      ((lower.includes(' hepa ') || lower.includes(' hepatitis b ')) && p.key === 'lab_hbsag') ||
       (lower.includes(' hiv ') && p.key === 'lab_hiv') ||
-      (lower.includes(' vdrl ') || (lower.includes(' syphilis ') && p.key === 'lab_vdrl')) ||
+      ((lower.includes(' vdrl ') || lower.includes(' syphilis ')) && p.key === 'lab_vdrl') ||
       (lower.includes(' dengue ') && p.key.startsWith('lab_dengue_')) ||
       (lower.includes(' covid antigen ') && p.key === 'lab_covid_antigen') ||
-      (lower.includes(' rt pcr ') || (lower.includes(' covid rtpcr ') && p.key === 'lab_covid_rtpcr')) ||
-      (lower.includes(' whole abdomen ultrasound ') || (lower.includes(' utz abdomen ') && p.key === 'lab_ultra_abd')) ||
-      (lower.includes(' ob ultrasound ') || (lower.includes(' prenatal ultrasound ') && p.key === 'lab_ultra_ob')) ||
+      ((lower.includes(' rt pcr ') || lower.includes(' covid rtpcr ')) && p.key === 'lab_covid_rtpcr') ||
+      ((lower.includes(' whole abdomen ultrasound ') || lower.includes(' utz abdomen ')) && p.key === 'lab_ultra_abd') ||
+      ((lower.includes(' ob ultrasound ') || lower.includes(' prenatal ultrasound ')) && p.key === 'lab_ultra_ob') ||
       (lower.includes(' breast ultrasound ') && p.key === 'lab_ultra_breast') ||
       (lower.includes(' thyroid ultrasound ') && p.key === 'lab_ultra_thyroid') ||
-      (lower.includes(' annual physical ') || (lower.includes(' ape basic ') && p.key === 'pkg_annual')) ||
-      (lower.includes(' executive check up ') || (lower.includes(' ape plus ') && p.key === 'pkg_ape_plus')) ||
+      ((lower.includes(' annual physical ') || lower.includes(' ape basic ')) && p.key === 'pkg_annual') ||
+      ((lower.includes(' executive check up ') || lower.includes(' ape plus ')) && p.key === 'pkg_ape_plus') ||
       (lower.includes(' pre employment local ') && p.key === 'pkg_preemp') ||
-      (lower.includes(' ofw ') || (lower.includes(' abroad pre employment ') && p.key === 'pkg_preemp_abroad')) ||
+      ((lower.includes(' ofw ') || lower.includes(' abroad pre employment ')) && p.key === 'pkg_preemp_abroad') ||
       (lower.includes(' first prenatal package ') && p.key === 'pkg_prenatal_first') ||
       (lower.includes(' dengue package ') && p.key === 'pkg_dengue') ||
       (lower.includes(' ward admission ') && p.key === 'rm_ward') ||
       (lower.includes(' semi private ') && p.key === 'rm_semiprivate') ||
       (lower.includes(' private room ') && p.key === 'rm_private') ||
       (lower.includes(' circumcision ') && p.key === 'min_circumcise') ||
-      (lower.includes(' suture ') || (lower.includes(' tahi hiwa ') && p.key === 'min_suture')) ||
-      (lower.includes(' abscess ') || (lower.includes(' pigsa drain ') && p.key === 'min_abscess')) ||
-      (lower.includes(' cautery ') || (lower.includes(' kulugo ') && p.key === 'min_cautery')) ||
-      (lower.includes(' hemorrhoid band ') || (lower.includes(' almoranas ligation ') && p.key === 'min_hemorrhoid')) ||
-      (lower.includes(' wisdom tooth ') || (lower.includes(' impacted bunot ') && p.key === 'den_extract_impact')) ||
-      (lower.includes(' panorex ') || (lower.includes(' full mouth xray ') && p.key === 'den_panorex')) ||
+      ((lower.includes(' suture ') || lower.includes(' tahi hiwa ')) && p.key === 'min_suture') ||
+      ((lower.includes(' abscess ') || lower.includes(' pigsa drain ')) && p.key === 'min_abscess') ||
+      ((lower.includes(' cautery ') || lower.includes(' kulugo ')) && p.key === 'min_cautery') ||
+      ((lower.includes(' hemorrhoid band ') || lower.includes(' almoranas ligation ')) && p.key === 'min_hemorrhoid') ||
+      ((lower.includes(' wisdom tooth ') || lower.includes(' impacted bunot ')) && p.key === 'den_extract_impact') ||
+      ((lower.includes(' panorex ') || lower.includes(' full mouth xray ')) && p.key === 'den_panorex') ||
       (lower.includes(' fluoride ') && p.key === 'den_fluoride') ||
-      (lower.includes(' operating room minor ') || (lower.includes(' minor or booking ') && p.key === 'ot_booking')) ||
+      ((lower.includes(' operating room minor ') || lower.includes(' minor or booking ')) && p.key === 'ot_booking') ||
       (lower.includes(' major surgery booking ') && p.key === 'ot_booking_major') ||
       (lower.includes(' ambulance ') && p.key === 'ambulance') ||
       (lower.includes(' medical certificate ') && p.key === 'med_cert') ||
@@ -836,13 +836,13 @@ function detectPriceIntent(normalized) {
       (lower.includes(' barangay medical ') && p.key === 'barangay_medical') ||
       (lower.includes(' senior citizen discount note ') && p.key === 'senior_disc') ||
       (hay.includes(' consultation ') && lower.includes(' consultation fee ')) ||
-      hay.includes(' check up ') ||
+      (lower.includes(' check up ') && hay.includes(' check up ')) ||
       (lower.includes(' room rate ') && p.key.startsWith('rm_')) ||
       (lower.includes(' pedia consultation ') && p.key === 'opd_pediatrics') ||
       (lower.includes(' obgyne ') && p.key === 'opd_obgyne') ||
       (lower.includes(' derma ') && p.key === 'opd_derma') ||
       (lower.includes(' ent ') && p.key === 'opd_ent') ||
-      (lower.includes(' optha ') || lower.includes(' eye check up ') && p.key === 'opd_optha') ||
+      ((lower.includes(' optha ') || lower.includes(' eye check up ')) && p.key === 'opd_optha') ||
       (lower.includes(' ortho ') && p.key === 'opd_ortho') ||
       (lower.includes(' surgery ') && p.key === 'opd_surgery') ||
       (lower.includes(' urology ') && p.key === 'opd_urology') ||
@@ -1191,7 +1191,7 @@ function bestKnowledgeMatch(role, pathname, text) {
     return {
       id: `price::${first.key}`,
       title: `Price for ${first.name}`,
-      text: `Service name: ${first.name} (category: ${first.category}). Current reference price in Philippine Pesos: ₱${Number(first.pricePHP).toLocaleString('en-PH')}. ${first.notes ? `Additional notes: ${first.notes}. ` : ''}IMPORTANT: Senior Citizen and PWD 20% discount is mandatorily applied to all services upon presentation of valid ID. PhilHealth and accredited HMO partners may also apply direct coverage at the Cashier / Billing Department. Prices can change and must be confirmed with the Billing Department. If exact charge differs on visit due to additional service or complexity, billing department shall provide final official receipt.`
+      text: `Service name: ${first.name} (category: ${first.category}). Reference price in Philippine Pesos: ₱${Number(first.pricePHP).toLocaleString('en-PH')}. ${first.notes ? `Additional notes: ${first.notes}. ` : ''}Prices, discount eligibility, and PhilHealth or HMO coverage can change. Present any valid Senior Citizen or PWD ID and confirm the final charge and applicable benefits with the Billing Department.`
     };
   }
   const symptomHit = detectSymptomIntent(normalized);
@@ -1254,11 +1254,11 @@ function quickAnswerFor(role, text) {
       const exact = PUBLIC_PRICES.find((p) => String(p.key).toLowerCase() === key.toLowerCase());
       if (exact) {
         const discTag = exact.pricePHP > 0
-          ? `\n\n💡 Senior Citizen / PWD discount: -20% sa presyo sa itaas pag nag-present ng valid ID.`
+          ? `\n\n💡 Mag-present ng valid Senior Citizen/PWD ID at ipa-confirm sa Billing ang eligibility at final discount.`
           : '';
         const priceTag = exact.pricePHP === 0
           ? `Note: ${exact.notes || 'No fee for this service / discount note.'}`
-          : `💰 Presyo: **₱${Number(exact.pricePHP).toLocaleString('en-PH')}** (${exact.category})`;
+          : `💰 Presyo: ₱${Number(exact.pricePHP).toLocaleString('en-PH')} (${exact.category})`;
         return `✅ SERVICE: ${exact.name}\n${priceTag}${exact.notes ? `\n📝 Details: ${exact.notes}` : ''}${discTag}`;
       }
     }
@@ -1660,7 +1660,7 @@ function localAssistantReply({ role, message, pathname, preferredLanguage = 'eng
     const service = priceHit.matches[0];
     const priceLine = service.pricePHP === 0
       ? `Note: ${service.notes || 'Service reference entry.'}`
-      : `💰 Presyo: **₱${Number(service.pricePHP).toLocaleString('en-PH')}** (${service.category})\n${service.notes ? `📝 ${service.notes}` : ''}\n\n💡 Senior Citizen / PWD discount: -20% sa presyo sa itaas pag nag-present ng valid ID.`;
+      : `💰 Presyo: ₱${Number(service.pricePHP).toLocaleString('en-PH')} (${service.category})\n${service.notes ? `📝 ${service.notes}` : ''}\n\n💡 Mag-present ng valid Senior Citizen/PWD ID at ipa-confirm sa Billing ang eligibility at final discount.`;
     const nextChips = [
       `Price list ng lahat ng serbisyo`,
       `Paano magpa-appointment ng ${String(service.category || 'OPD').split(' ')[0]}?`,
