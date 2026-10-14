@@ -8,6 +8,7 @@ import AccountHeaderActions from "../components/AccountHeaderActions";
 import ConfirmModal from "../components/ConfirmModal";
 import { checkBackendHealth, fetchJson } from "../utils/api";
 import { formatActivityLog } from "../utils/activityLogDisplay";
+import { printHtmlDocument } from "../utils/printDocument";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const WEB_ORIGIN = String(process.env.REACT_APP_WEB_ORIGIN || '').trim() || 'https://pascualinga.com';
@@ -3787,42 +3788,15 @@ function AdminDashboard() {
           </body>
         </html>
       `;
-      const printFrame = document.createElement('iframe');
-      printFrame.title = `${safeTitle} printable report`;
-      printFrame.setAttribute('aria-hidden', 'true');
-      Object.assign(printFrame.style, {
-          position: 'fixed', right: '0', bottom: '0', width: '1px', height: '1px',
-          border: '0', opacity: '0', pointerEvents: 'none'
-      });
-      document.body.appendChild(printFrame);
-      const frameDocument = printFrame.contentDocument || printFrame.contentWindow?.document;
-      if (!frameDocument || !printFrame.contentWindow) {
-          printFrame.remove();
-          setModalType('error');
-          setSuccessMessage('Unable to prepare the printable report. Please try again.');
-          setShowSuccessModal(true);
-          return;
-      }
-      frameDocument.open();
-      frameDocument.write(reportHtml);
-      frameDocument.close();
-      const cleanup = () => window.setTimeout(() => printFrame.remove(), 500);
-      printFrame.contentWindow.onafterprint = cleanup;
-      window.setTimeout(async () => {
-          try {
-              await frameDocument.fonts?.ready;
-              printFrame.contentWindow.focus();
-              printFrame.contentWindow.print();
-          } catch (error) {
-              cleanup();
+      void printHtmlDocument({
+          html: reportHtml,
+          title: safeTitle,
+          onError: (message) => {
               setModalType('error');
-              setSuccessMessage('Unable to open the print dialog. Please try again.');
+              setSuccessMessage(message);
               setShowSuccessModal(true);
           }
-      }, 250);
-      window.setTimeout(() => {
-          if (printFrame.isConnected) printFrame.remove();
-      }, 60000);
+      });
       logActivity('Export', `Printed ${String(title || 'report')}`, 'Report: printable output').catch(() => {});
   };
 
@@ -8448,22 +8422,13 @@ function AdminDashboard() {
 
   // --- PDF ANALYTICS HELPER ---
   const exportPDFAnalytics = () => {
-      // Open a temporary printable window
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-          setModalType('error');
-          setSuccessMessage('The PDF report was blocked by the browser. Allow pop-ups and try again.');
-          setShowSuccessModal(true);
-          return;
-      }
-      
       // Calculate analytical data derived from Supabase
       const totalStaff = Number(dashboardStats?.registered?.total ?? staffList.length);
       const totalPatients = Number(dashboardStats?.patients?.total ?? patientList.length);
       const lowStock = Number((dashboardStats?.inventory?.lowStockMeds ?? 0) + (dashboardStats?.inventory?.lowStockSupplies ?? 0));
       const onlineCount = Number(dashboardStats?.online?.total ?? staffList.filter(s => s.status === 'Online').length);
       
-      printWindow.document.write(`
+      const analyticsHtml = `
           <html>
               <head>
                   <title>Executive Operational Analytics</title>
@@ -8502,14 +8467,16 @@ function AdminDashboard() {
                   <div class="footer">Pascual General Hospital - Confidential Internal Analytics Report</div>
               </body>
           </html>
-      `);
-      
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-          printWindow.print();
-          printWindow.close();
-      }, 500); // Small delay to ensure styles apply before print dialog
+      `;
+      void printHtmlDocument({
+          html: analyticsHtml,
+          title: 'Executive Operational Analytics',
+          onError: (message) => {
+              setModalType('error');
+              setSuccessMessage(message);
+              setShowSuccessModal(true);
+          }
+      });
       logActivity('Export', 'Exported executive analytics PDF', 'Report: executive analytics').catch(() => {});
   };
 

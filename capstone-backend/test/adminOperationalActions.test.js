@@ -21,9 +21,8 @@ test('admin restock rejection reports failures and prevents duplicate actions', 
 });
 
 test('admin report printing uses a rendered same-page frame instead of a transient blank tab', () => {
-  assert.match(adminSource, /document\.createElement\('iframe'\)/);
-  assert.match(adminSource, /await frameDocument\.fonts\?\.ready/);
-  assert.match(adminSource, /printFrame\.contentWindow\.print\(\)/);
+  assert.match(adminSource, /import \{ printHtmlDocument \} from "\.\.\/utils\/printDocument"/);
+  assert.match(adminSource, /printHtmlDocument\(\{/);
   const helperStart = adminSource.indexOf('const printTableReport');
   const helperEnd = adminSource.indexOf('const isLowStockItem', helperStart);
   assert.ok(helperStart >= 0 && helperEnd > helperStart);

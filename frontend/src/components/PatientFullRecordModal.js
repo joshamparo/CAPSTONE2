@@ -12,6 +12,7 @@ import {
   X
 } from 'lucide-react';
 import { API_BASE, buildAuthHeaders, fetchJson, getCurrentUser } from '../utils/api';
+import { printHtmlDocument } from '../utils/printDocument';
 import './PatientFullRecordModal.css';
 
 const DASH = '—';
@@ -207,8 +208,6 @@ export default function PatientFullRecordModal({
 
   const handlePrintRecord = () => {
     if (!record) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
 
     const profileRows = [
       ['Patient ID', patient.id || patientId || DASH],
@@ -460,9 +459,7 @@ export default function PatientFullRecordModal({
       </html>
     `;
 
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
+    void printHtmlDocument({ html, title: `${displayName} - Patient Record` });
   };
 
   return (

@@ -8,6 +8,7 @@ import EmbeddedJitsiMeeting from '../components/EmbeddedJitsiMeeting';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import StatusBadge from '../components/StatusBadge';
 import { checkBackendHealth, fetchJson } from '../utils/api';
+import { printHtmlDocument } from '../utils/printDocument';
 import { supabase } from '../lib/supabaseClient';
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 // Older trace call sites intentionally do nothing. Patient/room data must not
@@ -131,6 +132,26 @@ function DoctorDashboard() {
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [videoMeetingUrl, setVideoMeetingUrl] = useState('');
   const [videoMeetingTitle, setVideoMeetingTitle] = useState('');
+
+  useEffect(() => {
+    if (!printTarget && !printCertificateTarget) return undefined;
+
+    let secondFrame = 0;
+    const clearPrintDocument = () => {
+      setPrintTarget(null);
+      setPrintCertificateTarget(null);
+    };
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => window.print());
+    });
+
+    window.addEventListener('afterprint', clearPrintDocument, { once: true });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame) window.cancelAnimationFrame(secondFrame);
+      window.removeEventListener('afterprint', clearPrintDocument);
+    };
+  }, [printTarget, printCertificateTarget]);
   const [videoStartingId, setVideoStartingId] = useState('');
   const videoStartInFlightRef = useRef(new Set());
   const videoRoomSyncTokenRef = useRef(0);
@@ -2816,8 +2837,8 @@ function DoctorDashboard() {
 
   const printPrescription = (p) => {
     if (!p) return;
+    setPrintCertificateTarget(null);
     setPrintTarget(p);
-    setTimeout(() => window.print(), 50);
   };
 
   const copyToCurrentPrescription = (pastPrescription) => {
@@ -2955,23 +2976,17 @@ function DoctorDashboard() {
 
   const printCertificate = (c) => {
     if (!c) return;
+    setPrintTarget(null);
     setPrintCertificateTarget(c);
-    setTimeout(() => window.print(), 50);
   };
 
   const printFullPatientRecord = () => {
     if (!selectedPatient) return;
     
-    // Create a printable content
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      setToast({ type: 'error', message: 'Popup blocked. Allow popups to print.' });
-      return;
-    }
     const patient = selectedPatient;
     const patientName = `${patient.firstName} ${patient.lastName}`;
     
-    printWindow.document.write(`
+    const html = `
       <html>
         <head>
           <title>Patient Record - ${patientName}</title>
@@ -3065,8 +3080,12 @@ function DoctorDashboard() {
           </div>
         </body>
       </html>
-    `);
-    printWindow.document.close();
+    `;
+    void printHtmlDocument({
+      html,
+      title: `Patient Record - ${patientName}`,
+      onError: (message) => setToast({ type: 'error', message })
+    });
   };
 
   const statusClass = (s) => {
