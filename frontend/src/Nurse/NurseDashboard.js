@@ -3750,11 +3750,20 @@ function NurseDashboard() {
   useEffect(() => {
     if (!settings.autoRefresh) return;
 
-    const interval = setInterval(() => {
-      if (document.visibilityState !== 'visible') return;
-      if (['overview', 'patients', 'er-intake'].includes(view) && typeof refreshPatientsList === 'function') refreshPatientsList();
-      if (view === 'appointments' && typeof fetchAppointments === 'function') fetchAppointments();
-      if (['overview', 'ward-management'].includes(view) && typeof fetchWardRegistry === 'function') fetchWardRegistry();
+    let refreshInFlight = false;
+    const interval = setInterval(async () => {
+      if (document.visibilityState !== 'visible' || refreshInFlight) return;
+      const tasks = [];
+      if (['overview', 'patients', 'er-intake'].includes(view) && typeof refreshPatientsList === 'function') tasks.push(refreshPatientsList());
+      if (view === 'appointments' && typeof fetchAppointments === 'function') tasks.push(fetchAppointments());
+      if (['overview', 'ward-management'].includes(view) && typeof fetchWardRegistry === 'function') tasks.push(fetchWardRegistry());
+      if (!tasks.length) return;
+      refreshInFlight = true;
+      try {
+        await Promise.allSettled(tasks);
+      } finally {
+        refreshInFlight = false;
+      }
     }, 60000);
 
     return () => clearInterval(interval);
@@ -5053,8 +5062,11 @@ function NurseDashboard() {
 
   // Fetch Dashboard Stats
   React.useEffect(() => {
+    if (view !== 'overview') return undefined;
+    let statsInFlight = false;
     const fetchStats = async () => {
-        if (document.visibilityState !== 'visible') return;
+        if (document.visibilityState !== 'visible' || statsInFlight) return;
+        statsInFlight = true;
         try {
             setStatsError('');
             const data = await fetchJson('/api/stats/overview', { apiBase: API_BASE, headers: { ...getAuthHeaders() }, timeoutMs: 15000 });
@@ -5063,13 +5075,15 @@ function NurseDashboard() {
             console.error('Error fetching stats:', error);
             setStats({ patients: 0, inpatients: 0, accounts: 0 });
             setStatsError(String(error?.message || 'Unable to load dashboard stats.'));
+        } finally {
+            statsInFlight = false;
         }
     };
 
     fetchStats();
     const interval = setInterval(fetchStats, 30000);
     return () => clearInterval(interval);
-  }, [API_BASE]);
+  }, [API_BASE, view]);
 
   React.useEffect(() => {
     if (view === 'patients') {

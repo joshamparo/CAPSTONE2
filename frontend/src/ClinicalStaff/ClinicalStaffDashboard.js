@@ -410,18 +410,26 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
   }, [videoMeeting]);
 
   useEffect(() => {
-    refreshOrders();
-    refreshSchedule();
-    refreshApprovals();
-    if (isPhysicalTherapist) refreshVideoAppointments();
-    if (!isEcgOperator) refreshPatients();
-    const t = setInterval(() => {
-      refreshOrders();
-      refreshSchedule();
-      refreshApprovals();
-      if (isPhysicalTherapist) refreshVideoAppointments();
-    }, 20000);
-    return () => clearInterval(t);
+    let cancelled = false;
+    let refreshInFlight = false;
+    const refreshWorkspace = async ({ includePatients = false } = {}) => {
+      if (cancelled || refreshInFlight || document.visibilityState !== 'visible') return;
+      refreshInFlight = true;
+      try {
+        const tasks = [refreshOrders(), refreshSchedule(), refreshApprovals()];
+        if (isPhysicalTherapist) tasks.push(refreshVideoAppointments());
+        if (includePatients && !isEcgOperator) tasks.push(refreshPatients());
+        await Promise.allSettled(tasks);
+      } finally {
+        refreshInFlight = false;
+      }
+    };
+    void refreshWorkspace({ includePatients: true });
+    const t = setInterval(() => void refreshWorkspace(), 20000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
   }, [role, orderStatusFilter, isEcgOperator, isPhysicalTherapist]);
 
   useEffect(() => {

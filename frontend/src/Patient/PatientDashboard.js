@@ -560,7 +560,10 @@ function PatientDashboard() {
   useEffect(() => {
     if (!user?.email) return;
     let cancelled = false;
+    let loadInFlight = false;
     const load = async ({ silent = false } = {}) => {
+      if (cancelled || loadInFlight || document.visibilityState !== 'visible') return;
+      loadInFlight = true;
       if (!silent) setLoadingResults(true);
       setRecordsError('');
       try {
@@ -576,6 +579,7 @@ function PatientDashboard() {
         setRecordsError(String(e?.message || 'Unable to load lab results.'));
       } finally {
         if (!silent) setLoadingResults(false);
+        loadInFlight = false;
       }
     };
 
