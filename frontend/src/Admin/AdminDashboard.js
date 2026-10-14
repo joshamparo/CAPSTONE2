@@ -1006,6 +1006,7 @@ function AdminDashboard() {
   const [restockPriority, setRestockPriority] = useState('Normal');
   const [restockNote, setRestockNote] = useState('');
   const [restockSubmitting, setRestockSubmitting] = useState(false);
+  const [restockActionId, setRestockActionId] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [nameNotice, setNameNotice] = useState("");
   const [nameNoticeField, setNameNoticeField] = useState(null);
@@ -1555,8 +1556,11 @@ function AdminDashboard() {
   };
 
   const handleRejectRestock = async (req) => {
+    const requestId = String(req?.id || req?._id || '').trim();
+    if (!requestId || restockActionId) return;
+    setRestockActionId(requestId);
     try {
-      await fetchJson(`/api/restock-requests/${req.id}`, {
+      await fetchJson(`/api/restock-requests/${encodeURIComponent(requestId)}`, {
         apiBase: API_BASE,
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -1565,8 +1569,20 @@ function AdminDashboard() {
           fulfilledBy: (adminProfile && (adminProfile.name || adminProfile.email)) || 'Admin'
         })
       });
-      fetchRestockRequests();
-    } catch (_) {}
+      setRestockRequests((current) => current.map((item) => (
+        String(item?.id || item?._id || '') === requestId ? { ...item, status: 'Rejected' } : item
+      )));
+      setModalType('success');
+      setSuccessMessage('Restock request rejected.');
+      setShowSuccessModal(true);
+      await fetchRestockRequests();
+    } catch (error) {
+      setModalType('error');
+      setSuccessMessage(String(error?.message || 'Failed to reject request.'));
+      setShowSuccessModal(true);
+    } finally {
+      setRestockActionId('');
+    }
   };
 
   const submitRestockRequest = async () => {
@@ -3731,10 +3747,9 @@ function AdminDashboard() {
   };
 
   const printTableReport = (title, subtitle, columns, rows) => {
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
+      if (!Array.isArray(columns) || columns.length === 0 || !Array.isArray(rows) || rows.length === 0) {
           setModalType('error');
-          setSuccessMessage('The printable report was blocked by the browser. Allow pop-ups and try again.');
+          setSuccessMessage('No report data is available to print.');
           setShowSuccessModal(true);
           return;
       }
@@ -3744,7 +3759,7 @@ function AdminDashboard() {
       const th = columns.map((c) => `<th>${escapeReportHtml(c)}</th>`).join('');
       const td = rows.map((r) => `<tr>${columns.map((c) => `<td>${escapeReportHtml(r[c])}</td>`).join('')}</tr>`).join('');
 
-      printWindow.document.write(`
+      const reportHtml = `
         <html>
           <head>
             <title>${safeTitle}</title>
@@ -3771,13 +3786,43 @@ function AdminDashboard() {
             <div class="footer">Confidential • Internal use only</div>
           </body>
         </html>
-      `);
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-          printWindow.print();
-          printWindow.close();
-      }, 350);
+      `;
+      const printFrame = document.createElement('iframe');
+      printFrame.title = `${safeTitle} printable report`;
+      printFrame.setAttribute('aria-hidden', 'true');
+      Object.assign(printFrame.style, {
+          position: 'fixed', right: '0', bottom: '0', width: '1px', height: '1px',
+          border: '0', opacity: '0', pointerEvents: 'none'
+      });
+      document.body.appendChild(printFrame);
+      const frameDocument = printFrame.contentDocument || printFrame.contentWindow?.document;
+      if (!frameDocument || !printFrame.contentWindow) {
+          printFrame.remove();
+          setModalType('error');
+          setSuccessMessage('Unable to prepare the printable report. Please try again.');
+          setShowSuccessModal(true);
+          return;
+      }
+      frameDocument.open();
+      frameDocument.write(reportHtml);
+      frameDocument.close();
+      const cleanup = () => window.setTimeout(() => printFrame.remove(), 500);
+      printFrame.contentWindow.onafterprint = cleanup;
+      window.setTimeout(async () => {
+          try {
+              await frameDocument.fonts?.ready;
+              printFrame.contentWindow.focus();
+              printFrame.contentWindow.print();
+          } catch (error) {
+              cleanup();
+              setModalType('error');
+              setSuccessMessage('Unable to open the print dialog. Please try again.');
+              setShowSuccessModal(true);
+          }
+      }, 250);
+      window.setTimeout(() => {
+          if (printFrame.isConnected) printFrame.remove();
+      }, 60000);
       logActivity('Export', `Printed ${String(title || 'report')}`, 'Report: printable output').catch(() => {});
   };
 
@@ -5417,7 +5462,7 @@ function AdminDashboard() {
                   {restockRequests.length === 0 ? (
                        <div className="empty-state-sm" style={{padding: '2rem'}}>No restock requests from pharmacy.</div>
                    ) : (
-                       restockRequests.filter(r => r.status === 'Pending').map((req) => (
+                       restockRequests.filter(r => String(r.status || '').toLowerCase() === 'pending').map((req) => (
                            <div key={req.id} className="inventory-item-row" style={{ gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.2fr' }}>
                                <div className="inv-name-col">
                                    <span className="inv-name">{req.item_name || req.itemName}</span>
@@ -5436,29 +5481,33 @@ function AdminDashboard() {
                                </div>
                                <div className="inv-action-col" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                                  <button
+                                      type="button"
                                       className="btn-orange-sm"
                                       onClick={() => handleApproveRestock(req)}
+                                      disabled={restockActionId === String(req.id || req._id || '')}
                                       style={{ padding: '4px 12px', fontSize: '0.75rem' }}
                                   >
                                        Approve
                                    </button>
                                    <button
+                                      type="button"
                                       className="btn-gray-sm"
                                       onClick={() => handleRejectRestock(req)}
+                                      disabled={Boolean(restockActionId)}
                                       style={{ padding: '4px 12px', fontSize: '0.75rem', background: '#fee2e2', color: '#b91c1c', border: 'none' }}
                                   >
-                                       Reject
+                                       {restockActionId === String(req.id || req._id || '') ? 'Rejecting...' : 'Reject'}
                                    </button>
                                </div>
                            </div>
                        ))
                    )}
-                   {restockRequests.filter(r => r.status !== 'Pending').length > 0 && (
+                   {restockRequests.filter(r => String(r.status || '').toLowerCase() !== 'pending').length > 0 && (
                      <div style={{ padding: '12px', background: '#f8fafc', fontSize: '0.8rem', fontWeight: 700, color: '#64748b', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
                        RECENTLY PROCESSED
                      </div>
                    )}
-                   {restockRequests.filter(r => r.status !== 'Pending').slice(0, 5).map((req) => (
+                   {restockRequests.filter(r => String(r.status || '').toLowerCase() !== 'pending').slice(0, 5).map((req) => (
                      <div key={req.id} className="inventory-item-row" style={{ gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.2fr', opacity: 0.7 }}>
                         <div className="inv-name-col">
                             <span className="inv-name">{req.item_name || req.itemName}</span>

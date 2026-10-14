@@ -322,9 +322,11 @@ router.patch('/:id', async (req, res) => {
         UPDATE restock_requests
         SET status = 'Rejected', fulfilled_by = ${fulfilledBy}, updated_at = now()
         WHERE id = ${id}
+          AND status IN ('Pending', 'In Progress')
         RETURNING id, item_type, item_id, item_name, requested_qty, fulfilled_qty, priority, status, note, requested_by, fulfilled_by, created_at, updated_at
       `;
       const updated = Array.isArray(rows) ? rows[0] : rows;
+      if (!updated) return res.status(409).json({ message: 'Request was already processed by another user.' });
       if (fulfilledBy) {
         prisma.activity_logs.create({
           data: {
