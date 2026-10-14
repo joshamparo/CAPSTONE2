@@ -166,7 +166,8 @@ export const fetchJson = async (urlOrPath, opts = {}) => {
     headers = {},
     body,
     timeoutMs = 45000,
-    parseJson = true
+    parseJson = true,
+    keepalive = false
   } = opts;
 
   const url = String(urlOrPath || '').startsWith('http') ? String(urlOrPath) : `${apiBase}${urlOrPath}`;
@@ -179,6 +180,7 @@ export const fetchJson = async (urlOrPath, opts = {}) => {
       method,
       headers,
       body,
+      keepalive,
       ...(ctrl ? { signal: ctrl.signal } : {})
     });
 

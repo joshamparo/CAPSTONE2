@@ -1790,14 +1790,15 @@ function PharmacistDashboard() {
     }
   };
 
-  const confirmLogout = async () => {
+  const confirmLogout = () => {
     try {
       const session = JSON.parse(localStorage.getItem('currentUser'));
       if (session?.id && session?.accountType) {
         fetch(`${API_BASE}/api/staff/logout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: session.id, accountType: session.accountType })
+          body: JSON.stringify({ id: session.id, accountType: session.accountType }),
+          keepalive: true
         }).catch(() => {});
       }
     } catch (_) {}

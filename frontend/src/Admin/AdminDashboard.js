@@ -2619,20 +2619,22 @@ function AdminDashboard() {
      setPasswordsMatch(null);
    };
 
-  const confirmLogout = async () => {
+  const confirmLogout = () => {
+    let logoutRequest = null;
     try {
         const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
         // If we have a user and it's NOT the hardcoded simulated admin
         if (currentUser && currentUser._id && localStorage.getItem('tempLoginEmail') !== "admin@pgh.com") {
-            await fetchJson(`/api/staff/logout`, {
+            logoutRequest = {
               apiBase: API_BASE,
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
               body: JSON.stringify({ 
                 id: currentUser._id, 
                 accountType: currentUser.accountType || 'staff' 
-              })
-            });
+              }),
+              keepalive: true
+            };
         }
     } catch (error) {
         console.error("Logout error:", error);
@@ -2643,6 +2645,9 @@ function AdminDashboard() {
     localStorage.removeItem('tempLoginRole');
     localStorage.removeItem('generatedOTP');
     navigate('/login');
+    if (logoutRequest) {
+      fetchJson(`/api/staff/logout`, logoutRequest).catch((error) => console.error("Logout notification error:", error));
+    }
   };
 
   const handleNameInput = (e, fieldId) => {

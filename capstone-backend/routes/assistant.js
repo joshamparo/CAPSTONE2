@@ -1922,7 +1922,9 @@ router.post('/chat', async (req, res) => {
     }
 
     const protectedReply = localAssistantReply({ role, message: latestText, pathname, preferredLanguage });
-    if (protectedReply.source === 'policy') {
+    // Deterministic policy and curated knowledge answers do not need an OpenAI
+    // round trip. This keeps common questions fast and avoids unnecessary cost.
+    if (protectedReply.source === 'policy' || protectedReply.source === 'knowledge') {
       return res.json({ requestId, role, pathname, ...protectedReply, latencyMs: Date.now() - startAt });
     }
 

@@ -1460,16 +1460,18 @@ export default function OfficeStaffDashboard({ mode }) {
     fetchCloseout({ date: closeoutDate });
   }, [closeoutDate, role, user, view]);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
+    let logoutRequest = null;
     try {
       const u = getUser();
       if (u && u._id && localStorage.getItem('tempLoginEmail') !== 'admin@pgh.com') {
-        await fetchJson(`/api/staff/logout`, {
+        logoutRequest = {
           apiBase: API_BASE,
           method: 'POST',
           headers: buildHeaders(u),
-          body: JSON.stringify({ id: u._id, accountType: u.accountType || u.account_type || u.role || role })
-        });
+          body: JSON.stringify({ id: u._id, accountType: u.accountType || u.account_type || u.role || role }),
+          keepalive: true
+        };
       }
     } catch (_) {
     }
@@ -1478,6 +1480,9 @@ export default function OfficeStaffDashboard({ mode }) {
     localStorage.removeItem('tempLoginRole');
     localStorage.removeItem('generatedOTP');
     navigate('/login');
+    if (logoutRequest) {
+      fetchJson(`/api/staff/logout`, logoutRequest).catch(() => {});
+    }
   };
 
   const navItems = useMemo(() => {

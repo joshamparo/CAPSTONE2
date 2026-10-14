@@ -366,26 +366,21 @@ function HomePage() {
     return out;
   }, [newsCursor, newsItems, newsLoading]);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     let storedUser = null;
     try {
       storedUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
     } catch (_) {}
     const userId = storedUser?.id || storedUser?._id;
+    let logoutRequest = null;
     if (storedUser && userId && storedUser.sessionToken) {
-        try {
-            const role = String(storedUser.account_type || storedUser.accountType || storedUser.role || '').toLowerCase();
-            await fetch(`${API_BASE}/api/staff/logout`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(storedUser, role) },
-                body: JSON.stringify({ 
-                    id: userId,
-                    accountType: role
-                })
-            });
-        } catch (error) {
-            console.error("Failed to notify backend of logout:", error);
-        }
+        const role = String(storedUser.account_type || storedUser.accountType || storedUser.role || '').toLowerCase();
+        logoutRequest = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(storedUser, role) },
+          body: JSON.stringify({ id: userId, accountType: role }),
+          keepalive: true
+        };
     }
     localStorage.removeItem('currentUser');
     localStorage.removeItem('tempLoginEmail');
@@ -393,6 +388,9 @@ function HomePage() {
     setMobileNavOpen(false);
     setUser(null);
     navigate('/');
+    if (logoutRequest) {
+      fetch(`${API_BASE}/api/staff/logout`, logoutRequest).catch((error) => console.error("Failed to notify backend of logout:", error));
+    }
   };
 
   const closeMobileNav = () => setMobileNavOpen(false);

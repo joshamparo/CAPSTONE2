@@ -5362,18 +5362,20 @@ function NurseDashboard() {
       setShowHandoffModal(true);
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
+    let logoutRequest = null;
     try {
         const currentUser = JSON.parse(localStorage.getItem('currentUser'));
         if (currentUser && currentUser._id) {
-            await fetch(`${API_BASE}/api/staff/logout`, {
+            logoutRequest = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ 
                     id: currentUser._id, 
                     accountType: currentUser.accountType || 'nurse' 
-                })
-            });
+                }),
+                keepalive: true
+            };
         }
     } catch (error) {
         console.error("Logout error:", error);
@@ -5383,6 +5385,9 @@ function NurseDashboard() {
     localStorage.removeItem('tempLoginRole');
     localStorage.removeItem('currentUser');
     navigate('/login');
+    if (logoutRequest) {
+      fetch(`${API_BASE}/api/staff/logout`, logoutRequest).catch((error) => console.error("Logout notification error:", error));
+    }
   };
 
   // --- Validation Functions (Reused from Admin) ---
