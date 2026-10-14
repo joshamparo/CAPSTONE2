@@ -86,6 +86,8 @@ export default function PatientFullRecordModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [record, setRecord] = useState(null);
+  const [loadedPatientId, setLoadedPatientId] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
   const [tab, setTab] = useState('overview');
   const [interpretations, setInterpretations] = useState({});
   const [signingResultId, setSigningResultId] = useState('');
@@ -101,21 +103,27 @@ export default function PatientFullRecordModal({
     }
     if (!patientId) {
       setRecord(null);
+      setLoadedPatientId('');
       setError('Missing patient ID.');
       return undefined;
     }
 
+    const requestedPatientId = String(patientId).trim();
     let cancelled = false;
     const run = async () => {
       setLoading(true);
       setError('');
+      setLoadedPatientId('');
       try {
-        const data = await fetchJson(`/api/patients/${encodeURIComponent(String(patientId).trim())}/full-record`, {
+        const data = await fetchJson(`/api/patients/${encodeURIComponent(requestedPatientId)}/full-record`, {
           apiBase: API_BASE,
           headers,
           timeoutMs: 45000
         });
-        if (!cancelled) setRecord(data || null);
+        if (!cancelled) {
+          setRecord(data || null);
+          setLoadedPatientId(requestedPatientId);
+        }
       } catch (e) {
         if (!cancelled) {
           setRecord(null);
@@ -130,7 +138,7 @@ export default function PatientFullRecordModal({
     return () => {
       cancelled = true;
     };
-  }, [open, patientId, headers]);
+  }, [open, patientId, headers, reloadKey]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -143,19 +151,21 @@ export default function PatientFullRecordModal({
 
   if (!open) return null;
 
-  const patient = record?.patient || {};
-  const overview = record?.overview || {};
-  const encounters = Array.isArray(record?.encounters) ? record.encounters : [];
-  const notes = Array.isArray(record?.notes) ? record.notes : [];
-  const prescriptions = Array.isArray(record?.prescriptions) ? record.prescriptions : [];
-  const results = Array.isArray(record?.results) ? record.results : [];
-  const orders = Array.isArray(record?.orders) ? record.orders : [];
-  const invoices = Array.isArray(record?.billing?.invoices) ? record.billing.invoices : [];
-  const certificates = Array.isArray(record?.certificates) ? record.certificates : [];
-  const serviceRequests = Array.isArray(record?.requests) ? record.requests : [];
-  const timeline = Array.isArray(record?.timeline) ? record.timeline : [];
-  const walkIns = Array.isArray(record?.clinicalRecords?.walkInIntakes) ? record.clinicalRecords.walkInIntakes : [];
-  const erRegistration = record?.clinicalRecords?.erRegistration;
+  const requestedPatientId = String(patientId || '').trim();
+  const activeRecord = loadedPatientId === requestedPatientId ? record : null;
+  const patient = activeRecord?.patient || {};
+  const overview = activeRecord?.overview || {};
+  const encounters = Array.isArray(activeRecord?.encounters) ? activeRecord.encounters : [];
+  const notes = Array.isArray(activeRecord?.notes) ? activeRecord.notes : [];
+  const prescriptions = Array.isArray(activeRecord?.prescriptions) ? activeRecord.prescriptions : [];
+  const results = Array.isArray(activeRecord?.results) ? activeRecord.results : [];
+  const orders = Array.isArray(activeRecord?.orders) ? activeRecord.orders : [];
+  const invoices = Array.isArray(activeRecord?.billing?.invoices) ? activeRecord.billing.invoices : [];
+  const certificates = Array.isArray(activeRecord?.certificates) ? activeRecord.certificates : [];
+  const serviceRequests = Array.isArray(activeRecord?.requests) ? activeRecord.requests : [];
+  const timeline = Array.isArray(activeRecord?.timeline) ? activeRecord.timeline : [];
+  const walkIns = Array.isArray(activeRecord?.clinicalRecords?.walkInIntakes) ? activeRecord.clinicalRecords.walkInIntakes : [];
+  const erRegistration = activeRecord?.clinicalRecords?.erRegistration;
   const emergencyContacts = readEmergencyContacts(patient);
 
   const tabs = [
@@ -207,7 +217,7 @@ export default function PatientFullRecordModal({
   };
 
   const handlePrintRecord = () => {
-    if (!record) return;
+    if (!activeRecord) return;
 
     const profileRows = [
       ['Patient ID', patient.id || patientId || DASH],
@@ -473,7 +483,7 @@ export default function PatientFullRecordModal({
             </div>
           </div>
           <div className="patient-record-head-actions">
-            <button type="button" className="patient-record-print" onClick={handlePrintRecord}>
+            <button type="button" className="patient-record-print" onClick={handlePrintRecord} disabled={!activeRecord || loading}>
               Print Record
             </button>
             <button type="button" className="patient-record-close" onClick={onClose} aria-label="Close patient record">
@@ -482,7 +492,7 @@ export default function PatientFullRecordModal({
           </div>
         </div>
 
-        <div className="patient-record-summary">
+        {activeRecord ? <div className="patient-record-summary">
           <div className="patient-record-hero">
             <div className="patient-record-name">{displayName}</div>
             <div className="patient-record-meta">
@@ -509,9 +519,9 @@ export default function PatientFullRecordModal({
               <strong>{overview?.counts?.encounters || 0}</strong>
             </div>
           </div>
-        </div>
+        </div> : null}
 
-        <div className="patient-record-tabs">
+        {activeRecord ? <div className="patient-record-tabs">
           {tabs.map((item) => (
             <button
               key={item.key}
@@ -523,13 +533,21 @@ export default function PatientFullRecordModal({
               <span>{item.label}</span>
             </button>
           ))}
-        </div>
+        </div> : null}
 
         <div className="patient-record-body">
           {loading ? <div className="patient-record-empty">Loading patient record...</div> : null}
-          {!loading && error ? <div className="patient-record-error">{error}</div> : null}
+          {!loading && error ? (
+            <div className="patient-record-error">
+              <div>{error}</div>
+              <button type="button" onClick={() => setReloadKey((value) => value + 1)}>Retry loading record</button>
+            </div>
+          ) : null}
+          {!loading && !error && activeRecord && Array.isArray(activeRecord.warnings) && activeRecord.warnings.length ? (
+            <div className="patient-record-warning">{activeRecord.warnings.join(' ')}</div>
+          ) : null}
 
-          {!loading && !error && record ? (
+          {!loading && !error && activeRecord ? (
             <>
               {tab === 'overview' ? (
                 <div className="patient-record-grid">

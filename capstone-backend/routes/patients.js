@@ -1086,6 +1086,12 @@ router.get('/:id/full-record', async (req, res) => {
             }
             : { patient_id: patient.id };
 
+        const recordWarnings = [];
+        const loadRecordSection = (label, query) => Promise.resolve(query).catch(() => {
+            recordWarnings.push(`${label} are temporarily unavailable.`);
+            return [];
+        });
+
         const [
             appointmentsRaw,
             notesRaw,
@@ -1096,22 +1102,22 @@ router.get('/:id/full-record', async (req, res) => {
             requestsRaw,
             invoicesRaw
         ] = await Promise.all([
-            prisma.appointments.findMany({
+            loadRecordSection('Appointments', prisma.appointments.findMany({
                 where: appointmentWhere,
                 orderBy: [{ appointment_date: 'desc' }, { created_at: 'desc' }],
                 take: 200
-            }).catch(() => []),
-            prisma.doctor_notes.findMany({
+            })),
+            loadRecordSection('Clinical notes', prisma.doctor_notes.findMany({
                 where: { patient_id: patient.id },
                 orderBy: { created_at: 'desc' },
                 take: 200
-            }).catch(() => []),
-            prisma.prescriptions.findMany({
+            })),
+            loadRecordSection('Prescriptions', prisma.prescriptions.findMany({
                 where: { patient_id: patient.id },
                 orderBy: { created_at: 'desc' },
                 take: 200
-            }).catch(() => []),
-            prisma.$queryRaw(Prisma.sql`
+            })),
+            loadRecordSection('Laboratory results', prisma.$queryRaw(Prisma.sql`
                 SELECT id, order_id, patient_id, type, title, url, result_date, uploaded_by, created_at,
                        verification_status, verification_score, verification_flags, extracted_fields, verified_at
                 FROM public.lab_results
@@ -1119,8 +1125,8 @@ router.get('/:id/full-record', async (req, res) => {
                   ${requesterRole === 'patient' ? Prisma.sql`AND lower(coalesce(verification_status, 'pending')) = 'verified'` : Prisma.empty}
                 ORDER BY created_at DESC
                 LIMIT 200
-            `).catch(() => []),
-            prisma.clinical_orders.findMany({
+            `)),
+            loadRecordSection('Clinical orders', prisma.clinical_orders.findMany({
                 where: { patient_id: patient.id },
                 include: {
                     events: { orderBy: { created_at: 'desc' } },
@@ -1128,18 +1134,18 @@ router.get('/:id/full-record', async (req, res) => {
                 },
                 orderBy: { created_at: 'desc' },
                 take: 200
-            }).catch(() => []),
-            prisma.medical_certificates.findMany({
+            })),
+            loadRecordSection('Medical certificates', prisma.medical_certificates.findMany({
                 where: { patient_id: patient.id },
                 orderBy: { created_at: 'desc' },
                 take: 100
-            }).catch(() => []),
-            prisma.requests.findMany({
+            })),
+            loadRecordSection('Service requests', prisma.requests.findMany({
                 where: { patient_id: patient.id },
                 orderBy: { created_at: 'desc' },
                 take: 100
-            }).catch(() => []),
-            prisma.billing_invoices.findMany({
+            })),
+            loadRecordSection('Billing history', prisma.billing_invoices.findMany({
                 where: { patient_id: patient.id },
                 include: {
                     items: true,
@@ -1147,7 +1153,7 @@ router.get('/:id/full-record', async (req, res) => {
                 },
                 orderBy: { created_at: 'desc' },
                 take: 100
-            }).catch(() => [])
+            }))
         ]);
 
         const appointments = appointmentsRaw.map((appointment) => ({
@@ -1332,6 +1338,7 @@ router.get('/:id/full-record', async (req, res) => {
             null;
 
         const payload = {
+            warnings: recordWarnings,
             patient: {
                 ...toPatientResponse(patient),
                 displayName: patientDisplayName
@@ -1393,8 +1400,13 @@ router.get('/:id/full-record', async (req, res) => {
             walkIns: clinicalSummary.walkInIntakes
         });
 
-        await require('../utils/nurseCareStorage').ensureNurseCareTable();
-        const specialtyCare = await prisma.$queryRaw`SELECT id, department, stage, notes, handoff_to, history, updated_at FROM public.nurse_specialty_care WHERE patient_id = ${patientId}::uuid ORDER BY created_at DESC`;
+        let specialtyCare = [];
+        try {
+            await require('../utils/nurseCareStorage').ensureNurseCareTable();
+            specialtyCare = await prisma.$queryRaw`SELECT id, department, stage, notes, handoff_to, history, updated_at FROM public.nurse_specialty_care WHERE patient_id = ${patientId}::uuid ORDER BY created_at DESC`;
+        } catch (error) {
+            payload.warnings.push('Specialty nursing history is temporarily unavailable; the rest of this patient record is complete.');
+        }
         payload.specialtyCare = specialtyCare;
         payload.timeline.push(...specialtyCare.map(row => ({ id: `nursing:${row.id}`, type: 'nursing_care', date: row.updated_at,
             title: `${row.department}: ${row.stage}${row.handoff_to ? ` — ${row.handoff_to}` : ''}`, notes: row.notes })));
