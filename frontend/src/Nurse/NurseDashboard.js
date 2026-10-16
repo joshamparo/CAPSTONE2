@@ -38,7 +38,18 @@ function NurseDashboard() {
   const [view, setView] = useState('overview');
   const [activityPage, setActivityPage] = useState(1);
   const [bedSearch, setBedSearch] = useState('');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 1024);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1024px)');
+    const syncSidebar = (event) => setIsSidebarCollapsed(event.matches);
+    if (media.addEventListener) media.addEventListener('change', syncSidebar);
+    else media.addListener(syncSidebar);
+    return () => {
+      if (media.removeEventListener) media.removeEventListener('change', syncSidebar);
+      else media.removeListener(syncSidebar);
+    };
+  }, []);
   const [statsError, setStatsError] = useState('');
   const [patientsError, setPatientsError] = useState('');
   const [centralRecordOpen, setCentralRecordOpen] = useState(false);
@@ -6201,7 +6212,7 @@ function NurseDashboard() {
           Backend offline: {backendHealth.error}
         </div>
       ) : null}
-      <aside className={`nurse-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
+      <aside className={`nurse-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`} onClick={(event) => { if (window.innerWidth <= 1024 && event.target.closest('.nurse-nav-item')) setIsSidebarCollapsed(true); }}>
         <div className="nurse-sidebar-header">
            <div className="nurse-brand">
              <img src="/images/pgh%20logo.png" alt="PASCUALINGA" className="nurse-brand-logo" />

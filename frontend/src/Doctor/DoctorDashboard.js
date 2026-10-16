@@ -19,7 +19,18 @@ function DoctorDashboard() {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(null);
   const [backendHealth, setBackendHealth] = useState({ checked: false, ok: true, error: '' });
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 1024);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1024px)');
+    const syncSidebar = (event) => setIsCollapsed(event.matches);
+    if (media.addEventListener) media.addEventListener('change', syncSidebar);
+    else media.addListener(syncSidebar);
+    return () => {
+      if (media.removeEventListener) media.removeEventListener('change', syncSidebar);
+      else media.removeListener(syncSidebar);
+    };
+  }, []);
   const [activeNav, setActiveNav] = useState('dashboard');
   const [profileForm, setProfileForm] = useState({
     firstName: '',
@@ -4766,7 +4777,7 @@ function DoctorDashboard() {
           Backend offline: {backendHealth.error}
         </div>
       ) : null}
-      <aside className={`doc-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
+      <aside className={`doc-sidebar ${isCollapsed ? 'collapsed' : ''}`} onClick={(event) => { if (window.innerWidth <= 1024 && event.target.closest('.doc-nav-item')) setIsCollapsed(true); }}>
         <div className="doc-sidebar-head">
           <div className="doc-brand">
             <img className="doc-brand-logo" src="/images/pgh%20logo.png" alt="PASCUALINGA" />

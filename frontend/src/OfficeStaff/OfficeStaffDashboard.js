@@ -155,7 +155,18 @@ export default function OfficeStaffDashboard({ mode }) {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [backendHealth, setBackendHealth] = useState({ checked: false, ok: true, error: '' });
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 1024);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1024px)');
+    const syncSidebar = (event) => setCollapsed(event.matches);
+    if (media.addEventListener) media.addEventListener('change', syncSidebar);
+    else media.addListener(syncSidebar);
+    return () => {
+      if (media.removeEventListener) media.removeEventListener('change', syncSidebar);
+      else media.removeListener(syncSidebar);
+    };
+  }, []);
   const [view, setView] = useState('dashboard');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [centralRecordOpen, setCentralRecordOpen] = useState(false);
@@ -1718,7 +1729,7 @@ export default function OfficeStaffDashboard({ mode }) {
           Backend offline: {backendHealth.error}
         </div>
       ) : null}
-      <aside className={`office-sidebar ${collapsed ? 'collapsed' : ''}`}>
+      <aside className={`office-sidebar ${collapsed ? 'collapsed' : ''}`} onClick={(event) => { if (window.innerWidth <= 1024 && event.target.closest('.office-nav-btn')) setCollapsed(true); }}>
         <div className="office-sidebar-top">
           <div className="office-brand">
             <img className="office-brand-logo" src="/images/pgh%20logo.png" alt="PASCUALINGA" />

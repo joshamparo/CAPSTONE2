@@ -1,0 +1,324 @@
+/*
+ * Shared responsive contract for every authenticated dashboard.
+ * Component styles remain responsible for visual design; this file owns
+ * viewport behavior so tablet and phone rules stay consistent across roles.
+ */
+
+@media (max-width: 1024px) {
+  .app-mobile-menu-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--app-border);
+    background: var(--app-card);
+    color: var(--app-text);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  :where(
+    .admin-dashboard-container,
+    .doctor-shell,
+    .nurse-dashboard-container,
+    .cs-layout,
+    .pharm-shell,
+    .sec-dashboard,
+    .office-shell
+  ) {
+    width: 100%;
+    min-width: 0;
+    height: 100dvh !important;
+    min-height: 100dvh;
+    overflow: hidden !important;
+  }
+
+  :where(
+    .sidebar,
+    .doc-sidebar,
+    .nurse-sidebar,
+    .cs-sidebar,
+    .pharm-sidebar,
+    .sec-sidebar,
+    .office-sidebar
+  ) {
+    position: fixed !important;
+    inset: 0 auto 0 0;
+    width: min(320px, 86vw) !important;
+    height: 100dvh !important;
+    max-height: 100dvh;
+    z-index: 100 !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    transform: translateX(0);
+    transition: transform 0.24s ease, box-shadow 0.24s ease !important;
+    box-shadow: 18px 0 50px rgba(15, 23, 42, 0.28) !important;
+  }
+
+  :where(
+    .sidebar.collapsed,
+    .doc-sidebar.collapsed,
+    .nurse-sidebar.collapsed,
+    .cs-sidebar.collapsed,
+    .pharm-sidebar.collapsed,
+    .sec-sidebar.collapsed,
+    .office-sidebar.collapsed
+  ) {
+    width: min(320px, 86vw) !important;
+    transform: translateX(-110%) !important;
+    box-shadow: none !important;
+  }
+
+  :where(
+    .main-content,
+    .doc-main,
+    .nurse-main-content,
+    .cs-main,
+    .pharm-main,
+    .sec-main,
+    .office-main
+  ) {
+    flex: 1 1 auto;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  :where(
+    .admin-header,
+    .doctor-topbar,
+    .nurse-header,
+    .cs-topbar,
+    .pharm-header,
+    .sec-topbar,
+    .office-header
+  ) {
+    width: 100%;
+    height: auto !important;
+    min-height: 68px;
+    padding: 12px 16px !important;
+    gap: 10px !important;
+    flex-wrap: wrap !important;
+  }
+
+  :where(
+    .content-body,
+    .doctor-content,
+    .nurse-content,
+    .nurse-page-content,
+    .cs-content,
+    .pharm-content,
+    .sec-content,
+    .office-content
+  ) {
+    width: 100%;
+    min-width: 0;
+    padding: 16px !important;
+  }
+
+  :where(
+    .dashboard-grid,
+    .dashboard-grid-equal-2,
+    .admin-ai-grid,
+    .admin-trend-grid,
+    .doc-grid,
+    .doc-msg-wrap,
+    .nurse-dashboard-grid,
+    .cs-grid,
+    .pharm-grid,
+    .sec-grid,
+    .office-grid-2,
+    .office-grid-3,
+    .office-grid-4
+  ) {
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  :where(
+    .form-grid-2-col,
+    .profile-form-grid,
+    .settings-form-grid,
+    .office-billing-grid,
+    .office-hmo-fields-pro,
+    .doc-records-layout
+  ) {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  :where(
+    .main-content,
+    .doc-main,
+    .nurse-main-content,
+    .cs-main,
+    .pharm-main,
+    .sec-main,
+    .office-main
+  ) :where(table, .table-container, .table-responsive, .modern-table-container, .doc-table-container, .doc-approval-table-wrap, .cs-card:has(> table)) {
+    max-width: 100%;
+  }
+
+  :where(
+    .main-content,
+    .doc-main,
+    .nurse-main-content,
+    .cs-main,
+    .pharm-main,
+    .sec-main,
+    .office-main
+  ) table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  :where(
+    .modern-modal,
+    .doc-modal,
+    .inc-modal,
+    .cs-modal,
+    .pharm-modal,
+    .sec-modal,
+    .office-modal,
+    .office-billing-modal,
+    .modal-content
+  ) {
+    width: min(94vw, 760px) !important;
+    max-width: min(94vw, 760px) !important;
+    max-height: calc(100dvh - 28px) !important;
+    overflow-y: auto !important;
+  }
+
+  :where(button, a, input, select, textarea) {
+    touch-action: manipulation;
+  }
+}
+
+@media (max-width: 640px) {
+  :where(
+    .admin-header,
+    .doctor-topbar,
+    .nurse-header,
+    .cs-topbar,
+    .pharm-header,
+    .sec-topbar,
+    .office-header
+  ) {
+    padding: 10px 12px !important;
+  }
+
+  :where(
+    .content-body,
+    .doctor-content,
+    .nurse-content,
+    .nurse-page-content,
+    .cs-content,
+    .pharm-content,
+    .sec-content,
+    .office-content
+  ) {
+    padding: 12px !important;
+  }
+
+  :where(
+    .dashboard-grid,
+    .dashboard-grid-equal-2,
+    .admin-kpi-grid,
+    .admin-quick-actions-grid,
+    .admin-ai-grid,
+    .admin-trend-grid,
+    .doc-grid,
+    .doc-msg-wrap,
+    .doc-msg-suggest,
+    .nurse-dashboard-grid,
+    .cs-grid,
+    .pharm-grid,
+    .sec-grid,
+    .office-grid-2,
+    .office-grid-3,
+    .office-grid-4
+  ) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  :where(
+    .page-header-container,
+    .header-actions,
+    .doctor-topbar-right,
+    .header-actions-group,
+    .cs-topbar-actions,
+    .pharm-header-actions,
+    .sec-topbar-actions,
+    .office-header-actions,
+    .toolbar,
+    .filter-bar,
+    .search-filter-bar
+  ) {
+    width: 100%;
+    min-width: 0;
+    flex-wrap: wrap !important;
+    align-items: stretch !important;
+  }
+
+  :where(input:not([type='checkbox']):not([type='radio']), select, textarea) {
+    max-width: 100%;
+    font-size: 16px;
+  }
+
+  :where(.modern-modal-overlay, .doc-modal-overlay, .inc-modal-overlay, .cs-modal-overlay, .pharm-modal-overlay) {
+    padding: 8px !important;
+    align-items: flex-start !important;
+    overflow-y: auto;
+  }
+
+  :where(
+    .modern-modal,
+    .doc-modal,
+    .inc-modal,
+    .cs-modal,
+    .pharm-modal,
+    .sec-modal,
+    .office-modal,
+    .office-billing-modal,
+    .modal-content
+  ) {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px) !important;
+    border-radius: 14px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  :where(
+    .content-body,
+    .doctor-content,
+    .nurse-content,
+    .nurse-page-content,
+    .cs-content,
+    .pharm-content,
+    .sec-content,
+    .office-content
+  ) {
+    padding: 9px !important;
+  }
+
+  .app-mobile-menu-btn {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+  }
+}

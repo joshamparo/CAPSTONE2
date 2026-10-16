@@ -1009,7 +1009,18 @@ function AdminDashboard() {
   const [restockNote, setRestockNote] = useState('');
   const [restockSubmitting, setRestockSubmitting] = useState(false);
   const [restockActionId, setRestockActionId] = useState('');
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 1024);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1024px)');
+    const syncSidebar = (event) => setIsCollapsed(event.matches);
+    if (media.addEventListener) media.addEventListener('change', syncSidebar);
+    else media.addListener(syncSidebar);
+    return () => {
+      if (media.removeEventListener) media.removeEventListener('change', syncSidebar);
+      else media.removeListener(syncSidebar);
+    };
+  }, []);
   const [nameNotice, setNameNotice] = useState("");
   const [nameNoticeField, setNameNoticeField] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -8520,7 +8531,7 @@ function AdminDashboard() {
         </div>
       ) : null}
       {/* SIDEBAR */}
-      <aside className={`sidebar ${isCollapsed ? "collapsed" : ""}`}>
+      <aside className={`sidebar ${isCollapsed ? "collapsed" : ""}`} onClick={(event) => { if (window.innerWidth <= 1024 && event.target.closest('.nav-item, .nav-subitem')) setIsCollapsed(true); }}>
         <div className="sidebar-header">
           <div className="admin-brand">
             <img className="admin-brand-logo" src="/images/pgh%20logo.png" alt="PASCUALINGA" />

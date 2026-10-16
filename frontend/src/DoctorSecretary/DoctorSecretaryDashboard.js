@@ -248,7 +248,18 @@ export default function DoctorSecretaryDashboard() {
     () => norm(user.linkedDoctorId || user.linked_doctor_id),
     [user]
   );
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 1024);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1024px)');
+    const syncSidebar = (event) => setSidebarCollapsed(event.matches);
+    if (media.addEventListener) media.addEventListener('change', syncSidebar);
+    else media.addListener(syncSidebar);
+    return () => {
+      if (media.removeEventListener) media.removeEventListener('change', syncSidebar);
+      else media.removeListener(syncSidebar);
+    };
+  }, []);
   const [activeTab, setActiveTab] = useState('dashboard');
 
   const [profileForm, setProfileForm] = useState({
@@ -1608,7 +1619,7 @@ export default function DoctorSecretaryDashboard() {
           Backend offline: {backendHealth.error}
         </div>
       ) : null}
-      <aside className={`sec-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+      <aside className={`sec-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} onClick={(event) => { if (window.innerWidth <= 1024 && event.target.closest('.sec-nav-btn')) setSidebarCollapsed(true); }}>
         <div className="sec-sidebar-header">
           <div className="sec-brand">
             <div className="sec-brand-badge">DS</div>

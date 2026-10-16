@@ -189,7 +189,18 @@ function PharmacistDashboard() {
   }, []);
 
   const [activeTab, setActiveTab] = useState('pos'); // Set POS as default or medicines
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 1024);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1024px)');
+    const syncSidebar = (event) => setIsCollapsed(event.matches);
+    if (media.addEventListener) media.addEventListener('change', syncSidebar);
+    else media.addListener(syncSidebar);
+    return () => {
+      if (media.removeEventListener) media.removeEventListener('change', syncSidebar);
+      else media.removeListener(syncSidebar);
+    };
+  }, []);
   const [medPage, setMedPage] = useState(1);
   const [supPage, setSupPage] = useState(1);
 
@@ -2616,7 +2627,7 @@ function PharmacistDashboard() {
           Backend offline: {backendHealth.error}
         </div>
       ) : null}
-      <aside className={`pharm-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
+      <aside className={`pharm-sidebar ${isCollapsed ? 'collapsed' : ''}`} onClick={(event) => { if (window.innerWidth <= 1024 && event.target.closest('.pharm-nav-item')) setIsCollapsed(true); }}>
         <div className="pharm-sidebar-head">
           <div className="pharm-brand">
             <img className="pharm-brand-logo" src="/images/pgh%20logo.png" alt="PASCUALINGA" />
