@@ -556,6 +556,43 @@
   }
 }
 
+.assistant-widget-provenance {
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.assistant-widget-feedback {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.assistant-widget-feedback button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.assistant-widget-feedback button:hover,
+.assistant-widget-feedback button.selected {
+  border-color: #f97316;
+  color: #ea580c;
+  background: #fff7ed;
+}
+
 @media (max-height: 620px) and (max-width: 768px) {
   .assistant-widget-header {
     padding-top: 10px;

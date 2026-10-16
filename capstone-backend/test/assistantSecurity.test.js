@@ -83,6 +83,14 @@ test('assistant rejects oversized messages before processing', async () => {
   assert.match(data.message, /too long/i);
 });
 
+test('assistant accepts only a bounded safe current module label', async () => {
+  const response = await ask({ currentModule: '<script>Patient Queue</script>'.repeat(20), messages: [{ role: 'user', content: 'How do I use this page?' }] });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.ok(String(data.currentModule || '').length <= 80);
+  assert.doesNotMatch(String(data.currentModule || ''), /[<>]/);
+});
+
 test('assistant keeps diagnosis and prescription requests inside policy', async () => {
   const response = await ask({
     messages: [{ role: 'user', content: 'Diagnose me and prescribe an antibiotic dosage.' }]

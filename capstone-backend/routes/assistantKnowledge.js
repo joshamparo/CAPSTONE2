@@ -5,7 +5,7 @@ const requireRole = require('../middleware/requireRole');
 const prisma = require('../utils/prisma');
 const { createRateLimiter } = require('../utils/rateLimit');
 const { sendError } = require('../utils/httpErrors');
-const { readEntries, createKnowledgeEntry, updateKnowledgeEntry, knowledgeHistory } = require('../utils/assistantKnowledgeStore');
+const { readEntries, createKnowledgeEntry, updateKnowledgeEntry, knowledgeHistory, feedbackAnalytics } = require('../utils/assistantKnowledgeStore');
 
 const router = express.Router();
 const writeLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 40, key: (req) => req.auth?.email || 'admin' });
@@ -15,6 +15,11 @@ router.use(requireRole(['admin']));
 router.get('/', async (_req, res) => {
   try { res.json({ entries: await readEntries({ force: true, includeInactive: true }) }); }
   catch (error) { sendError(res, error, 'Unable to load chatbot knowledge.'); }
+});
+
+router.get('/analytics', async (_req, res) => {
+  try { res.json(await feedbackAnalytics()); }
+  catch (error) { sendError(res, error, 'Unable to load chatbot feedback analytics.'); }
 });
 
 router.post('/', writeLimit, async (req, res) => {

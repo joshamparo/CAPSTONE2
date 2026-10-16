@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, MessageCircleMore, RefreshCw, Send, ShieldCheck, Square, X } from 'lucide-react';
+import { Bot, MessageCircleMore, RefreshCw, Send, ShieldCheck, Square, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 import { API_BASE, buildAuthHeaders, getCurrentUser } from '../utils/api';
 import './AssistantWidget.css';
 
@@ -131,6 +131,16 @@ function initialGreeting(role, pathname) {
   return `Hello! I’m your ${ROLE_LABELS[role] || 'User'} Assistant. I can guide you through your current dashboard and specific tasks. Ano ang matutulong ko?`;
 }
 
+function detectCurrentModule() {
+  const selectors = [
+    '.nav-subitem.active', '.doc-nav-item.active', '.nurse-nav-item.active', '.cs-nav-btn.active',
+    '.pharm-nav-item.active', '.cashier-nav-item.active', '.nav-item.active', '[role="tab"][aria-selected="true"]'
+  ];
+  const element = selectors.map((selector) => document.querySelector(selector)).find(Boolean);
+  return String(element?.innerText || element?.textContent || '')
+    .replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
 export default function AssistantWidget({ pathname = '/' }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -141,6 +151,7 @@ export default function AssistantWidget({ pathname = '/' }) {
   const [suggestionsVisible, setSuggestionsVisible] = useState(true);
   const [suggestedQuestions, setSuggestedQuestions] = useState([]);
   const [lastFailedMessage, setLastFailedMessage] = useState('');
+  const [feedbackError, setFeedbackError] = useState('');
   const messagesRef = useRef(null);
   const requestControllerRef = useRef(null);
   const requestSequenceRef = useRef(0);
@@ -220,6 +231,7 @@ export default function AssistantWidget({ pathname = '/' }) {
         return 'english';
       };
       const preferredLanguage = computePreferredLanguage(text);
+      const currentModule = detectCurrentModule();
       const res = await fetch(`${API_BASE}/api/assistant/chat`, {
         method: 'POST',
         headers,
@@ -227,6 +239,7 @@ export default function AssistantWidget({ pathname = '/' }) {
         body: JSON.stringify({
           role,
           pathname,
+          currentModule,
           preferredLanguage,
           messages: nextMessages.map((message) => ({
             role: message.role,
@@ -247,6 +260,11 @@ export default function AssistantWidget({ pathname = '/' }) {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
           content: String(data?.answer || 'I could not prepare a response right now.').trim(),
+          requestId: data?.requestId,
+          knowledgeKey: data?.knowledgeKey,
+          lastUpdated: data?.lastUpdated,
+          source: data?.source,
+          currentModule,
           meta: data?.source === 'openai'
             ? 'AI-assisted answer'
             : data?.source === 'knowledge'
@@ -285,6 +303,20 @@ export default function AssistantWidget({ pathname = '/' }) {
       if (requestControllerRef.current === controller) requestControllerRef.current = null;
       if (requestSequence === requestSequenceRef.current) setLoading(false);
     }
+  };
+
+  const sendFeedback = async (message, rating) => {
+    if (!message.requestId || message.feedback) return;
+    setFeedbackError('');
+    try {
+      const response = await fetch(`${API_BASE}/api/assistant/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(currentUser, role === 'public' ? '' : role) },
+        body: JSON.stringify({ requestId: message.requestId, knowledgeKey: message.knowledgeKey, source: message.source, currentModule: message.currentModule, rating, reason: rating === 'not_helpful' ? 'did_not_answer' : null })
+      });
+      if (!response.ok) throw new Error('Feedback could not be saved.');
+      setMessages((items) => items.map((item) => item.id === message.id ? { ...item, feedback: rating } : item));
+    } catch (err) { setFeedbackError(String(err?.message || 'Feedback could not be saved.')); }
   };
 
   const handleSubmit = async (e) => {
@@ -363,6 +395,14 @@ export default function AssistantWidget({ pathname = '/' }) {
                 <div key={message.id} className={`assistant-widget-message ${message.role}`}>
                   {message.content}
                   {message.meta ? <div className="assistant-widget-message-meta">{message.meta}</div> : null}
+                  {message.knowledgeKey && message.lastUpdated ? <div className="assistant-widget-provenance">Approved hospital information · Updated {new Date(message.lastUpdated).toLocaleDateString()}</div> : null}
+                  {message.role === 'assistant' && message.requestId ? (
+                    <div className="assistant-widget-feedback" aria-label="Rate this answer">
+                      <span>{message.feedback ? 'Feedback saved' : 'Helpful?'}</span>
+                      <button type="button" className={message.feedback === 'helpful' ? 'selected' : ''} onClick={() => sendFeedback(message, 'helpful')} aria-label="Helpful answer"><ThumbsUp size={13} /></button>
+                      <button type="button" className={message.feedback === 'not_helpful' ? 'selected' : ''} onClick={() => sendFeedback(message, 'not_helpful')} aria-label="Not helpful answer"><ThumbsDown size={13} /></button>
+                    </div>
+                  ) : null}
                 </div>
               ))}
 
@@ -440,7 +480,7 @@ export default function AssistantWidget({ pathname = '/' }) {
                 </button>
               ) : null}
               <div id="assistant-privacy-note" className="assistant-widget-footer-note">
-                {error || 'Do not enter patient names, IDs, results, or other private health information. This assistant does not provide diagnosis or prescriptions.'}
+                {error || feedbackError || 'Do not enter patient names, IDs, results, or other private health information. This assistant does not provide diagnosis or prescriptions.'}
                 <span className="assistant-widget-character-count">{draft.length}/1000</span>
               </div>
             </form>

@@ -1,6 +1,7 @@
 const express = require('express');
 const { verifySessionToken } = require('../utils/sessionToken');
-const { findKnowledgeAnswer } = require('../utils/assistantKnowledgeStore');
+const { findKnowledgeAnswer, recordFeedback } = require('../utils/assistantKnowledgeStore');
+const { createRateLimiter } = require('../utils/rateLimit');
 
 const router = express.Router();
 
@@ -16,6 +17,7 @@ const assistantRateState = new Map(); // key -> { count, resetAt }
 const ASSISTANT_ROLES = new Set(['admin', 'doctor', 'nurse', 'pharmacist', 'cashier', 'doctor_secretary', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'staff', 'patient']);
 const MAX_MESSAGE_CHARS = 1000;
 const MAX_CONVERSATION_CHARS = 5000;
+const assistantFeedbackLimit = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 40, key: (req) => String(req.ip || req.socket?.remoteAddress || 'public') });
 
 const TAGLISH_SLANG_MAP = [
   [/b(g?)ruh?\b/gi, ''],
@@ -1918,7 +1920,7 @@ function localAssistantReply({ role, message, messages = [], pathname, preferred
   };
 }
 
-function buildSystemPrompt({ role, pathname, preferredLanguage }) {
+function buildSystemPrompt({ role, pathname, preferredLanguage, currentModule = '' }) {
   const scope = role === 'public'
     ? 'You are the public-facing Pascualinga Assistant for Pascual General Hospital. Answer only public hospital questions.'
     : `You are Pascualinga Assistant for an authenticated ${roleLabel(role)} account. Answer only role-appropriate Pascual General Hospital system guidance and public hospital information.`;
@@ -1927,6 +1929,7 @@ function buildSystemPrompt({ role, pathname, preferredLanguage }) {
     scope,
     `Current role: ${role}`,
     `Current page: ${String(pathname || '/').trim() || '/'}`,
+    `Current visible module: ${String(currentModule || 'not detected').trim() || 'not detected'}`,
     'You may respond briefly and warmly to ordinary greetings, thanks, farewells, and simple conversational small talk, then offer help within your scope.',
     'Never answer unrelated general knowledge questions.',
     'Never provide diagnosis, treatment plans, medication recommendations, or prescription advice.',
@@ -1967,11 +1970,11 @@ function buildMiniSummary(messages) {
   return parts.join('\n');
 }
 
-async function createOpenAIResponse({ role, pathname, messages, preferredLanguage }) {
+async function createOpenAIResponse({ role, pathname, messages, preferredLanguage, currentModule }) {
   const inputMessages = [];
   inputMessages.push({
     role: 'system',
-    content: [{ type: 'input_text', text: buildSystemPrompt({ role, pathname, preferredLanguage }) }]
+    content: [{ type: 'input_text', text: buildSystemPrompt({ role, pathname, preferredLanguage, currentModule }) }]
   });
 
   const miniSummary = buildMiniSummary(messages);
@@ -2024,6 +2027,17 @@ async function createOpenAIResponse({ role, pathname, messages, preferredLanguag
   return answer;
 }
 
+router.post('/feedback', assistantFeedbackLimit, async (req, res) => {
+  try {
+    const role = authenticatedAssistantRole(req);
+    const currentModule = String(req.body?.currentModule || '').replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const result = await recordFeedback({ ...req.body, role, currentModule });
+    return res.status(201).json(result);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : 'Unable to save assistant feedback.' });
+  }
+});
+
 router.post('/chat', async (req, res) => {
   try {
     const requestId =
@@ -2055,6 +2069,7 @@ router.post('/chat', async (req, res) => {
 
     const role = authenticatedAssistantRole(req);
     const pathname = safeAssistantPath(role, req.body?.pathname);
+    const currentModule = String(req.body?.currentModule || '').replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
     const messages = validatedMessages(req.body?.messages);
     if (!messages) return res.status(413).json({ requestId, message: 'The conversation is too long. Start a new chat and try again.' });
     const latestUserMessage = [...messages].reverse().find((msg) => String(msg?.role || '').toLowerCase() === 'user');
@@ -2069,15 +2084,15 @@ router.post('/chat', async (req, res) => {
     // Safety-sensitive requests always use deterministic policy/triage logic.
     // Admin-managed knowledge is considered only for non-medical, in-scope questions.
     if (!MEDICAL_RISK_PATTERN.test(latestText) && !OFF_TOPIC_PATTERN.test(latestText) && !detectSymptomIntent(normalizeQuestionText(latestText))) {
-      const managedAnswer = await findKnowledgeAnswer({ role, text: latestText, preferredLanguage });
+      const managedAnswer = await findKnowledgeAnswer({ role, text: latestText, preferredLanguage, currentModule });
       if (managedAnswer) {
-        return res.json({ requestId, role, pathname, ...managedAnswer, latencyMs: Date.now() - startAt });
+        return res.json({ requestId, role, pathname, currentModule, ...managedAnswer, latencyMs: Date.now() - startAt });
       }
     }
 
     if (!OPENAI_API_KEY) {
       const fallback = localAssistantReply({ role, message: latestText, messages, pathname, preferredLanguage });
-      return res.json({ requestId, role, pathname, ...fallback, source: fallback.source === 'unresolved' ? 'fallback' : fallback.source, latencyMs: Date.now() - startAt });
+      return res.json({ requestId, role, pathname, currentModule, ...fallback, source: fallback.source === 'unresolved' ? 'fallback' : fallback.source, latencyMs: Date.now() - startAt });
     }
 
     const protectedReply = localAssistantReply({ role, message: latestText, messages, pathname, preferredLanguage });
@@ -2088,7 +2103,7 @@ router.post('/chat', async (req, res) => {
     }
 
     try {
-      const answer = await createOpenAIResponse({ role, pathname, messages, preferredLanguage });
+      const answer = await createOpenAIResponse({ role, pathname, messages, preferredLanguage, currentModule });
       return res.json({
         requestId,
         role,
