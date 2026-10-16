@@ -123,3 +123,49 @@ test('operational answers do not claim live queue data or guaranteed turnaround'
   assert.match(resultData.answer, /estimate|confirm|kumpirmahin/i);
   assert.doesNotMatch(resultData.answer, /100%/i);
 });
+
+test('assistant handles basic casual conversation naturally in English and Tagalog', async () => {
+  const cases = [
+    ['How are you?', /doing well|ready to help/i],
+    ['Kumusta ka?', /mabuti|handa akong tumulong/i],
+    ['Who are you?', /Pascualinga Assistant/i],
+    ['Thanks a lot!', /welcome/i],
+    ['Paalam', /paalam|nandito lang/i]
+  ];
+
+  for (const [question, answerPattern] of cases) {
+    const response = await ask({ messages: [{ role: 'user', content: question }] });
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.source, 'knowledge');
+    assert.match(data.answer, answerPattern);
+  }
+});
+
+test('every authenticated chatbot role answers casual and basic workflow questions', async () => {
+  const roles = [
+    'admin', 'doctor', 'nurse', 'pharmacist', 'cashier', 'doctor_secretary',
+    'medtech', 'radiographer', 'ecg_operator', 'physical_therapist', 'staff', 'patient'
+  ];
+
+  for (const role of roles) {
+    const token = createSessionToken({ id: `${role}-1`, email: `${role}@example.com`, role, sessionVersion: 0 });
+    const casualResponse = await ask(
+      { pathname: `/${role.replaceAll('_', '-')}`, messages: [{ role: 'user', content: 'How are you?' }] },
+      { Authorization: `Bearer ${token}` }
+    );
+    assert.equal(casualResponse.status, 200);
+    const casualData = await casualResponse.json();
+    assert.equal(casualData.role, role);
+    assert.match(casualData.answer, /doing well|ready to help/i);
+
+    const basicResponse = await ask(
+      { pathname: `/${role.replaceAll('_', '-')}`, messages: [{ role: 'user', content: 'What can this system do?' }] },
+      { Authorization: `Bearer ${token}` }
+    );
+    assert.equal(basicResponse.status, 200);
+    const basicData = await basicResponse.json();
+    assert.equal(basicData.role, role);
+    assert.ok(basicData.answer.length > 30);
+  }
+});

@@ -1318,6 +1318,51 @@ function detectAssistantCapabilityIntent(text) {
   return '';
 }
 
+function detectCasualIntent(text) {
+  const normalized = normalizeQuestionText(text);
+  if (!normalized) return '';
+
+  if (/^(hi|hello|hey|hello po|hi po|hey po)( there)?$/.test(normalized)) return 'greeting';
+  if (/^(good morning|good afternoon|good evening|magandang umaga|magandang hapon|magandang gabi)( po)?$/.test(normalized)) return 'greeting';
+  if (/^(kamusta|kumusta)( ka| kayo)?( na)?( po)?$/.test(normalized) || /^(how are you|how are you doing)( today)?$/.test(normalized)) return 'wellbeing';
+  if (/^(salamat|maraming salamat|thank you|thanks|thank you so much|thanks a lot)( po)?$/.test(normalized)) return 'thanks';
+  if (/^(bye|goodbye|see you|see you later|paalam|sige bye|okay bye)( po)?$/.test(normalized)) return 'goodbye';
+  if (/^(ok|okay|sige|got it|understood|noted|ayos)( na)?( po)?$/.test(normalized)) return 'acknowledgement';
+  if (/^(who are you|what are you|ano ka|sino ka|anong pangalan mo|what is your name)$/.test(normalized)) return 'identity';
+
+  return '';
+}
+
+function casualReply({ role, preferredLanguage, intent }) {
+  const tagalog = preferredLanguage === 'tagalog';
+  const roleHint = role === 'public'
+    ? (tagalog ? 'hospital information' : 'hospital information')
+    : (tagalog ? `${roleLabel(role)} workflow mo` : `your ${roleLabel(role)} workflow`);
+
+  const replies = {
+    greeting: tagalog
+      ? `Hello! Paano kita matutulungan tungkol sa ${roleHint}?`
+      : `Hello! How can I help with ${roleHint} today?`,
+    wellbeing: tagalog
+      ? `Mabuti naman, salamat sa pagtanong! Handa akong tumulong tungkol sa ${roleHint}. Kumusta ka?`
+      : `I'm doing well, thanks for asking! I'm ready to help with ${roleHint}. How are you?`,
+    thanks: tagalog
+      ? 'Walang anuman! Sabihin mo lang kung may iba ka pang tanong.'
+      : `You're welcome! Let me know if you have another question.`,
+    goodbye: tagalog
+      ? 'Paalam! Nandito lang ako kung kailangan mo ulit ng tulong.'
+      : `Goodbye! I'll be here if you need help again.`,
+    acknowledgement: tagalog
+      ? 'Sige! Sabihin mo lang kung ano ang susunod mong kailangan.'
+      : `Got it! Tell me what you'd like help with next.`,
+    identity: tagalog
+      ? `Ako ang Pascualinga Assistant. Makakatulong ako sa ${roleHint}, gamit ang impormasyong pinapayagan para sa account mo.`
+      : `I'm the Pascualinga Assistant. I can help with ${roleHint} using information available to your account.`
+  };
+
+  return replies[intent] || '';
+}
+
 function assistantCapabilityReply({ role, preferredLanguage, intent }) {
   if (!intent) return '';
 
@@ -1380,6 +1425,7 @@ function detectPreferredLanguage(text) {
   if (!raw) return 'english';
   const lower = raw.toLowerCase();
   if (/\b(tagalog|taglish|filipino|nagtatagalog|magtagalog|mag tagalog)\b/i.test(raw)) return 'tagalog';
+  if (/^(kamusta|kumusta|salamat|maraming salamat|paalam|magandang umaga|magandang hapon|magandang gabi)(\b|\s)/i.test(lower)) return 'tagalog';
   const tagalogSignals = [
     ' ano ', ' paano ', ' bakit ', ' saan ', ' kailan ', ' sino ', ' pwede ', ' puwede ',
     ' gusto ', ' ko ', ' mo ', ' nyo ', ' ninyo ', ' natin ', ' natin ', ' ito ', ' iyan ',
@@ -1590,34 +1636,10 @@ function localAssistantReply({ role, message, pathname, preferredLanguage = 'eng
   }
 
   const normalized = normalizeQuestionText(text);
-  const isGreeting =
-    normalized === 'hello' ||
-    normalized === 'hi' ||
-    normalized === 'hey' ||
-    normalized === 'good morning' ||
-    normalized === 'good afternoon' ||
-    normalized === 'good evening' ||
-    normalized === 'kamusta' ||
-    normalized === 'kumusta' ||
-    normalized === 'hello po' ||
-    normalized === 'hi po' ||
-    normalized === 'hey po' ||
-    normalized === 'salamat' ||
-    normalized === 'thank you' ||
-    normalized === 'thanks' ||
-    normalized === 'magandang umaga' ||
-    normalized === 'magandang hapon' ||
-    normalized === 'magandang gabi';
-
-  if (isGreeting) {
-    const greetingKey = normalized.includes('salamat') || normalized.includes('thank') ? 'thank you' : (normalized.includes('kamusta') || normalized.includes('kumusta') ? 'kamusta' : (normalized.includes('umaga') ? 'magandang umaga' : (normalized.includes('hapon') ? 'magandang hapon' : (normalized.includes('gabi') ? 'magandang gabi' : 'hello'))));
-    
-    // For local fallback, we pick the best translation from our pool
-    const pool = ROLE_QUICK_ANSWERS.public;
-    const answer = pool[normalized] || pool[greetingKey] || pool['hello'];
-
+  const casualIntent = detectCasualIntent(text);
+  if (casualIntent) {
     return {
-      answer: localizeAssistantText(answer, effectiveLanguage, role),
+      answer: casualReply({ role, preferredLanguage: effectiveLanguage, intent: casualIntent }),
       source: 'knowledge',
       grounded: true,
       suggestions: role === 'public'
@@ -1755,7 +1777,7 @@ function localAssistantReply({ role, message, pathname, preferredLanguage = 'eng
         effectiveLanguage,
         role
       ),
-      source: 'knowledge',
+      source: 'unresolved',
       grounded: true,
       suggestions: ['May lagnat ang baby ko', 'Magkano ang CBC?', 'Paano magpa-appointment?', 'Nasaan result ng xray ko?', 'Saan ang hospital?']
     };
@@ -1763,7 +1785,7 @@ function localAssistantReply({ role, message, pathname, preferredLanguage = 'eng
 
   return {
     answer: localizeAssistantText(`I can help as your ${roleLabel(role)} assistant for Pascual General Hospital system use. If you tell me the module or task you are trying to do on this page, I can guide you using role-appropriate instructions.`, effectiveLanguage, role),
-    source: 'knowledge',
+    source: 'unresolved',
     grounded: true,
     suggestions: ['Appointments', 'Billing', 'Patients', 'Inventory', 'Requests']
   };
@@ -1778,6 +1800,7 @@ function buildSystemPrompt({ role, pathname, preferredLanguage }) {
     scope,
     `Current role: ${role}`,
     `Current page: ${String(pathname || '/').trim() || '/'}`,
+    'You may respond briefly and warmly to ordinary greetings, thanks, farewells, and simple conversational small talk, then offer help within your scope.',
     'Never answer unrelated general knowledge questions.',
     'Never provide diagnosis, treatment plans, medication recommendations, or prescription advice.',
     'Never claim that a price, schedule, availability, or turnaround time is guaranteed. Ask the user to confirm changeable information with hospital staff.',
@@ -1918,7 +1941,7 @@ router.post('/chat', async (req, res) => {
 
     if (!OPENAI_API_KEY) {
       const fallback = localAssistantReply({ role, message: latestText, pathname, preferredLanguage });
-      return res.json({ requestId, role, pathname, ...fallback, latencyMs: Date.now() - startAt });
+      return res.json({ requestId, role, pathname, ...fallback, source: fallback.source === 'unresolved' ? 'fallback' : fallback.source, latencyMs: Date.now() - startAt });
     }
 
     const protectedReply = localAssistantReply({ role, message: latestText, pathname, preferredLanguage });
