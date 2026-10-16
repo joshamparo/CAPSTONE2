@@ -1,5 +1,6 @@
 const express = require('express');
 const { verifySessionToken } = require('../utils/sessionToken');
+const { findKnowledgeAnswer } = require('../utils/assistantKnowledgeStore');
 
 const router = express.Router();
 
@@ -2063,6 +2064,15 @@ router.post('/chat', async (req, res) => {
 
     if (!latestText) {
       return res.status(400).json({ message: 'A user message is required.' });
+    }
+
+    // Safety-sensitive requests always use deterministic policy/triage logic.
+    // Admin-managed knowledge is considered only for non-medical, in-scope questions.
+    if (!MEDICAL_RISK_PATTERN.test(latestText) && !OFF_TOPIC_PATTERN.test(latestText) && !detectSymptomIntent(normalizeQuestionText(latestText))) {
+      const managedAnswer = await findKnowledgeAnswer({ role, text: latestText, preferredLanguage });
+      if (managedAnswer) {
+        return res.json({ requestId, role, pathname, ...managedAnswer, latencyMs: Date.now() - startAt });
+      }
     }
 
     if (!OPENAI_API_KEY) {

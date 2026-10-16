@@ -9,6 +9,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import { checkBackendHealth, fetchJson } from "../utils/api";
 import { formatActivityLog } from "../utils/activityLogDisplay";
 import { printHtmlDocument } from "../utils/printDocument";
+import AssistantKnowledgeManager from "./AssistantKnowledgeManager";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const WEB_ORIGIN = String(process.env.REACT_APP_WEB_ORIGIN || '').trim() || 'https://pascualinga.com';
@@ -8103,6 +8104,7 @@ function AdminDashboard() {
                 </div>
 
                 <div className="settings-grid-layout">
+                    <AssistantKnowledgeManager />
                     {/* Maintenance Mode & General Settings */}
                     <div className="settings-section-card full-width-card">
                         <div className="section-card-header">
