@@ -96,12 +96,12 @@ const trustHighlights = [
 
 const careEnvironmentCards = [
   {
-    image: "/images/hospital-pharmacy-800.jpg",
+    image: "/images/hospital-interior-800.jpg",
     title: "Pharmacy Support",
     text: "Accessible medicine support and dependable coordination for daily patient needs."
   },
   {
-    image: "/images/hospital-interior-800.jpg",
+    image: "/images/hospital-pharmacy-800.jpg",
     title: "Organized Care Environment",
     text: "A clean and structured hospital interior designed to support safe workflows."
   },
