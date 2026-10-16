@@ -6,7 +6,9 @@ const requireRole = require('../middleware/requireRole');
 const { sendError } = require('../utils/httpErrors');
 
 let adminOverviewCache = { fetchedAt: 0, payload: null, promise: null };
-const ADMIN_OVERVIEW_CACHE_MS = 1000;
+// Dashboard counts need to feel current, but recomputing every count for users
+// opening the same screen within one second creates avoidable database I/O.
+const ADMIN_OVERVIEW_CACHE_MS = Math.max(5000, Math.min(60000, Number(process.env.ADMIN_OVERVIEW_CACHE_MS || 15000)));
 
 function safeCount(task, fallback = 0) {
     return Promise.resolve()

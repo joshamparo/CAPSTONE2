@@ -1131,6 +1131,7 @@ function AdminDashboard() {
   const [recentActivities, setRecentActivities] = useState([]);
   const dashboardRefreshInFlightRef = useRef(false);
   const patientListRequestSequenceRef = useRef(0);
+  const patientListLoadedRef = useRef(false);
   
   // Fetch Dashboard Data
   const fetchDashboardData = async () => {
@@ -1162,18 +1163,23 @@ function AdminDashboard() {
             setAppointmentEvents([]);
         }
 
-        const patientRequestSequence = ++patientListRequestSequenceRef.current;
-        try {
-            const rows = await fetchJson(`/api/patients?summary=1&take=2000`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
-            if (patientRequestSequence !== patientListRequestSequenceRef.current) return;
-            if (!Array.isArray(rows)) throw new Error('The server returned an invalid patient list.');
-            setPatientList(rows);
-            setPatientListError("");
-        } catch (err) {
-            if (patientRequestSequence === patientListRequestSequenceRef.current) {
-              console.error("Failed to refresh patient records", err);
-              setPatientListError(`${String(err?.message || "Unable to refresh patient records.")} Displaying the last successfully loaded data.`);
-            }
+        // Patient summaries can be large. Load them once per dashboard session;
+        // live counts come from the compact admin-overview endpoint.
+        if (!patientListLoadedRef.current) {
+          const patientRequestSequence = ++patientListRequestSequenceRef.current;
+          try {
+              const rows = await fetchJson(`/api/patients?summary=1&take=2000`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
+              if (patientRequestSequence !== patientListRequestSequenceRef.current) return;
+              if (!Array.isArray(rows)) throw new Error('The server returned an invalid patient list.');
+              setPatientList(rows);
+              patientListLoadedRef.current = true;
+              setPatientListError("");
+          } catch (err) {
+              if (patientRequestSequence === patientListRequestSequenceRef.current) {
+                console.error("Failed to refresh patient records", err);
+                setPatientListError(`${String(err?.message || "Unable to refresh patient records.")} Displaying the last successfully loaded data.`);
+              }
+          }
         }
 
         try {
@@ -1383,7 +1389,7 @@ function AdminDashboard() {
 
   const fetchRestockRequests = async () => {
       try {
-          const data = await fetchJson(`/api/restock-requests?take=500`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
+          const data = await fetchJson(`/api/restock-requests?take=200`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
           setRestockRequests(Array.isArray(data) ? data : []);
       } catch (_) {
           setRestockRequests([]);
@@ -1629,10 +1635,6 @@ function AdminDashboard() {
       }
   };
 
-  useEffect(() => {
-    fetchInventory();
-    fetchRestockRequests();
-  }, []);
   // Activity Log Helper
   const logActivity = async (action, details, target, role = 'Admin') => {
       try {
@@ -1649,7 +1651,7 @@ function AdminDashboard() {
               details
             })
           });
-          fetchActivityLogs(); // Refresh logs if on that view
+          if (view === 'activity-logs') fetchActivityLogs();
       } catch (error) {
           console.error("Failed to log activity:", error);
       }
@@ -1658,7 +1660,7 @@ function AdminDashboard() {
   const fetchActivityLogs = async () => {
       try {
           setActivityLogsError("");
-          const data = await fetchJson(`/api/activity-logs?take=1000`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
+          const data = await fetchJson(`/api/activity-logs?take=200`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
           const mapped = Array.isArray(data) ? data.map((l) => formatActivityLog({
             ...l,
             id: String(l.id || l._id || ''),

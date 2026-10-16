@@ -79,62 +79,8 @@ function isMinutesBlockedByAvailability({ minutes, blocks }) {
 }
 
 async function ensureTables() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS appointment_approval_requests (
-      id BIGSERIAL PRIMARY KEY,
-      patient_id UUID,
-      patient_name TEXT,
-      doctor_name TEXT,
-      doctor_id UUID,
-      nurse_name TEXT,
-      requested_date DATE,
-      requested_time TIME,
-      service_type TEXT,
-      service_category TEXT,
-      department_key TEXT,
-      service_name TEXT,
-      reason TEXT,
-      status TEXT NOT NULL DEFAULT 'Pending',
-      suggested_date DATE,
-      suggested_time TIME,
-      suggested_note TEXT,
-      appointment_id BIGINT,
-      doctor_last_read_at TIMESTAMPTZ,
-      nurse_last_read_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-  `);
-
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS service_type TEXT;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS doctor_id uuid;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS service_category text;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS department_key text;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS service_name text;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS booking_ref text;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS paymongo_checkout_session_id text;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS paymongo_payment_id text;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS paymongo_event_id text;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS payment_status text;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS paid_at timestamptz;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS amount integer;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE appointment_approval_requests ADD COLUMN IF NOT EXISTS currency text;`);
-  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS appointment_approval_requests_booking_ref_uidx ON appointment_approval_requests(booking_ref) WHERE booking_ref IS NOT NULL;`);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS appointment_messages (
-      id BIGSERIAL PRIMARY KEY,
-      request_id BIGINT NOT NULL REFERENCES appointment_approval_requests(id) ON DELETE CASCADE,
-      sender_role TEXT NOT NULL,
-      sender_name TEXT,
-      body TEXT NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-  `);
-
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS appointment_approval_requests_doctor_status_idx ON appointment_approval_requests(doctor_name, status, created_at DESC);`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS appointment_approval_requests_nurse_status_idx ON appointment_approval_requests(nurse_name, status, created_at DESC);`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS appointment_messages_request_created_idx ON appointment_messages(request_id, created_at DESC);`);
+  // Installed by manual_migration_request_path_performance.sql before startup.
+  return true;
 }
 
 ensureTables().catch(() => {});

@@ -89,3 +89,24 @@ test('role health probes use a visible-tab one-minute cadence', () => {
     assert.doesNotMatch(source, /setInterval\(run, 15000\)/);
   }
 });
+
+test('high-traffic request paths do not execute schema DDL', () => {
+  const routesRoot = path.join(__dirname, '..', 'routes');
+  const announcements = fs.readFileSync(path.join(routesRoot, 'announcements.js'), 'utf8');
+  const approvals = fs.readFileSync(path.join(routesRoot, 'approvalRequests.js'), 'utf8');
+  const billing = fs.readFileSync(path.join(routesRoot, 'billing.js'), 'utf8');
+  const announcementSetup = announcements.slice(announcements.indexOf('function ensureAnnouncementsSchema'), announcements.indexOf('function mulberry32'));
+  const approvalSetup = approvals.slice(approvals.indexOf('async function ensureTables'), approvals.indexOf('router.use(requireRole'));
+  const billingCore = billing.slice(billing.indexOf('async function ensureBillingTablesExist'), billing.indexOf('function isUuid'));
+  assert.doesNotMatch(announcementSetup, /ALTER TABLE|CREATE TABLE|CREATE INDEX/i);
+  assert.doesNotMatch(approvalSetup, /ALTER TABLE|CREATE TABLE|CREATE INDEX/i);
+  assert.doesNotMatch(billingCore, /ALTER TABLE|CREATE TABLE|CREATE INDEX/i);
+});
+
+test('admin avoids repeated oversized background list requests', () => {
+  const admin = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'src', 'Admin', 'AdminDashboard.js'), 'utf8');
+  assert.match(admin, /if \(!patientListLoadedRef\.current\)/);
+  assert.match(admin, /patientListLoadedRef\.current = true/);
+  assert.doesNotMatch(admin, /activity-logs\?take=1000/);
+  assert.doesNotMatch(admin, /restock-requests\?take=500/);
+});

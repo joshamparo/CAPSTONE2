@@ -132,6 +132,8 @@ async function serveFastHmoQueue(req, res) {
 }
 
 async function ensureBillingTablesExist() {
+  const now = Date.now();
+  if (now - billingSchemaEnsureState.coreCheckedAt < BILLING_SCHEMA_RECHECK_MS) return true;
   const reg = await prisma.$queryRaw`
     SELECT to_regclass('public.billing_invoices')::text AS billing_invoices,
            to_regclass('public.billing_invoice_items')::text AS billing_invoice_items,
@@ -145,52 +147,8 @@ async function ensureBillingTablesExist() {
     throw err;
   }
 
-  const now = Date.now();
-  if (now - billingSchemaEnsureState.coreCheckedAt < BILLING_SCHEMA_RECHECK_MS) return;
-
-  const cols = await prisma.$queryRaw`
-    SELECT table_name, column_name
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND (
-        (table_name = 'billing_invoices' AND column_name IN ('appointment_id', 'status', 'notes', 'created_by', 'total_amount', 'updated_at'))
-        OR
-        (table_name = 'billing_payments' AND column_name IN ('received_by', 'idempotency_key'))
-      )
-  `.catch(() => []);
-
-  const present = new Set((Array.isArray(cols) ? cols : []).map((row) => `${row.table_name}.${row.column_name}`));
-  const invoiceAdds = [];
-  if (!present.has('billing_invoices.appointment_id')) invoiceAdds.push(`ADD COLUMN appointment_id bigint NULL REFERENCES public.appointments(id) ON DELETE SET NULL`);
-  if (!present.has('billing_invoices.status')) invoiceAdds.push(`ADD COLUMN status text NULL DEFAULT 'Draft'`);
-  if (!present.has('billing_invoices.notes')) invoiceAdds.push(`ADD COLUMN notes text NULL`);
-  if (!present.has('billing_invoices.created_by')) invoiceAdds.push(`ADD COLUMN created_by text NULL`);
-  if (!present.has('billing_invoices.total_amount')) invoiceAdds.push(`ADD COLUMN total_amount numeric(12,2) NOT NULL DEFAULT 0`);
-  if (!present.has('billing_invoices.updated_at')) invoiceAdds.push(`ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now()`);
-  if (invoiceAdds.length) {
-    await prisma.$executeRawUnsafe(`ALTER TABLE public.billing_invoices ${invoiceAdds.join(', ')};`).catch(() => {});
-  }
-
-  if (!present.has('billing_payments.received_by')) {
-    await prisma.$executeRawUnsafe(`ALTER TABLE public.billing_payments ADD COLUMN received_by text NULL;`).catch(() => {});
-  }
-
-  if (!present.has('billing_payments.idempotency_key')) {
-    await prisma.$executeRawUnsafe(`ALTER TABLE public.billing_payments ADD COLUMN idempotency_key text NULL;`).catch(() => {});
-  }
-
-  // Optional: make retries safe (invoice_id + idempotency_key must be unique when provided).
-  await prisma
-    .$executeRawUnsafe(
-      `
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_billing_payments_invoice_idempotency
-        ON public.billing_payments (invoice_id, idempotency_key)
-        WHERE idempotency_key IS NOT NULL AND idempotency_key <> '';
-      `
-    )
-    .catch(() => {});
-
   billingSchemaEnsureState.coreCheckedAt = now;
+  return true;
 }
 
 async function ensureDoctorServiceFeesTableExist() {
@@ -206,20 +164,7 @@ async function ensureDoctorServiceFeesTableExist() {
     return;
   }
 
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS public.doctor_service_fees (
-      id bigserial PRIMARY KEY,
-      doctor_uuid uuid NOT NULL,
-      service_key text NOT NULL,
-      service_name text NOT NULL,
-      default_fee numeric(10,2) NOT NULL DEFAULT 0,
-      active boolean NOT NULL DEFAULT true,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now(),
-      UNIQUE (doctor_uuid, service_key)
-    );
-  `);
-  billingSchemaEnsureState.doctorFeesCheckedAt = now;
+  throw Object.assign(new Error('Doctor service fees table is not installed.'), { statusCode: 503 });
 }
 
 async function ensureBillingAdjustmentsTableExist() {
@@ -235,25 +180,7 @@ async function ensureBillingAdjustmentsTableExist() {
     return;
   }
 
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS public.billing_adjustments (
-      id bigserial PRIMARY KEY,
-      invoice_id bigint NOT NULL REFERENCES public.billing_invoices(id) ON DELETE CASCADE,
-      type text NOT NULL,
-      amount numeric(10,2) NOT NULL DEFAULT 0,
-      reference text NULL,
-      reason text NULL,
-      created_by text NULL,
-      created_at timestamptz NOT NULL DEFAULT now()
-    );
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_billing_adjustments_invoice_id ON public.billing_adjustments(invoice_id);
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_billing_adjustments_created_at ON public.billing_adjustments(created_at);
-  `);
-  billingSchemaEnsureState.adjustmentsCheckedAt = now;
+  throw Object.assign(new Error('Billing adjustments table is not installed.'), { statusCode: 503 });
 }
 
 async function ensureBillingHmoClaimsTableExist() {
@@ -265,58 +192,10 @@ async function ensureBillingHmoClaimsTableExist() {
   `;
   const info = Array.isArray(reg) ? reg[0] : null;
   if (info && info.billing_hmo_claims) {
-    await Promise.all([
-      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_provider text NULL`),
-      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_loa_number text NULL`),
-      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS hmo_card_number text NULL`),
-      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS coverage_json jsonb NULL`),
-      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_id uuid NULL`),
-      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS patient_name text NULL`),
-      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_status text NOT NULL DEFAULT 'Pending Verification'`),
-      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_reference text NULL`),
-      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_verified_by text NULL`),
-      prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_verified_at timestamptz NULL`)
-    ]);
     billingSchemaEnsureState.hmoClaimsCheckedAt = now;
-    return;
+    return true;
   }
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS public.billing_hmo_claims (
-      id bigserial PRIMARY KEY,
-      invoice_id bigint NOT NULL UNIQUE REFERENCES public.billing_invoices(id) ON DELETE CASCADE,
-      hmo_provider text NULL,
-    hmo_loa_number text NULL,
-    hmo_card_number text NULL,
-    coverage_json jsonb NULL,
-    philhealth_deduction numeric(12,2) NOT NULL DEFAULT 0,
-    philhealth_status text NOT NULL DEFAULT 'Pending Verification',
-    philhealth_reference text NULL,
-    philhealth_verified_by text NULL,
-    philhealth_verified_at timestamptz NULL,
-    loa_approved_amount numeric(12,2) NOT NULL DEFAULT 0,
-      status text NOT NULL DEFAULT 'Pending',
-      notes text NULL,
-      requested_by text NULL,
-      updated_by text NULL,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now()
-    );
-  `);
-  await Promise.all([
-    prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_status text NOT NULL DEFAULT 'Pending Verification'`),
-    prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_reference text NULL`),
-    prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_verified_by text NULL`),
-    prisma.$executeRawUnsafe(`ALTER TABLE public.billing_hmo_claims ADD COLUMN IF NOT EXISTS philhealth_verified_at timestamptz NULL`)
-  ]);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_status ON public.billing_hmo_claims(status, updated_at DESC);
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_billing_hmo_claims_invoice_id ON public.billing_hmo_claims(invoice_id);
-  `);
-
-  billingSchemaEnsureState.hmoClaimsCheckedAt = now;
+  throw Object.assign(new Error('Billing HMO claims table is not installed.'), { statusCode: 503 });
 }
 
 function isUuid(v) {

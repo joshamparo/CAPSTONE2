@@ -11,34 +11,10 @@ const requireRole = require('../middleware/requireRole');
 
 const announcementSseClients = new Map();
 
-let announcementsSchemaPromise = null;
-
 function ensureAnnouncementsSchema() {
-    if (!announcementsSchemaPromise) {
-        announcementsSchemaPromise = (async () => {
-            await prisma.$executeRawUnsafe(`
-                CREATE TABLE IF NOT EXISTS public.announcements (
-                    id BIGSERIAL PRIMARY KEY,
-                    title TEXT,
-                    content TEXT,
-                    priority TEXT,
-                    target TEXT,
-                    author TEXT,
-                    pinned BOOLEAN NOT NULL DEFAULT false,
-                    expires_at TIMESTAMPTZ NULL,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                )
-            `);
-            await prisma.$executeRawUnsafe(`ALTER TABLE public.announcements ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT false;`);
-            await prisma.$executeRawUnsafe(`ALTER TABLE public.announcements ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NULL;`);
-            await prisma.$executeRawUnsafe(`ALTER TABLE public.announcements ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();`);
-            await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS announcements_created_idx ON public.announcements(created_at DESC);`);
-        })().catch((err) => {
-            announcementsSchemaPromise = null;
-            throw err;
-        });
-    }
-    return announcementsSchemaPromise;
+    // Schema prerequisites are installed once by the serialized startup migration.
+    // Keep this compatibility hook non-blocking for callers that still await it.
+    return Promise.resolve();
 }
 
 function mulberry32(seed) {
