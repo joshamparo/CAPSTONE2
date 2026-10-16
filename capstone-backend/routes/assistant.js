@@ -1318,17 +1318,33 @@ function detectAssistantCapabilityIntent(text) {
   return '';
 }
 
+function canonicalizeCasualText(value) {
+  return String(value || '')
+    .replace(/\bhi+\b/g, 'hi')
+    .replace(/\bhel+o+\b/g, 'hello')
+    .replace(/\bhey+\b/g, 'hey')
+    .replace(/\bkumusta+\b/g, 'kumusta')
+    .replace(/\bkamusta+\b/g, 'kamusta')
+    .replace(/\bsalamat+\b/g, 'salamat')
+    .replace(/\bthanks+\b/g, 'thanks')
+    .replace(/\bbye+\b/g, 'bye');
+}
+
 function detectCasualIntent(text) {
   const normalized = normalizeQuestionText(text);
   if (!normalized) return '';
 
-  if (/^(hi|hello|hey|hello po|hi po|hey po)( there)?$/.test(normalized)) return 'greeting';
-  if (/^(good morning|good afternoon|good evening|magandang umaga|magandang hapon|magandang gabi)( po)?$/.test(normalized)) return 'greeting';
-  if (/^(kamusta|kumusta)( ka| kayo)?( na)?( po)?$/.test(normalized) || /^(how are you|how are you doing)( today)?$/.test(normalized)) return 'wellbeing';
-  if (/^(salamat|maraming salamat|thank you|thanks|thank you so much|thanks a lot)( po)?$/.test(normalized)) return 'thanks';
-  if (/^(bye|goodbye|see you|see you later|paalam|sige bye|okay bye)( po)?$/.test(normalized)) return 'goodbye';
-  if (/^(ok|okay|sige|got it|understood|noted|ayos)( na)?( po)?$/.test(normalized)) return 'acknowledgement';
-  if (/^(who are you|what are you|ano ka|sino ka|anong pangalan mo|what is your name)$/.test(normalized)) return 'identity';
+  // Normalize common stretched casual words without changing legitimate
+  // double letters in phrases such as "goodbye", "see", and "paalam".
+  const casual = canonicalizeCasualText(normalized);
+
+  if (/^(hi|hello|hey)( there)?( po)?$/.test(casual)) return 'greeting';
+  if (/^(good morning|good afternoon|good evening|magandang umaga|magandang hapon|magandang gabi)( po)?$/.test(casual)) return 'greeting';
+  if (/^(kamusta|kumusta)( ka| kayo)?( na)?( po)?$/.test(casual) || /^(how are you|how are you doing)( today)?$/.test(casual)) return 'wellbeing';
+  if (/^(salamat|maraming salamat|thank you|thanks|thank you so much|thanks a lot)( po)?$/.test(casual)) return 'thanks';
+  if (/^(bye|goodbye|see you|see you later|paalam|sige bye|okay bye)( po)?$/.test(casual)) return 'goodbye';
+  if (/^(ok|okay|sige|got it|understood|noted|ayos)( na)?( po)?$/.test(casual)) return 'acknowledgement';
+  if (/^(who are you|what are you|ano ka|sino ka|anong pangalan mo|what is your name)$/.test(casual)) return 'identity';
 
   return '';
 }
@@ -1424,8 +1440,9 @@ function detectPreferredLanguage(text) {
   const raw = String(text || '').trim();
   if (!raw) return 'english';
   const lower = raw.toLowerCase();
+  const casualLower = canonicalizeCasualText(lower);
   if (/\b(tagalog|taglish|filipino|nagtatagalog|magtagalog|mag tagalog)\b/i.test(raw)) return 'tagalog';
-  if (/^(kamusta|kumusta|salamat|maraming salamat|paalam|magandang umaga|magandang hapon|magandang gabi)(\b|\s)/i.test(lower)) return 'tagalog';
+  if (/^(kamusta|kumusta|salamat|maraming salamat|paalam|magandang umaga|magandang hapon|magandang gabi)(\b|\s)/i.test(casualLower)) return 'tagalog';
   const tagalogSignals = [
     ' ano ', ' paano ', ' bakit ', ' saan ', ' kailan ', ' sino ', ' pwede ', ' puwede ',
     ' gusto ', ' ko ', ' mo ', ' nyo ', ' ninyo ', ' natin ', ' natin ', ' ito ', ' iyan ',

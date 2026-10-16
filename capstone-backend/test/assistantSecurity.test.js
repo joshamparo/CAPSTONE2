@@ -128,6 +128,11 @@ test('assistant handles basic casual conversation naturally in English and Tagal
   const cases = [
     ['How are you?', /doing well|ready to help/i],
     ['Kumusta ka?', /mabuti|handa akong tumulong/i],
+    ['hii', /hello|how can i help/i],
+    ['helloooo po', /hello|paano kita matutulungan/i],
+    ['heyyy there', /hello|how can i help/i],
+    ['kumustaaa ka po', /mabuti|handa akong tumulong/i],
+    ['thanksss', /welcome/i],
     ['Who are you?', /Pascualinga Assistant/i],
     ['Thanks a lot!', /welcome/i],
     ['Paalam', /paalam|nandito lang/i]
