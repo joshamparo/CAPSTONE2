@@ -878,6 +878,112 @@ function detectLabStatusIntent(normalized) {
   return '';
 }
 
+function safeConversationContext(messages) {
+  const priorUserMessages = (Array.isArray(messages) ? messages : [])
+    .filter((message) => String(message?.role || '').toLowerCase() === 'user')
+    .map((message) => String(message?.content || '').trim())
+    .filter(Boolean)
+    .slice(0, -1)
+    .reverse();
+
+  for (const priorText of priorUserMessages) {
+    const normalized = normalizeQuestionText(priorText);
+    const price = detectPriceIntent(normalized);
+    const namesSpecificXray = /\b(chest|extremity|arm|leg|hand|foot|spine|pelvis)\s*xray\b/.test(normalized);
+    if (price.matches.length === 1 || (price.matches.length > 1 && namesSpecificXray)) {
+      return { intent: 'price', service: price.matches[0] };
+    }
+    const appointment = detectAppointmentIntent(normalized);
+    if (appointment) return { intent: appointment };
+    if (detectLabStatusIntent(normalized)) return { intent: 'lab_result_status' };
+    const department = detectDepartmentHint(normalized);
+    if (department) return { intent: 'department', department };
+  }
+
+  return null;
+}
+
+function departmentForService(service) {
+  const category = String(service?.category || '').toLowerCase();
+  const name = String(service?.name || '').toLowerCase();
+  if (/x-ray|ultrasound|radiology|imaging/.test(`${category} ${name}`)) return 'Radiology / Imaging';
+  if (/laboratory|pathology|cbc|urinalysis|blood|culture|hba1c/.test(`${category} ${name}`)) return 'Laboratory / Pathology';
+  if (/dental|tooth|teeth/.test(`${category} ${name}`)) return 'Dental Clinic';
+  if (/room|admission/.test(`${category} ${name}`)) return 'Admissions / Reception';
+  if (/consult|opd/.test(`${category} ${name}`)) return 'Out-Patient Department (OPD)';
+  return 'hospital reception';
+}
+
+function resolveConversationFollowUp({ text, messages, preferredLanguage }) {
+  const context = safeConversationContext(messages);
+  if (!context) return null;
+
+  const normalized = normalizeQuestionText(text);
+  const tagalog = preferredLanguage === 'tagalog';
+  const isComparison = /^(how about|what about|and how about|paano naman|magkano naman|eh yung|e yung|yung naman|what if)\b/.test(normalized);
+
+  if (context.intent === 'price' && isComparison) {
+    const contextualPrice = detectPriceIntent(normalizeQuestionText(`how much ${text}`));
+    const namesSpecificXray = /\b(chest|extremity|arm|leg|hand|foot|spine|pelvis)\s*xray\b/.test(normalized);
+    if (contextualPrice.matches.length === 1 || (contextualPrice.matches.length > 1 && namesSpecificXray)) {
+      return { rewrittenText: `how much ${text}` };
+    }
+    if (contextualPrice.matches.length > 1) {
+      const choices = contextualPrice.matches.slice(0, 4).map((service) => service.name).join(', ');
+      return {
+        reply: {
+          answer: tagalog
+            ? `May ilang posibleng serbisyo: ${choices}. Alin dito ang gusto mong malaman ang presyo?`
+            : `There are several possible services: ${choices}. Which one would you like a price for?`,
+          source: 'knowledge', grounded: true, suggestions: contextualPrice.matches.slice(0, 4).map((service) => `Magkano ang ${service.name}?`)
+        }
+      };
+    }
+  }
+
+  const asksWhere = /^(where|where do i go|where should i go|saan|saan ako pupunta|saan pupunta|anong department|which department)(\b|$)/.test(normalized);
+  if (asksWhere && context.service) {
+    const department = departmentForService(context.service);
+    return {
+      reply: {
+        answer: tagalog
+          ? `Para sa ${context.service.name}, pumunta sa ${department}. Magtanong muna sa reception pagdating at kumpirmahin ang availability sa 0915 312 7144.`
+          : `For ${context.service.name}, proceed to ${department}. Check with reception when you arrive and confirm availability at 0915 312 7144.`,
+        source: 'knowledge', grounded: true,
+        suggestions: [`Paano magpa-appointment?`, `Ano ang requirements?`, `Hospital location`]
+      }
+    };
+  }
+
+  const asksRequirements = /(requirement|requirements|what.*bring|what.*need|ano.*dadalahin|ano.*dalhin|ano.*kailangan|kailangan ko ba)/.test(normalized);
+  if (asksRequirements && context.intent === 'appointment_booking') {
+    return {
+      reply: {
+        answer: tagalog
+          ? 'Para sa appointment o walk-in, magdala ng valid ID at PhilHealth o HMO card kung meron. Maaaring may dagdag na requirement depende sa department, kaya kumpirmahin muna sa 0915 312 7144.'
+          : 'For an appointment or walk-in, bring a valid ID and your PhilHealth or HMO card if available. Requirements may vary by department, so confirm first at 0915 312 7144.',
+        source: 'knowledge', grounded: true,
+        suggestions: ['OPD hours?', 'Hospital location', 'Current queue?']
+      }
+    };
+  }
+
+  const asksResultNextStep = /^(where.*get|where.*claim|how.*get|how.*claim|saan.*kuha|saan.*kunin|paano.*kuha|paano.*kunin|what.*next|ano.*sunod)/.test(normalized);
+  if (asksResultNextStep && context.intent === 'lab_result_status') {
+    return {
+      reply: {
+        answer: tagalog
+          ? 'Tingnan ang Patient Portal kung available, o dalhin ang valid ID at resibo sa Laboratory o Radiology releasing area. Hindi nakikita ng chatbot ang actual result o live release status.'
+          : 'Check the Patient Portal if available, or bring your valid ID and receipt to the Laboratory or Radiology releasing area. The chatbot cannot view the actual result or its live release status.',
+        source: 'knowledge', grounded: true,
+        suggestions: ['Lab result turnaround?', 'Hospital location', 'Contact number']
+      }
+    };
+  }
+
+  return null;
+}
+
 function detectDepartmentHint(normalized) {
   if (!normalized) return '';
   const n = ` ${normalized} `;
@@ -1645,9 +1751,12 @@ function resolveReplyLanguage(text, preferredLanguage) {
   return detectPreferredLanguage(text) === 'tagalog' ? 'tagalog' : 'english';
 }
 
-function localAssistantReply({ role, message, pathname, preferredLanguage = 'english' }) {
-  const text = String(message || '').trim();
-  const effectiveLanguage = resolveReplyLanguage(text, preferredLanguage);
+function localAssistantReply({ role, message, messages = [], pathname, preferredLanguage = 'english' }) {
+  const originalText = String(message || '').trim();
+  const effectiveLanguage = resolveReplyLanguage(originalText, preferredLanguage);
+  const followUp = resolveConversationFollowUp({ text: originalText, messages, preferredLanguage: effectiveLanguage });
+  if (followUp?.reply) return followUp.reply;
+  const text = String(followUp?.rewrittenText || originalText).trim();
   if (!text) {
     return safeReply(localizeAssistantText('Please ask a question related to Pascual General Hospital information or your authorized system workflow.', effectiveLanguage, role));
   }
@@ -1957,11 +2066,11 @@ router.post('/chat', async (req, res) => {
     }
 
     if (!OPENAI_API_KEY) {
-      const fallback = localAssistantReply({ role, message: latestText, pathname, preferredLanguage });
+      const fallback = localAssistantReply({ role, message: latestText, messages, pathname, preferredLanguage });
       return res.json({ requestId, role, pathname, ...fallback, source: fallback.source === 'unresolved' ? 'fallback' : fallback.source, latencyMs: Date.now() - startAt });
     }
 
-    const protectedReply = localAssistantReply({ role, message: latestText, pathname, preferredLanguage });
+    const protectedReply = localAssistantReply({ role, message: latestText, messages, pathname, preferredLanguage });
     // Deterministic policy and curated knowledge answers do not need an OpenAI
     // round trip. This keeps common questions fast and avoids unnecessary cost.
     if (protectedReply.source === 'policy' || protectedReply.source === 'knowledge') {
@@ -1981,7 +2090,7 @@ router.post('/chat', async (req, res) => {
         latencyMs: Date.now() - startAt
       });
     } catch (openAiError) {
-      const fallback = localAssistantReply({ role, message: latestText, pathname, preferredLanguage });
+      const fallback = localAssistantReply({ role, message: latestText, messages, pathname, preferredLanguage });
       return res.json({
         requestId,
         role,

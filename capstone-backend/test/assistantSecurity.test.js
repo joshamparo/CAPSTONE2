@@ -174,3 +174,53 @@ test('every authenticated chatbot role answers casual and basic workflow questio
     assert.ok(basicData.answer.length > 30);
   }
 });
+
+test('assistant resolves safe multi-turn follow-up questions from prior context', async () => {
+  const cases = [
+    {
+      messages: [
+        { role: 'user', content: 'Magkano ang CBC?' },
+        { role: 'assistant', content: 'The CBC reference price is ₱380.' },
+        { role: 'user', content: 'How about chest xray?' }
+      ],
+      answer: /Chest X-ray/i,
+      detail: /₱600/
+    },
+    {
+      messages: [
+        { role: 'user', content: 'Magkano ang chest xray?' },
+        { role: 'assistant', content: 'The reference price is ₱600.' },
+        { role: 'user', content: 'Saan ako pupunta?' }
+      ],
+      answer: /Radiology|Imaging/i,
+      detail: /reception|0915 312 7144/i
+    },
+    {
+      messages: [
+        { role: 'user', content: 'Paano magpa-appointment?' },
+        { role: 'assistant', content: 'Call the hospital to confirm availability.' },
+        { role: 'user', content: 'Ano ang kailangan kong dalhin?' }
+      ],
+      answer: /valid ID/i,
+      detail: /PhilHealth|HMO/i
+    },
+    {
+      messages: [
+        { role: 'user', content: 'Nasaan ang lab result ko?' },
+        { role: 'assistant', content: 'Check the portal or releasing area.' },
+        { role: 'user', content: 'Paano ko kunin?' }
+      ],
+      answer: /Patient Portal|releasing area/i,
+      detail: /valid ID|resibo/i
+    }
+  ];
+
+  for (const item of cases) {
+    const response = await ask({ messages: item.messages });
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.source, 'knowledge');
+    assert.match(data.answer, item.answer);
+    assert.match(data.answer, item.detail);
+  }
+});
