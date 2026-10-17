@@ -4717,6 +4717,7 @@ function NurseDashboard() {
   const [patientOrders, setPatientOrders] = useState([]);
   const [patientOrdersLoading, setPatientOrdersLoading] = useState(false);
   const [patientOrdersError, setPatientOrdersError] = useState('');
+  const patientOrdersRequestSequenceRef = useRef(0);
   const [orderRemarkDraft, setOrderRemarkDraft] = useState({});
   const [orderDetailsById, setOrderDetailsById] = useState({});
   const [orderDetailsErrorById, setOrderDetailsErrorById] = useState({});
@@ -5675,6 +5676,7 @@ function NurseDashboard() {
 
   const fetchPatientOrders = async (patientId, { silent } = {}) => {
     const pid = String(patientId || '').trim();
+    const requestSequence = ++patientOrdersRequestSequenceRef.current;
     if (!pid) {
       setPatientOrders([]);
       return;
@@ -5685,10 +5687,14 @@ function NurseDashboard() {
       const params = new URLSearchParams();
       params.set('patientId', pid);
       params.set('assignedRole', 'nurse');
-      params.set('take', '200');
-      const res = await fetch(`${API_BASE}/api/clinical-orders?${params.toString()}`, { headers: { ...getAuthHeaders() } });
-      const data = await res.json().catch(() => []);
-      if (!res.ok) throw new Error(data?.message || 'Unable to load doctor orders.');
+      params.set('take', '50');
+      params.set('includeBilling', '0');
+      const data = await fetchJson(`/api/clinical-orders?${params.toString()}`, {
+        apiBase: API_BASE,
+        headers: { ...getAuthHeaders() },
+        timeoutMs: 15000
+      });
+      if (requestSequence !== patientOrdersRequestSequenceRef.current) return;
       const rows = Array.isArray(data) ? data : [];
       rows.sort((a, b) => {
         const at = a.updatedAt || a.createdAt || null;
@@ -5699,10 +5705,11 @@ function NurseDashboard() {
       });
       setPatientOrders(rows);
     } catch (e) {
+      if (requestSequence !== patientOrdersRequestSequenceRef.current) return;
       setPatientOrders([]);
       setPatientOrdersError(String(e?.message || 'Unable to load doctor orders.'));
     } finally {
-      if (!silent) setPatientOrdersLoading(false);
+      if (!silent && requestSequence === patientOrdersRequestSequenceRef.current) setPatientOrdersLoading(false);
     }
   };
 
@@ -5716,9 +5723,11 @@ function NurseDashboard() {
     setExpandedOrderHistoryId(oid);
     setOrderDetailsErrorById((prev) => ({ ...prev, [oid]: '' }));
     try {
-      const res = await fetch(`${API_BASE}/api/clinical-orders/${encodeURIComponent(oid)}`, { headers: { ...getAuthHeaders() } });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.message || 'Unable to load order history.');
+      const data = await fetchJson(`/api/clinical-orders/${encodeURIComponent(oid)}`, {
+        apiBase: API_BASE,
+        headers: { ...getAuthHeaders() },
+        timeoutMs: 15000
+      });
       setOrderDetailsById((prev) => ({ ...prev, [oid]: data }));
     } catch (error) {
       setOrderDetailsById((prev) => ({ ...prev, [oid]: { order: null, events: [], results: [] } }));
@@ -5752,9 +5761,11 @@ function NurseDashboard() {
     }
     setOrderActionLoadingId(oid);
     try {
-      const res = await fetch(`${API_BASE}/api/clinical-orders/${encodeURIComponent(oid)}`, {
+      await fetchJson(`/api/clinical-orders/${encodeURIComponent(oid)}`, {
+        apiBase: API_BASE,
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        timeoutMs: 15000,
         body: JSON.stringify({
           ...(statusClean ? { status: statusClean } : {}),
           eventNote: eventNote != null ? String(eventNote) : null,
@@ -5762,8 +5773,6 @@ function NurseDashboard() {
           actorRole: 'nurse'
         })
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.message || 'Update failed');
       if (ordersTargetPatient?._id) {
         await fetchPatientOrders(String(ordersTargetPatient._id), { silent: true });
       }
@@ -5859,11 +5868,10 @@ function NurseDashboard() {
     setShowEROrdersModal(true);
     setOrderRemarkDraft({});
     await fetchPatientOrders(String(patient._id));
-    refreshSupplyCatalog().catch(() => {});
-    refreshMyRestockRequests().catch(() => {});
   };
 
   const closeEROrdersModal = () => {
+    patientOrdersRequestSequenceRef.current += 1;
     setShowEROrdersModal(false);
     setOrdersModalTab('orders');
     setOrdersTargetPatient(null);
@@ -9376,7 +9384,11 @@ function NurseDashboard() {
                 <button
                   type="button"
                   className={`orders-tab-btn ${ordersModalTab === 'supplies' ? 'active' : ''}`}
-                  onClick={() => setOrdersModalTab('supplies')}
+                  onClick={() => {
+                    setOrdersModalTab('supplies');
+                    refreshSupplyCatalog().catch(() => {});
+                    refreshMyRestockRequests().catch(() => {});
+                  }}
                 >
                   <Package size={18} /> Supplies
                 </button>
@@ -9386,10 +9398,14 @@ function NurseDashboard() {
                     className="btn-primary-action"
                     style={{ padding: '8px 12px', fontSize: '0.85rem' }}
                     onClick={() => {
-                      if (ordersTargetPatient?._id) fetchPatientOrders(String(ordersTargetPatient._id));
-                      refreshMyRestockRequests().catch(() => {});
+                      if (ordersModalTab === 'orders' && ordersTargetPatient?._id) {
+                        fetchPatientOrders(String(ordersTargetPatient._id));
+                      } else if (ordersModalTab === 'supplies') {
+                        refreshSupplyCatalog().catch(() => {});
+                        refreshMyRestockRequests().catch(() => {});
+                      }
                     }}
-                    disabled={patientOrdersLoading || restockMineLoading}
+                    disabled={ordersModalTab === 'orders' ? patientOrdersLoading : (supplyCatalogLoading || restockMineLoading)}
                   >
                     <RotateCw size={16} /> Refresh
                   </button>
@@ -9413,6 +9429,8 @@ function NurseDashboard() {
                         const st = String(o.status || 'Pending');
                         const isStat = String(o.priority || '').toUpperCase() === 'STAT';
                         const stLow = st.toLowerCase();
+                        const canStart = stLow === 'pending';
+                        const canComplete = stLow === 'in progress';
                         const badgeBg =
                           stLow.includes('completed') ? '#dcfce7' :
                           stLow.includes('progress') ? '#e0f2fe' :
@@ -9483,24 +9501,28 @@ function NurseDashboard() {
                                     <CheckCircle size={16} /> Acknowledged by {o.acknowledgedBy || 'Nurse'}
                                   </div>
                                 )}
-                                <button
-                                  type="button"
-                                  className="btn-primary-action"
-                                  style={{ padding: '10px 12px', fontSize: '0.9rem' }}
-                                  onClick={() => patchOrder(oid, { status: 'In Progress', eventNote: String(orderRemarkDraft[oid] || '').trim() || 'Started' })}
-                                  disabled={orderActionLoadingId === oid}
-                                >
-                                  <Clock size={16} /> Start
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn-primary-action"
-                                  style={{ padding: '10px 12px', fontSize: '0.9rem' }}
-                                  onClick={() => patchOrder(oid, { status: 'Completed', eventNote: String(orderRemarkDraft[oid] || '').trim() || 'Completed' })}
-                                  disabled={orderActionLoadingId === oid}
-                                >
-                                  <CheckCircle size={16} /> Complete
-                                </button>
+                                {canStart ? (
+                                  <button
+                                    type="button"
+                                    className="btn-primary-action"
+                                    style={{ padding: '10px 12px', fontSize: '0.9rem' }}
+                                    onClick={() => patchOrder(oid, { status: 'In Progress', eventNote: String(orderRemarkDraft[oid] || '').trim() || 'Started' })}
+                                    disabled={orderActionLoadingId === oid}
+                                  >
+                                    <Clock size={16} /> Start
+                                  </button>
+                                ) : null}
+                                {canComplete ? (
+                                  <button
+                                    type="button"
+                                    className="btn-primary-action"
+                                    style={{ padding: '10px 12px', fontSize: '0.9rem' }}
+                                    onClick={() => patchOrder(oid, { status: 'Completed', eventNote: String(orderRemarkDraft[oid] || '').trim() || 'Completed' })}
+                                    disabled={orderActionLoadingId === oid}
+                                  >
+                                    <CheckCircle size={16} /> Complete
+                                  </button>
+                                ) : null}
                                 <button
                                   type="button"
                                   className="btn-ghost"

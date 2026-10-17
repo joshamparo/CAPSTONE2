@@ -187,6 +187,15 @@ function canTransitionStatus({ fromStatus, toStatus, actorRole, assignedRole }) 
   if (!to || to === from) return true;
   if (role === 'admin') return true;
 
+  if (role === 'nurse') {
+    if (assigned !== 'nurse') return false;
+    const allowed = {
+      Pending: new Set(['In Progress', 'Cancelled']),
+      'In Progress': new Set(['Completed', 'Cancelled'])
+    };
+    return Boolean(allowed[from]?.has(to));
+  }
+
   if (to === 'Paid') {
     if (from !== 'For Payment') return false;
     return role === 'cashier';
@@ -331,7 +340,11 @@ router.get('/', async (req, res) => {
         if (actor.actorName) {
           or.push({ ordered_by_role: expectedRole, ordered_by_name: actor.actorName });
         }
-        if (actor.actorRole !== 'nurse') or.push({ assigned_role: actor.actorRole });
+        if (actor.actorRole === 'nurse') {
+          or.push({ assigned_role: 'nurse', assigned_to: null });
+        } else {
+          or.push({ assigned_role: actor.actorRole });
+        }
         if (actor.actorEmail) or.push({ assigned_to: actor.actorEmail });
         where.OR = or;
         if (actor.actorRole === 'nurse') where.AND = [...(where.AND || []), { patients: { is: req.nursePatientScope } }];
@@ -426,7 +439,8 @@ router.get('/', async (req, res) => {
 
     const linkedInvoicesMap = new Map();
     const claimPerInvoice = new Map();
-    if (orderIdsForLookup.length > 0) {
+    const includeBilling = String(req.query.includeBilling || '1').trim() !== '0';
+    if (includeBilling && orderIdsForLookup.length > 0) {
       try {
         const placeholders = orderIdsForLookup.map((_, i) => `$${i + 1}`).join(',');
         const params = orderIdsForLookup.map((id) => BigInt(id));
@@ -974,7 +988,7 @@ router.patch('/:id', async (req, res) => {
       if (!canTransitionStatus({ fromStatus: effectiveFromStatus, toStatus: newStatus, actorRole: actorFromHeaders.actorRole, assignedRole: current.assignedRole })) {
         return res.status(403).json({ message: 'Forbidden status transition' });
       }
-      if (newStatus === 'Completed' && actorFromHeaders.actorRole !== 'admin') {
+      if (newStatus === 'Completed' && actorFromHeaders.actorRole !== 'admin' && SCHEDULABLE_ROLE_SET.has(assignedRoleNorm)) {
         const verifiedResults = await prisma.$queryRaw`
           SELECT id
           FROM public.lab_results
@@ -1221,7 +1235,7 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-router.__test = { canAccessOrderRow, inferActor, enrichClinicalOrder };
+router.__test = { canAccessOrderRow, canTransitionStatus, inferActor, enrichClinicalOrder };
 module.exports = router;
 
 

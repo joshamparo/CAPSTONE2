@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const router = require('../routes/clinicalOrders');
-const { canAccessOrderRow, inferActor } = router.__test;
+const { canAccessOrderRow, canTransitionStatus, inferActor } = router.__test;
 
 const roles = ['medtech', 'radiographer', 'ecg_operator', 'physical_therapist'];
 
@@ -32,6 +32,19 @@ test('admin and cashier retain their explicit operational access', () => {
   const order = { assignedRole: 'medtech', assignedTo: 'medtech@example.test' };
   assert.equal(canAccessOrderRow(order, { actorRole: 'admin', actorEmail: 'admin@example.test' }), true);
   assert.equal(canAccessOrderRow(order, { actorRole: 'cashier', actorEmail: 'cashier@example.test' }), true);
+});
+
+test('doctor orders assigned to nurses remain visible before individual assignment', () => {
+  const order = { orderedByRole: 'Doctor', orderedByName: 'Verified Doctor', assignedRole: 'nurse', assignedTo: null };
+  assert.equal(canAccessOrderRow(order, { actorRole: 'nurse', actorEmail: 'er.nurse@example.test', actorName: 'ER Nurse' }), true);
+});
+
+test('nurse order status follows pending to in-progress to completed', () => {
+  assert.equal(canTransitionStatus({ fromStatus: 'Pending', toStatus: 'In Progress', actorRole: 'nurse', assignedRole: 'nurse' }), true);
+  assert.equal(canTransitionStatus({ fromStatus: 'Pending', toStatus: 'Completed', actorRole: 'nurse', assignedRole: 'nurse' }), false);
+  assert.equal(canTransitionStatus({ fromStatus: 'In Progress', toStatus: 'Completed', actorRole: 'nurse', assignedRole: 'nurse' }), true);
+  assert.equal(canTransitionStatus({ fromStatus: 'Completed', toStatus: 'In Progress', actorRole: 'nurse', assignedRole: 'nurse' }), false);
+  assert.equal(canTransitionStatus({ fromStatus: 'Pending', toStatus: 'In Progress', actorRole: 'nurse', assignedRole: 'medtech' }), false);
 });
 
 test('clinical-order identity comes from the signed session, not spoofed headers', () => {
