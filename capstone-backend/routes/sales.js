@@ -24,14 +24,6 @@ async function ensureBillingTablesExist() {
   }
 }
 
-async function ensureSalesLinkColumns() {
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE public.sales
-    ADD COLUMN IF NOT EXISTS patient_id uuid NULL,
-    ADD COLUMN IF NOT EXISTS invoice_id bigint NULL;
-  `).catch(() => {});
-}
-
 async function loadSalesLinkMeta(ids) {
   if (!Array.isArray(ids) || ids.length === 0) return new Map();
   const safeIds = ids.map((id) => String(id)).filter((id) => /^\d+$/.test(id));
@@ -536,7 +528,6 @@ router.get('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
 // POST Log Sale
 router.post('/', requireRole(['pharmacist', 'admin']), requireIdempotency('pharmacy-sale-create'), async (req, res) => {
     try {
-        await ensureSalesLinkColumns();
         const { items, total, payment, change, pharmacist, discountType, discountValue, discountRef, patientId, createInvoice, paymentMethod, paymentReference, bulkOrder, bulkMeta } = req.body;
         const safeItems = Array.isArray(items) ? items : [];
         if (safeItems.length === 0) return res.status(400).json({ message: 'items is required' });
@@ -578,6 +569,7 @@ router.post('/', requireRole(['pharmacist', 'admin']), requireIdempotency('pharm
         if (Number.isFinite(changeRaw) && Math.abs(changeRaw - changeNum) > 0.01) {
             return res.status(400).json({ message: 'Change mismatch' });
         }
+        if (shouldCreateInvoice) await ensureBillingTablesExist();
 
         // Using Prisma to handle the transaction logging
         // If your database is connected to Supabase, this will sync automatically
@@ -627,13 +619,29 @@ router.post('/', requireRole(['pharmacist', 'admin']), requireIdempotency('pharm
 
                 // Get current stock with read lock for safety
                 const currentItem = await tx.$queryRawUnsafe(`
-                  SELECT stock FROM public.${tableName}
+                  SELECT stock, price FROM public.${tableName}
                   WHERE id = $1 FOR UPDATE
                 `, BigInt(item.id));
 
                 const stockRow = Array.isArray(currentItem) ? currentItem[0] : null;
-                const currentStock = stockRow ? Number(stockRow.stock) : 0;
-                const newStock = Math.max(0, currentStock - item.quantity);
+                if (!stockRow) {
+                    const error = new Error(`${item.name || 'Cart item'} is no longer available.`);
+                    error.statusCode = 409;
+                    throw error;
+                }
+                const currentStock = Number(stockRow.stock);
+                const currentPrice = round2(Number(stockRow.price || 0));
+                if (!Number.isFinite(currentPrice) || Math.abs(currentPrice - round2(item.price)) > 0.01) {
+                    const error = new Error(`Price changed for ${item.name || 'cart item'}. Refresh the POS and try again.`);
+                    error.statusCode = 409;
+                    throw error;
+                }
+                if (!Number.isFinite(currentStock) || currentStock < item.quantity) {
+                    const error = new Error(`Insufficient stock for ${item.name || 'cart item'}. Available: ${Math.max(0, Number(currentStock) || 0)}.`);
+                    error.statusCode = 409;
+                    throw error;
+                }
+                const newStock = currentStock - item.quantity;
                 const delta = newStock - currentStock;
 
                 await table.update({
@@ -663,54 +671,42 @@ router.post('/', requireRole(['pharmacist', 'admin']), requireIdempotency('pharm
 
             let invoiceId = null;
             if (shouldCreateInvoice) {
-                try {
-                    ensureBillingTablesExist();
-                } catch (_) {}
-                try {
-                    const createdByStr = pharmacistName || actorRole;
-                    const notesArr = [];
-                    notesArr.push('Pharmacy POS sale');
-                    if (paymentMethod) notesArr.push(`Payment: ${String(paymentMethod)}`);
-                    if (paymentReference) notesArr.push(`Ref: ${String(paymentReference).slice(0,120)}`);
-                    notesArr.push(`Sale ID: ${sale.id.toString()}`);
-                    const inv = await tx.$queryRawUnsafe(`
+                const createdByStr = pharmacistName || actorRole;
+                const notesArr = [];
+                notesArr.push('Pharmacy POS sale');
+                if (paymentMethod) notesArr.push(`Payment: ${String(paymentMethod)}`);
+                if (paymentReference) notesArr.push(`Ref: ${String(paymentReference).slice(0,120)}`);
+                notesArr.push(`Sale ID: ${sale.id.toString()}`);
+                const inv = await tx.$queryRawUnsafe(`
                         INSERT INTO public.billing_invoices (patient_id, status, notes, created_by, total_amount, created_at, updated_at)
                         VALUES ($1::uuid, 'Paid', $2, $3, $4::numeric, now(), now())
                         RETURNING id
-                    `, patientIdValue, notesArr.join(' | ').slice(0, 500), createdByStr, Number(totalDue));
-                    const invRow = Array.isArray(inv) && inv.length ? inv[0] : null;
-                    if (invRow?.id) {
-                        invoiceId = BigInt(invRow.id);
-                        let lineIdx = 0;
-                        for (const item of normalizedItems) {
-                            lineIdx += 1;
-                            const lineTotal = round2(Number(item.price || 0) * Math.max(1, Number(item.quantity || 1)));
-                            await tx.$executeRawUnsafe(`
-                                INSERT INTO public.billing_invoice_items (invoice_id, line_no, description, quantity, unit_price, line_total, created_at)
-                                VALUES ($1, $2, $3, $4, $5::numeric, $6::numeric, now())
-                            `, invoiceId, lineIdx, String(item.name || '').slice(0, 300), Math.max(1, Number(item.quantity || 1)), Number(item.price || 0), Number(lineTotal));
-                        }
-                        if (discountAmount > 0) {
-                            lineIdx += 1;
-                            const ref = String(discountRef || '').trim();
-                            const lbl = discountLabel ? `Discount (${discountLabel}${ref ? `) Ref: ${ref}` : ')'}` : 'Discount';
-                            await tx.$executeRawUnsafe(`
-                                INSERT INTO public.billing_invoice_items (invoice_id, line_no, description, quantity, unit_price, line_total, created_at)
-                                VALUES ($1, $2, $3, 1, $4::numeric, $5::numeric, now())
-                            `, invoiceId, lineIdx, String(lbl).slice(0, 300), Number(0), -Math.abs(Number(discountAmount)));
-                        }
-                        await tx.$executeRawUnsafe(`
-                            INSERT INTO public.billing_payments (invoice_id, amount, method, reference, received_by, payment_date, idempotency_key, created_at)
-                            VALUES ($1, $2::numeric, $3, $4, $5, now(), $6, now())
-                        `, invoiceId, Number(paymentNum), String(paymentMethod || 'Cash').slice(0, 50), paymentReference ? String(paymentReference).slice(0, 200) : null, pharmacistName, `pharmacy-pos-sale-${sale.id.toString()}`);
-                    }
-                } catch (invErr) {
-                    console.error('[sales] failed to create billing invoice for pharmacy POS sale', invErr);
+                `, patientIdValue, notesArr.join(' | ').slice(0, 500), createdByStr, Number(totalDue));
+                const invRow = Array.isArray(inv) && inv.length ? inv[0] : null;
+                if (!invRow?.id) throw new Error('Billing invoice could not be created.');
+                invoiceId = BigInt(invRow.id);
+                for (const item of normalizedItems) {
+                    const lineTotal = round2(Number(item.price || 0) * Math.max(1, Number(item.quantity || 1)));
+                    await tx.$executeRawUnsafe(`
+                                INSERT INTO public.billing_invoice_items (invoice_id, description, quantity, unit_price, line_total, created_at)
+                                VALUES ($1, $2, $3, $4::numeric, $5::numeric, now())
+                    `, invoiceId, String(item.name || '').slice(0, 300), Math.max(1, Number(item.quantity || 1)), Number(item.price || 0), Number(lineTotal));
                 }
+                if (discountAmount > 0) {
+                    const ref = String(discountRef || '').trim();
+                    const lbl = discountLabel ? `Discount (${discountLabel}${ref ? `) Ref: ${ref}` : ')'}` : 'Discount';
+                    await tx.$executeRawUnsafe(`
+                                INSERT INTO public.billing_invoice_items (invoice_id, description, quantity, unit_price, line_total, created_at)
+                                VALUES ($1, $2, 1, $3::numeric, $4::numeric, now())
+                    `, invoiceId, String(lbl).slice(0, 300), Number(0), -Math.abs(Number(discountAmount)));
+                }
+                await tx.$executeRawUnsafe(`
+                    INSERT INTO public.billing_payments (invoice_id, amount, method, reference, received_by, idempotency_key, created_at)
+                    VALUES ($1, $2::numeric, $3, $4, $5, $6, now())
+                `, invoiceId, Number(paymentNum), String(paymentMethod || 'Cash').slice(0, 50), paymentReference ? String(paymentReference).slice(0, 200) : null, pharmacistName, `pharmacy-pos-sale-${sale.id.toString()}`);
             }
 
-            try {
-              await tx.$executeRawUnsafe(
+            await tx.$executeRawUnsafe(
                 `UPDATE public.sales
                  SET patient_id = $1,
                      invoice_id = $2
@@ -718,34 +714,14 @@ router.post('/', requireRole(['pharmacist', 'admin']), requireIdempotency('pharm
                 patientIdValue,
                 invoiceId,
                 BigInt(sale.id)
-              );
-            } catch (linkErr) {
-              console.error('[sales] failed to link sale to patient/invoice:', linkErr);
-            }
+            );
 
             // Stock movements (same txn)
-            try {
-                await tx.$executeRawUnsafe(`
-                    CREATE TABLE IF NOT EXISTS public.stock_movements (
-                        id bigserial PRIMARY KEY,
-                        item_type text NOT NULL,
-                        item_id bigint NOT NULL,
-                        delta integer NOT NULL,
-                        reason text NOT NULL DEFAULT 'manual_adjust',
-                        actor_name text NULL,
-                        actor_role text NULL,
-                        note text NULL,
-                        created_at timestamptz NOT NULL DEFAULT now()
-                    )
-                `);
-            } catch (_) {}
             for (const sm of stockDeltas) {
-                try {
-                    await tx.$executeRawUnsafe(`
+                await tx.$executeRawUnsafe(`
                         INSERT INTO public.stock_movements (item_type, item_id, delta, reason, actor_name, actor_role, note)
                         VALUES ($1, $2, $3, $4, $5, $6, $7)
-                    `, sm.itemType, sm.itemId, sm.delta, 'dispense', pharmacistName, actorRole, 'POS sale');
-                } catch (_) {}
+                `, sm.itemType, sm.itemId, sm.delta, 'dispense', pharmacistName, actorRole, 'POS sale');
             }
 
             return { sale, invoice: invoiceId };
@@ -764,14 +740,6 @@ router.post('/', requireRole(['pharmacist', 'admin']), requireIdempotency('pharm
             });
         } catch (e) {}
 
-        const verifiedSale = await prisma.sales.findUnique({
-          where: { id: BigInt(result.sale.id) }
-        }).catch(() => null);
-        if (!verifiedSale) {
-          console.error('[sales] sale verification failed after create:', { saleId: String(result.sale.id) });
-          return res.status(500).json({ message: 'Sale could not be verified after checkout. Please try again.' });
-        }
-
         console.info('[sales] checkout persisted', {
           saleId: String(result.sale.id),
           patientId: patientIdValue,
@@ -784,7 +752,7 @@ router.post('/', requireRole(['pharmacist', 'admin']), requireIdempotency('pharm
             serialize({
                 ...result.sale,
                 patient_id: patientIdValue,
-                invoice_id: null,
+                invoice_id: result.invoice,
                 transaction_no,
                 subtotal,
                 discount_amount: discountAmount,
@@ -793,6 +761,12 @@ router.post('/', requireRole(['pharmacist', 'admin']), requireIdempotency('pharm
         );
     } catch (err) {
         const msg = String(err?.message || '');
+        if (Number(err?.statusCode) === 409) {
+            return res.status(409).json({ message: msg });
+        }
+        if (msg.includes('Billing tables are not installed')) {
+            return res.status(503).json({ message: 'Billing is temporarily unavailable. No stock was deducted; please retry.' });
+        }
         if (msg.toLowerCase().includes('cannot convert') || msg.toLowerCase().includes('bigint')) {
             return res.status(400).json({ message: 'Invalid item id' });
         }

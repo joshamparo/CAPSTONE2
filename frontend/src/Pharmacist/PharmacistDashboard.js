@@ -2274,6 +2274,12 @@ function PharmacistDashboard() {
       setToast({ type: 'success', text: createBillingInvoice ? 'Transaction completed and sent to billing.' : 'Transaction completed successfully!' });
       Promise.allSettled([fetchMedicines(), fetchSupplies(), fetchPosProducts()]);
     } catch (err) {
+      if (Number(err?.status) === 400 || (Number(err?.status) === 409 && !/still processing/i.test(String(err?.message || '')))) {
+        saleIdempotencyKeyRef.current = '';
+      }
+      if (Number(err?.status) === 409) {
+        Promise.allSettled([fetchMedicines(), fetchSupplies(), fetchPosProducts()]);
+      }
       setToast({ type: 'error', text: err.message || 'Checkout failed.' });
     } finally {
       setRxSaving(false);
