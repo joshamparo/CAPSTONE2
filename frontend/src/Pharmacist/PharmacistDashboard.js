@@ -4110,12 +4110,12 @@ function PharmacistDashboard() {
                           <div className="pharm-actions">
                             {String(r.status || '').toLowerCase() === 'pending' && (
                               <button type="button" className="pharm-btn" onClick={() => updateRequestStatus(r.id, 'Processing')} disabled={Boolean(requestActionIds[String(r.id)])}>
-                                {requestActionIds[String(r.id)] === 'processing' ? 'Processingâ€¦' : 'Process'}
+                                {requestActionIds[String(r.id)] === 'processing' ? 'Processing...' : 'Process'}
                               </button>
                             )}
                             {['processing', 'in progress', 'approved'].includes(String(r.status || '').toLowerCase()) && (
                               <button type="button" className="pharm-btn primary" onClick={() => fulfillRequest(r)} disabled={Boolean(requestActionIds[String(r.id)])}>
-                                {requestActionIds[String(r.id)] === 'fulfilling' ? 'Fulfillingâ€¦' : 'Fulfill'}
+                                {requestActionIds[String(r.id)] === 'fulfilling' ? 'Fulfilling...' : 'Fulfill'}
                               </button>
                             )}
                             {String(r.status || '').toLowerCase() === 'completed' && (
