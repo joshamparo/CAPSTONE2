@@ -880,9 +880,6 @@ function PharmacistDashboard() {
       paramsBase.set('to', rng.to);
       if (salesPharmacist.trim()) paramsBase.set('pharmacist', salesPharmacist.trim());
 
-      const sumData = await fetchJson(`/api/sales/summary?${paramsBase.toString()}`, { apiBase: API_BASE, headers: buildAuthHeaders() });
-      setSalesSummary(sumData);
-
       const txParams = new URLSearchParams(paramsBase);
       if (salesQuery.trim()) txParams.set('q', salesQuery.trim());
       if (salesDiscountType && salesDiscountType !== 'all') txParams.set('discountType', salesDiscountType);
@@ -891,14 +888,42 @@ function PharmacistDashboard() {
       txParams.set('take', String(pageSize));
       txParams.set('skip', String((page - 1) * pageSize));
 
-      const txData = await fetchJson(`/api/sales?${txParams.toString()}`, { apiBase: API_BASE, headers: buildAuthHeaders() });
-      setSalesTransactions(Array.isArray(txData?.items) ? txData.items : []);
-      setSalesTotal(Number(txData?.total || 0));
-      setSalesPage(page);
+      const reportRequests = await Promise.allSettled([
+        fetchJson(`/api/sales/summary?${paramsBase.toString()}`, { apiBase: API_BASE, headers: buildAuthHeaders() }),
+        fetchJson(`/api/sales?${txParams.toString()}`, { apiBase: API_BASE, headers: buildAuthHeaders() }),
+        fetchJson(`/api/sales/items?${paramsBase.toString()}`, { apiBase: API_BASE, headers: buildAuthHeaders() })
+      ]);
+      const [summaryResult, transactionsResult, itemsResult] = reportRequests;
+      const failedSections = [];
 
-      const itData = await fetchJson(`/api/sales/items?${paramsBase.toString()}`, { apiBase: API_BASE, headers: buildAuthHeaders() });
-      setSalesItems(Array.isArray(itData?.items) ? itData.items : []);
-      setSalesItemsMeta({ discounts_total: itData?.discounts_total ?? 0, from: itData?.from, to: itData?.to });
+      if (summaryResult.status === 'fulfilled') {
+        setSalesSummary(summaryResult.value);
+      } else {
+        failedSections.push('Daily Summary');
+      }
+
+      if (transactionsResult.status === 'fulfilled') {
+        const txData = transactionsResult.value;
+        setSalesTransactions(Array.isArray(txData?.items) ? txData.items : []);
+        setSalesTotal(Number(txData?.total || 0));
+        setSalesPage(page);
+      } else {
+        failedSections.push('Transactions');
+      }
+
+      if (itemsResult.status === 'fulfilled') {
+        const itData = itemsResult.value;
+        setSalesItems(Array.isArray(itData?.items) ? itData.items : []);
+        setSalesItemsMeta({ discounts_total: itData?.discounts_total ?? 0, from: itData?.from, to: itData?.to });
+      } else {
+        failedSections.push('Items Sold');
+      }
+
+      if (failedSections.length > 0) {
+        const firstFailure = reportRequests.find((result) => result.status === 'rejected');
+        const detail = String(firstFailure?.reason?.message || '').trim();
+        setSalesError(`Unable to load ${failedSections.join(', ')}.${detail && detail !== 'Server error' ? ` ${detail}` : ' Please refresh and try again.'}`);
+      }
     } catch (e) {
       setSalesError(String(e?.message || 'Failed to load sales report'));
     } finally {

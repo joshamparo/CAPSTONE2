@@ -41,3 +41,14 @@ test('pharmacy POS refreshes stale inventory after a checkout conflict', () => {
   assert.match(dashboardSource, /Number\(err\?\.status\) === 409/);
   assert.match(dashboardSource, /Promise\.allSettled\(\[fetchMedicines\(\), fetchSupplies\(\), fetchPosProducts\(\)\]\)/);
 });
+
+test('sales report routes never call removed runtime schema setup', () => {
+  assert.doesNotMatch(routeSource, /ensureSalesLinkColumns/);
+});
+
+test('sales report sections load concurrently and isolate endpoint failures', () => {
+  assert.match(dashboardSource, /const reportRequests = await Promise\.allSettled\(/);
+  assert.match(dashboardSource, /failedSections\.push\('Daily Summary'\)/);
+  assert.match(dashboardSource, /failedSections\.push\('Transactions'\)/);
+  assert.match(dashboardSource, /failedSections\.push\('Items Sold'\)/);
+});

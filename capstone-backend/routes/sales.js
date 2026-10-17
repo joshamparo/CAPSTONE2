@@ -330,7 +330,6 @@ router.get('/items', requireRole(['pharmacist', 'admin']), async (req, res) => {
 
 router.get('/:id', requireRole(['pharmacist', 'admin']), async (req, res) => {
   try {
-    await ensureSalesLinkColumns();
     const id = parseNumericId(req.params.id);
     if (id == null) return res.status(400).json({ message: 'Invalid id' });
     const sale = await prisma.sales.findUnique({
@@ -371,7 +370,6 @@ router.get('/:id', requireRole(['pharmacist', 'admin']), async (req, res) => {
 
 router.get('/', requireRole(['pharmacist', 'admin']), async (req, res) => {
   try {
-    await ensureSalesLinkColumns();
     const q = String(req.query.q || '').trim();
     const pharmacist = String(req.query.pharmacist || '').trim();
     const discountType = String(req.query.discountType || '').trim().toLowerCase();
