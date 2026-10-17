@@ -10,6 +10,17 @@ const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const EXPIRY_SOON_DAYS = 30;
 const EXPIRY_CRITICAL_DAYS = 7;
 
+const SafeProductImage = ({ src, alt, className, fallback }) => {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  if (!src || failed) return fallback;
+  return <img className={className} src={src} alt={alt} onError={() => setFailed(true)} />;
+};
+
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
 const normalizeDateValue = (value) => {
@@ -3161,11 +3172,11 @@ function PharmacistDashboard() {
                       title={c.name}
                       >
                         <div className="pharm-cat-img">
-                          {c.image_url ? (
-                            <img src={c.image_url} alt={c.name} />
-                        ) : (
-                          <Package size={18} />
-                        )}
+                          <SafeProductImage
+                            src={c.image_url}
+                            alt={c.name}
+                            fallback={<Package size={18} />}
+                          />
                         </div>
                         <div className="pharm-cat-name">{c.name}</div>
                         <div className="pharm-cat-count">{Number(c.available_count || 0)}</div>
@@ -3188,13 +3199,15 @@ function PharmacistDashboard() {
                     posResults.map((item) => (
                       <div key={`${item.type}-${item.id}`} className="pharm-product-card">
                         <div className="pharm-product-img">
-                          {item.imageUrl ? (
-                            <img src={item.imageUrl} alt={item.name} />
-                          ) : (
-                            <div className="pharm-product-img-placeholder">
-                              <Package size={22} />
-                            </div>
-                          )}
+                          <SafeProductImage
+                            src={item.imageUrl}
+                            alt={item.name}
+                            fallback={(
+                              <div className="pharm-product-img-placeholder">
+                                <Package size={22} />
+                              </div>
+                            )}
+                          />
                         </div>
                         <div className="pharm-product-meta">
                           <div className="pharm-product-badges">
@@ -3724,7 +3737,12 @@ function PharmacistDashboard() {
                         </td>
                         <td>
                           <div className="pharm-img-cell">
-                            {m.image_url ? <img className="pharm-mini-img" src={m.image_url} alt={m.name} /> : <div className="pharm-mini-img placeholder" />}
+                            <SafeProductImage
+                              className="pharm-mini-img"
+                              src={m.image_url}
+                              alt={m.name}
+                              fallback={<div className="pharm-mini-img placeholder" />}
+                            />
                             <button type="button" className="pharm-btn sm" onClick={() => requestProductImageUpload('medicine', m.id)} disabled={imageUploading || !categoryIdsAreNumeric}>
                               Upload
                             </button>
@@ -3917,11 +3935,12 @@ function PharmacistDashboard() {
                         </td>
                         <td>
                           <div className="pharm-img-cell">
-                            {s.image_url ? (
-                              <img className="pharm-mini-img" src={s.image_url} alt={s.item_name} />
-                            ) : (
-                              <div className="pharm-mini-img placeholder" />
-                            )}
+                            <SafeProductImage
+                              className="pharm-mini-img"
+                              src={s.image_url}
+                              alt={s.item_name}
+                              fallback={<div className="pharm-mini-img placeholder" />}
+                            />
                             <button type="button" className="pharm-btn sm" onClick={() => requestProductImageUpload('supply', s.id)} disabled={imageUploading || !categoryIdsAreNumeric}>
                               Upload
                             </button>
@@ -4963,7 +4982,14 @@ function PharmacistDashboard() {
                     ) : (
                       posCategories.map((c) => (
                         <tr key={c.id}>
-                          <td>{c.image_url ? <img className="pharm-mini-img" src={c.image_url} alt={c.name} /> : <div className="pharm-mini-img placeholder" />}</td>
+                          <td>
+                            <SafeProductImage
+                              className="pharm-mini-img"
+                              src={c.image_url}
+                              alt={c.name}
+                              fallback={<div className="pharm-mini-img placeholder" />}
+                            />
+                          </td>
                           <td className="pharm-strong">{c.name}</td>
                           <td>{Number(c.available_count || 0)}</td>
                           <td className="pharm-right">
