@@ -1477,7 +1477,7 @@ async function reassignOfflineVideoAppointmentsForRange(startStr, endStr) {
     }
 }
 
-router.get('/debug/video-apts', async (req, res) => {
+router.get('/debug/video-apts', requireRole(['admin']), async (req, res) => {
     try {
         const apts = await prisma.appointments.findMany({
             where: { consultation_mode: 'video' },

@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { newAppointmentRouting, canAssignOnsiteAppointment, doctorAppointmentScope } = require('../utils/appointmentRouting');
 
 test('onsite appointments always start in the secretary assignment queue', () => {
@@ -28,4 +30,12 @@ test('doctor queue includes own video and assigned onsite appointments only', ()
   const scope = doctorAppointmentScope('doctor-id');
   assert.equal(scope.AND[0].doctor_uuid, 'doctor-id');
   assert.equal(scope.AND[1].OR[1].assignment_status, 'ASSIGNED');
+});
+
+test('video appointment debug data is restricted to administrators', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../routes/appointments.js'), 'utf8');
+  assert.match(
+    source,
+    /router\.get\('\/debug\/video-apts',\s*requireRole\(\['admin'\]\),\s*async\s*\(req, res\)\s*=>/
+  );
 });
