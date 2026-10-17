@@ -7,6 +7,45 @@ const { parseLimit, parseOffset } = require('../utils/normalize');
 const serialize = (obj) =>
   JSON.parse(JSON.stringify(obj, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
 
+const normalizeBarcode = (value) => String(value || '').trim();
+
+router.get('/barcode/:barcode', requireRole(['pharmacist', 'admin', 'nurse']), async (req, res) => {
+  try {
+    const barcode = normalizeBarcode(req.params.barcode);
+    if (!barcode) return res.status(400).json({ message: 'Barcode is required' });
+    if (barcode.length > 128 || /[\u0000-\u001f\u007f]/.test(barcode)) {
+      return res.status(400).json({ message: 'Invalid barcode' });
+    }
+    const kind = String(req.query.kind || 'auto').trim().toLowerCase();
+    if (!['auto', 'medicine', 'supply'].includes(kind)) {
+      return res.status(400).json({ message: 'Invalid barcode type' });
+    }
+
+    const [medicine, supply] = await Promise.all([
+      kind === 'supply'
+        ? Promise.resolve(null)
+        : prisma.medicines.findUnique({ where: { barcode }, include: { product_categories: true } }),
+      kind === 'medicine'
+        ? Promise.resolve(null)
+        : prisma.supplies.findUnique({ where: { barcode }, include: { product_categories: true } })
+    ]);
+
+    if (medicine) return res.json(serialize({ type: 'medicine', item: medicine }));
+    if (supply) return res.json(serialize({ type: 'supply', item: supply }));
+    return res.status(404).json({ message: 'Barcode not found' });
+  } catch (err) {
+    const code = String(err?.code || '');
+    const message = String(err?.message || '').toLowerCase();
+    const schemaMismatch = code === 'P2021' || message.includes('does not exist') || message.includes('barcode');
+    console.error('pharmacyPos GET /barcode failed:', err);
+    return res.status(schemaMismatch ? 400 : 500).json({
+      message: schemaMismatch
+        ? 'Barcode support is not installed. Run the barcode migration first.'
+        : 'Unable to look up barcode'
+    });
+  }
+});
+
 router.get('/products', requireRole(['pharmacist', 'admin', 'nurse']), async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();

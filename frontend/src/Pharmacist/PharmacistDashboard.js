@@ -254,6 +254,8 @@ function PharmacistDashboard() {
   const [inventoryScan, setInventoryScan] = useState('');
   const [scanBusy, setScanBusy] = useState(false);
   const scanInputRef = useRef(null);
+  const scanLookupInFlightRef = useRef(false);
+  const posBarcodeLookupInFlightRef = useRef(false);
   const [barcodeSave, setBarcodeSave] = useState({}); // key -> { saving?: boolean, error?: string, ok?: boolean }
   const [inventoryFocus, setInventoryFocus] = useState(null); // { kind: 'medicine'|'supply', id: string }
   const [scanMode, setScanMode] = useState('restock'); // restock | dispense | find
@@ -1444,35 +1446,44 @@ function PharmacistDashboard() {
 
   const handleScanCenterLookup = async (rawValue) => {
     const code = String(rawValue !== undefined ? rawValue : inventoryScan || '').trim();
-    if (!code || scanBusy) return;
+    if (!code || scanLookupInFlightRef.current) return;
+    scanLookupInFlightRef.current = true;
     setScanBusy(true);
     setScanCenterMatch(null);
     setScanBanner({ type: 'info', text: 'Looking up barcode…' });
     try {
-      const tryOrder =
-        scanCenterKind === 'medicine'
-          ? ['medicine']
-          : scanCenterKind === 'supply'
-            ? ['supply']
-            : ['medicine', 'supply'];
-
       let found = null;
       let foundKind = null;
-      for (const k of tryOrder) {
-        const endpoint = k === 'supply' ? 'supplies' : 'inventory';
+
+      if (scanCenterKind !== 'supply') {
+        found = (Array.isArray(medicines) ? medicines : []).find(
+          (item) => String(item?.barcode || '').trim() === code
+        ) || null;
+        if (found) foundKind = 'medicine';
+      }
+      if (!found && scanCenterKind !== 'medicine') {
+        found = (Array.isArray(supplies) ? supplies : []).find(
+          (item) => String(item?.barcode || '').trim() === code
+        ) || null;
+        if (found) foundKind = 'supply';
+      }
+
+      if (!found) {
         try {
-          found = await fetchJson(`/api/${endpoint}/barcode/${encodeURIComponent(code)}`, {
+          const result = await fetchJson(`/api/pharmacy/barcode/${encodeURIComponent(code)}?kind=${encodeURIComponent(scanCenterKind)}`, {
             apiBase: API_BASE,
-            headers: buildAuthHeaders()
+            headers: buildAuthHeaders(),
+            timeoutMs: 10000
           });
-          if (found) {
-            foundKind = k;
-            break;
+          const resultKind = result?.type === 'supply' ? 'supply' : result?.type === 'medicine' ? 'medicine' : null;
+          if (resultKind && (scanCenterKind === 'auto' || scanCenterKind === resultKind)) {
+            found = result?.item || null;
+            foundKind = found ? resultKind : null;
           }
         } catch (e) {
-          const msg = String(e?.message || '');
-          if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('404')) continue;
-          throw e;
+          const status = Number(e?.status || 0);
+          const msg = String(e?.message || '').toLowerCase();
+          if (status !== 404 && !msg.includes('not found')) throw e;
         }
       }
 
@@ -1487,6 +1498,22 @@ function PharmacistDashboard() {
         setScanAssignModal({ code, kind: scanCenterKind === 'auto' ? 'auto' : scanCenterKind });
         setScanLog((prev) => [{ at: Date.now(), code, kind: scanCenterKind, status: 'not_found', message: '' }, ...prev].slice(0, 12));
         return;
+      }
+
+      if (foundKind === 'medicine') {
+        setMedicines((prev) => {
+          const list = Array.isArray(prev) ? prev : [];
+          const id = String(found.id || '').trim();
+          if (!id || list.some((item) => String(item?.id || '') === id)) return list;
+          return [{ ...found }, ...list];
+        });
+      } else if (foundKind === 'supply') {
+        setSupplies((prev) => {
+          const list = Array.isArray(prev) ? prev : [];
+          const id = String(found.id || '').trim();
+          if (!id || list.some((item) => String(item?.id || '') === id)) return list;
+          return [{ ...found }, ...list];
+        });
       }
       setScanCenterMatch({ kind: foundKind, item: found });
 
@@ -1520,6 +1547,7 @@ function PharmacistDashboard() {
     } catch (e) {
       setScanBanner({ type: 'error', text: String(e?.message || 'Lookup failed') });
     } finally {
+      scanLookupInFlightRef.current = false;
       setScanBusy(false);
       setTimeout(() => scanInputRef.current?.focus?.(), 0);
     }
@@ -1556,6 +1584,7 @@ function PharmacistDashboard() {
     const code = String(inventoryScan || '').trim();
     if (!code) return;
     if (scanBusy) return;
+    if (scanCenterOpen) return;
     if (activeTab !== 'medicines' && activeTab !== 'supplies') return;
     if (code.length < 6) return;
 
@@ -1565,7 +1594,7 @@ function PharmacistDashboard() {
     }, 400);
 
     return () => clearTimeout(t);
-  }, [activeTab, inventoryScan, scanBusy]);
+  }, [activeTab, inventoryScan, scanBusy, scanCenterOpen]);
 
   useEffect(() => {
     if (activeTab !== 'medicines' && activeTab !== 'supplies') return;
@@ -2137,58 +2166,59 @@ function PharmacistDashboard() {
       return true;
     }
 
-    let found = null;
-    let foundType = null;
+    if (posBarcodeLookupInFlightRef.current) return false;
+    posBarcodeLookupInFlightRef.current = true;
     try {
-      found = await fetchJson(`/api/inventory/barcode/${encodeURIComponent(code)}`, { apiBase: API_BASE, headers: buildAuthHeaders() });
-      foundType = 'medicine';
-    } catch (e) {
-      const msg = String(e?.message || '').toLowerCase();
-      if (!msg.includes('not found') && !msg.includes('404')) throw e;
-    }
-
-    if (!found) {
+      let found = null;
+      let foundType = null;
       try {
-        found = await fetchJson(`/api/supplies/barcode/${encodeURIComponent(code)}`, { apiBase: API_BASE, headers: buildAuthHeaders() });
-        foundType = 'supply';
+        const result = await fetchJson(`/api/pharmacy/barcode/${encodeURIComponent(code)}?kind=auto`, {
+          apiBase: API_BASE,
+          headers: buildAuthHeaders(),
+          timeoutMs: 10000
+        });
+        found = result?.item || null;
+        foundType = result?.type === 'supply' ? 'supply' : result?.type === 'medicine' ? 'medicine' : null;
       } catch (e) {
         const msg = String(e?.message || '').toLowerCase();
-        if (!msg.includes('not found') && !msg.includes('404')) throw e;
+        if (Number(e?.status || 0) !== 404 && !msg.includes('not found')) throw e;
       }
-    }
 
-    if (!found || !foundType) {
-      setToast({ type: 'error', text: `Barcode not found: ${code}` });
-      return false;
-    }
+      if (!found || !foundType) {
+        setToast({ type: 'error', text: `Barcode not found: ${code}` });
+        return false;
+      }
 
-    if (foundType === 'medicine') {
-      setMedicines((prev) => {
-        const list = Array.isArray(prev) ? prev : [];
-        const id = String(found.id || '').trim();
-        if (!id) return list;
-        const next = list.some((m) => String(m?.id || '') === id)
-          ? list.map((m) => (String(m?.id || '') === id ? { ...m, ...found } : m))
-          : [{ ...found }, ...list];
-        return next;
-      });
-    } else {
-      setSupplies((prev) => {
-        const list = Array.isArray(prev) ? prev : [];
-        const id = String(found.id || '').trim();
-        if (!id) return list;
-        const next = list.some((s) => String(s?.id || '') === id)
-          ? list.map((s) => (String(s?.id || '') === id ? { ...s, ...found } : s))
-          : [{ ...found }, ...list];
-        return next;
-      });
-    }
+      if (foundType === 'medicine') {
+        setMedicines((prev) => {
+          const list = Array.isArray(prev) ? prev : [];
+          const id = String(found.id || '').trim();
+          if (!id) return list;
+          const next = list.some((m) => String(m?.id || '') === id)
+            ? list.map((m) => (String(m?.id || '') === id ? { ...m, ...found } : m))
+            : [{ ...found }, ...list];
+          return next;
+        });
+      } else {
+        setSupplies((prev) => {
+          const list = Array.isArray(prev) ? prev : [];
+          const id = String(found.id || '').trim();
+          if (!id) return list;
+          const next = list.some((s) => String(s?.id || '') === id)
+            ? list.map((s) => (String(s?.id || '') === id ? { ...s, ...found } : s))
+            : [{ ...found }, ...list];
+          return next;
+        });
+      }
 
-    const cartItem = buildCartItemFromInventoryRow(foundType, found);
-    if (cartItem) addToCart(cartItem, foundType);
-    setPosSearch('');
-    setToast({ type: 'success', text: `Added to cart: ${cartItem?.name || 'Item'}` });
-    return true;
+      const cartItem = buildCartItemFromInventoryRow(foundType, found);
+      if (cartItem) addToCart(cartItem, foundType);
+      setPosSearch('');
+      setToast({ type: 'success', text: `Added to cart: ${cartItem?.name || 'Item'}` });
+      return true;
+    } finally {
+      posBarcodeLookupInFlightRef.current = false;
+    }
   };
 
   const removeFromCart = (id, type) => {
@@ -5402,7 +5432,9 @@ function PharmacistDashboard() {
                       setInventoryScan(cleaned);
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleScanCenterLookup();
+                      if (e.key !== 'Enter' && e.key !== 'Tab') return;
+                      e.preventDefault();
+                      handleScanCenterLookup();
                     }}
                     disabled={scanBusy}
                     style={{ flex: 1 }}
