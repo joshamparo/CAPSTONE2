@@ -10,7 +10,7 @@ const read = (relativePath) => fs.readFileSync(path.join(__dirname, '..', '..', 
 test('admin dashboard requests the lightweight patient list and a bounded activity feed', () => {
   const dashboard = read('frontend/src/Admin/AdminDashboard.js');
   assert.match(dashboard, /\/api\/patients\?summary=1&take=2000/);
-  assert.match(dashboard, /\/api\/activity-logs\?take=50/);
+  assert.match(dashboard, /\/api\/activity-logs\?take=8/);
 });
 
 test('patient summary mode is admin-only and excludes sensitive or heavy fields', () => {

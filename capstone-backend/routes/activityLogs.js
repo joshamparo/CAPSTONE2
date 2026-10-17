@@ -27,14 +27,29 @@ router.get('/', async (req, res) => {
         const hasStart = start && !Number.isNaN(start.getTime());
         const hasEnd = end && !Number.isNaN(end.getTime());
 
-        const where = hasStart || hasEnd ? {
-            timestamp: {
-                ...(hasStart ? { gte: start } : {}),
-                ...(hasEnd ? { lte: end } : {})
-            }
-        } : undefined;
+        const actionFilter = String(req.query.action || '').trim().toLowerCase();
+        const actionWhere = actionFilter === 'create'
+            ? { OR: [{ action: { contains: 'create', mode: 'insensitive' } }, { action: { contains: 'register', mode: 'insensitive' } }] }
+            : actionFilter === 'update'
+                ? { OR: [{ action: { contains: 'update', mode: 'insensitive' } }, { action: { contains: 'edit', mode: 'insensitive' } }] }
+                : actionFilter === 'delete'
+                    ? { OR: [{ action: { contains: 'delete', mode: 'insensitive' } }, { action: { contains: 'remove', mode: 'insensitive' } }] }
+                    : actionFilter && actionFilter !== 'all'
+                        ? { action: { equals: actionFilter, mode: 'insensitive' } }
+                        : null;
 
-        const cacheKey = JSON.stringify({ take, skip, start: hasStart ? start.toISOString() : '', end: hasEnd ? end.toISOString() : '' });
+        const where = {
+            ...(hasStart || hasEnd ? {
+                timestamp: {
+                    ...(hasStart ? { gte: start } : {}),
+                    ...(hasEnd ? { lte: end } : {})
+                }
+            } : {}),
+            ...(actionWhere || {})
+        };
+        const includeTotal = String(req.query.includeTotal || '') === '1';
+
+        const cacheKey = JSON.stringify({ take, skip, start: hasStart ? start.toISOString() : '', end: hasEnd ? end.toISOString() : '', actionFilter, includeTotal });
         const now = Date.now();
         if (activityLogsCache.payload && activityLogsCache.key === cacheKey && now - activityLogsCache.fetchedAt < ACTIVITY_LOGS_CACHE_MS) {
             return res.json(activityLogsCache.payload);
@@ -46,12 +61,15 @@ router.get('/', async (req, res) => {
 
         activityLogsCache.key = cacheKey;
         activityLogsCache.promise = (async () => {
-        const logs = await prisma.activity_logs.findMany({
-            where,
-            orderBy: { timestamp: 'desc' },
-            take,
-            skip
-        });
+        const [logs, total] = await Promise.all([
+            prisma.activity_logs.findMany({
+                where,
+                orderBy: { timestamp: 'desc' },
+                take,
+                skip
+            }),
+            includeTotal ? prisma.activity_logs.count({ where }) : Promise.resolve(null)
+        ]);
         
         // Convert BigInt id to string for JSON serialization
         const serializedLogs = logs.map(log => ({
@@ -59,8 +77,11 @@ router.get('/', async (req, res) => {
             id: log.id.toString()
         }));
         activityLogsCache.fetchedAt = Date.now();
-        activityLogsCache.payload = serializedLogs;
-        return serializedLogs;
+        const responsePayload = includeTotal
+            ? { items: serializedLogs, total, take, skip }
+            : serializedLogs;
+        activityLogsCache.payload = responsePayload;
+        return responsePayload;
         })().finally(() => { activityLogsCache.promise = null; });
 
         const payload = await activityLogsCache.promise;

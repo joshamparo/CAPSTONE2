@@ -14,6 +14,7 @@ import AssistantKnowledgeManager from "./AssistantKnowledgeManager";
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const WEB_ORIGIN = String(process.env.REACT_APP_WEB_ORIGIN || '').trim() || 'https://pascualinga.com';
 const ADMIN_MANUAL_ROOM_STATUSES = ['Available', 'Reserved', 'Cleaning', 'Maintenance', 'Inactive'];
+const ACTIVITY_LOGS_PER_PAGE = 12;
 
 function manilaDateKey(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
@@ -1116,9 +1117,12 @@ function AdminDashboard() {
   const [activityLogs, setActivityLogs] = useState([]);
   const [logFilter, setLogFilter] = useState("All"); // All, Create, Update, Delete, Login, System
   const [logPage, setLogPage] = useState(1);
+  const [activityLogsTotal, setActivityLogsTotal] = useState(0);
+  const [activityLogsLoading, setActivityLogsLoading] = useState(false);
   const [activityLogsError, setActivityLogsError] = useState("");
   const [logDateFrom, setLogDateFrom] = useState("");
   const [logDateTo, setLogDateTo] = useState("");
+  const activityLogsRequestSequenceRef = useRef(0);
   const [reportsDateFrom, setReportsDateFrom] = useState("");
   const [reportsDateTo, setReportsDateTo] = useState("");
   const [salesMonitorDate, setSalesMonitorDate] = useState(() => manilaDateKey());
@@ -1150,7 +1154,7 @@ function AdminDashboard() {
     dashboardRefreshInFlightRef.current = true;
     try {
         try {
-            const logs = await fetchJson(`/api/activity-logs?take=50`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
+            const logs = await fetchJson(`/api/activity-logs?take=8`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
             const mapped = Array.isArray(logs) ? logs.map((l) => formatActivityLog({
               ...l,
               id: String(l.id || l._id || ''),
@@ -1669,10 +1673,23 @@ function AdminDashboard() {
   };
 
   const fetchActivityLogs = async () => {
+      const requestSequence = ++activityLogsRequestSequenceRef.current;
+      setActivityLogsLoading(true);
       try {
           setActivityLogsError("");
-          const data = await fetchJson(`/api/activity-logs?take=200`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
-          const mapped = Array.isArray(data) ? data.map((l) => formatActivityLog({
+          const params = new URLSearchParams();
+          params.set('take', String(ACTIVITY_LOGS_PER_PAGE));
+          params.set('skip', String((Math.max(1, logPage) - 1) * ACTIVITY_LOGS_PER_PAGE));
+          params.set('includeTotal', '1');
+          if (logFilter && logFilter !== 'All') params.set('action', logFilter);
+          const from = parseDateStart(logDateFrom);
+          const to = parseDateEnd(logDateTo);
+          if (from) params.set('start', from.toISOString());
+          if (to) params.set('end', to.toISOString());
+          const data = await fetchJson(`/api/activity-logs?${params.toString()}`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
+          if (requestSequence !== activityLogsRequestSequenceRef.current) return;
+          const rows = Array.isArray(data?.items) ? data.items : [];
+          const mapped = rows.map((l) => formatActivityLog({
             ...l,
             id: String(l.id || l._id || ''),
             actorName: l.actorName || l.actor_name || '',
@@ -1680,12 +1697,17 @@ function AdminDashboard() {
             action: l.action || '',
             target: l.target || '',
             details: l.details || ''
-          })) : [];
+          }));
           setActivityLogs(mapped);
+          setActivityLogsTotal(Math.max(0, Number(data?.total) || 0));
       } catch (error) {
+          if (requestSequence !== activityLogsRequestSequenceRef.current) return;
           console.error("Error fetching logs:", error);
           setActivityLogs([]);
+          setActivityLogsTotal(0);
           setActivityLogsError(String(error?.message || "Unable to load activity logs. Please check the server connection."));
+      } finally {
+          if (requestSequence === activityLogsRequestSequenceRef.current) setActivityLogsLoading(false);
       }
   };
 
@@ -1872,12 +1894,18 @@ function AdminDashboard() {
       fetchAnnouncements();
     } else if (view === 'staff-management') {
       fetchStaff();
-    } else if (view === 'activity-logs') {
-      fetchActivityLogs();
     } else if (view === 'reports') {
       fetchDashboardStats();
     }
   }, [view]);
+
+  useEffect(() => {
+    if (view !== 'activity-logs' || document.visibilityState !== 'visible') return;
+    fetchActivityLogs();
+    return () => {
+      activityLogsRequestSequenceRef.current += 1;
+    };
+  }, [view, logPage, logFilter, logDateFrom, logDateTo]);
 
   useEffect(() => {
     if (!supabase) {
@@ -7461,21 +7489,9 @@ function AdminDashboard() {
 
     // 6. ACTIVITY LOGS VIEW
     if (view === "activity-logs") {
-        const LOGS_PER_PAGE = 12;
-        const filteredLogs = activityLogs.filter((log) => matchesActivityLogFilter(log, logFilter));
-        const logFrom = parseDateStart(logDateFrom);
-        const logTo = parseDateEnd(logDateTo);
-        const rangedLogs = filteredLogs.filter((l) => {
-          if (!logFrom && !logTo) return true;
-          const d = new Date(l.timestamp || 0);
-          if (Number.isNaN(d.getTime())) return false;
-          return withinRange(d, logFrom, logTo);
-        });
-
-        const totalPages = Math.max(1, Math.ceil(rangedLogs.length / LOGS_PER_PAGE));
+        const totalPages = Math.max(1, Math.ceil(activityLogsTotal / ACTIVITY_LOGS_PER_PAGE));
         const currentPage = Math.min(Math.max(1, logPage), totalPages);
-        const startIndex = (currentPage - 1) * LOGS_PER_PAGE;
-        const pagedLogs = rangedLogs.slice(startIndex, startIndex + LOGS_PER_PAGE);
+        const pagedLogs = activityLogs;
 
         return (
             <div className="staff-management-container">
@@ -7535,16 +7551,16 @@ function AdminDashboard() {
                               type="button"
                               className="inc-btn inc-btn-ghost"
                               onClick={() => {
-                                const data = rangedLogs.map((l) => ({
+                                const data = activityLogs.map((l) => ({
                                   Time: new Date(l.timestamp).toLocaleString(),
                                   Actor: l.actorName,
                                   Action: l.action,
                                   Target: l.target,
                                   Details: l.details
                                 }));
-                                printTableReport('System Activity Logs', 'Filtered report', Object.keys(data[0] || {}), data);
+                                printTableReport('System Activity Logs', `Filtered report — page ${currentPage} of ${totalPages}`, Object.keys(data[0] || {}), data);
                               }}
-                              disabled={rangedLogs.length === 0}
+                              disabled={activityLogs.length === 0 || activityLogsLoading}
                             >
                               <Download size={16} />
                               Print
@@ -7586,13 +7602,19 @@ function AdminDashboard() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {activityLogsError ? (
+                                {activityLogsLoading ? (
+                                    <tr>
+                                        <td colSpan="5" className="text-center py-8 text-slate-500">
+                                            Loading activity logs...
+                                        </td>
+                                    </tr>
+                                ) : activityLogsError ? (
                                     <tr>
                                         <td colSpan="5" className="text-center py-8 text-slate-500">
                                             {activityLogsError}
                                         </td>
                                     </tr>
-                                ) : rangedLogs.length === 0 ? (
+                                ) : activityLogs.length === 0 ? (
                                     <tr>
                                         <td colSpan="5" className="text-center py-8 text-slate-500">
                                             No activity logs found.
