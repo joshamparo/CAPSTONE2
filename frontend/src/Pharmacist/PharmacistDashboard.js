@@ -441,6 +441,10 @@ function PharmacistDashboard() {
   }, [searchText, activeTab]);
 
   useEffect(() => {
+    setSearchText('');
+  }, [activeTab]);
+
+  useEffect(() => {
     if (activeTab !== 'medicines' && activeTab !== 'supplies') {
       if (inventoryFocus) setInventoryFocus(null);
       return;
@@ -1362,6 +1366,7 @@ function PharmacistDashboard() {
     return supplies.filter((s) => (
       String(s.item_name || '').toLowerCase().includes(q) ||
       String(s.barcode || '').toLowerCase().includes(q) ||
+      String(s.category || '').toLowerCase().includes(q) ||
       String(s.status || '').toLowerCase().includes(q)
     ));
   }, [activeTab, inventoryFocus, supplies, searchText]);
@@ -1377,17 +1382,6 @@ function PharmacistDashboard() {
       items: filteredSupplies.slice(startIndex, startIndex + perPage)
     };
   }, [filteredSupplies, supPage]);
-
-  const filteredPrescriptions = useMemo(() => {
-    const q = String(searchText || '').trim().toLowerCase();
-    if (!q) return prescriptions;
-    return prescriptions.filter((p) => {
-      const patient = String(p.patientName || '').toLowerCase();
-      const doctor = String(p.doctorName || p.doctor_name || '').toLowerCase();
-      const diagnosis = String(p.diagnosis || '').toLowerCase();
-      return patient.includes(q) || doctor.includes(q) || diagnosis.includes(q);
-    });
-  }, [prescriptions, searchText]);
 
   const openStockModal = (kind, item) => {
     setStockModal({ kind, item });
@@ -2750,10 +2744,6 @@ function PharmacistDashboard() {
             </div>
           </div>
           <div className="pharm-header-right">
-            <div className="pharm-search">
-              <Search size={18} className="pharm-search-icon" />
-              <input value={searchText} onChange={(e) => setSearchText(e.target.value)} placeholder="Search..." />
-            </div>
             <AccountHeaderActions user={currentUser} onSignOut={confirmLogout} onOpenNotification={(n) => {
               const type = String(n?.type || '').toLowerCase();
               if (type.includes('prescription')) {
@@ -3620,6 +3610,15 @@ function PharmacistDashboard() {
           <div className="pharm-card">
             <div className="pharm-card-head">
               <div className="pharm-card-title">Medicines Inventory</div>
+              <div className="pharm-search pharm-section-search">
+                <Search size={18} className="pharm-search-icon" />
+                <input
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  placeholder="Search medicines by name, barcode, category, or status..."
+                  aria-label="Search medicines"
+                />
+              </div>
               <div className="pharm-page">
                 <button
                   type="button"
@@ -3818,6 +3817,15 @@ function PharmacistDashboard() {
           <div className="pharm-card">
             <div className="pharm-card-head">
               <div className="pharm-card-title">Supplies Inventory</div>
+              <div className="pharm-search pharm-section-search">
+                <Search size={18} className="pharm-search-icon" />
+                <input
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  placeholder="Search supplies by name, barcode, category, or status..."
+                  aria-label="Search supplies"
+                />
+              </div>
               <div className="pharm-page">
                 <button
                   type="button"
@@ -4016,7 +4024,18 @@ function PharmacistDashboard() {
 
         {activeTab === 'requests' && (
           <div className="pharm-card">
-            <div className="pharm-card-title">Nurse Requests (Medication / Supply)</div>
+            <div className="pharm-card-head">
+              <div className="pharm-card-title">Nurse Requests (Medication / Supply)</div>
+              <div className="pharm-search pharm-section-search">
+                <Search size={18} className="pharm-search-icon" />
+                <input
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  placeholder="Search requests by item, patient, requester, or status..."
+                  aria-label="Search pharmacy requests"
+                />
+              </div>
+            </div>
             {loadingRequests ? (
               <div className="pharm-empty">Loading requests…</div>
             ) : pharmacyRequests.length === 0 ? (

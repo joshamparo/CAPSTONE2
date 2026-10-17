@@ -52,3 +52,14 @@ test('sales report sections load concurrently and isolate endpoint failures', ()
   assert.match(dashboardSource, /failedSections\.push\('Transactions'\)/);
   assert.match(dashboardSource, /failedSections\.push\('Items Sold'\)/);
 });
+
+test('pharmacist search is contextual instead of duplicating the header', () => {
+  const headerStart = dashboardSource.indexOf('<header className="pharm-header">');
+  const headerEnd = dashboardSource.indexOf('</header>', headerStart);
+  const headerSource = dashboardSource.slice(headerStart, headerEnd);
+  assert.doesNotMatch(headerSource, /className="pharm-search"/);
+  assert.match(dashboardSource, /aria-label="Search medicines"/);
+  assert.match(dashboardSource, /aria-label="Search supplies"/);
+  assert.match(dashboardSource, /aria-label="Search pharmacy requests"/);
+  assert.match(dashboardSource, /setSearchText\(''\);\s*\}, \[activeTab\]\);/);
+});
