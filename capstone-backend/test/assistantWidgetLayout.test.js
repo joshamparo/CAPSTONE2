@@ -10,10 +10,16 @@ const css = fs.readFileSync(
   'utf8'
 );
 
-test('dashboard assistant uses a readable desktop panel anchored away from side navigation', () => {
-  assert.match(css, /\.assistant-widget-root\.assistant-widget-page-dashboard\s*\{[^}]*left:\s*auto;[^}]*right:\s*24px;/s);
+test('dashboard assistant keeps its launcher inside staff side navigation', () => {
+  assert.match(css, /\.assistant-widget-root\.assistant-widget-page-sidebar\s*\{[^}]*left:\s*12px;[^}]*right:\s*auto;/s);
+  assert.match(css, /\.assistant-widget-root\.assistant-widget-page-sidebar\.assistant-widget-is-open\s*\{[^}]*left:\s*260px;/s);
   assert.match(css, /\.assistant-widget-root\.assistant-widget-page-dashboard \.assistant-widget-panel\s*\{[^}]*width:\s*min\(430px,[^}]*height:\s*min\(760px,/s);
   assert.doesNotMatch(css, /assistant-widget-page-dashboard \.assistant-widget-panel\s*\{[^}]*width:\s*min\(320px,/s);
+});
+
+test('collapsed staff sidebars use an icon-only assistant launcher', () => {
+  assert.match(css, /body:has\(\.sidebar\.collapsed,[^}]*\.assistant-widget-trigger\s*\{[^}]*width:\s*52px;[^}]*height:\s*52px;/s);
+  assert.match(css, /assistant-widget-page-sidebar:not\(\.assistant-widget-is-open\) \.assistant-widget-trigger-label/);
 });
 
 test('mobile assistant overrides dashboard positioning and keeps safe edge spacing', () => {

@@ -350,7 +350,8 @@ export default function AssistantWidget({ pathname = '/' }) {
   const pageClass = useMemo(() => {
     const currentPath = String(pathname || '').trim();
     if (/^\/(admin|patient|staff|nurse|doctor|pharmacist|cashier|doctor-secretary|medtech|radiographer|ecg|pt)(\/|$)/.test(currentPath)) {
-      return 'assistant-widget-page-dashboard';
+      const usesSidebar = /^\/(admin|nurse|doctor|pharmacist|cashier|doctor-secretary|medtech|radiographer|ecg|pt)(\/|$)/.test(currentPath);
+      return `assistant-widget-page-dashboard${usesSidebar ? ' assistant-widget-page-sidebar' : ''}`;
     }
     return '';
   }, [pathname]);
