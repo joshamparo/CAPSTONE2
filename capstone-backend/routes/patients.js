@@ -643,6 +643,37 @@ const ADMIN_PATIENT_SUMMARY_SELECT = Object.freeze({
     updated_at: true
 });
 
+// Nurse list screens need current clinical/ward context, but never account
+// credentials or password-recovery fields. Keep this projection explicit so
+// the database does not read or return unrelated sensitive columns.
+const NURSE_PATIENT_LIST_SELECT = Object.freeze({
+    id: true,
+    first_name: true,
+    middle_name: true,
+    last_name: true,
+    date_of_birth: true,
+    gender: true,
+    contact_number: true,
+    email: true,
+    street: true,
+    city: true,
+    province: true,
+    postal_code: true,
+    country: true,
+    emergency_contacts: true,
+    blood_type: true,
+    allergies: true,
+    philhealth_number: true,
+    admission_status: true,
+    ward_number: true,
+    diagnosis: true,
+    attending_doctor: true,
+    admission_date: true,
+    clinical_records: true,
+    created_at: true,
+    updated_at: true
+});
+
 function serializePayload(value) {
     return JSON.parse(
         JSON.stringify(value, (_key, current) => {
@@ -959,7 +990,10 @@ router.get('/', async (req, res) => {
 
         const { q, email, take, skip } = req.query;
         const adminSummaryRequested = requesterRole === 'admin' && String(req.query.summary || '').trim() === '1';
-        const limit = take !== undefined ? parseLimit(take, { min: 1, max: 2000, fallback: 200 }) : null;
+        const nurseListRequested = requesterRole === 'nurse';
+        const limit = take !== undefined
+            ? parseLimit(take, { min: 1, max: 2000, fallback: 200 })
+            : (nurseListRequested ? 500 : null);
         const offset = skip !== undefined ? parseOffset(skip, { min: 0, max: 20000, fallback: 0 }) : 0;
 
         const query = String(q || '').trim();
@@ -976,37 +1010,41 @@ router.get('/', async (req, res) => {
         }
 
         const clinicalScopePromise = clinicalPatientOrderScope(req);
-        let clinicalScope;
         const receptionRoutes = new Map();
 
-        // Central reception scope. Intake history is authoritative, so ER nurses
-        // can see reception-created service patients without exposing unrelated
-        // outpatient records. Appointment state enriches ER/onsite routing.
-        if (requesterRole === 'nurse' && req.nurseDepartment === 'ER') {
-            const [resolvedScope, receptionPatients, receptionAppointments] = await Promise.all([
-                clinicalScopePromise,
-                prisma.patients.findMany({
-                    select: { id: true, clinical_records: true },
-                    orderBy: { created_at: 'desc' },
-                    take: 2000
-                }),
-                prisma.appointments.findMany({
-                    where: {
-                        patient_id: { not: null },
-                        OR: [
-                            { reason: { startsWith: '[TRIAGE][WALK-IN] ER Consultation' } },
-                            { reason: { startsWith: '[APPOINTMENT][CLINIC]' } }
-                        ]
-                    },
-                    select: { patient_id: true, reason: true, status: true, assignment_status: true, doctor_uuid: true },
-                    orderBy: { created_at: 'desc' },
-                    take: 2000
-                })
-            ]);
-            clinicalScope = resolvedScope;
-            receptionPatients.forEach((row) => {
-                const reception = getReceptionRouteFromClinicalRecords(row.clinical_records);
-                if (reception) receptionRoutes.set(row.id, reception);
+        // Department authorization already resolves intake, appointment, ward,
+        // order, and nursing-history links. Do not repeat that work by loading
+        // thousands of full clinical JSON records before the actual list query.
+        const clinicalScope = await clinicalScopePromise;
+        const scopedWhere = clinicalScope
+            ? (Object.keys(where).length ? { AND: [where, clinicalScope] } : clinicalScope)
+            : (Object.keys(where).length ? where : undefined);
+        const patients = await prisma.patients.findMany({
+            where: scopedWhere,
+            orderBy: { created_at: 'desc' },
+            ...(adminSummaryRequested ? { select: ADMIN_PATIENT_SUMMARY_SELECT } : {}),
+            ...(!adminSummaryRequested && nurseListRequested ? { select: NURSE_PATIENT_LIST_SELECT } : {}),
+            ...(limit ? { take: limit } : {}),
+            ...(offset ? { skip: offset } : {})
+        });
+
+        if (requesterRole === 'nurse' && req.nurseDepartment === 'ER' && patients.length) {
+            patients.forEach((patient) => {
+                const reception = getReceptionRouteFromClinicalRecords(patient.clinical_records);
+                if (reception) receptionRoutes.set(patient.id, reception);
+            });
+            const patientIds = patients.map((patient) => patient.id).filter(Boolean);
+            const receptionAppointments = await prisma.appointments.findMany({
+                where: {
+                    patient_id: { in: patientIds },
+                    OR: [
+                        { reason: { startsWith: '[TRIAGE][WALK-IN] ER Consultation' } },
+                        { reason: { startsWith: '[APPOINTMENT][CLINIC]' } }
+                    ]
+                },
+                select: { patient_id: true, reason: true, status: true, assignment_status: true, doctor_uuid: true },
+                orderBy: { created_at: 'desc' },
+                take: Math.min(2000, Math.max(100, patientIds.length * 2))
             });
             const enrichedAppointmentRoutes = new Set();
             receptionAppointments.forEach((row) => {
@@ -1023,27 +1061,7 @@ router.get('/', async (req, res) => {
                 });
                 enrichedAppointmentRoutes.add(row.patient_id);
             });
-            if (receptionRoutes.size) {
-                clinicalScope = {
-                    OR: [
-                        clinicalScope,
-                        { id: { in: Array.from(receptionRoutes.keys()) } }
-                    ]
-                };
-            }
-        } else {
-            clinicalScope = await clinicalScopePromise;
         }
-        const scopedWhere = clinicalScope
-            ? (Object.keys(where).length ? { AND: [where, clinicalScope] } : clinicalScope)
-            : (Object.keys(where).length ? where : undefined);
-        const patients = await prisma.patients.findMany({
-            where: scopedWhere,
-            orderBy: { created_at: 'desc' },
-            ...(adminSummaryRequested ? { select: ADMIN_PATIENT_SUMMARY_SELECT } : {}),
-            ...(limit ? { take: limit } : {}),
-            ...(offset ? { skip: offset } : {})
-        });
         res.json(patients.map((patient) => {
             const reception = receptionRoutes.get(patient.id);
             const normalizedPatient = reception?.route === 'ER'

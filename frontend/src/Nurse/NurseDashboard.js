@@ -2286,7 +2286,7 @@ function NurseDashboard() {
     setLoadingPatients(true);
     setPatientsError('');
     try {
-      const data = await fetchJson('/api/patients', { apiBase: API_BASE, headers: { ...getAuthHeaders() }, timeoutMs: 20000 });
+      const data = await fetchJson('/api/patients?take=500', { apiBase: API_BASE, headers: { ...getAuthHeaders() }, timeoutMs: 30000 });
       if (requestSequence !== patientsRequestSequenceRef.current) return;
       const nextPatients = (Array.isArray(data) ? data : []).map(normalizePatient);
       patientsLastSuccessCountRef.current = nextPatients.length;
