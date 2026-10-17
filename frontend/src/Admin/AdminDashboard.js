@@ -7550,15 +7550,22 @@ function AdminDashboard() {
                             <button
                               type="button"
                               className="inc-btn inc-btn-ghost"
-                              onClick={() => {
-                                const data = activityLogs.map((l) => ({
-                                  Time: new Date(l.timestamp).toLocaleString(),
-                                  Actor: l.actorName,
-                                  Action: l.action,
-                                  Target: l.target,
-                                  Details: l.details
-                                }));
-                                printTableReport('System Activity Logs', `Filtered report — page ${currentPage} of ${totalPages}`, Object.keys(data[0] || {}), data);
+                              onClick={async () => {
+                                try {
+                                  const rows = await fetchActivityLogsForExport(logDateFrom, logDateTo, logFilter);
+                                  const data = rows.map((l) => ({
+                                    Time: new Date(l.timestamp).toLocaleString(),
+                                    Actor: l.actorName,
+                                    Action: l.action,
+                                    Target: l.target,
+                                    Details: l.details
+                                  }));
+                                  printTableReport('System Activity Logs', 'Filtered report', Object.keys(data[0] || {}), data);
+                                } catch (_) {
+                                  setModalType("error");
+                                  setSuccessMessage("Failed to prepare activity logs for printing. Please check the server.");
+                                  setShowSuccessModal(true);
+                                }
                               }}
                               disabled={activityLogs.length === 0 || activityLogsLoading}
                             >
