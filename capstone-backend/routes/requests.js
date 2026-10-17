@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const requireIdempotency = require('../middleware/requireIdempotency');
 const { sendError } = require('../utils/httpErrors');
 
 const normalizeRole = (v) => String(v || '').trim().toLowerCase();
@@ -9,86 +10,8 @@ const headerRole = (req) => normalizeRole(req.headers['x-user-role']);
 const headerName = (req) => String(req.headers['x-user-name'] || '').trim();
 const headerEmail = (req) => String(req.headers['x-user-email'] || '').trim();
 
-let requestsSchemaPromise = null;
-
-function ensureRequestsSchema() {
-  if (!requestsSchemaPromise) {
-    requestsSchemaPromise = (async () => {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS public.requests (
-          id BIGSERIAL PRIMARY KEY,
-          patient_id UUID NULL,
-          patient_name TEXT NULL,
-          requested_by TEXT NULL,
-          message TEXT NULL,
-          status TEXT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        );
-      `);
-      await prisma.$executeRawUnsafe(`ALTER TABLE public.requests ADD COLUMN IF NOT EXISTS patient_name TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE public.requests ADD COLUMN IF NOT EXISTS requested_by TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE public.requests ADD COLUMN IF NOT EXISTS message TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE public.requests ADD COLUMN IF NOT EXISTS status TEXT NULL;`);
-      await prisma.$executeRawUnsafe(`ALTER TABLE public.requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();`);
-      // Older databases only allowed Pending/Completed and rejected the
-      // Pharmacy module's Process transition with PostgreSQL error 23514.
-      await prisma.$executeRawUnsafe(`ALTER TABLE public.requests DROP CONSTRAINT IF EXISTS requests_status_check;`);
-      await prisma.$executeRawUnsafe(`
-        ALTER TABLE public.requests
-        ADD CONSTRAINT requests_status_check
-        CHECK (
-          status IS NULL OR lower(status) IN (
-            'pending', 'processing', 'in progress', 'approved',
-            'completed', 'rejected', 'cancelled'
-          )
-        ) NOT VALID;
-      `);
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS requests_status_created_idx ON public.requests(status, created_at DESC);`);
-    })().catch((err) => {
-      requestsSchemaPromise = null;
-      throw err;
-    });
-  }
-  return requestsSchemaPromise;
-}
-
 const serialize = (obj) =>
   JSON.parse(JSON.stringify(obj, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
-
-async function ensureBillingTablesExist() {
-  const reg = await prisma.$queryRaw`
-    SELECT to_regclass('public.billing_invoices')::text AS billing_invoices,
-           to_regclass('public.billing_invoice_items')::text AS billing_invoice_items,
-           to_regclass('public.billing_payments')::text AS billing_payments
-  `;
-  const info = Array.isArray(reg) ? reg[0] : null;
-  const ok = Boolean(info && info.billing_invoices && info.billing_invoice_items && info.billing_payments);
-  if (!ok) {
-    const err = new Error('Billing tables are not installed. Run manual_migration_billing.sql in Supabase first.');
-    err.statusCode = 500;
-    throw err;
-  }
-}
-
-async function ensureStockMovementsTableExist() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS public.stock_movements (
-      id bigserial PRIMARY KEY,
-      item_type text NOT NULL,
-      item_id bigint NOT NULL,
-      delta int NOT NULL,
-      reason text NOT NULL,
-      patient_id uuid NULL,
-      request_id bigint NULL,
-      actor_name text NULL,
-      actor_role text NULL,
-      note text NULL,
-      created_at timestamptz NOT NULL DEFAULT now()
-    );
-  `).catch(() => {});
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS stock_movements_item_idx ON public.stock_movements(item_type, item_id);`).catch(() => {});
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS stock_movements_patient_idx ON public.stock_movements(patient_id);`).catch(() => {});
-}
 
 const toMoney = (v) => {
   const n = Number(v);
@@ -123,7 +46,6 @@ router.use(requireRole(['nurse', 'pharmacist', 'admin']));
 // POST: Create a new correction request
 router.post('/', async (req, res) => {
     try {
-        await ensureRequestsSchema();
         const role = headerRole(req);
         if (role !== 'nurse' && role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
 
@@ -199,7 +121,6 @@ router.post('/', async (req, res) => {
 // GET: Fetch all requests (for Admin view)
 router.get('/', async (req, res) => {
     try {
-        await ensureRequestsSchema();
         const role = headerRole(req);
         const hdrName = headerName(req);
         const requesterName = String(req.query.requesterName || '').trim();
@@ -258,15 +179,12 @@ router.get('/', async (req, res) => {
     }
 });
 
-router.post('/:id/fulfill', async (req, res) => {
+router.post('/:id/fulfill', requireIdempotency('pharmacy-request-fulfill'), async (req, res) => {
     try {
         const role = headerRole(req);
         const hdrName = headerName(req);
         const hdrEmail = headerEmail(req);
         if (role !== 'pharmacist' && role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
-
-        await ensureBillingTablesExist();
-        await ensureStockMovementsTableExist();
 
         const idRaw = String(req.params.id || '').trim();
         if (!/^\d+$/.test(idRaw)) return res.status(400).json({ message: 'Invalid request id' });
@@ -309,10 +227,35 @@ router.post('/:id/fulfill', async (req, res) => {
         if (!normalizedItems.length) return res.status(400).json({ message: 'Invalid items' });
 
         const result = await prisma.$transaction(async (tx) => {
+          const lockedRows = await tx.$queryRaw`
+            SELECT id, status
+            FROM public.requests
+            WHERE id = ${requestId}
+            FOR UPDATE
+          `;
+          const lockedRequest = Array.isArray(lockedRows) ? lockedRows[0] : null;
+          if (!lockedRequest) {
+            const err = new Error('Request not found');
+            err.statusCode = 404;
+            throw err;
+          }
+          const lockedStatus = String(lockedRequest.status || '').trim().toLowerCase();
+          if (lockedStatus === 'completed') {
+            const err = new Error('Request is already completed');
+            err.statusCode = 409;
+            throw err;
+          }
+          if (!['processing', 'in progress', 'approved'].includes(lockedStatus)) {
+            const err = new Error('Process this request before fulfilling it.');
+            err.statusCode = 409;
+            throw err;
+          }
+
           for (const it of normalizedItems) {
             if (it.type === 'medicine') {
               const id = BigInt(it.itemId);
-              const med = await tx.medicines.findUnique({ where: { id } }).catch(() => null);
+              const medRows = await tx.$queryRaw`SELECT id, name, stock FROM public.medicines WHERE id = ${id} FOR UPDATE`;
+              const med = Array.isArray(medRows) ? medRows[0] : null;
               if (!med) throw new Error(`Medicine not found: ${it.name || it.itemId}`);
               const prev = Number(med.stock || 0);
               if (prev < it.qty) {
@@ -334,10 +277,11 @@ router.post('/:id/fulfill', async (req, res) => {
                 hdrName || null,
                 role || null,
                 it.description || null
-              ).catch(() => {});
+              );
             } else if (it.type === 'supply') {
               const id = BigInt(it.itemId);
-              const sup = await tx.supplies.findUnique({ where: { id } }).catch(() => null);
+              const supplyRows = await tx.$queryRaw`SELECT id, item_name, stock FROM public.supplies WHERE id = ${id} FOR UPDATE`;
+              const sup = Array.isArray(supplyRows) ? supplyRows[0] : null;
               if (!sup) throw new Error(`Supply not found: ${it.name || it.itemId}`);
               const prev = Number(sup.stock || 0);
               if (prev < it.qty) {
@@ -359,7 +303,7 @@ router.post('/:id/fulfill', async (req, res) => {
                 hdrName || null,
                 role || null,
                 it.description || null
-              ).catch(() => {});
+              );
             }
           }
 
@@ -369,7 +313,7 @@ router.post('/:id/fulfill', async (req, res) => {
               status: { in: ['Draft', 'Ready'] }
             },
             orderBy: { created_at: 'desc' }
-          }).catch(() => null);
+          });
 
           const invoice =
             open ||
@@ -427,16 +371,14 @@ router.post('/:id/fulfill', async (req, res) => {
           addedAmount: result.addedAmount
         });
     } catch (err) {
-        const msg = String(err?.message || 'Server Error');
-        const code = Number(err?.statusCode) || 500;
-        res.status(code).json({ message: msg });
+        console.error('Error fulfilling pharmacy request:', err);
+        sendError(res, err, 'Unable to fulfill request.');
     }
 });
 
 // PUT: Update request status
 router.put('/:id', async (req, res) => {
     try {
-        await ensureRequestsSchema();
         const role = headerRole(req);
         const hdrName = headerName(req);
         const requestedStatus = String(req.body?.status || '').trim();

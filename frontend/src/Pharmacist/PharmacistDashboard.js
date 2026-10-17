@@ -324,6 +324,7 @@ function PharmacistDashboard() {
   const [loadingMeds, setLoadingMeds] = useState(false);
   const [loadingSupplies, setLoadingSupplies] = useState(false);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  const [requestActionIds, setRequestActionIds] = useState({});
   const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
   const [loadingRestocks, setLoadingRestocks] = useState(false);
 
@@ -386,6 +387,7 @@ function PharmacistDashboard() {
   const [rxQuantities, setRxQuantities] = useState({});
   const [rxSaving, setRxSaving] = useState(false);
   const saleIdempotencyKeyRef = useRef('');
+  const requestFulfillKeysRef = useRef(new Map());
 
   useEffect(() => {
     let u = null;
@@ -1690,6 +1692,9 @@ function PharmacistDashboard() {
   };
 
   const updateRequestStatus = async (id, status) => {
+    const requestKey = String(id);
+    if (requestActionIds[requestKey]) return;
+    setRequestActionIds((current) => ({ ...current, [requestKey]: 'processing' }));
     try {
       const updated = await fetchJson(`/api/requests/${id}`, {
         apiBase: API_BASE,
@@ -1697,25 +1702,53 @@ function PharmacistDashboard() {
         headers: buildJsonHeaders(),
         body: JSON.stringify({ status })
       });
-      await fetchRequests();
+      setRequests((current) => current.map((item) => (
+        String(item.id) === requestKey ? { ...item, ...updated, id: item.id, status: updated?.status || status } : item
+      )));
       setToast({ type: 'success', text: `Request marked ${String(updated?.status || status)}.` });
+      fetchRequests();
     } catch (e) {
       setToast({ type: 'error', text: String(e?.message || 'Request update failed.') });
+    } finally {
+      setRequestActionIds((current) => {
+        const next = { ...current };
+        delete next[requestKey];
+        return next;
+      });
     }
   };
 
   const fulfillRequest = async (r) => {
+    const requestKey = String(r.id);
+    if (requestActionIds[requestKey]) return;
+    const idempotencyKey = requestFulfillKeysRef.current.get(requestKey)
+      || (globalThis.crypto?.randomUUID?.() || `pharmacy-request-${requestKey}-${Date.now()}`);
+    requestFulfillKeysRef.current.set(requestKey, idempotencyKey);
+    setRequestActionIds((current) => ({ ...current, [requestKey]: 'fulfilling' }));
     try {
       const data = await fetchJson(`/api/requests/${r.id}/fulfill`, {
         apiBase: API_BASE,
         method: 'POST',
-        headers: buildJsonHeaders(),
+        headers: { ...buildJsonHeaders(), 'x-idempotency-key': idempotencyKey },
         body: JSON.stringify({})
       });
-      await Promise.all([fetchRequests(), fetchMedicines(), fetchSupplies()]);
+      requestFulfillKeysRef.current.delete(requestKey);
+      setRequests((current) => current.map((item) => (
+        String(item.id) === requestKey ? { ...item, ...(data?.request || {}), id: item.id, status: 'Completed' } : item
+      )));
       setToast({ type: 'success', text: `Fulfilled. Added ₱${String(data.addedAmount || '').trim() || '0.00'} to billing.` });
+      Promise.allSettled([fetchRequests(), fetchMedicines(), fetchSupplies()]);
     } catch (e) {
+      if (Number(e?.status) >= 400 && Number(e?.status) < 500 && !/still processing/i.test(String(e?.message || ''))) {
+        requestFulfillKeysRef.current.delete(requestKey);
+      }
       setToast({ type: 'error', text: String(e?.message || 'Fulfillment failed.') });
+    } finally {
+      setRequestActionIds((current) => {
+        const next = { ...current };
+        delete next[requestKey];
+        return next;
+      });
     }
   };
 
@@ -4076,10 +4109,14 @@ function PharmacistDashboard() {
                         <td className="pharm-right">
                           <div className="pharm-actions">
                             {String(r.status || '').toLowerCase() === 'pending' && (
-                              <button type="button" className="pharm-btn" onClick={() => updateRequestStatus(r.id, 'Processing')}>Process</button>
+                              <button type="button" className="pharm-btn" onClick={() => updateRequestStatus(r.id, 'Processing')} disabled={Boolean(requestActionIds[String(r.id)])}>
+                                {requestActionIds[String(r.id)] === 'processing' ? 'Processingâ€¦' : 'Process'}
+                              </button>
                             )}
                             {['processing', 'in progress', 'approved'].includes(String(r.status || '').toLowerCase()) && (
-                              <button type="button" className="pharm-btn primary" onClick={() => fulfillRequest(r)}>Fulfill</button>
+                              <button type="button" className="pharm-btn primary" onClick={() => fulfillRequest(r)} disabled={Boolean(requestActionIds[String(r.id)])}>
+                                {requestActionIds[String(r.id)] === 'fulfilling' ? 'Fulfillingâ€¦' : 'Fulfill'}
+                              </button>
                             )}
                             {String(r.status || '').toLowerCase() === 'completed' && (
                               <span className="pharm-done"><CheckCircle2 size={16} /> Done</span>
