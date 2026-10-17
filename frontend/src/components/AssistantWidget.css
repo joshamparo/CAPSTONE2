@@ -36,28 +36,8 @@
 }
 
 body:has(.sidebar.collapsed, .pharm-sidebar.collapsed, .doc-sidebar.collapsed, .nurse-sidebar.collapsed, .office-sidebar.collapsed, .sec-sidebar.collapsed, .cs-sidebar.collapsed)
-  .assistant-widget-root.assistant-widget-page-sidebar:not(.assistant-widget-is-open) {
-  left: 10px;
-}
-
-body:has(.sidebar.collapsed, .pharm-sidebar.collapsed, .doc-sidebar.collapsed, .nurse-sidebar.collapsed, .office-sidebar.collapsed, .sec-sidebar.collapsed, .cs-sidebar.collapsed)
-  .assistant-widget-root.assistant-widget-page-sidebar:not(.assistant-widget-is-open) .assistant-widget-trigger {
-  width: 52px;
-  height: 52px;
-  padding: 0;
-  justify-content: center;
-}
-
-body:has(.sidebar.collapsed, .pharm-sidebar.collapsed, .doc-sidebar.collapsed, .nurse-sidebar.collapsed, .office-sidebar.collapsed, .sec-sidebar.collapsed, .cs-sidebar.collapsed)
-  .assistant-widget-root.assistant-widget-page-sidebar:not(.assistant-widget-is-open) .assistant-widget-trigger-label,
-body:has(.sidebar.collapsed, .pharm-sidebar.collapsed, .doc-sidebar.collapsed, .nurse-sidebar.collapsed, .office-sidebar.collapsed, .sec-sidebar.collapsed, .cs-sidebar.collapsed)
-  .assistant-widget-root.assistant-widget-page-sidebar:not(.assistant-widget-is-open) .assistant-widget-trigger svg:last-child {
+  .assistant-widget-root.assistant-widget-page-sidebar {
   display: none;
-}
-
-body:has(.sidebar.collapsed, .pharm-sidebar.collapsed, .doc-sidebar.collapsed, .nurse-sidebar.collapsed, .office-sidebar.collapsed, .sec-sidebar.collapsed, .cs-sidebar.collapsed)
-  .assistant-widget-root.assistant-widget-page-sidebar.assistant-widget-is-open {
-  left: 84px;
 }
 
 .assistant-widget-panel {

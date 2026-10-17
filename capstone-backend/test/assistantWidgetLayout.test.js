@@ -17,9 +17,9 @@ test('dashboard assistant keeps its launcher inside staff side navigation', () =
   assert.doesNotMatch(css, /assistant-widget-page-dashboard \.assistant-widget-panel\s*\{[^}]*width:\s*min\(320px,/s);
 });
 
-test('collapsed staff sidebars use an icon-only assistant launcher', () => {
-  assert.match(css, /body:has\(\.sidebar\.collapsed,[^}]*\.assistant-widget-trigger\s*\{[^}]*width:\s*52px;[^}]*height:\s*52px;/s);
-  assert.match(css, /assistant-widget-page-sidebar:not\(\.assistant-widget-is-open\) \.assistant-widget-trigger-label/);
+test('collapsed staff sidebars hide the assistant instead of clipping its launcher', () => {
+  assert.match(css, /body:has\(\.sidebar\.collapsed,[^}]*\.assistant-widget-root\.assistant-widget-page-sidebar\s*\{[^}]*display:\s*none;/s);
+  assert.doesNotMatch(css, /assistant-widget-page-sidebar:not\(\.assistant-widget-is-open\) \.assistant-widget-trigger\s*\{[^}]*width:\s*52px;/s);
 });
 
 test('mobile assistant overrides dashboard positioning and keeps safe edge spacing', () => {
