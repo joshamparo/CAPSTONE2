@@ -34,3 +34,10 @@ test('ER route enrichment only queries already-authorized returned patient ids',
   assert.match(listRoute, /patient_id:\s*\{\s*in:\s*patientIds\s*\}/);
   assert.match(listRoute, /patients\.forEach\(\(patient\)\s*=>\s*\{[\s\S]*getReceptionRouteFromClinicalRecords\(patient\.clinical_records\)/);
 });
+
+test('background patient refresh keeps cached data without raising a page-level timeout', () => {
+  assert.match(nurseDashboard, /const refreshPatientsList = async \(options = \{\}\)/);
+  assert.match(nurseDashboard, /const silent = options\?\.silent === true/);
+  assert.match(nurseDashboard, /if \(!silent \|\| !hasCachedPatients\)/);
+  assert.match(nurseDashboard, /refreshPatientsList\(\{ silent: true \}\)/);
+});

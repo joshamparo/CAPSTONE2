@@ -2280,27 +2280,34 @@ function NurseDashboard() {
     return `${careTeamDoctors[0]}, ${careTeamDoctors[1]} +${careTeamDoctors.length - 2} more`;
   }, [careTeamDoctors]);
 
-  const refreshPatientsList = async () => {
+  const refreshPatientsList = async (options = {}) => {
+    const silent = options?.silent === true;
     if (document.visibilityState !== 'visible') return;
     const requestSequence = ++patientsRequestSequenceRef.current;
-    setLoadingPatients(true);
-    setPatientsError('');
+    if (!silent) {
+      setLoadingPatients(true);
+      setPatientsError('');
+    }
     try {
       const data = await fetchJson('/api/patients?take=500', { apiBase: API_BASE, headers: { ...getAuthHeaders() }, timeoutMs: 30000 });
       if (requestSequence !== patientsRequestSequenceRef.current) return;
       const nextPatients = (Array.isArray(data) ? data : []).map(normalizePatient);
       patientsLastSuccessCountRef.current = nextPatients.length;
       setPatientsList(nextPatients);
+      setPatientsError('');
     } catch (error) {
       console.error("Error fetching patients:", error);
       if (requestSequence === patientsRequestSequenceRef.current) {
-        const suffix = patientsLastSuccessCountRef.current > 0
-          ? ` Keeping the last ${patientsLastSuccessCountRef.current} successfully loaded record(s).`
-          : ' No patient data has loaded successfully yet.';
-        setPatientsError(`${String(error?.message || 'Unable to refresh patients.')}${suffix}`);
+        const hasCachedPatients = patientsLastSuccessCountRef.current > 0;
+        if (!silent || !hasCachedPatients) {
+          const suffix = hasCachedPatients
+            ? ` Keeping the last ${patientsLastSuccessCountRef.current} successfully loaded record(s).`
+            : ' No patient data has loaded successfully yet.';
+          setPatientsError(`${String(error?.message || 'Unable to refresh patients.')}${suffix}`);
+        }
       }
     } finally {
-      if (requestSequence === patientsRequestSequenceRef.current) setLoadingPatients(false);
+      if (!silent && requestSequence === patientsRequestSequenceRef.current) setLoadingPatients(false);
     }
   };
 
@@ -3765,7 +3772,7 @@ function NurseDashboard() {
     const interval = setInterval(async () => {
       if (document.visibilityState !== 'visible' || refreshInFlight) return;
       const tasks = [];
-      if (['overview', 'patients', 'er-intake'].includes(view) && typeof refreshPatientsList === 'function') tasks.push(refreshPatientsList());
+      if (['overview', 'patients', 'er-intake'].includes(view) && typeof refreshPatientsList === 'function') tasks.push(refreshPatientsList({ silent: true }));
       if (view === 'appointments' && typeof fetchAppointments === 'function') tasks.push(fetchAppointments());
       if (['overview', 'ward-management'].includes(view) && typeof fetchWardRegistry === 'function') tasks.push(fetchWardRegistry());
       if (!tasks.length) return;
