@@ -991,6 +991,7 @@ router.get('/', async (req, res) => {
         const { q, email, take, skip } = req.query;
         const adminSummaryRequested = requesterRole === 'admin' && String(req.query.summary || '').trim() === '1';
         const nurseListRequested = requesterRole === 'nurse';
+        const compactNurseListRequested = nurseListRequested && String(req.query.list || '').trim() === '1';
         const limit = take !== undefined
             ? parseLimit(take, { min: 1, max: 2000, fallback: 200 })
             : (nurseListRequested ? 500 : null);
@@ -1067,7 +1068,12 @@ router.get('/', async (req, res) => {
             const normalizedPatient = reception?.route === 'ER'
                 ? { ...patient, admission_status: 'Emergency' }
                 : patient;
-            return { ...toPatientResponse(normalizedPatient), receptionRoute: reception?.route || null, routingStatus: reception?.status || null };
+            const responsePatient = toPatientResponse(normalizedPatient);
+            // Route enrichment above still uses the authorized clinical record,
+            // but the list-only client does not need that potentially large JSON
+            // document transferred on every refresh.
+            if (compactNurseListRequested) delete responsePatient.clinical_records;
+            return { ...responsePatient, receptionRoute: reception?.route || null, routingStatus: reception?.status || null };
         }));
     } catch (err) {
         res.status(500).json({ message: "Error fetching patients" });

@@ -202,6 +202,7 @@ function NurseDashboard() {
   const [patientsList, setPatientsList] = useState([]);
   const patientsRequestSequenceRef = useRef(0);
   const patientsLastSuccessCountRef = useRef(0);
+  const patientsRefreshInFlightRef = useRef(null);
   const [patientRecords, setPatientRecords] = useState([]);
   const patientRecordsRequestSequenceRef = useRef(0);
   const [patientRecordsLoading, setPatientRecordsLoading] = useState(false);
@@ -2283,13 +2284,18 @@ function NurseDashboard() {
   const refreshPatientsList = async (options = {}) => {
     const silent = options?.silent === true;
     if (document.visibilityState !== 'visible') return;
+    // Reuse the active request. A timer tick, view change, and a manual refresh
+    // can otherwise make the database repeat the same expensive nurse-scope
+    // lookup at the same time.
+    if (patientsRefreshInFlightRef.current) return patientsRefreshInFlightRef.current;
     const requestSequence = ++patientsRequestSequenceRef.current;
     if (!silent) {
       setLoadingPatients(true);
       setPatientsError('');
     }
+    const request = (async () => {
     try {
-      const data = await fetchJson('/api/patients?take=500', { apiBase: API_BASE, headers: { ...getAuthHeaders() }, timeoutMs: 30000 });
+      const data = await fetchJson('/api/patients?take=500&list=1', { apiBase: API_BASE, headers: { ...getAuthHeaders() }, timeoutMs: 45000 });
       if (requestSequence !== patientsRequestSequenceRef.current) return;
       const nextPatients = (Array.isArray(data) ? data : []).map(normalizePatient);
       patientsLastSuccessCountRef.current = nextPatients.length;
@@ -2308,7 +2314,11 @@ function NurseDashboard() {
       }
     } finally {
       if (!silent && requestSequence === patientsRequestSequenceRef.current) setLoadingPatients(false);
+      if (patientsRefreshInFlightRef.current === request) patientsRefreshInFlightRef.current = null;
     }
+    })();
+    patientsRefreshInFlightRef.current = request;
+    return request;
   };
 
   const handleUpdateAppointmentStatus = async (aptId, status) => {
@@ -5103,12 +5113,6 @@ function NurseDashboard() {
     const interval = setInterval(fetchStats, 30000);
     return () => clearInterval(interval);
   }, [API_BASE, view]);
-
-  React.useEffect(() => {
-    if (view === 'patients') {
-      fetchPatientRecords();
-    }
-  }, [view, activeDept, approvalDepartment]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
