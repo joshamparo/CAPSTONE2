@@ -86,6 +86,7 @@ const LIVE_NEWS_KEYWORDS = [
 const LIVE_NEWS_MIN_RELEVANCE = 2;
 
 const LIVE_NEWS_CACHE_MS = 10 * 60 * 1000;
+const NEWS_IMAGE_CACHE_SECONDS = 60 * 60 * 6;
 let liveNewsCache = {
     fetchedAt: 0,
     items: []
@@ -167,6 +168,16 @@ function firstValidImageUrl(...candidates) {
         if (url) return url.toString();
     }
     return '';
+}
+
+const OFFICIAL_NEWS_IMAGE_HOSTS = new Set([
+    ...OFFICIAL_NEWS_HOSTS,
+    'cdn.who.int'
+]);
+
+function isOfficialNewsImageUrl(raw) {
+    const url = safeUrl(raw);
+    return Boolean(url && OFFICIAL_NEWS_IMAGE_HOSTS.has(url.hostname.toLowerCase()));
 }
 
 function extractImageFromHtml(value) {
@@ -415,7 +426,15 @@ async function getLiveNews(limit) {
         return String(a.title || '').localeCompare(String(b.title || ''));
     });
 
-    const trustedFallback = fallbackLiveNews();
+    const trustedFallback = await Promise.all(fallbackLiveNews().map(async (item) => {
+        if (item.imageUrl) return item;
+        try {
+            const response = await fetch(item.url, {
+                headers: { Accept: 'text/html,*/*;q=0.8', 'User-Agent': 'PascualingaNewsBot/1.0' }
+            });
+            return response.ok ? enrichOfficialArticleImage(item, await response.text()) : item;
+        } catch (_) { return item; }
+    }));
     const merged = [...deduped, ...trustedFallback].filter((item, index, items) => {
         const key = String(item.url || '').toLowerCase();
         return isOfficialNewsUrl(item.url) && key && items.findIndex((candidate) => String(candidate.url || '').toLowerCase() === key) === index;
@@ -644,6 +663,38 @@ router.get('/news', async (req, res) => {
     }
 });
 
+// Proxy only images from the allowlisted official publishers. This avoids
+// browser hotlink/referrer restrictions while keeping the endpoint SSRF-safe.
+router.get('/news/image', async (req, res) => {
+    const rawUrl = String(req.query.url || '').trim();
+    if (!isOfficialNewsImageUrl(rawUrl)) {
+        return res.status(400).json({ message: 'Unsupported news image URL.' });
+    }
+    try {
+        const response = await fetch(rawUrl, {
+            headers: {
+                Accept: 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8',
+                'User-Agent': 'PascualingaNewsBot/1.0'
+            },
+            redirect: 'follow'
+        });
+        const finalUrl = response.url || rawUrl;
+        const contentType = String(response.headers.get('content-type') || '').split(';')[0].toLowerCase();
+        if (!response.ok || !isOfficialNewsImageUrl(finalUrl) || !contentType.startsWith('image/')) {
+            return res.status(502).json({ message: 'Official news image is unavailable.' });
+        }
+        const body = Buffer.from(await response.arrayBuffer());
+        if (!body.length || body.length > 10 * 1024 * 1024) {
+            return res.status(502).json({ message: 'Official news image is invalid.' });
+        }
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', `public, max-age=${NEWS_IMAGE_CACHE_SECONDS}, stale-while-revalidate=86400`);
+        return res.send(body);
+    } catch (_) {
+        return res.status(502).json({ message: 'Official news image is unavailable.' });
+    }
+});
+
 // @route   POST api/announcements
 // @desc    Create a new announcement
 router.post('/', requireRole(['admin']), announcementWriteRateLimit, async (req, res) => {
@@ -794,5 +845,5 @@ router.delete('/:id', requireRole(['admin']), announcementWriteRateLimit, async 
 });
 
 module.exports = router;
-module.exports._newsTest = { decodeXmlEntities, stripHtml, compactSummary, fallbackLiveNews, isOfficialNewsUrl, parsePhilHealthListing, enrichPhilHealthArticle, enrichOfficialArticleImage, selectBalancedNews };
+module.exports._newsTest = { decodeXmlEntities, stripHtml, compactSummary, fallbackLiveNews, isOfficialNewsUrl, isOfficialNewsImageUrl, parsePhilHealthListing, enrichPhilHealthArticle, enrichOfficialArticleImage, selectBalancedNews };
 

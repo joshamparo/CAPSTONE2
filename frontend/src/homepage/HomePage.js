@@ -174,8 +174,14 @@ function isOfficialNewsLink(raw) {
 
 function pickNewsImage(item) {
   const directImage = String(item?.imageUrl || '').trim();
-  if (/^https:\/\//i.test(directImage)) return directImage;
-  return '';
+  if (/^https:\/\//i.test(directImage)) {
+    return `${API_BASE}/api/announcements/news/image?url=${encodeURIComponent(directImage)}`;
+  }
+  const topic = `${item?.title || ''} ${item?.summary || ''}`.toLowerCase();
+  if (/medicine|drug|pharmacy|gamot|vaccine/.test(topic)) return '/images/hospital-pharmacy-800.jpg';
+  if (/emergency|maternal|pregnan|newborn|child|adolescent|obesity/.test(topic)) return '/images/hospital-emergency-800.jpg';
+  if (/hospital|health.?care|patient|clinic|treatment/.test(topic)) return '/images/hospital-main-800.jpg';
+  return '/images/hospital-interior-800.jpg';
 }
 
 function NewsCardImage({ item, title }) {
@@ -183,24 +189,19 @@ function NewsCardImage({ item, title }) {
   const imageUrl = pickNewsImage(item);
   const sourceLabel = String(item?.label || item?.source || 'Health News');
 
-  if (!imageUrl || imageFailed) {
-    const isWHO = /who|world health organization/i.test(`${item?.label || ''} ${item?.source || ''}`);
-    return (
-      <div className={`news-card-image-placeholder ${isWHO ? 'news-card-image-placeholder-who' : 'news-card-image-placeholder-local'}`}>
-        <span>{sourceLabel}</span>
-        <strong>Official health update</strong>
-      </div>
-    );
-  }
+  const fallbackImage = pickNewsImage({ ...item, imageUrl: '' });
+  const renderedImage = imageFailed ? fallbackImage : imageUrl;
 
   return (
     <img
-      src={imageUrl}
+      src={renderedImage}
       alt={`${title || sourceLabel} article`}
       loading="lazy"
       width="900"
       height="480"
-      onError={() => setImageFailed(true)}
+      onError={() => {
+        if (renderedImage !== fallbackImage) setImageFailed(true);
+      }}
     />
   );
 }

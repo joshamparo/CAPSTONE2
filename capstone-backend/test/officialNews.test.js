@@ -36,6 +36,13 @@ test('official news links reject lookalike, insecure, and unrelated URLs', () =>
   assert.equal(_newsTest.isOfficialNewsUrl('https://www.who.int/about'), false);
 });
 
+test('news image proxy allowlist accepts only official image hosts', () => {
+  assert.equal(_newsTest.isOfficialNewsImageUrl('https://cdn.who.int/media/article.jpg'), true);
+  assert.equal(_newsTest.isOfficialNewsImageUrl('https://www.philhealth.gov.ph/news/images/article.jpg'), true);
+  assert.equal(_newsTest.isOfficialNewsImageUrl('https://who.int.evil.example/article.jpg'), false);
+  assert.equal(_newsTest.isOfficialNewsImageUrl('http://cdn.who.int/media/article.jpg'), false);
+});
+
 test('news summaries remove encoded markup and stay compact', () => {
   const encoded = '&lt;p&gt;Official health&amp;nbsp;update for Filipino patients.&lt;/p&gt;';
   assert.equal(_newsTest.stripHtml(encoded), 'Official health update for Filipino patients.');
