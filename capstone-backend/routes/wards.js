@@ -663,37 +663,14 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
 
 router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDepartment, requireWardManager, async (req, res) => {
   try {
-    const { patientId, roomCode } = req.body;
+    const patientId = String(req.body?.patientId || '').trim();
+    const roomCode = String(req.body?.roomCode || '').trim();
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(patientId || ''))) return res.status(400).json({ message: 'Invalid patient ID.' });
 
     if (!patientId || !roomCode) {
       return res.status(400).json({ message: 'Patient ID and Room Code are required.' });
     }
 
-    const patient = await prisma.patients.findUnique({ where: { id: patientId } });
-    if (!patient) {
-        console.error('[AssignPatient] Patient not found:', patientId);
-        return res.status(404).json({ message: 'Patient not found.' });
-    }
-
-    // Check if room is available
-    const registry = await buildWardRegistry();
-    const targetRoom = registry.rooms.find(r => normalizeText(r.roomCode) === normalizeText(roomCode));
-    
-    if (!targetRoom) {
-        console.error('[AssignPatient] Room not found:', roomCode);
-        return res.status(404).json({ message: 'Room not found.' });
-    }
-    
-    if (targetRoom.occupied && String(targetRoom.patient?.id || '') !== String(patientId)) {
-        console.error('[AssignPatient] Room already occupied:', roomCode, 'by', targetRoom.patient?.name);
-        return res.status(409).json({ message: `Room ${roomCode} is already occupied.` });
-    }
-    if (!targetRoom.occupied && !canAutoAssignRoom(targetRoom.manualStatus)) {
-      return res.status(409).json({ message: 'This room is not available for assignment.' });
-    }
-
-    await ensureNurseCareTable();
     await prisma.$transaction(async (tx) => {
       // Lock both the patient and room in a stable order. This prevents two
       // rapid clicks (or two nurses) from assigning the same patient/bed twice.
@@ -701,8 +678,9 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDe
       for (const lockKey of lockKeys) {
         await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(hashtext($1))`, lockKey);
       }
-      const lockedRoom = await tx.$queryRawUnsafe('SELECT status FROM public.ward_rooms WHERE lower(room_code) = lower($1) FOR UPDATE', String(roomCode).trim());
-      if (!lockedRoom.length || !canAutoAssignRoom(lockedRoom[0].status)) throw Object.assign(new Error('Room is no longer available. Refresh the ward overview.'), { status: 409 });
+      const lockedRoom = await tx.$queryRawUnsafe('SELECT status, ward_name FROM public.ward_rooms WHERE lower(room_code) = lower($1) FOR UPDATE', roomCode);
+      if (!lockedRoom.length) throw Object.assign(new Error('Room not found. Refresh the ward overview.'), { status: 404 });
+      if (!canAutoAssignRoom(lockedRoom[0].status)) throw Object.assign(new Error('Room is no longer available. Refresh the ward overview.'), { status: 409 });
       const currentPatient = await tx.patients.findUnique({
         where: { id: patientId },
         select: { ward_number: true, admission_status: true }
@@ -737,9 +715,16 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDe
         conflict.statusCode = 409;
         throw conflict;
       }
-      const previousRoom = registry.rooms.find(room => normalizeText(room.roomCode) === normalizeText(currentRoom));
-      await retainWardDepartment(tx, patientId, previousRoom?.wardName, req.nurseDepartment);
-      await retainWardDepartment(tx, patientId, targetRoom.wardName, req.nurseDepartment);
+      let previousWardName = '';
+      if (currentRoom) {
+        const previousRoom = await tx.$queryRawUnsafe(
+          'SELECT ward_name FROM public.ward_rooms WHERE lower(room_code) = lower($1) LIMIT 1',
+          currentRoom
+        );
+        previousWardName = String(previousRoom[0]?.ward_name || '').trim();
+      }
+      await retainWardDepartment(tx, patientId, previousWardName, req.nurseDepartment);
+      await retainWardDepartment(tx, patientId, String(lockedRoom[0].ward_name || '').trim(), req.nurseDepartment);
       await tx.activity_logs.create({ data: { actor_name: req.auth.email, role: req.auth.role, action: 'Ward Patient Assigned', target: 'Patient:' + patientId, details: 'Assigned to ' + roomCode } });
       await tx.patients.update({
         where: { id: patientId },
@@ -756,12 +741,12 @@ router.post('/assign-patient', requireRole(['admin', 'nurse']), authorizeNurseDe
           AND lower(kind) IN ('admission request', 'transfer request')
           AND lower(status) NOT IN ('completed', 'cancelled', 'rejected')
       `;
-    });
+    }, { maxWait: 5000, timeout: 15000 });
 
     // Clear cache
     buildWardRegistry._cache.payload = null;
     
-    res.json({ message: 'Patient assigned successfully.' });
+    res.json({ message: 'Patient assigned successfully.', patientId, roomCode });
   } catch (err) {
     console.error('[AssignPatient] Error:', err);
     sendError(res, err, 'Failed to assign patient.');

@@ -3001,10 +3001,12 @@ function NurseDashboard() {
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ patientId: patientIdClean, roomCode: roomCodeClean })
       });
-      await Promise.all([fetchWardRegistry(), refreshPatientsList()]);
       setBedAssignmentConfirmation(null);
       setAssigningPatient(null);
       addActivity('Patient Assigned', `Patient assigned to ${roomCodeClean}`, 'success');
+      // The assignment is already committed. Refresh both views in the
+      // background so a slow list request does not keep the confirmation busy.
+      void Promise.allSettled([fetchWardRegistry(), refreshPatientsList()]);
     } catch (err) {
       setSuccessMessage(err.message || 'Failed to assign patient.');
       setModalType('error');
