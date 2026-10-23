@@ -198,7 +198,7 @@ const SYMPTOM_TRIAGE_RULES = [
     level: 'RED',
     keywords: ['stroke', 'cerebrovascular', 'heart attack', 'myocardial', 'cardiac arrest', 'cpr', 'drowning', 'unconscious', 'hinihingal nang malala', 'hindi makahinga', 'hindi makapagsalita', 'paninikip ng dibdib', 'chest pain severe', 'dugo ang dumi', 'coughing blood', 'vomiting blood', 'dugo sa suka', 'baby kulang buwan', 'preterm labor', 'convulsion', 'kombulsyon', 'seizure', 'nanginginig ang buong katawan', 'head trauma', 'nahulog mataas', 'nalaglag mula sa mataas na lugar', 'sugat malalim', 'deep laceration', 'suicide attempt', 'overdose', 'sobrang sakit ng ulo', 'pinakamasakit na sakit ng ulo', 'panghihina ng isang bahagi ng katawan', 'panghihina ng kaliwa o kanang kamay o paa', 'nahihirapang magsalita', 'slurred speech', 'double vision', 'bulag bigla', 'biglang hindi makakita', 'buntis dugo', 'pregnant bleeding', 'placenta previa', 'eclampsia', 'high risk pregnancy', 'acute abdomen', 'stabbing abdominal pain', 'acute surgical abdomen', 'anaphylaxis', 'pamamaga ng labi', 'pamamaga ng dila', 'hirap huminga pagkatapos kumain', 'allergic reaction severe', 'shortness of breath sudden', 'hinihingal bigla', 'pulmonary embolism', 'fast breathing baby', 'grunting baby', 'indrawing', 'sepsis', 'shock', 'pale cold clammy skin', 'malamig na pawis malala'],
     response: {
-      en: '⚠️ MAARING EMERGENCY ITO — HUWAG MAGHINTAY. TUMAWAG AGAD SA EMERGENCY HOTLINE NG PASCUAL GENERAL HOSPITAL: 0915 312 7144. Maaari rin pong pumunta AGAD sa Pinakamalapit na Emergency Room (ER 24/7 bukas). Ang symptoms na ito ay kailangan ng agarang medikal na atensyon. Huwag munang uminom ng gamot nang walang payo ng doktor.',
+      en: '⚠️ THIS MAY BE AN EMERGENCY — DO NOT WAIT. Call the Pascual General Hospital emergency line now at 0915 312 7144 or go immediately to the nearest emergency room. The ER is open 24/7. Do not take medication without advice from a qualified clinician.',
       tl: '⚠️ MAARING EMERGENCY ITO — HUWAG MAGHINTAY. TUMAWAG AGAD SA EMERGENCY HOTLINE NG PASCUAL GENERAL HOSPITAL: 0915 312 7144. Maaari rin pong pumunta AGAD sa Pinakamalapit na Emergency Room (ER 24/7 bukas). Ang symptoms na ito ay kailangan ng agarang medikal na atensyon. Huwag munang uminom ng gamot nang walang payo ng doktor.'
     },
     dept: 'EMERGENCY ROOM (24/7)'
@@ -207,7 +207,7 @@ const SYMPTOM_TRIAGE_RULES = [
     level: 'YELLOW',
     keywords: ['fever mataas', 'lagnat mataas', 'high fever', '39 degrees', '40 degrees', 'covid symptoms', 'ubo sipon lagnat', 'pneumonia suspicion', 'severe cough', 'matinding ubo', 'diarrhea 3x', '3x na pagtatae', 'pagsusuka 2x', 'nagsusuka nang paulit ulit', 'dehydration', 'nanghihina', 'body aches malala', 'severe body pain', 'back pain malala', 'excruciating back pain', 'kidney stones', 'UTI', 'pain when peeing', 'nasusunog kapag umiihi', 'ihip na ihi', 'persistent vomiting', 'sakit ng tiyan matindi', 'typhoid', 'dengue rashes', 'butlig balat malala', 'skin infection', 'pigsa malaki', 'abscess', 'sakit ng tenga matindi', 'ear infection severe', 'sinusitis severe', 'throat ulcer', 'strep throat suspicion', 'masakit lumunok', 'cannot swallow liquids', 'conjunctivitis malala', 'sore mata malala', 'mataas na blood pressure', 'alta presyon mahirap kontrolin', 'blood sugar mataas', 'high glucose', 'hypoglycemia malala', 'nanghihilo kasama pagsusuka', 'vertigo severe', 'sprain malaki', 'pilay hindi makalakad', 'fracture suspicion', 'hindi maigalaw ang braso o binti', 'dislocation', 'dislokasyon buto', 'deep cut', 'malalim na hiwa', 'animal bite', 'kagat ng aso', 'kagat ng pusa', 'snake bite', 'kagat ng ahas', 'monkey bite', 'rabies risk', 'mental health crisis', 'panic attack malala', 'anxiety severe', 'depression thoughts of self harm'],
     response: {
-      en: '🟡 Maaaring kailangan ng agarang patingin sa doktor sa araw na ito. Pumunta po kayo sa OPD (Out-Patient Department) ng Pascual General Hospital bukas sa lalong madaling panahon para matingnan ng naka-duty na doktor. Para mabilis: maaari pong mag-WALK IN (8AM opening) o tumawag muna sa 0915 312 7144 para malaman ang queue. Hindi po ako makakapagreseta ng gamot, ngunit ang mga naka-duty na clinician ang magbibigay ng tamang diagnosis at treatment pagdating niyo sa ospital. Magdala po ng valid ID at kung meron PhilHealth / HMO card.',
+      en: '🟡 This may need prompt assessment by a clinician today. Go to the Pascual General Hospital Out-Patient Department as soon as possible. You may walk in from 8:00 AM or call 0915 312 7144 to confirm availability. Bring a valid ID and your PhilHealth or HMO card if available. The chatbot cannot diagnose or prescribe medication.',
       tl: '🟡 Maaaring kailangan ng agarang patingin sa doktor sa araw na ito. Pumunta po kayo sa OPD (Out-Patient Department) ng Pascual General Hospital bukas sa lalong madaling panahon para matingnan ng naka-duty na doktor. Para mabilis: maaari pong mag-WALK IN (8AM opening) o tumawag muna sa 0915 312 7144 para malaman ang queue. Hindi po ako makakapagreseta ng gamot, ngunit ang mga naka-duty na clinician ang magbibigay ng tamang diagnosis at treatment pagdating niyo sa ospital. Magdala po ng valid ID at kung meron PhilHealth / HMO card.'
     },
     dept: 'OPD Clinics — ngayong araw / bukas agad'
@@ -216,7 +216,7 @@ const SYMPTOM_TRIAGE_RULES = [
     level: 'GREEN',
     keywords: ['lagnat mababa', 'mild fever', '37.5', '37.8', '38 degrees mild', 'sipon lang', 'sipon at ubo mild', 'ubo matagal na pero hindi lagnat', 'ubo 1 week', 'chronic cough', 'allergies', 'sneezing', 'bahing', 'makati balat', 'butlig ng rashes mild', 'dry skin', 'eczema mild', 'acne', 'tigyawat', 'dandruff', 'bukol balat maliit', 'lipoma maliit', 'scars consultation', 'pangangati ng paa', 'athlete foot', 'muscle pain mild', 'body pain mild', 'pagod lang', 'fatigue mild', 'kulang sa tulog', 'stress', 'anxiety mild', 'headache mild', 'sakit ng ulo minsan', 'migraine light', 'rayuma mild', 'arthritis mild', 'sakit ng tuhod pagkatapos maglakad', 'strain mild', 'pamamaga ng paa mild', 'sakit ng likod mild', 'slight sprain', 'pilay kaya pa namang maglakad', 'indigestion', 'hyperacidity', 'gastric pain mild', 'sakit ng tiyan pagkatapos kumain', 'constipation', 'hindi makadumi', '2 days walang dumi', 'hemorrhoid mild', 'almuranas mild', 'diarrhea 1x lang', 'soft stools', 'suka 1x lang tapos wala na', 'sakit ng tenga mild', 'ear wax', 'tugtog sa tenga', 'tinnitus mild', 'baradong ilong', 'rhinitis mild', 'sinusitis mild', 'cold 3 days', 'sore throat mild', 'masakit lalamunan lang', 'canker sore', 'singaw', 'bad breath consultation', 'bleeding gums', 'pumutok ang gilagid', 'ngipin masakit mild', 'sakit ng ngipin atras-abante', 'tooth ache mild', 'dental caries check', 'cloudy urine', 'ihip maulap lang', 'UTI mild suspicion', 'peklat', 'scar consultation', 'tingal sa mata mild', 'eye irritation mild', 'blurred vision check up', 'screening glasses', 'check up glasses', 'consult for eyeglasses prescription', 'regular check up', 'annual physical exam', 'ape', 'annual check up', 'health monitoring', 'high bp mild', 'blood pressure monitor', 'check blood sugar', 'glucose screening', 'weight loss program', 'diet consultation', 'nutrition counselling', 'family planning', 'prenatal check up', 'pregnancy check up', 'postpartum check up', 'pap smear', 'breast screening', 'dengue screening', 'urinalysis check', 'cbc monitoring', 'blood test results follow up', 'xray result follow up', 'vaccine consultation', 'vaccine schedule', 'flu shot', 'pneumonia vaccine', 'hpv vaccine'],
     response: {
-      en: '🟢 Ang symptoms na ito ay karaniwang kayang tingnan sa regular OPD consultation schedule. Para sa pinakamadaling proseso: MAAARI PO KAYONG MAG-WALK-IN sa OPD ng Pascual General Hospital tuwing 8:00AM — 5:00PM (Monday-Saturday) para sa regular Out-Patient check up. O tumawag muna sa 0915 312 7144 para makakuha ng queue number. Magdala lamang po ng Valid ID at PhilHealth/HMO card (kung meron) para sa maayos na proseso.',
+      en: '🟢 These symptoms can usually be assessed during a regular OPD consultation. You may walk in at Pascual General Hospital from 8:00 AM to 5:00 PM, Monday to Saturday, or call 0915 312 7144 to confirm the queue. Bring a valid ID and your PhilHealth or HMO card if available.',
       tl: '🟢 Ang symptoms na ito ay karaniwang kayang tingnan sa regular OPD consultation schedule. Para sa pinakamadaling proseso: MAAARI PO KAYONG MAG-WALK-IN sa OPD ng Pascual General Hospital tuwing 8:00AM — 5:00PM (Monday-Saturday) para sa regular Out-Patient check up. O tumawag muna sa 0915 312 7144 para makakuha ng queue number. Magdala lamang po ng Valid ID at PhilHealth/HMO card (kung meron) para sa maayos na proseso.'
     },
     dept: 'Regular OPD Consultation — Walk-ins Welcome'
@@ -225,7 +225,7 @@ const SYMPTOM_TRIAGE_RULES = [
     level: 'PEDIA_YELLOW',
     keywords: ['baby 6 months lagnat', 'infant lagnat', 'newborn fever', 'baby hilaw na lagnat', 'baby hindi mapakali', 'baby hindi makahinga', 'baby hinihingal', 'baby indrawing', 'baby grunting', 'baby cyanosis', 'asul na labi baby', 'baby yellow skin', 'jaundice newborn', 'baby matagal na lagnat', 'baby 3 days lagnat', 'toddler seizure', 'baby convulsion', 'baby vomiting green', 'green vomitus', 'baby high fever', 'baby rashes buong katawan', 'baby dengue suspicion', 'baby dehydration', 'baby walang ihi 6 hours', 'baby hindi umiihi', 'baby hindi makakain', 'baby hindi makasuso', 'baby weak cry', 'baby hindi kumikibo', 'baby paulit ulit na sinisipon', 'baby recurrent cough'],
     response: {
-      en: '🟡 Baby/Pediatric case — Mangyaring magpatingin AGAD sa Pediatric area ng Pascual General Hospital today/tomorrow morning. Ang mga sanggol at bata ay mabilis lumala ang kondisyon kaya kailangan ng agarang pagsusuri ng pedia doctor. Pumunta nang maaga sa OPD Pediatrics section (8AM opening), o tumawag muna sa 0915 312 7144 para mabigyan ng pedia queue number.',
+      en: '🟡 Pediatric case — Please seek prompt assessment at the Pascual General Hospital Pediatric OPD today or tomorrow morning. Infants and children can worsen quickly and should be assessed by a pediatric clinician. The OPD opens at 8:00 AM; call 0915 312 7144 to confirm availability.',
       tl: '🟡 Baby/Pediatric case — Mangyaring magpatingin AGAD sa Pediatric area ng Pascual General Hospital today/tomorrow morning. Ang mga sanggol at bata ay mabilis lumala ang kondisyon kaya kailangan ng agarang pagsusuri ng pedia doctor. Pumunta nang maaga sa OPD Pediatrics section (8AM opening), o tumawag muna sa 0915 312 7144 para mabigyan ng pedia queue number.'
     },
     dept: 'PEDIATRICS OPD AGAD'
@@ -234,7 +234,7 @@ const SYMPTOM_TRIAGE_RULES = [
     level: 'PREGNANCY_YELLOW',
     keywords: ['buntis', 'pregnant', 'prenatal', 'first time buntis', 'high risk buntis', 'buntis may sakit', 'buntis lagnat', 'buntis bleeding light', 'spotting pregnant', 'leaking amniotic', 'waters broke', 'baby movement nabawasan', 'less fetal movement', 'post term pregnancy', 'lagpas due date', 'breech baby check', '36 weeks pregnant', '37 weeks pregnant', 'preeclampsia suspicion', 'high bp pregnant', 'swelling feet pregnant', 'headache pregnant severe'],
     response: {
-      en: '🟡 Pregnancy case — Pumunta po agad sa OB-Gyne Out-Patient Department ng Pascual General Hospital para sa prenatal check. Ang mga buntis ay priority sa OPD tuwing 8AM-5PM Monday-Saturday. Magdala ng ultrasound results at prenatal records kung meron. Tumawag muna sa 0915 312 7144 para sa OB-Gyne availability.',
+      en: '🟡 Pregnancy case — Please go promptly to the Pascual General Hospital OB-Gyne Out-Patient Department for assessment. Bring available ultrasound results and prenatal records. Call 0915 312 7144 first to confirm OB-Gyne availability.',
       tl: '🟡 Pregnancy case — Pumunta po agad sa OB-Gyne Out-Patient Department ng Pascual General Hospital para sa prenatal check. Ang mga buntis ay priority sa OPD tuwing 8AM-5PM Monday-Saturday. Magdala ng ultrasound results at prenatal records kung meron. Tumawag muna sa 0915 312 7144 para sa OB-Gyne availability.'
     },
     dept: 'OB-GYNE OPD'
@@ -286,14 +286,14 @@ const PUBLIC_PRICES = [
   { category: 'LABORATORY — HORMONE / SPECIAL', key: 'lab_hiv', name: 'HIV Screening (anti-HIV)', pricePHP: 380, notes: '' },
   { category: 'LABORATORY — HORMONE / SPECIAL', key: 'lab_vdrl', name: 'Syphilis / VDRL', pricePHP: 280, notes: '' },
   { category: 'LABORATORY — HORMONE / SPECIAL', key: 'lab_blood_typing', name: 'Blood Typing (ABO + Rh)', pricePHP: 250, notes: 'Before surgery / pregnant mandatory' },
-  { category: 'LABORATORY — HORMONE / SPECIAL', key: 'lab_ecg', name: 'ECG (Resting 12-lead)', pricePHP: 350, notes: 'OPD or admission baseline' },
-  { category: 'LABORATORY — HORMONE / SPECIAL', key: 'lab_xray_chest', name: 'Chest X-ray (PA view)', pricePHP: 600, notes: 'Admission / Annual physical / Pre-employment' },
-  { category: 'LABORATORY — HORMONE / SPECIAL', key: 'lab_xray_apolat', name: 'X-ray Extremity (arm/leg/hand/foot)', pricePHP: 550, notes: '' },
-  { category: 'LABORATORY — HORMONE / SPECIAL', key: 'lab_xray_spine', name: 'X-ray Spine / Pelvis', pricePHP: 850, notes: '' },
-  { category: 'LABORATORY — HORMONE / SPECIAL', key: 'lab_ultra_abd', name: 'Ultrasound — Whole Abdomen', pricePHP: 1600, notes: 'Gallbladder, liver, kidney, pancreas' },
-  { category: 'LABORATORY — HORMONE / SPECIAL', key: 'lab_ultra_ob', name: 'Ultrasound — OB (Pregnancy)', pricePHP: 1300, notes: 'Gestational age, viability, 2D basic' },
-  { category: 'LABORATORY — HORMONE / SPECIAL', key: 'lab_ultra_breast', name: 'Breast Ultrasound', pricePHP: 1400, notes: 'Breast mass screening' },
-  { category: 'LABORATORY — HORMONE / SPECIAL', key: 'lab_ultra_thyroid', name: 'Thyroid Ultrasound', pricePHP: 1400, notes: 'Nodule / goiter assessment' },
+  { category: 'CARDIAC DIAGNOSTICS — ECG', key: 'lab_ecg', name: 'ECG (Resting 12-lead)', pricePHP: 350, notes: 'OPD or admission baseline' },
+  { category: 'RADIOLOGY — X-RAY', key: 'lab_xray_chest', name: 'Chest X-ray (PA view)', pricePHP: 600, notes: 'Admission / Annual physical / Pre-employment' },
+  { category: 'RADIOLOGY — X-RAY', key: 'lab_xray_apolat', name: 'X-ray Extremity (arm/leg/hand/foot)', pricePHP: 550, notes: '' },
+  { category: 'RADIOLOGY — X-RAY', key: 'lab_xray_spine', name: 'X-ray Spine / Pelvis', pricePHP: 850, notes: '' },
+  { category: 'RADIOLOGY — ULTRASOUND', key: 'lab_ultra_abd', name: 'Ultrasound — Whole Abdomen', pricePHP: 1600, notes: 'Gallbladder, liver, kidney, pancreas' },
+  { category: 'RADIOLOGY — ULTRASOUND', key: 'lab_ultra_ob', name: 'Ultrasound — OB (Pregnancy)', pricePHP: 1300, notes: 'Gestational age, viability, 2D basic' },
+  { category: 'RADIOLOGY — ULTRASOUND', key: 'lab_ultra_breast', name: 'Breast Ultrasound', pricePHP: 1400, notes: 'Breast mass screening' },
+  { category: 'RADIOLOGY — ULTRASOUND', key: 'lab_ultra_thyroid', name: 'Thyroid Ultrasound', pricePHP: 1400, notes: 'Nodule / goiter assessment' },
   { category: 'DENTAL PROCEDURES (Oral)', key: 'den_cleaning', name: 'Oral Prophylaxis (Cleaning)', pricePHP: 800, notes: 'Scaling + polishing' },
   { category: 'DENTAL PROCEDURES (Oral)', key: 'den_pasta', name: 'Dental Filling / Restoration (1 surface)', pricePHP: 600, notes: 'Light-cured composite' },
   { category: 'DENTAL PROCEDURES (Oral)', key: 'den_pasta_more', name: 'Dental Filling — 2+ surfaces / big cavity', pricePHP: 900, notes: '' },
@@ -856,6 +856,30 @@ function detectPriceIntent(normalized) {
   return { matches: matches.slice(0, 5), category: firstCategory };
 }
 
+function formatPriceReply(service, preferredLanguage = 'english') {
+  const tagalog = preferredLanguage === 'tagalog';
+  if (Number(service?.pricePHP) === 0) {
+    return tagalog
+      ? `✅ SERBISYO: ${service.name}\nPaalala: ${service.notes || 'Ipa-confirm ang detalye sa ospital.'}`
+      : `✅ SERVICE: ${service.name}\nNote: ${service.notes || 'Confirm the details with the hospital.'}`;
+  }
+  const amount = `₱${Number(service?.pricePHP || 0).toLocaleString('en-PH')}`;
+  const details = service?.notes ? `\n${tagalog ? '📝 Detalye' : '📝 Details'}: ${service.notes}` : '';
+  const reminder = tagalog
+    ? '💡 Reference amount lamang ito. Mag-present ng valid Senior Citizen/PWD ID at ipa-confirm sa Billing ang final charge, discount, PhilHealth, at HMO coverage.'
+    : '💡 This is a reference amount only. Present a valid Senior Citizen/PWD ID and confirm the final charge, discount, PhilHealth, and HMO coverage with Billing.';
+  return tagalog
+    ? `✅ PRESYO NG SERBISYO\nSerbisyo: ${service.name}\nKategorya: ${service.category}\n💰 Presyo: ${amount}${details}\n\n${reminder}`
+    : `✅ SERVICE PRICE\nService: ${service.name}\nCategory: ${service.category}\n💰 Price: ${amount}${details}\n\n${reminder}`;
+}
+
+function publicFallbackReply(preferredLanguage = 'english') {
+  if (preferredLanguage === 'tagalog') {
+    return 'Makakatulong ako sa impormasyon tungkol sa ospital, symptom triage, reference prices, appointments at walk-ins, at pagkuha ng laboratory o imaging results. Sabihin mo kung alin dito ang kailangan mo.';
+  }
+  return 'I can help with hospital information, symptom triage, reference prices, appointments and walk-ins, and guidance for laboratory or imaging results. Tell me which topic you need help with.';
+}
+
 function detectAppointmentIntent(normalized) {
   if (!normalized) return '';
   if (
@@ -1362,13 +1386,7 @@ function quickAnswerFor(role, text) {
       const key = publicIntent.slice('price_query::'.length);
       const exact = PUBLIC_PRICES.find((p) => String(p.key).toLowerCase() === key.toLowerCase());
       if (exact) {
-        const discTag = exact.pricePHP > 0
-          ? `\n\n💡 Mag-present ng valid Senior Citizen/PWD ID at ipa-confirm sa Billing ang eligibility at final discount.`
-          : '';
-        const priceTag = exact.pricePHP === 0
-          ? `Note: ${exact.notes || 'No fee for this service / discount note.'}`
-          : `💰 Presyo: ₱${Number(exact.pricePHP).toLocaleString('en-PH')} (${exact.category})`;
-        return `✅ SERVICE: ${exact.name}\n${priceTag}${exact.notes ? `\n📝 Details: ${exact.notes}` : ''}${discTag}`;
+        return formatPriceReply(exact, detectPreferredLanguage(text));
       }
     }
     if (publicIntent.startsWith('symptom_triage::')) {
@@ -1552,6 +1570,7 @@ function detectPreferredLanguage(text) {
   const casualLower = canonicalizeCasualText(lower);
   if (/\b(tagalog|taglish|filipino|nagtatagalog|magtagalog|mag tagalog)\b/i.test(raw)) return 'tagalog';
   if (/^(kamusta|kumusta|salamat|maraming salamat|paalam|magandang umaga|magandang hapon|magandang gabi)(\b|\s)/i.test(casualLower)) return 'tagalog';
+  if (/^(magkano|paano|bakit|saan|kailan|sino|puwede|pwede|ano|anong)(\b|\s)/i.test(casualLower)) return 'tagalog';
   const tagalogSignals = [
     ' ano ', ' paano ', ' bakit ', ' saan ', ' kailan ', ' sino ', ' pwede ', ' puwede ',
     ' gusto ', ' ko ', ' mo ', ' nyo ', ' ninyo ', ' natin ', ' natin ', ' ito ', ' iyan ',
@@ -1799,7 +1818,7 @@ function localAssistantReply({ role, message, messages = [], pathname, preferred
           ? ['Prenatal check schedule?', 'Magkano ang OB consultation?', 'First prenatal package?']
           : ['Magkano ang OPD consult?', 'Paano magpa-appointment?', 'Queue / Pila ngayon?', 'Hospital location'];
     return {
-      answer: localizeAssistantText(symptomHit.response.tl, effectiveLanguage, role),
+      answer: effectiveLanguage === 'tagalog' ? symptomHit.response.tl : symptomHit.response.en,
       source: 'knowledge',
       grounded: true,
       suggestions: nextChips
@@ -1809,9 +1828,6 @@ function localAssistantReply({ role, message, messages = [], pathname, preferred
   const priceHit = detectPriceIntent(normalized);
   if (priceHit.matches.length > 0) {
     const service = priceHit.matches[0];
-    const priceLine = service.pricePHP === 0
-      ? `Note: ${service.notes || 'Service reference entry.'}`
-      : `💰 Presyo: ₱${Number(service.pricePHP).toLocaleString('en-PH')} (${service.category})\n${service.notes ? `📝 ${service.notes}` : ''}\n\n💡 Mag-present ng valid Senior Citizen/PWD ID at ipa-confirm sa Billing ang eligibility at final discount.`;
     const nextChips = [
       `Price list ng lahat ng serbisyo`,
       `Paano magpa-appointment ng ${String(service.category || 'OPD').split(' ')[0]}?`,
@@ -1819,7 +1835,7 @@ function localAssistantReply({ role, message, messages = [], pathname, preferred
       `Hospital location / Saan pumunta?`
     ];
     return {
-      answer: localizeAssistantText(`✅ SERVICE PRICE (Reference amount — confirm with Billing):\nService: ${service.name}\n${priceLine}`, effectiveLanguage, role),
+      answer: formatPriceReply(service, effectiveLanguage),
       source: 'knowledge',
       grounded: true,
       suggestions: nextChips
@@ -1854,7 +1870,9 @@ function localAssistantReply({ role, message, messages = [], pathname, preferred
   }
 
   if (MEDICAL_RISK_PATTERN.test(text)) {
-    return safeReply(localizeAssistantText('I can help with Pascual General Hospital information and system guidance, but I cannot provide diagnosis, treatment, or prescription advice. For urgent medical concerns, please contact the hospital directly at 0915 312 7144 or seek immediate professional care. Para sa sintomas: I-check ang aking symptom triage (itanong: "May lagnat ang baby ko ano gagawin?") at bibigyan kita ng tamang route sa OPD / ER.', effectiveLanguage, role));
+    return safeReply(effectiveLanguage === 'tagalog'
+      ? 'Makakatulong ako sa impormasyon tungkol sa Pascual General Hospital at sa paggamit ng system, pero hindi ako maaaring magbigay ng diagnosis, treatment, o prescription advice. Para sa urgent na concern, tumawag agad sa 0915 312 7144 o magpunta sa pinakamalapit na emergency room.'
+      : 'I can help with Pascual General Hospital information and system guidance, but I cannot provide diagnosis, treatment, or prescription advice. For an urgent medical concern, call 0915 312 7144 or go to the nearest emergency room.');
   }
 
   if (OFF_TOPIC_PATTERN.test(text)) {
@@ -1901,11 +1919,7 @@ function localAssistantReply({ role, message, messages = [], pathname, preferred
 
   if (role === 'public') {
     return {
-      answer: localizeAssistantText(
-        'Makakatulong ako sa mga sumusunod (mga hospital-information topic na kaya kong tulungan):\n\n🏥 HOSPITAL INFO — Saan hospital, contact number, emergency hotline, services, facilities.\n\n🩺 SYMPTOM TRIAGE — Halimbawa: "May lagnat ang baby ko", "Masakit ang dibdib ko", "Nahihilo ako" — bibigyan kita ng RED/YELLOW/GREEN na guide kung ER agad, OPD today, o regular consult.\n\n💸 PRICE LIST / MGA PRESYO — Lahat ng OPD, lab, xray, ultrasound, dental, packages, rooms. Itanong lang: "Magkano ang CBC?", "Magkano bunot ng ngipin?" etc.\n\n📅 APPOINTMENT / WALK-IN — Paano makakuha ng slot, pila, queue, operating hours.\n\n🔬 LAB / XRAY RESULT — Typical turnaround oras, paano kunin, Patient Portal steps.\n\nItanong mo na ang kahit ano sa mga ito!',
-        effectiveLanguage,
-        role
-      ),
+      answer: publicFallbackReply(effectiveLanguage),
       source: 'unresolved',
       grounded: true,
       suggestions: ['May lagnat ang baby ko', 'Magkano ang CBC?', 'Paano magpa-appointment?', 'Nasaan result ng xray ko?', 'Saan ang hospital?']

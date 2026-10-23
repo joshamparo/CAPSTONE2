@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const express = require('express');
 
 process.env.SESSION_SECRET = 'assistant-route-test-secret';
-process.env.ASSISTANT_RATE_LIMIT_MAX = '50';
+process.env.ASSISTANT_RATE_LIMIT_MAX = '200';
 delete process.env.OPENAI_API_KEY;
 
 const { createSessionToken } = require('../utils/sessionToken');
@@ -99,6 +99,18 @@ test('assistant keeps diagnosis and prescription requests inside policy', async 
   const data = await response.json();
   assert.equal(data.source, 'policy');
   assert.match(data.answer, /cannot|hindi|doctor|professional/i);
+  assert.doesNotMatch(data.answer, /Para sa|itanong|bibigyan|pumunta/i);
+});
+
+test('symptom triage keeps English and Tagalog responses separate', async () => {
+  const english = await ask({ messages: [{ role: 'user', content: 'I have chest pain severe and shortness of breath sudden.' }] });
+  const englishData = await english.json();
+  assert.match(englishData.answer, /THIS MAY BE AN EMERGENCY|DO NOT WAIT/i);
+  assert.doesNotMatch(englishData.answer, /HUWAG|TUMAWAG|Maaari|pumunta/i);
+
+  const tagalog = await ask({ messages: [{ role: 'user', content: 'May paninikip ng dibdib at hindi makahinga.' }] });
+  const tagalogData = await tagalog.json();
+  assert.match(tagalogData.answer, /MAARING EMERGENCY|HUWAG MAGHINTAY/i);
 });
 
 test('price matching returns the requested service instead of the first price entry', async () => {
@@ -116,6 +128,43 @@ test('price matching returns the requested service instead of the first price en
     assert.match(data.answer, pricePattern);
     assert.doesNotMatch(data.answer, /\*\*/);
   }
+});
+
+test('diagnostic prices use the correct department category and response language', async () => {
+  const cases = [
+    ['How much is a chest xray?', /RADIOLOGY — X-RAY/, /This is a reference amount only/, /Presyo|Mag-present/],
+    ['How much is an ECG?', /CARDIAC DIAGNOSTICS — ECG/, /This is a reference amount only/, /Presyo|Mag-present/],
+    ['How much is a whole abdomen ultrasound?', /RADIOLOGY — ULTRASOUND/, /This is a reference amount only/, /Presyo|Mag-present/]
+  ];
+  for (const [question, category, reminder, forbidden] of cases) {
+    const response = await ask({ messages: [{ role: 'user', content: question }] });
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.match(data.answer, category);
+    assert.match(data.answer, reminder);
+    assert.doesNotMatch(data.answer, forbidden);
+  }
+
+  const tagalogResponse = await ask({ messages: [{ role: 'user', content: 'Magkano ang chest xray?' }] });
+  const tagalogData = await tagalogResponse.json();
+  assert.match(tagalogData.answer, /PRESYO NG SERBISYO/);
+  assert.match(tagalogData.answer, /Reference amount lamang ito/);
+});
+
+test('capability and fallback replies follow the language of the question', async () => {
+  const english = await ask({ messages: [{ role: 'user', content: 'What can you do?' }] });
+  const englishData = await english.json();
+  assert.match(englishData.answer, /^I can help/i);
+  assert.doesNotMatch(englishData.answer, /Makakatulong|Puwede|tanungin/);
+
+  const tagalog = await ask({ messages: [{ role: 'user', content: 'Paano ka makakatulong?' }] });
+  const tagalogData = await tagalog.json();
+  assert.match(tagalogData.answer, /^Makakatulong/i);
+
+  const unknownEnglish = await ask({ messages: [{ role: 'user', content: 'Please explain the available help.' }] });
+  const unknownEnglishData = await unknownEnglish.json();
+  assert.match(unknownEnglishData.answer, /^I can help/i);
+  assert.doesNotMatch(unknownEnglishData.answer, /Makakatulong|Sabihin mo/);
 });
 
 test('operational answers do not claim live queue data or guaranteed turnaround', async () => {
