@@ -6,7 +6,6 @@ import './OfficeStaffDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import { getClinicalPaymentStatus } from './clinicalPaymentStatus';
 import { getLabPaymentFinancials } from './labPaymentFinancials';
-import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import { checkBackendHealth, fetchJson } from '../utils/api';
 
@@ -168,7 +167,6 @@ export default function OfficeStaffDashboard({ mode }) {
     };
   }, []);
   const [view, setView] = useState('dashboard');
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [centralRecordOpen, setCentralRecordOpen] = useState(false);
   const [centralRecordPatientId, setCentralRecordPatientId] = useState(null);
   const [centralRecordPatientLabel, setCentralRecordPatientLabel] = useState('');
@@ -1801,7 +1799,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 <RefreshCw size={16} />
                 Refresh
               </button>
-              <AccountHeaderActions user={user} roleLabel={roleLabel} onSignOut={() => setShowLogoutConfirm(true)} />
+              <AccountHeaderActions user={user} roleLabel={roleLabel} onSignOut={handleLogout} />
             </div>
           </div>
 
@@ -4996,11 +4994,6 @@ export default function OfficeStaffDashboard({ mode }) {
         user={user}
       />
 
-      <SignOutConfirmModal
-        open={showLogoutConfirm}
-        onClose={() => setShowLogoutConfirm(false)}
-        onConfirm={handleLogout}
-      />
     </div>
   );
 }

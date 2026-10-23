@@ -7,7 +7,6 @@ import '../Admin/AdminDashboard.css';
 import { ncrCalabarzonCities, SPECIALIZATION_OPTIONS } from '../utils/constants';
 import { supabase } from '../lib/supabaseClient';
 import { API_BASE, checkBackendHealth, fetchJson } from '../utils/api';
-import SignOutConfirmModal from '../components/SignOutConfirmModal';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import { getNurseModuleConfig, normalizeNurseModuleKey } from './nurseModuleConfig';
@@ -67,7 +66,6 @@ function NurseDashboard() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [settingsSyncState, setSettingsSyncState] = useState('loading');
 
@@ -6465,7 +6463,7 @@ function NurseDashboard() {
                   departmentValue={activeDept}
                   departmentOptions={[{ value: activeDept, label: activeDept }]}
                   showChangePasswordMenu={true}
-                  onSignOut={() => setShowLogoutConfirm(true)}
+                  onSignOut={handleLogout}
                   onOpenNotification={(notification) => {
                     const type = String(notification?.type || '').toLowerCase();
                     if (type.includes('appointment') || type.includes('approval')) setView('appointments');
@@ -9776,12 +9774,6 @@ function NurseDashboard() {
               </div>
           </div>
       )}
-
-      <SignOutConfirmModal
-        open={showLogoutConfirm}
-        onClose={() => setShowLogoutConfirm(false)}
-        onConfirm={handleLogout}
-      />
 
       <PatientFullRecordModal
         open={centralRecordOpen}

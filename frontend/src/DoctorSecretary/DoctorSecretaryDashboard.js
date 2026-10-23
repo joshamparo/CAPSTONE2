@@ -1688,7 +1688,7 @@ export default function DoctorSecretaryDashboard() {
                       : 'Approvals'}
             </div>
           </div>
-          <AccountHeaderActions user={user} roleLabel="Doctor Secretary" onSignOut={() => setShowLogoutConfirm(true)} onOpenNotification={(n) => {
+          <AccountHeaderActions user={user} roleLabel="Doctor Secretary" onSignOut={logout} onOpenNotification={(n) => {
             if (n?.type === 'approval_request' || n?.meta?.requestId || String(n?.type || '').toLowerCase().includes('approval')) {
               setActiveTab('approvals');
             } else if (n?.type === 'onsite_booking' || String(n?.type || '').toLowerCase().includes('onsite') || String(n?.type || '').toLowerCase().includes('inbox')) {
