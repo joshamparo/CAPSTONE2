@@ -702,12 +702,28 @@ function AdminDashboard() {
   };
 
   const addDoctorAvailabilityRule = () => {
-    const s = normalizeTimeInput(doctorAvailAddRule.startTime) || '09:00';
-    const e = normalizeTimeInput(doctorAvailAddRule.endTime) || '17:00';
-    const sMin = s ? parseInt(s.slice(0, 2), 10) * 60 + parseInt(s.slice(3, 5), 10) : null;
-    const eMin = e ? parseInt(e.slice(0, 2), 10) * 60 + parseInt(e.slice(3, 5), 10) : null;
-    if (sMin === null || eMin === null || eMin <= sMin) {
+    const s = normalizeTimeInput(doctorAvailAddRule.startTime);
+    const e = normalizeTimeInput(doctorAvailAddRule.endTime);
+    if (!s || !e) {
+      setDoctorAvailError('Start and end times are required.');
+      return;
+    }
+    const sMin = parseInt(s.slice(0, 2), 10) * 60 + parseInt(s.slice(3, 5), 10);
+    const eMin = parseInt(e.slice(0, 2), 10) * 60 + parseInt(e.slice(3, 5), 10);
+    if (!Number.isFinite(sMin) || !Number.isFinite(eMin) || eMin <= sMin) {
       setDoctorAvailError('End time must be after start time.');
+      return;
+    }
+    const slotMinutesRaw = String(doctorAvailAddRule.slotMinutes ?? '').trim();
+    const slotMinutes = Number(slotMinutesRaw);
+    if (!slotMinutesRaw || !Number.isInteger(slotMinutes) || slotMinutes < 5 || slotMinutes > 180) {
+      setDoctorAvailError('Slot Minutes must be a whole number from 5 to 180.');
+      return;
+    }
+    const maxPerSlotRaw = String(doctorAvailAddRule.maxPerSlot ?? '').trim();
+    const maxPerSlot = Number(maxPerSlotRaw);
+    if (!maxPerSlotRaw || !Number.isInteger(maxPerSlot) || maxPerSlot < 1 || maxPerSlot > 20) {
+      setDoctorAvailError('Max Patients / Slot must be a whole number from 1 to 20.');
       return;
     }
     const next = {
@@ -717,10 +733,11 @@ function AdminDashboard() {
       dayOfWeek: Math.max(0, Math.min(6, Math.trunc(Number(doctorAvailAddRule.dayOfWeek)) || 0)),
       startTime: s,
       endTime: e,
-      slotMinutes: Math.max(5, Math.min(180, Math.trunc(Number(doctorAvailAddRule.slotMinutes || 30) || 30))),
-      maxPerSlot: Math.max(1, Math.min(20, Math.trunc(Number(doctorAvailAddRule.maxPerSlot || 1) || 1))),
+      slotMinutes,
+      maxPerSlot,
       active: doctorAvailAddRule.active === false ? false : true
     };
+    setDoctorAvailError('');
     setDoctorAvailRules((prev) => [...(Array.isArray(prev) ? prev : []), next]);
   };
 

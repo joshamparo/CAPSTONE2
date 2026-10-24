@@ -1260,8 +1260,8 @@ router.put('/doctors/:doctorId/availability/rules', requireRole(['doctor_secreta
       const dayOfWeek = Math.trunc(Number(r?.dayOfWeek));
       const startTime = toTimeStr(r?.startTime);
       const endTime = toTimeStr(r?.endTime);
-      const slotMinutesRaw = Number(r?.slotMinutes || 30);
-      const maxPerSlotRaw = Number(r?.maxPerSlot || 1);
+      const slotMinutesRaw = Number(r?.slotMinutes);
+      const maxPerSlotRaw = Number(r?.maxPerSlot);
 
       if (!Number.isFinite(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
         return res.status(400).json({ message: `Rule ${line}: dayOfWeek must be 0 (Sun) to 6 (Sat).` });
@@ -1280,8 +1280,8 @@ router.put('/doctors/:doctorId/availability/rules', requireRole(['doctor_secreta
       if (!Number.isFinite(slotMinutesRaw) || !Number.isInteger(slotMinutesRaw) || slotMinutesRaw < 5 || slotMinutesRaw > 180) {
         return res.status(400).json({ message: `Rule ${line}: slotMinutes must be 5-180 minutes.` });
       }
-      if (!Number.isFinite(maxPerSlotRaw) || !Number.isInteger(maxPerSlotRaw) || maxPerSlotRaw < 1 || maxPerSlotRaw > 50) {
-        return res.status(400).json({ message: `Rule ${line}: maxPerSlot must be 1-50.` });
+      if (!Number.isFinite(maxPerSlotRaw) || !Number.isInteger(maxPerSlotRaw) || maxPerSlotRaw < 1 || maxPerSlotRaw > 20) {
+        return res.status(400).json({ message: `Rule ${line}: maxPerSlot must be 1-20.` });
       }
     }
 
@@ -1290,8 +1290,8 @@ router.put('/doctors/:doctorId/availability/rules', requireRole(['doctor_secreta
         const dayOfWeek = Math.trunc(Number(r?.dayOfWeek));
         const startTime = toTimeStr(r?.startTime);
         const endTime = toTimeStr(r?.endTime);
-        const slotMinutes = Math.max(5, Math.min(180, Math.trunc(Number(r?.slotMinutes || 30) || 30)));
-        const maxPerSlot = Math.max(1, Math.min(50, Math.trunc(Number(r?.maxPerSlot || 1) || 1)));
+        const slotMinutes = Math.trunc(Number(r?.slotMinutes));
+        const maxPerSlot = Math.trunc(Number(r?.maxPerSlot));
         const active = r?.active === undefined ? true : Boolean(r.active);
         if (!Number.isFinite(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) return null;
         if (!startTime || !endTime) return null;
