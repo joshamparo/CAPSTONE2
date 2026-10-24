@@ -383,7 +383,7 @@ function AppShell() {
           } 
         />
         <Route 
-          path="/nurse" 
+          path="/nurse/*"
           element={
             <ProtectedRoute allowedRoles={['nurse']}>
               <NurseDashboard />

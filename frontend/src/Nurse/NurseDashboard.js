@@ -1,6 +1,6 @@
 import MedicalFileLink from '../components/MedicalFileLink';
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { LogOut, User, Users, MessageSquare, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Settings, AlertCircle, AlertOctagon, Printer, Search, Eye, BedDouble, Bed, LayoutDashboard, Activity, FileText, Calendar, ClipboardList, ArrowLeft, Stethoscope, UserCheck, Clipboard, Check, FilePenLine, LogIn, Pill, FlaskConical, ScanLine, Package, Clock, CheckCircle, XCircle, X, Plus, Phone, AlertTriangle, Info, MapPin, Copy, Save, Megaphone, RotateCw, Send, Upload, Download, Menu, ShieldAlert, Mail, Briefcase, Key, Shield, EyeOff } from 'lucide-react';
 import './NurseDashboard.css';
 import '../Admin/AdminDashboard.css'; 
@@ -19,6 +19,29 @@ const RECEPTION_ROUTE_LABELS = {
 import StatusBadge from '../components/StatusBadge';
 import ModalShell from '../components/ModalShell';
 import { buildPatientWatchlist, getMedicationActionSuccessMessage } from './nurseClinicalUtils';
+
+const NURSE_VIEW_PATHS = Object.freeze({
+  overview: '/nurse',
+  patients: '/nurse/patients',
+  appointments: '/nurse/appointments',
+  vitals: '/nurse/vitals',
+  'er-intake': '/nurse/er-intake',
+  orders: '/nurse/orders-management',
+  'ward-management': '/nurse/wards',
+  inpatients: '/nurse/inpatients',
+  tasks: '/nurse/tasks',
+  calendar: '/nurse/calendar',
+  shifts: '/nurse/shifts',
+  schedules: '/nurse/schedules',
+  activity: '/nurse/activity',
+  profile: '/nurse/profile'
+});
+
+const NURSE_PATH_VIEWS = Object.freeze(
+  Object.fromEntries(Object.entries(NURSE_VIEW_PATHS).map(([viewName, pathname]) => [pathname, viewName]))
+);
+
+const nurseViewFromPath = (pathname) => NURSE_PATH_VIEWS[String(pathname || '').replace(/\/+$/, '') || '/nurse'] || 'overview';
 
 const normalizePhilhealthPin = (value) => String(value || '').replace(/\D/g, '').slice(0, 12);
 const formatPhilhealthPin = (value) => {
@@ -43,8 +66,21 @@ const IMAGING_SERVICES = ["Standard 12-Lead ECG", "Stress Test", "Holter Monitor
 
 function NurseDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [backendHealth, setBackendHealth] = useState({ checked: false, ok: true, error: '' });
-  const [view, setView] = useState('overview');
+  const [view, setViewState] = useState(() => nurseViewFromPath(location.pathname));
+  const setView = useCallback((nextView) => {
+    const resolvedView = typeof nextView === 'function' ? nextView(view) : nextView;
+    const safeView = NURSE_VIEW_PATHS[resolvedView] ? resolvedView : 'overview';
+    setViewState(safeView);
+    const targetPath = NURSE_VIEW_PATHS[safeView];
+    if (location.pathname !== targetPath) navigate(targetPath);
+  }, [location.pathname, navigate, view]);
+
+  useEffect(() => {
+    const routeView = nurseViewFromPath(location.pathname);
+    setViewState((currentView) => currentView === routeView ? currentView : routeView);
+  }, [location.pathname]);
   const [activityPage, setActivityPage] = useState(1);
   const [bedSearch, setBedSearch] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 1024);
