@@ -67,6 +67,27 @@ test('schema bootstrap prefers the Railway-reachable pooled database URL', () =>
   assert.ok(schemaUrl >= 0 && pooledUrl > schemaUrl && directUrl > pooledUrl);
 });
 
+test('Railway root startup runs the backend prestart schema bootstrap', () => {
+  const rootPackage = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
+  assert.equal(rootPackage.scripts.start, 'npm --prefix capstone-backend start');
+});
+
+test('doctor availability schema is installed before consultation traffic', () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, '..', 'prisma', 'manual_migration_doctor_availability.sql'),
+    'utf8'
+  );
+  for (const table of [
+    'doctor_availability_rules',
+    'doctor_availability_exceptions',
+    'doctor_availability_date_windows',
+    'doctor_availability_day_offs'
+  ]) {
+    assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS public\\.${table}`, 'i'));
+  }
+  assert.equal(isSafeAutomaticMigration(migration), true);
+});
+
 test('appointment routes no longer invoke runtime schema setup', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'appointments.js'), 'utf8');
   assert.equal(source.split('ensureAppointmentsSchema()').length - 1, 1, 'schema setup should only remain as its function declaration');

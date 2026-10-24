@@ -72,66 +72,6 @@ async function enforceDoctorAvailability({ doctorId, dateKey, mode = 'onsite', r
         }
     } catch (_) {}
 
-    // Prisma tables (rules / day-offs / exceptions / date-windows)
-    try {
-        await prisma.$executeRawUnsafe(`
-          CREATE TABLE IF NOT EXISTS public.doctor_availability_rules (
-            id BIGSERIAL PRIMARY KEY,
-            doctor_id UUID NOT NULL REFERENCES public.doctors(id) ON DELETE CASCADE,
-            mode TEXT NOT NULL DEFAULT 'onsite',
-            day_of_week INT NOT NULL,
-            start_time TIME NOT NULL,
-            end_time TIME NOT NULL,
-            slot_minutes INT NOT NULL DEFAULT 30,
-            max_per_slot INT NOT NULL DEFAULT 1,
-            active BOOLEAN NOT NULL DEFAULT true,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-          );
-        `);
-        await prisma.$executeRawUnsafe(`
-          CREATE TABLE IF NOT EXISTS public.doctor_availability_exceptions (
-            id BIGSERIAL PRIMARY KEY,
-            doctor_id UUID NOT NULL REFERENCES public.doctors(id) ON DELETE CASCADE,
-            mode TEXT NOT NULL DEFAULT 'onsite',
-            date DATE NOT NULL,
-            start_time TIME NULL,
-            end_time TIME NULL,
-            kind TEXT NOT NULL DEFAULT 'block',
-            note TEXT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-          );
-        `);
-        await prisma.$executeRawUnsafe(`
-          CREATE TABLE IF NOT EXISTS public.doctor_availability_date_windows (
-            id BIGSERIAL PRIMARY KEY,
-            doctor_id UUID NOT NULL REFERENCES public.doctors(id) ON DELETE CASCADE,
-            mode TEXT NOT NULL DEFAULT 'onsite',
-            date DATE NOT NULL,
-            start_time TIME NOT NULL,
-            end_time TIME NOT NULL,
-            slot_minutes INT NOT NULL DEFAULT 30,
-            max_per_slot INT NOT NULL DEFAULT 1,
-            active BOOLEAN NOT NULL DEFAULT true,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-          );
-        `);
-        await prisma.$executeRawUnsafe(`
-          CREATE TABLE IF NOT EXISTS public.doctor_availability_day_offs (
-            id BIGSERIAL PRIMARY KEY,
-            doctor_id UUID NOT NULL REFERENCES public.doctors(id) ON DELETE CASCADE,
-            mode TEXT NOT NULL DEFAULT 'onsite',
-            day_of_week INT NOT NULL,
-            active BOOLEAN NOT NULL DEFAULT true,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            UNIQUE (doctor_id, mode, day_of_week)
-          );
-        `);
-    } catch (_) {}
-
     const toMin = (v) => {
         const raw = String(v || '').trim();
         const m = raw.match(/^(\d{1,2}):(\d{2})/);
@@ -1610,6 +1550,7 @@ router.post('/er-registration', requireRole(['admin', 'nurse']), async (req, res
 });
 
 router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempotency('walk-in-intake'), async (req, res) => {
+    let failureStage = 'validation';
     try {
         // Schema is installed by the prestart bootstrap. Keep request handling
         // focused on the intake itself; DDL here previously made the first
@@ -1800,6 +1741,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
         // records routing, triage, coverage details and any requested orders;
         // billing is created later from services actually rendered.
         const syncHmoInsideCoreTransaction = false;
+        failureStage = 'core_transaction';
         const result = await prisma.$transaction(async (tx) => {
             let patient = null;
 
@@ -1893,7 +1835,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
                     const selectedSpec = String(payload.selectedSpecialization || '').trim();
 
                     const specDoctorIds = selectedSpec
-                      ? (await prisma.doctors.findMany({
+                      ? (await tx.doctors.findMany({
                             where: { specialization: { equals: selectedSpec, mode: 'insensitive' } },
                             select: { id: true }
                         }).catch(() => []) || []).map((d) => String(d?.id || '')).filter(Boolean)
@@ -1904,7 +1846,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
                             ? [doctorSelection.doctorUuid]
                             : specDoctorIds;
                         let anyAvailable = false;
-                        let slotMaxPerSlot = 1;
+                        const availabilityByDoctor = new Map();
                         for (const dId of doctorsToCheck) {
                             const enforceRes = await enforceDoctorAvailability({
                                 doctorId: dId,
@@ -1912,12 +1854,9 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
                                 mode: 'onsite',
                                 requestedMin
                             });
+                            availabilityByDoctor.set(dId, enforceRes);
                             if (!enforceRes?.blocked) {
                                 anyAvailable = true;
-                                if (enforceRes?.rule?.maxPerSlot && Number.isFinite(Number(enforceRes.rule.maxPerSlot))) {
-                                    slotMaxPerSlot = Math.max(1, Math.min(20, Math.trunc(Number(enforceRes.rule.maxPerSlot))));
-                                }
-                                break;
                             }
                         }
                         if (!anyAvailable) {
@@ -1957,12 +1896,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
                         }
                         let totalRemainingCapacity = 0;
                         for (const dId of doctorsToCheck) {
-                            const enforceRes = await enforceDoctorAvailability({
-                                doctorId: dId,
-                                dateKey,
-                                mode: 'onsite',
-                                requestedMin
-                            }).catch(() => null);
+                            const enforceRes = availabilityByDoctor.get(dId);
                             if (enforceRes?.blocked) continue;
                             const maxPerSlot = (enforceRes?.rule?.maxPerSlot && Number.isFinite(Number(enforceRes.rule.maxPerSlot)))
                                 ? Math.max(1, Math.min(20, Math.trunc(Number(enforceRes.rule.maxPerSlot))))
@@ -2846,6 +2780,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
         // GUARANTEES: HMO claim row exists if patient had HMO + status approved/awaiting
         // Even if layer1 syncHmo failed silently (old bugs/crashes/.catch(()=>null)), this runs directly with fresh prisma
         // after commit, using an invoice-scoped advisory lock so duplicates never happen.
+        failureStage = 'post_commit_hmo_sync';
         const hasHmoCoverage = Boolean(payload.hasHmo);
         const hasHmoClaim = hasHmoCoverage && !deferErBilling;
         let hmoSync = deferErBilling && hasHmoCoverage
@@ -2921,6 +2856,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
             hmoSync = { state: 'pending', label: 'Sync pending', invoiceId: result?.linkedInvoiceId || result?.hmoSummary?.invoice_id || null };
         }
 
+        failureStage = 'response';
         let emailSent = false;
         let emailQueued = false;
         if (routeMeta.type === 'onsite_consult') {
@@ -2964,8 +2900,10 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
         const reference = crypto.randomUUID().slice(0, 8);
         console.error('[Walk-in intake] Failed', {
             reference,
+            stage: failureStage,
             code: String(err?.code || 'UNCLASSIFIED'),
             name: String(err?.name || 'Error'),
+            message: String(err?.message || 'Unknown error').slice(0, 500),
             model: String(err?.meta?.modelName || ''),
             target: Array.isArray(err?.meta?.target) ? err.meta.target.map(String) : String(err?.meta?.target || '')
         });

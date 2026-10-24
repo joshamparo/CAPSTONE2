@@ -20,12 +20,32 @@ test('walk-in intake does not run schema DDL during a patient request', () => {
   assert.doesNotMatch(beforePayload, /ensureBillingTablesExist/i);
 });
 
+test('consultation availability checks do not run schema DDL or repeat per doctor', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'patients.js'), 'utf8');
+  const start = source.indexOf('async function enforceDoctorAvailability');
+  const end = source.indexOf('router.use(requireRole', start);
+  const availability = source.slice(start, end);
+  assert.doesNotMatch(availability, /\b(?:CREATE|ALTER)\s+(?:TABLE|INDEX)\b/i);
+
+  const handler = walkInHandlerSource();
+  assert.match(handler, /const availabilityByDoctor = new Map\(\)/);
+  assert.match(handler, /availabilityByDoctor\.set\(dId, enforceRes\)/);
+  assert.match(handler, /availabilityByDoctor\.get\(dId\)/);
+  assert.match(handler, /await tx\.doctors\.findMany/);
+});
+
+test('walk-in failures log their internal stage and safe diagnostic message', () => {
+  const handler = walkInHandlerSource();
+  assert.match(handler, /stage: failureStage/);
+  assert.match(handler, /message: String\(err\?\.message \|\| 'Unknown error'\)\.slice\(0, 500\)/);
+});
+
 test('walk-in failures are traceable without exposing database errors', () => {
   const handler = walkInHandlerSource();
   assert.match(handler, /crypto\.randomUUID\(\)\.slice\(0, 8\)/);
   assert.match(handler, /\[Walk-in intake\] Failed/);
   assert.match(handler, /Unable to process walk-in intake\. Reference:/);
-  assert.doesNotMatch(handler, /message:\s*String\(err\?\.message/);
+  assert.doesNotMatch(handler, /res\.status\([^)]*\)\.json\(\{[^}]*err\?\.message/);
 });
 
 test('walk-in intake does not scan historical invoices or wait for email delivery', () => {
