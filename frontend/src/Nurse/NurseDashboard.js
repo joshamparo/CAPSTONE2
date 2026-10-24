@@ -798,6 +798,8 @@ function NurseDashboard() {
     doctorId: "",
     doctorName: "",
     selectedSpecialization: "",
+    reservedDoctorId: "",
+    reservedDoctorName: "",
     consultTiming: "same_day",
     preferredDate: "",
     preferredTime: "",
@@ -1029,11 +1031,15 @@ function NurseDashboard() {
           next.consultTiming = 'future_schedule';
           next.preferredDate = '';
           next.preferredTime = '';
+          next.reservedDoctorId = '';
+          next.reservedDoctorName = '';
         } else {
           next.selectedSpecialization = '';
           next.consultTiming = 'same_day';
           next.preferredDate = '';
           next.preferredTime = '';
+          next.reservedDoctorId = '';
+          next.reservedDoctorName = '';
         }
       }
       if (name === 'doctorId') {
@@ -1049,7 +1055,14 @@ function NurseDashboard() {
         if (String(next.routeType || '').trim() === 'onsite_consult') {
           next.preferredDate = '';
           next.preferredTime = '';
+          next.reservedDoctorId = '';
+          next.reservedDoctorName = '';
         }
+      }
+      if (name === 'preferredDate') {
+        next.preferredTime = '';
+        next.reservedDoctorId = '';
+        next.reservedDoctorName = '';
       }
       return next;
     });
@@ -1423,6 +1436,10 @@ function NurseDashboard() {
           setAddPatientError("Select the appointment time first.");
           return;
         }
+        if (!String(addPatientData.reservedDoctorId || '').trim()) {
+          setAddPatientError("Select a time slot backed by an available doctor.");
+          return;
+        }
         if (date < minAppointmentDateKey) {
           setAddPatientError("Appointment must be scheduled on a future date.");
           return;
@@ -1539,6 +1556,7 @@ function NurseDashboard() {
           consultTiming: addPatientData.consultTiming || null,
           preferredDate: addPatientData.preferredDate || null,
           preferredTime: addPatientData.preferredTime || null,
+          reservedDoctorId: addPatientData.reservedDoctorId || null,
           firstName: addPatientData.firstName,
           middleName: addPatientData.middleName,
           lastName: addPatientData.lastName,
@@ -1701,6 +1719,8 @@ function NurseDashboard() {
         consultTiming: "same_day",
         preferredDate: "",
         preferredTime: "",
+        reservedDoctorId: "",
+        reservedDoctorName: "",
         confirmNotDuplicate: false,
         firstName: "", middleName: "", lastName: "", dateOfBirth: "", gender: "Male",
         contactNumber: "", email: "", address: "", bloodType: "A+",
@@ -11290,13 +11310,19 @@ function NurseDashboard() {
                                     const renderGrid = (list) => (
                                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
                                         {list.map((time) => {
-                                          const selected = String(addPatientData.preferredTime || '').trim() === time;
+                                          const slot = appointmentSlots.find((item) => String(item?.time || '').trim() === time);
+                                          const selected = String(addPatientData.preferredTime || '').trim() === time && String(addPatientData.reservedDoctorId || '') === String(slot?.doctorId || '');
                                           return (
                                             <button
                                               key={time}
                                               type="button"
                                               className="btn-gray"
-                                              onClick={() => handleAddPatientChange({ target: { name: 'preferredTime', value: time } })}
+                                              onClick={() => setAddPatientData((current) => ({
+                                                ...current,
+                                                preferredTime: time,
+                                                reservedDoctorId: String(slot?.doctorId || ''),
+                                                reservedDoctorName: String(slot?.doctorName || '')
+                                              }))}
                                               style={{
                                                 fontWeight: 900,
                                                 padding: '10px 12px',
@@ -11306,6 +11332,7 @@ function NurseDashboard() {
                                               }}
                                             >
                                               {formatTime12(time)}
+                                              {slot?.doctorName ? <span style={{ display: 'block', marginTop: 2, fontSize: 10, color: '#64748b' }}>{slot.doctorName}</span> : null}
                                             </button>
                                           );
                                         })}

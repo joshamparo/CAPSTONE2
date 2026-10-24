@@ -926,16 +926,20 @@ router.get(
       if (Number.isNaN(dt.getTime())) return res.status(400).json({ message: 'Invalid date' });
       const dKey = dateKey(dt);
 
-      const doctors = await prisma.doctors
-        .findMany({
-          where: { specialization: { equals: specialization, mode: 'insensitive' } },
-          select: { id: true }
-        })
-        .catch(() => []);
-      const doctorIds = (Array.isArray(doctors) ? doctors : []).map((d) => String(d.id)).filter(Boolean);
+      const doctorIds = await getIntakeDoctorIds(prisma, specialization).catch(() => []);
+      const doctors = doctorIds.length
+        ? await prisma.doctors.findMany({
+            where: { id: { in: doctorIds } },
+            select: { id: true, first_name: true, last_name: true }
+          }).catch(() => [])
+        : [];
+      const doctorNames = new Map((Array.isArray(doctors) ? doctors : []).map((doctor) => [
+        String(doctor.id),
+        `Dr. ${String(doctor.first_name || '').trim()} ${String(doctor.last_name || '').trim()}`.trim()
+      ]));
 
-      // Nurse bookings remain unassigned until a linked secretary accepts
-      // them, but they must still reserve specialization-level capacity.
+      // Legacy pending rows without a reserved doctor still consume pooled
+      // specialization capacity. New bookings reserve one concrete doctor.
       const pendingRows = await prisma.appointments.findMany({
         where: {
           consultation_mode: 'onsite',
@@ -966,21 +970,35 @@ router.get(
           )
         );
 
-        for (const slots of slotResults) {
+        for (let index = 0; index < slotResults.length; index += 1) {
+          const doctorId = doctorIds[index];
+          const slots = slotResults[index];
           for (const s of Array.isArray(slots) ? slots : []) {
             const t = String(s?.time || '').trim();
             if (!t) continue;
-            byTime.set(t, (byTime.get(t) || 0) + Math.max(1, Number(s?.remainingCapacity || 1)));
+            const remainingCapacity = Math.max(1, Number(s?.remainingCapacity || 1));
+            const current = byTime.get(t) || { capacity: 0, doctors: [] };
+            current.capacity += remainingCapacity;
+            current.doctors.push({ doctorId, doctorName: doctorNames.get(doctorId) || 'Doctor', remainingCapacity });
+            byTime.set(t, current);
           }
         }
       }
 
       const slots = Array.from(byTime.entries())
-        .map(([time, capacity]) => {
-          const availableCapacity = Math.max(0, capacity - (pendingByTime.get(time) || 0));
-          return { time, availableDoctors: availableCapacity, availableCapacity };
+        .map(([time, slotInfo]) => {
+          let pendingToSkip = pendingByTime.get(time) || 0;
+          const candidates = [];
+          for (const doctor of slotInfo.doctors) {
+            const remainingCapacity = Math.max(0, doctor.remainingCapacity - pendingToSkip);
+            pendingToSkip = Math.max(0, pendingToSkip - doctor.remainingCapacity);
+            if (remainingCapacity > 0) candidates.push({ ...doctor, remainingCapacity });
+          }
+          const selectedDoctor = candidates[0] || null;
+          const availableCapacity = candidates.reduce((sum, doctor) => sum + doctor.remainingCapacity, 0);
+          return { time, doctorId: selectedDoctor?.doctorId || null, doctorName: selectedDoctor?.doctorName || null, availableDoctors: candidates.length, availableCapacity };
         })
-        .filter((slot) => slot.availableCapacity > 0)
+        .filter((slot) => slot.availableCapacity > 0 && slot.doctorId)
         .sort((a, b) => a.time.localeCompare(b.time));
 
       res.json({ specialization, mode, date: dKey, slots });
@@ -1083,6 +1101,9 @@ router.get(
       const dt = new Date(dateRaw);
       if (Number.isNaN(dt.getTime())) return res.status(400).json({ message: 'Invalid date' });
       const dKey = dateKey(dt);
+      const excludeAppointmentId = /^\d+$/.test(String(req.query.excludeAppointmentId || '').trim())
+        ? BigInt(String(req.query.excludeAppointmentId).trim())
+        : null;
       const blockedDates = await loadBlockedDates({ doctorId, from: dKey, to: dKey });
       const dayBlocked = (Array.isArray(blockedDates) ? blockedDates : []).some((b) => !b?.startTime && !b?.endTime);
       if (dayBlocked) {
@@ -1100,7 +1121,8 @@ router.get(
           where: {
             doctor_uuid: doctorId,
             consultation_mode: 'onsite',
-            appointment_date: dt
+            appointment_date: dt,
+            ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {})
           },
           select: { appointment_time: true, status: true }
         })

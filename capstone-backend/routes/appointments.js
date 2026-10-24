@@ -2202,8 +2202,10 @@ router.get('/unassigned', requireRole(['admin', 'doctor_secretary', 'staff']), a
 
         const where = {
             consultation_mode: 'onsite',
-            doctor_uuid: null,
-            assignment_status: 'PENDING_ASSIGNMENT'
+            assignment_status: 'PENDING_ASSIGNMENT',
+            ...(requesterRole === 'doctor_secretary'
+                ? { OR: [{ doctor_uuid: String(req.headers['x-linked-doctor-id'] || '').trim() }, { doctor_uuid: null }] }
+                : {})
         };
         if (date) {
             const d = new Date(date);
@@ -2414,7 +2416,6 @@ router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary'
                 const existingTime = formatHHmm(existing.appointment_time);
                 const doctorChanged = dataToUpdate.doctor_uuid && dataToUpdate.doctor_uuid !== existing.doctor_uuid;
                 const timeChanged = resolvedTime !== existingTime;
-
                 if (doctorChanged || timeChanged) {
                     const enforceRes = await enforceDoctorAvailabilityAll({
                         doctorId: doctorUuid,

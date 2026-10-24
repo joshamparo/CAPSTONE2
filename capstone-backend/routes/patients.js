@@ -1806,6 +1806,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
                 const selectedSpecialization = String(payload.selectedSpecialization || '').trim() || null;
                 const preferredDateRaw = String(payload.preferredDate || '').trim();
                 const preferredTimeRaw = String(payload.preferredTime || '').trim();
+                const reservedDoctorId = String(payload.reservedDoctorId || '').trim();
                 const consultServiceKey = selectedSpecialization ? normalizeServiceKey(`${selectedSpecialization}_consultation`) : 'general_consultation';
                 const consultServiceName = selectedSpecialization ? `${selectedSpecialization} Consultation` : 'General Consultation';
                 const appointmentDateValue =
@@ -1838,10 +1839,14 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
                       ? await getIntakeDoctorIds(tx, selectedSpec).catch(() => [])
                       : [];
 
-                    if (doctorSelection?.doctorUuid || specDoctorIds.length) {
-                        const doctorsToCheck = doctorSelection?.doctorUuid
-                            ? [doctorSelection.doctorUuid]
-                            : specDoctorIds;
+                    if (!reservedDoctorId || !specDoctorIds.includes(reservedDoctorId)) {
+                        const err = new Error('Selected time is no longer linked to an available doctor. Refresh the schedule and choose a slot again.');
+                        err.statusCode = 409;
+                        throw err;
+                    }
+
+                    if (reservedDoctorId) {
+                        const doctorsToCheck = [reservedDoctorId];
                         let anyAvailable = false;
                         const availabilityByDoctor = new Map();
                         for (const dId of doctorsToCheck) {
@@ -1986,7 +1991,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
                         consultation_mode: 'onsite',
                         patient_id: patient.id,
                         doctor_id: routeMeta.type === 'onsite_consult' ? selectedSpecialization : (doctorSelection?.doctorName || null),
-                        doctor_uuid: routeMeta.type === 'onsite_consult' ? null : (doctorSelection?.doctorUuid || null),
+                        doctor_uuid: routeMeta.type === 'onsite_consult' ? reservedDoctorId : (doctorSelection?.doctorUuid || null),
                         walkin_ticket: walkinTicket,
                         walkin_ticket_seq: walkinSeq,
                         walkin_ticket_date: walkinTicketDate,

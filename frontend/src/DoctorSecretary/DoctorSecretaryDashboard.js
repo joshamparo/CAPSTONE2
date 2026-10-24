@@ -1040,7 +1040,8 @@ export default function DoctorSecretaryDashboard() {
       const m = String(d.getMonth() + 1).padStart(2, '0');
       const day = String(d.getDate()).padStart(2, '0');
       const dKey = `${y}-${m}-${day}`;
-      const data = await fetchJson(`/api/doctors/${encodeURIComponent(docUuid)}/availability/slots?date=${encodeURIComponent(dKey)}&mode=onsite`, { apiBase: API_BASE, headers });
+      const appointmentId = String(assignTarget?.id || '').trim();
+      const data = await fetchJson(`/api/doctors/${encodeURIComponent(docUuid)}/availability/slots?date=${encodeURIComponent(dKey)}&mode=onsite${appointmentId ? `&excludeAppointmentId=${encodeURIComponent(appointmentId)}` : ''}`, { apiBase: API_BASE, headers });
       setAssignSlots(Array.isArray(data?.slots) ? data.slots : []);
     } catch (e) {
       setAssignSlots([]);
