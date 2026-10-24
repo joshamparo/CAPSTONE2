@@ -1,7 +1,7 @@
 import MedicalFileLink from '../components/MedicalFileLink';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, Upload, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronLeft, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff, Maximize2, Paperclip, Pin, MoreHorizontal, Download, Image as ImageIcon, File, Video as VideoIcon, ArrowDown, Bell, Copy, AtSign, Reply, Clock, Sparkles, Bed } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle2, FileText, LogOut, Search, Plus, Trash2, Printer, User, ClipboardCheck, X, Menu, RotateCw, MessageSquare, Send, Check, Ban, CornerUpRight, ChevronLeft, ChevronRight, Video, Activity, Stethoscope, HeartPulse, Thermometer, Droplets, Wind, AlertTriangle, BriefcaseMedical, Save, ChevronUp, ChevronDown, Mail, Briefcase, Phone, Key, Shield, Eye, EyeOff, Maximize2, Paperclip, Pin, MoreHorizontal, Download, Image as ImageIcon, File, Video as VideoIcon, ArrowDown, Bell, Copy, AtSign, Reply, Clock, Sparkles, Bed } from 'lucide-react';
 import './DoctorDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import EmbeddedJitsiMeeting from '../components/EmbeddedJitsiMeeting';
@@ -11,6 +11,18 @@ import { checkBackendHealth, fetchJson } from '../utils/api';
 import { printHtmlDocument } from '../utils/printDocument';
 import { supabase } from '../lib/supabaseClient';
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+const CLINICAL_SERVICE_OPTIONS = Object.freeze({
+  Laboratory: ['Complete Blood Count (CBC)', 'Urinalysis', 'Blood Chemistry', 'Fecalysis'],
+  Imaging: ['Chest X-Ray'],
+  ECG: ['Standard 12-Lead ECG', 'Stress Test', 'Holter Monitoring', 'ECG']
+});
+const CLINICAL_ROLE_LABELS = Object.freeze({
+  medtech: 'Medical Technologist',
+  radiographer: 'Radiographer',
+  ecg_operator: 'ECG Operator',
+  physical_therapist: 'Physical Therapist',
+  nurse: 'Nurse'
+});
 // Older trace call sites intentionally do nothing. Patient/room data must not
 // be sent to a developer workstation from a production browser.
 const reportVideoRoomDebug = () => {};
@@ -131,14 +143,11 @@ function DoctorDashboard() {
   const [printTarget, setPrintTarget] = useState(null);
   const [labResults, setLabResults] = useState([]);
   const [labResultsError, setLabResultsError] = useState('');
-  const [labForm, setLabForm] = useState({ type: 'Lab', title: '', url: '', resultDate: '' });
-  const [savingLab, setSavingLab] = useState(false);
   const [certificates, setCertificates] = useState([]);
   const [certificatesError, setCertificatesError] = useState('');
   const [certForm, setCertForm] = useState({ purpose: '', diagnosis: '', recommendations: '', validUntil: '' });
   const [savingCert, setSavingCert] = useState(false);
   const [printCertificateTarget, setPrintCertificateTarget] = useState(null);
-  const [labFile, setLabFile] = useState(null);
   const [toast, setToast] = useState(null);
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [videoMeetingUrl, setVideoMeetingUrl] = useState('');
@@ -1603,8 +1612,19 @@ function DoctorDashboard() {
     const k = String(kind || '').trim().toLowerCase();
     if (k === 'laboratory') return 'medtech';
     if (k === 'imaging') return 'radiographer';
+    if (k === 'ecg') return 'ecg_operator';
+    if (k === 'physical therapy') return 'physical_therapist';
     if (k === 'procedure') return 'nurse';
     return 'nurse';
+  };
+
+  const openClinicalOrder = () => {
+    if (!selectedPatient?._id) {
+      setToast({ type: 'error', message: 'Select a patient before creating a clinical order.' });
+      return;
+    }
+    setOrderForm({ kind: 'Laboratory', service: '', notes: '', priority: 'Routine', assignedRole: 'medtech' });
+    setOrderModalOpen(true);
   };
 
   const openNurseEndorsement = () => {
@@ -1790,7 +1810,7 @@ function DoctorDashboard() {
           service: orderForm.service,
           notes: orderForm.notes,
           priority: orderForm.priority,
-          assignedRole: orderForm.assignedRole || defaultAssignedRoleForKind(orderForm.kind),
+          assignedRole: defaultAssignedRoleForKind(orderForm.kind),
           assignedTo: null,
           orderedByName: doctorName,
           orderedByRole: 'Doctor'
@@ -2874,78 +2894,6 @@ function DoctorDashboard() {
     }, 50);
   };
 
-  const saveLabResult = async () => {
-    if (!selectedPatient?._id) return;
-    const title = String(labForm.title || '').trim();
-    const typedUrl = String(labForm.url || '').trim();
-    if (!userRole) {
-      setToast({ type: 'error', message: 'Session missing. Please login again.' });
-      return;
-    }
-    if (!title) {
-      setToast({ type: 'error', message: 'Title is required.' });
-      return;
-    }
-    if (!labFile && !typedUrl) {
-      setToast({ type: 'error', message: 'Upload a file or provide a URL.' });
-      return;
-    }
-
-    setSavingLab(true);
-    try {
-      let url = typedUrl;
-      if (labFile) {
-        const fd = new FormData();
-        fd.append('file', labFile);
-        fd.append('patientId', selectedPatient._id);
-        const upData = await fetchJson(`/api/lab-results/upload`, {
-          apiBase: API_BASE,
-          method: 'POST',
-          headers: { ...authHeaders },
-          body: fd
-        });
-        url = String(upData?.url || '').trim();
-        if (!url) {
-          setToast({ type: 'error', message: 'Upload failed.' });
-          return;
-        }
-      }
-
-      const data = await fetchJson(`/api/lab-results`, {
-        apiBase: API_BASE,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({
-          patientId: selectedPatient._id,
-          type: labForm.type,
-          title,
-          url,
-          resultDate: labForm.resultDate || null,
-          uploadedBy: doctorName
-        })
-      });
-      const st = String(data?.verificationStatus || data?.verification_status || '').trim().toLowerCase();
-      setLabForm({ type: 'Lab', title: '', url: '', resultDate: '' });
-      setLabFile(null);
-      await fetchLabResults(selectedPatient._id);
-      setToast({
-        type: st === 'rejected' ? 'error' : 'success',
-        message:
-          st === 'verified'
-            ? 'Result added and verified.'
-            : st === 'rejected'
-              ? 'Result added but rejected as invalid. Check Notifications for details.'
-              : st === 'flagged'
-                ? 'Result added but flagged for review. Check Notifications for details.'
-                : 'Result added. Verification is pending. Check Notifications for updates.'
-      });
-    } catch (e) {
-      setToast({ type: 'error', message: String(e?.message || 'Failed to add result.') });
-    } finally {
-      setSavingLab(false);
-    }
-  };
-
   const saveCertificate = async () => {
     const certificatePatientId = String(selectedPatient?._id || selectedPatient?.id || '').trim();
     if (!certificatePatientId) {
@@ -3148,41 +3096,47 @@ function DoctorDashboard() {
               value={orderForm.kind} 
               onChange={(e) => {
                 const kind = e.target.value;
-                setOrderForm(v => ({ ...v, kind, assignedRole: defaultAssignedRoleForKind(kind) }));
+                setOrderForm(v => ({ ...v, kind, service: '', assignedRole: defaultAssignedRoleForKind(kind) }));
               }}
             >
               <option value="Laboratory">Laboratory</option>
               <option value="Imaging">Imaging</option>
+              <option value="ECG">ECG / Cardiology</option>
+              <option value="Physical Therapy">Physical Therapy</option>
               <option value="Procedure">Procedure</option>
               <option value="Nursing Care">Nursing Care / Endorsement</option>
               <option value="Admission Request">Admission Request</option>
             </select>
           </div>
           <div className="doc-form-group">
-            <label>Assigned To</label>
-            <select
-              className="doc-select"
-              value={orderForm.assignedRole}
-              onChange={(e) => setOrderForm(v => ({ ...v, assignedRole: e.target.value }))}
-              disabled={['Admission Request', 'Transfer Request'].includes(orderForm.kind)}
-            >
-              <option value="nurse">Nurse</option>
-              <option value="medtech">Medtech</option>
-              <option value="radiographer">Radiographer</option>
-              <option value="ecg_operator">ECG Operator</option>
-              <option value="physical_therapist">Physical Therapist</option>
-              <option value="pharmacist">Pharmacist</option>
-            </select>
+            <label>Automatic Destination</label>
+            <div className="doc-input" aria-live="polite" style={{ display: 'flex', alignItems: 'center', background: '#f8fafc' }}>
+              {CLINICAL_ROLE_LABELS[defaultAssignedRoleForKind(orderForm.kind)] || 'Clinical Department'}
+            </div>
           </div>
           <div className="doc-form-group">
             <label>{orderForm.kind === 'Admission Request' ? 'Request' : 'Service / Test Name'}</label>
-            <input 
-              className="doc-input" 
-              placeholder="e.g. CBC, Chest X-ray" 
-              value={orderForm.service} 
-              onChange={(e) => setOrderForm(v => ({ ...v, service: e.target.value }))}
-              required
-            />
+            {CLINICAL_SERVICE_OPTIONS[orderForm.kind] ? (
+              <select
+                className="doc-select"
+                value={orderForm.service}
+                onChange={(e) => setOrderForm(v => ({ ...v, service: e.target.value }))}
+                required
+              >
+                <option value="">Select a service or test</option>
+                {CLINICAL_SERVICE_OPTIONS[orderForm.kind].map((service) => (
+                  <option key={service} value={service}>{service}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="doc-input"
+                placeholder="Describe the requested service"
+                value={orderForm.service}
+                onChange={(e) => setOrderForm(v => ({ ...v, service: e.target.value }))}
+                required
+              />
+            )}
           </div>
           <div className="doc-form-group">
             <label>Priority</label>
@@ -3406,7 +3360,7 @@ function DoctorDashboard() {
             </button>
             <button 
               className="doc-btn er-action-btn" 
-              onClick={() => setOrderModalOpen(true)}
+              onClick={openClinicalOrder}
             >
               <BriefcaseMedical size={16} /> Order Lab/Imaging
             </button>
@@ -4043,44 +3997,12 @@ function DoctorDashboard() {
         </div>
       </div>
       {!selectedPatient ? (
-        <div className="doc-empty">Select a patient to add lab or imaging results.</div>
+        <div className="doc-empty">Select a patient to view lab or imaging results.</div>
       ) : (
         <div className="doc-form">
           <div className="doc-muted">
-            Required: result type, title, and a valid PDF or image file (maximum 10 MB). Result date is optional.
+            Results are uploaded by the assigned clinical department. Doctors can review, interpret, sign, and release them here.
           </div>
-          <select className="doc-select" value={labForm.type} onChange={(e) => setLabForm((v) => ({ ...v, type: e.target.value }))}>
-            <option value="Lab">Lab</option>
-            <option value="Imaging">Imaging</option>
-          </select>
-          <input className="doc-input" placeholder="Title (e.g., CBC Result)" value={labForm.title} onChange={(e) => setLabForm((v) => ({ ...v, title: e.target.value }))} />
-          <div className="doc-upload-row">
-            <label className="doc-upload-btn">
-              <Upload size={16} />
-              Choose file
-              <input
-                type="file"
-                accept=".pdf,image/*"
-                onChange={(e) => {
-                  const f = e.target.files && e.target.files[0] ? e.target.files[0] : null;
-                  setLabFile(f);
-                }}
-                style={{ display: 'none' }}
-              />
-            </label>
-            <div className="doc-upload-name">{labFile ? labFile.name : 'No file selected'}</div>
-            {labFile && (
-              <button className="doc-btn" type="button" onClick={() => setLabFile(null)}>
-                <X size={16} />
-                Remove
-              </button>
-            )}
-          </div>
-          <input className="doc-input" placeholder="Or paste an existing clinic file URL (optional)" value={labForm.url} onChange={(e) => setLabForm((v) => ({ ...v, url: e.target.value }))} />
-          <input className="doc-input" type="date" value={labForm.resultDate} onChange={(e) => setLabForm((v) => ({ ...v, resultDate: e.target.value }))} />
-          <button className="doc-primary" type="button" onClick={saveLabResult} disabled={savingLab}>
-            Add Result
-          </button>
 
           <div className="doc-history">
             <div className="doc-history-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
@@ -4180,10 +4102,22 @@ function DoctorDashboard() {
         <div className="doc-empty">Select a patient to generate a medical certificate.</div>
       ) : (
         <div className="doc-form">
-          <input className="doc-input" placeholder="Purpose (required)" maxLength={200} value={certForm.purpose} onChange={(e) => setCertForm((v) => ({ ...v, purpose: e.target.value }))} />
-          <input className="doc-input" placeholder="Diagnosis / Findings (optional)" maxLength={2000} value={certForm.diagnosis} onChange={(e) => setCertForm((v) => ({ ...v, diagnosis: e.target.value }))} />
-          <input className="doc-input" placeholder="Recommendations (optional)" maxLength={2000} value={certForm.recommendations} onChange={(e) => setCertForm((v) => ({ ...v, recommendations: e.target.value }))} />
-          <input className="doc-input" type="date" aria-label="Valid Until" title="Valid Until" min={new Date(Date.now() + (8 * 60 * 60 * 1000)).toISOString().slice(0, 10)} value={certForm.validUntil} onChange={(e) => setCertForm((v) => ({ ...v, validUntil: e.target.value }))} />
+          <label className="doc-form-group">
+            <span>Purpose <span aria-hidden="true" style={{ color: '#dc2626' }}>*</span></span>
+            <input className="doc-input" required placeholder="e.g. Fit-to-work documentation" maxLength={200} value={certForm.purpose} onChange={(e) => setCertForm((v) => ({ ...v, purpose: e.target.value }))} />
+          </label>
+          <label className="doc-form-group">
+            <span>Diagnosis / Findings <span className="doc-muted">(optional)</span></span>
+            <textarea className="doc-textarea" placeholder="Clinical diagnosis or findings" maxLength={2000} value={certForm.diagnosis} onChange={(e) => setCertForm((v) => ({ ...v, diagnosis: e.target.value }))} />
+          </label>
+          <label className="doc-form-group">
+            <span>Recommendations <span className="doc-muted">(optional)</span></span>
+            <textarea className="doc-textarea" placeholder="Rest period, restrictions, or follow-up instructions" maxLength={2000} value={certForm.recommendations} onChange={(e) => setCertForm((v) => ({ ...v, recommendations: e.target.value }))} />
+          </label>
+          <label className="doc-form-group">
+            <span>Valid Until <span className="doc-muted">(optional)</span></span>
+            <input className="doc-input" type="date" min={new Date(Date.now() + (8 * 60 * 60 * 1000)).toISOString().slice(0, 10)} value={certForm.validUntil} onChange={(e) => setCertForm((v) => ({ ...v, validUntil: e.target.value }))} />
+          </label>
           <button className="doc-primary" type="button" onClick={saveCertificate} disabled={savingCert}>
             Create Certificate
           </button>
@@ -4207,6 +4141,10 @@ function DoctorDashboard() {
                     </div>
                   </div>
                   <div className="doc-history-sub">{c.purpose}</div>
+                  <div className="doc-muted">
+                    Issued {new Date(c.created_at || c.createdAt || Date.now()).toLocaleDateString()}
+                    {c.valid_until ? ` • Valid until ${new Date(c.valid_until).toLocaleDateString()}` : ''}
+                  </div>
                 </div>
               ))
             )}
@@ -5152,6 +5090,16 @@ function DoctorDashboard() {
                       <button className="doc-primary doc-soap-save-button" type="button" onClick={saveNote} disabled={savingNote}>
                         <Save size={16} />
                         {savingNote ? 'Saving…' : 'Save Note'}
+                      </button>
+                      <button
+                        className="doc-btn doc-soap-save-button"
+                        type="button"
+                        onClick={openClinicalOrder}
+                        disabled={savingNote}
+                        title="Send a lab, imaging, ECG, or therapy request to the correct clinical department"
+                      >
+                        <BriefcaseMedical size={16} />
+                        Order Clinical Service
                       </button>
                       <button
                         className="doc-btn doc-soap-save-button"

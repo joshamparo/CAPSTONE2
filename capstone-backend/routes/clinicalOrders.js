@@ -4,7 +4,7 @@ const { Prisma } = require('@prisma/client');
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { normalizeEmail, normalizeRole, parseLimit, parseOffset, parseDate } = require('../utils/normalize');
-const { resolveClinicalServicePricing } = require('../utils/clinicalServiceCatalog');
+const { resolveClinicalServicePricing, resolveClinicalServiceRouting } = require('../utils/clinicalServiceCatalog');
 const { recordLabOrderPayment, ensureBillingTablesExist, toMoney } = require('../utils/billingLedger');
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
 const { normalizeNurseDepartment } = require('../middleware/requireNurseDepartment');
@@ -651,7 +651,12 @@ router.post('/', requireIdempotency('clinical-order-create'), async (req, res) =
       return res.status(400).json({ message: 'Missing x-user-name header' });
     }
 
-    const roleNorm = normalizeRole(assignedRole);
+    const routedRole = resolveClinicalServiceRouting({ kind, service });
+    let roleNorm = normalizeRole(assignedRole);
+    // Doctors choose the clinical service, not the destination department. The
+    // server owns this mapping so a stale or tampered client cannot send CBC,
+    // X-ray, ECG, or therapy work to the wrong clinical queue.
+    if (actorFromHeaders.actorRole === 'doctor' && routedRole) roleNorm = routedRole;
     if (assignedRole && roleNorm && !ASSIGNABLE_ROLE_SET.has(roleNorm)) {
       return res.status(400).json({ message: 'Invalid assignedRole' });
     }
@@ -766,7 +771,7 @@ router.post('/', requireIdempotency('clinical-order-create'), async (req, res) =
            ${notes || null},
            ${orderedByNameFinal},
            ${orderedByRoleFinal},
-           ${assignedRole ? roleNorm : null},
+           ${roleNorm || null},
            ${assignedToFinal},
            ${scheduledAt ? new Date(scheduledAt) : null},
            now())
@@ -854,7 +859,7 @@ router.post('/', requireIdempotency('clinical-order-create'), async (req, res) =
       console.error('[clinical-orders] Unable to write create event:', eventError?.message || eventError);
     });
 
-    if (scheduledAt && assignedRole) {
+    if (scheduledAt && roleNorm) {
       await upsertScheduleForOrder({
         orderId: createdId,
         role: roleNorm,
@@ -909,7 +914,7 @@ router.post('/', requireIdempotency('clinical-order-create'), async (req, res) =
       id: String(createdId), patientId: patientUuid, patientName: patientName || null,
       kind: kind || null, service: service || null, priority: pr, status: st,
       notes: notes || null, orderedByName: orderedByNameFinal,
-      orderedByRole: orderedByRoleFinal, assignedRole: assignedRole ? roleNorm : null,
+      orderedByRole: orderedByRoleFinal, assignedRole: roleNorm || null,
       assignedTo: assignedToFinal
     }));
   } catch (err) {

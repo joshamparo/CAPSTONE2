@@ -19,9 +19,10 @@ test('doctor Lab and Imaging selector loads only authorized doctor patients', ()
   assert.doesNotMatch(fetchPatients, /const data = await fetchJson\(`\/api\/patients`/);
 });
 
-test('opening Lab and Imaging refreshes its patient selector', () => {
+test('opening Lab and Imaging refreshes its patient selector in review-only mode', () => {
   assert.match(dashboard, /if \(!userRole \|\| activeNav !== 'labs'\) return;\s*fetchPatients\(\)/);
-  assert.match(dashboard, /Required: result type, title, and a valid PDF or image file/);
+  assert.match(dashboard, /Results are uploaded by the assigned clinical department/);
+  assert.doesNotMatch(dashboard, /const saveLabResult\s*=/);
 });
 
 test('lab result upload and creation enforce signed doctor patient access', () => {

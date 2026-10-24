@@ -110,8 +110,23 @@ function resolveClinicalServicePricing({ kind, service } = {}) {
   };
 }
 
+function resolveClinicalServiceRouting({ kind, service } = {}) {
+  const normalizedService = normalizeCatalogKey(service);
+  const normalizedKind = normalizeCatalogKey(kind);
+  const catalogMatch = normalizedService ? catalogIndex.get(normalizedService) : null;
+  const category = catalogMatch?.category || categoryAliases[normalizedKind] || normalizedKind;
+
+  if (category === 'laboratory') return 'medtech';
+  if (category === 'radiology' || category === 'imaging') return 'radiographer';
+  if (category === 'cardiology' || category === 'ecg') return 'ecg_operator';
+  if (category === 'therapy' || category === 'physical therapy') return 'physical_therapist';
+  if (['procedure', 'nursing care', 'admission request', 'transfer request'].includes(normalizedKind)) return 'nurse';
+  return null;
+}
+
 module.exports = {
   CLINICAL_SERVICE_CATALOG,
   normalizeCatalogKey,
-  resolveClinicalServicePricing
+  resolveClinicalServicePricing,
+  resolveClinicalServiceRouting
 };
