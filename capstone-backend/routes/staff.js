@@ -265,20 +265,20 @@ async function getAvatarUrl(modelType, id) {
 // Helper to find document across collections
 async function findUserById(id) {
     try {
-        let user = await prisma.staff.findUnique({ where: { id } }).catch(() => null);
-        if (user) return { user, model: 'staff' };
-        
-        user = await prisma.nurses.findUnique({ where: { id } }).catch(() => null);
-        if (user) return { user, model: 'nurses' };
-        
-        user = await prisma.doctors.findUnique({ where: { id } }).catch(() => null);
-        if (user) return { user, model: 'doctors' };
-        
-        if (!isNaN(Number(id))) {
-            user = await prisma.accounts.findUnique({ where: { id: Number(id) } }).catch(() => null);
-            if (user) return { user, model: 'accounts' };
-        }
-        
+        // These collections are independent, so resolve them concurrently instead
+        // of making every account action wait for up to four database round trips.
+        const [staff, nurse, doctor, account] = await Promise.all([
+            prisma.staff.findUnique({ where: { id } }).catch(() => null),
+            prisma.nurses.findUnique({ where: { id } }).catch(() => null),
+            prisma.doctors.findUnique({ where: { id } }).catch(() => null),
+            !isNaN(Number(id))
+                ? prisma.accounts.findUnique({ where: { id: Number(id) } }).catch(() => null)
+                : Promise.resolve(null)
+        ]);
+        if (staff) return { user: staff, model: 'staff' };
+        if (nurse) return { user: nurse, model: 'nurses' };
+        if (doctor) return { user: doctor, model: 'doctors' };
+        if (account) return { user: account, model: 'accounts' };
         return null;
     } catch (e) {
         return null;
@@ -2795,19 +2795,7 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
             reset_password_expires: null,
             session_version: { increment: 1 }
         };
-        if (email) {
-            await prisma.$transaction([
-                prisma.staff.updateMany({ where: { email: { equals: email, mode: 'insensitive' } }, data: archiveData }),
-                prisma.nurses.updateMany({ where: { email: { equals: email, mode: 'insensitive' } }, data: archiveData }),
-                prisma.doctors.updateMany({ where: { email: { equals: email, mode: 'insensitive' } }, data: archiveData }),
-                prisma.accounts.updateMany({ where: { email: { equals: email, mode: 'insensitive' } }, data: archiveData })
-            ]);
-        } else {
-            const archiveWhere = result.model === 'accounts' ? { id: Number(id) } : { id };
-            await prisma[result.model].update({ where: archiveWhere, data: archiveData });
-        }
-
-        await prisma.activity_logs.create({
+        const auditEntry = prisma.activity_logs.create({
             data: {
                 actor_name: archivedBy,
                 role: 'Admin',
@@ -2816,6 +2804,21 @@ router.delete('/:id', requireRole(['admin']), async (req, res) => {
                 target: email || id
             }
         });
+        if (email) {
+            await prisma.$transaction([
+                prisma.staff.updateMany({ where: { email: { equals: email, mode: 'insensitive' } }, data: archiveData }),
+                prisma.nurses.updateMany({ where: { email: { equals: email, mode: 'insensitive' } }, data: archiveData }),
+                prisma.doctors.updateMany({ where: { email: { equals: email, mode: 'insensitive' } }, data: archiveData }),
+                prisma.accounts.updateMany({ where: { email: { equals: email, mode: 'insensitive' } }, data: archiveData }),
+                auditEntry
+            ]);
+        } else {
+            const archiveWhere = result.model === 'accounts' ? { id: Number(id) } : { id };
+            await prisma.$transaction([
+                prisma[result.model].update({ where: archiveWhere, data: archiveData }),
+                auditEntry
+            ]);
+        }
         router._staffListCache = null;
 
         res.json({ success: true, message: "Staff account deactivated. Historical records were preserved.", email: email || null });
@@ -2922,14 +2925,17 @@ router.delete('/:id/permanent', requireRole(['admin']), permanentDeleteRateLimit
             return res.status(400).json({ message: `Type "${requiredConfirmation}" exactly to permanently delete this account.` });
         }
 
-        const archivedMatches = [];
+        let archivedMatches = [];
         if (email) {
-            for (const model of ['staff', 'nurses', 'doctors', 'accounts']) {
-                const user = await prisma[model].findFirst({
+            const models = ['staff', 'nurses', 'doctors', 'accounts'];
+            const users = await Promise.all(models.map((model) =>
+                prisma[model].findFirst({
                     where: { email: { equals: email, mode: 'insensitive' }, is_active: false }
-                }).catch(() => null);
-                if (user) archivedMatches.push({ model, user });
-            }
+                }).catch(() => null)
+            ));
+            archivedMatches = users
+                .map((user, index) => user ? { model: models[index], user } : null)
+                .filter(Boolean);
             const canonical = selectCanonicalAccount(archivedMatches);
             if (!canonical.selected || canonical.conflicting) {
                 return res.status(409).json({ message: 'Conflicting archived account records must be resolved before permanent deletion.' });
@@ -2939,20 +2945,23 @@ router.delete('/:id/permanent', requireRole(['admin']), permanentDeleteRateLimit
         const actorEmail = normalizeEmail(req.auth?.email || '') || 'admin';
         const targetRole = normalizeRole(result.user.account_type || result.user.roles || (result.model === 'doctors' ? 'doctor' : result.model === 'nurses' ? 'nurse' : 'staff'));
 
-        await prisma.$transaction(async (tx) => {
-            if (email) {
-                const archivedEmailWhere = { email: { equals: email, mode: 'insensitive' }, is_active: false };
-                // Compatibility account rows are removed first. Clinical tables
-                // are never cascaded or modified by this operation.
-                await tx.accounts.deleteMany({ where: archivedEmailWhere });
-                await tx.staff.deleteMany({ where: archivedEmailWhere });
-                await tx.nurses.deleteMany({ where: archivedEmailWhere });
-                await tx.doctors.deleteMany({ where: archivedEmailWhere });
-            } else {
-                const deleteWhere = result.model === 'accounts' ? { id: Number(id) } : { id };
-                await tx[result.model].delete({ where: deleteWhere });
-            }
-            await tx.activity_logs.create({
+        const deleteOperations = [];
+        if (email) {
+            const archivedEmailWhere = { email: { equals: email, mode: 'insensitive' }, is_active: false };
+            // Compatibility account rows are removed first. Clinical tables
+            // are never cascaded or modified by this operation.
+            deleteOperations.push(
+                prisma.accounts.deleteMany({ where: archivedEmailWhere }),
+                prisma.staff.deleteMany({ where: archivedEmailWhere }),
+                prisma.nurses.deleteMany({ where: archivedEmailWhere }),
+                prisma.doctors.deleteMany({ where: archivedEmailWhere })
+            );
+        } else {
+            const deleteWhere = result.model === 'accounts' ? { id: Number(id) } : { id };
+            deleteOperations.push(prisma[result.model].delete({ where: deleteWhere }));
+        }
+        deleteOperations.push(
+            prisma.activity_logs.create({
                 data: {
                     actor_name: actorEmail,
                     role: 'Admin',
@@ -2960,8 +2969,9 @@ router.delete('/:id/permanent', requireRole(['admin']), permanentDeleteRateLimit
                     details: `Permanently deleted the deactivated ${targetRole || 'staff'} account for ${displayName}. Clinical and activity history was not deleted.`,
                     target: email || id
                 }
-            });
-        });
+            })
+        );
+        await prisma.$transaction(deleteOperations);
 
         router._staffListCache = null;
         return res.json({ success: true, message: 'Deactivated staff account permanently deleted. Historical records were preserved.' });

@@ -9020,7 +9020,7 @@ function AdminDashboard() {
           subtext={`${staffList.find((staff) => String(staff.id) === String(deleteConfirmation))?.firstName || ''} ${staffList.find((staff) => String(staff.id) === String(deleteConfirmation))?.lastName || ''}`.trim()}
           requiredText={`${staffList.find((staff) => String(staff.id) === String(deleteConfirmation))?.firstName || ''} ${staffList.find((staff) => String(staff.id) === String(deleteConfirmation))?.lastName || ''}`.trim() || staffList.find((staff) => String(staff.id) === String(deleteConfirmation))?.email || ''}
           cancelLabel="Cancel"
-          confirmLabel="Deactivate"
+          confirmLabel={deleteConfirmationLoading ? 'Deactivating...' : 'Deactivate'}
           confirmVariant="danger"
           confirmDisabled={deleteConfirmationLoading}
           cancelDisabled={deleteConfirmationLoading}
