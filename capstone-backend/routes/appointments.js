@@ -20,7 +20,7 @@ function authorizeNurseAppointment(req, res, next) {
         } catch (error) { sendError(res, error, 'Unable to verify appointment access.'); }
     });
 }
-const { newAppointmentRouting, canAssignOnsiteAppointment, doctorAppointmentScope } = require('../utils/appointmentRouting');
+const { newAppointmentRouting, canAssignOnsiteAppointment, doctorAppointmentScope, doctorDepartmentAppointmentScope } = require('../utils/appointmentRouting');
 const { createClient } = require('@supabase/supabase-js');
 const { ensureBillingTablesExist, toMoney } = require('../utils/billingLedger');
 const { sendEmail } = require('../utils/mailer');
@@ -1495,7 +1495,7 @@ router.get('/debug/video-apts', requireRole(['admin']), async (req, res) => {
 
 router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'cashier', 'staff', 'physical_therapist']), authorizeNurseAppointment, async (req, res) => {
     try {
-        const { date, start, end, take, skip, q, status, consultationMode, doctorUuid } = req.query;
+        const { date, start, end, take, skip, q, status, consultationMode, doctorUuid, scope } = req.query;
         let where = req.nurseAppointmentScope ? { AND: [req.nurseAppointmentScope] } : {};
 
         const role = String(req.headers['x-user-role'] || '').trim().toLowerCase();
@@ -1547,7 +1547,39 @@ router.get('/', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary', 'ca
         }
 
         if (role === 'doctor') {
-            const doctorScope = doctorAppointmentScope(req.auth?.id);
+            const requestedScope = String(scope || 'mine').trim().toLowerCase();
+            let doctorScope = doctorAppointmentScope(req.auth?.id);
+            if (requestedScope === 'department') {
+                const requestingDoctor = await prisma.doctors.findUnique({
+                    where: { id: String(req.auth?.id || '') },
+                    select: { id: true, specialization: true, department: true, is_active: true }
+                }).catch(() => null);
+                if (!requestingDoctor || requestingDoctor.is_active === false) {
+                    return res.status(403).json({ message: 'Active doctor profile required.' });
+                }
+                const specialization = String(requestingDoctor.specialization || '').trim();
+                const department = String(requestingDoctor.department || '').trim();
+                if (!specialization && !department) {
+                    return res.status(409).json({ message: 'Your doctor profile has no department or specialization configured.' });
+                }
+                const departmentDoctors = await prisma.doctors.findMany({
+                    where: {
+                        is_active: true,
+                        OR: [
+                            ...(specialization ? [
+                                { specialization: { equals: specialization, mode: 'insensitive' } },
+                                { department: { equals: specialization, mode: 'insensitive' } }
+                            ] : []),
+                            ...(department ? [
+                                { department: { equals: department, mode: 'insensitive' } },
+                                { specialization: { equals: department, mode: 'insensitive' } }
+                            ] : [])
+                        ]
+                    },
+                    select: { id: true }
+                });
+                doctorScope = doctorDepartmentAppointmentScope(departmentDoctors.map((doctor) => doctor.id));
+            }
             where.AND = [...(Array.isArray(where.AND) ? where.AND : []), ...doctorScope.AND];
         }
 

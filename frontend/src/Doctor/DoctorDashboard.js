@@ -982,8 +982,6 @@ function DoctorDashboard() {
   const inferVideoSpecialization = (reason) => {
     const raw = String(reason || '').trim();
     const lower = raw.toLowerCase();
-    // New mobile bookings put the department after the TRIAGE marker and keep
-    // the video/onsite flag in consultation_mode rather than the reason text.
     const triageSpecialty = raw.match(/^\s*\[triage[^\]]*\]\s*([^:|]+)\s*:/i)?.[1]?.trim();
     if (triageSpecialty) return normalizeSpecKey(triageSpecialty);
     if (!lower.includes('video consultation')) return '';
@@ -994,7 +992,7 @@ function DoctorDashboard() {
     const stopIdx = (() => {
       const i1 = tail.indexOf(':');
       const i2 = tail.indexOf('|');
-      const arr = [i1, i2].filter(n => n >= 0);
+      const arr = [i1, i2].filter((n) => n >= 0);
       return arr.length ? Math.min(...arr) : -1;
     })();
     const head = (stopIdx >= 0 ? tail.slice(0, stopIdx) : tail).trim();
@@ -1495,19 +1493,14 @@ function DoctorDashboard() {
     setLoadingAppointments(true);
     setAppointmentsError('');
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const startUpcoming = new Date(today);
-      startUpcoming.setDate(startUpcoming.getDate() - 7);
-      const endUpcoming = new Date(today);
-      endUpcoming.setDate(endUpcoming.getDate() + 365);
-      const startStr = formatDateParam(startUpcoming);
-      const endStr = formatDateParam(endUpcoming);
-
       const dateStr = formatDateParam(selectedDate);
-      const url = queueDateMode === 'date'
-        ? `${API_BASE}/api/appointments?date=${dateStr}`
-        : `${API_BASE}/api/appointments?start=${startStr}&end=${endStr}`;
+      const params = new URLSearchParams({
+        take: '500',
+        scope: queueScope === 'specialization' ? 'department' : 'mine'
+      });
+      if (queueDateMode === 'date') params.set('date', dateStr);
+      if (queueFilter === 'video') params.set('consultationMode', 'video');
+      const url = `${API_BASE}/api/appointments?${params.toString()}`;
 
       const data = await fetchJson(url, { headers: { ...authHeaders } });
       const rows = Array.isArray(data) ? data : [];
@@ -2304,14 +2297,7 @@ function DoctorDashboard() {
     if (activeNav !== 'dashboard') return;
     fetchPatients();
     fetchAppointments();
-  }, [activeNav, selectedDate, queueDateMode, userRole]);
-
-  useEffect(() => {
-    if (isERDoctor) return;
-    if (queueFilter === 'video' && queueScope !== 'specialization') {
-      setQueueScope('specialization');
-    }
-  }, [queueFilter, queueScope, isERDoctor]);
+  }, [activeNav, selectedDate, queueDateMode, queueFilter, queueScope, userRole]);
 
   useEffect(() => {
     if (!userRole) return;
@@ -3585,7 +3571,6 @@ function DoctorDashboard() {
             className={`doc-chip ${queueFilter === 'all' ? 'active' : ''}`}
             onClick={() => {
               setQueueFilter('all');
-              if (!isERDoctor) setQueueScope('mine');
             }}
           >
             All
@@ -3595,7 +3580,6 @@ function DoctorDashboard() {
             className={`doc-chip ${queueFilter === 'video' ? 'active' : ''}`}
             onClick={() => {
               setQueueFilter('video');
-              if (!isERDoctor) setQueueScope('specialization');
             }}
           >
             Video Consultations
@@ -3637,21 +3621,15 @@ function DoctorDashboard() {
                 return false;
               }
               const isVideo = isVideoConsult(apt);
-              const doctorSpecKey = normalizeSpecKey(currentUser?.specialization || '');
-              if (!isERDoctor && isVideo && doctorSpecKey) {
-                const inferredKey = inferVideoSpecialization(apt.reason);
-                if (inferredKey && inferredKey !== doctorSpecKey) return false;
-              }
               const target = normalizeAssignee(doctorInboxName || doctorName);
               const aptDoctor = normalizeAssignee(apt.doctor || apt.preferredDoctor);
               const doctorUuid = currentDoctorUuid;
               const aptUuid = String(apt.doctorUuid || apt.doctor_uuid || '').trim();
               if (doctorUuid && aptUuid && aptUuid === doctorUuid) return true;
 
-              if (!isERDoctor && queueScope === 'specialization' && isVideo) {
-                const inferredKey = inferVideoSpecialization(apt.reason);
-                if (doctorSpecKey && inferredKey && inferredKey === doctorSpecKey) return true;
-              }
+              // Department rows have already been authorized and scoped by the
+              // backend using the signed doctor's stored clinical profile.
+              if (!isERDoctor && queueScope === 'specialization') return true;
 
               // Special rule for Medicine/ER doctors: show triage walk-ins
               const reason = String(apt.reason || '').toLowerCase();

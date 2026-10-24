@@ -28,4 +28,21 @@ function doctorAppointmentScope(doctorId) {
   };
 }
 
-module.exports = { newAppointmentRouting, canAssignOnsiteAppointment, doctorAppointmentScope };
+function doctorDepartmentAppointmentScope(doctorIds) {
+  const ids = Array.from(new Set((Array.isArray(doctorIds) ? doctorIds : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean)));
+  return {
+    AND: [
+      { doctor_uuid: { in: ids } },
+      {
+        OR: [
+          { consultation_mode: 'video' },
+          { consultation_mode: 'onsite', assignment_status: 'ASSIGNED' }
+        ]
+      }
+    ]
+  };
+}
+
+module.exports = { newAppointmentRouting, canAssignOnsiteAppointment, doctorAppointmentScope, doctorDepartmentAppointmentScope };
