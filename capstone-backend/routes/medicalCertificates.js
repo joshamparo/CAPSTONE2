@@ -4,6 +4,7 @@ const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
 const { sendError } = require('../utils/httpErrors');
+const { normalizeMedicalCertificateInput } = require('../utils/medicalCertificateValidation');
 
 router.get('/', requireRole(['doctor', 'admin']), async (req, res) => {
   try {
@@ -35,10 +36,9 @@ router.get('/', requireRole(['doctor', 'admin']), async (req, res) => {
 
 router.post('/', requireRole(['doctor', 'admin']), async (req, res) => {
   try {
-    const { patientId, doctorName, purpose, diagnosis, recommendations, validUntil } = req.body;
-    if (!patientId || !doctorName || !purpose) {
-      return res.status(400).json({ message: 'patientId, doctorName, and purpose are required' });
-    }
+    const validation = normalizeMedicalCertificateInput(req.body);
+    if (!validation.ok) return res.status(400).json({ message: validation.message });
+    const { patientId, purpose, diagnosis, recommendations, validUntil } = validation.value;
     const access = await enforceDoctorPatientAccess(req, res, patientId);
     if (!access.allowed) return;
     const authenticatedDoctor = req.auth?.role === 'doctor'
@@ -49,22 +49,19 @@ router.post('/', requireRole(['doctor', 'admin']), async (req, res) => {
       : null;
     const actorName = authenticatedDoctor
       ? `${authenticatedDoctor.first_name || ''} ${authenticatedDoctor.last_name || ''}`.trim()
-      : String(doctorName || '').trim();
+      : String(req.body?.doctorName || req.auth?.name || '').trim();
     if (!actorName) return res.status(401).json({ message: 'Unable to resolve the authenticated doctor.' });
 
-    const rows = await prisma.$queryRaw`
-      INSERT INTO medical_certificates (patient_id, doctor_name, purpose, diagnosis, recommendations, valid_until)
-      VALUES (
-        ${patientId}::uuid,
-        ${actorName},
-        ${purpose},
-        ${diagnosis || null},
-        ${recommendations || null},
-        ${validUntil ? new Date(validUntil) : null}::date
-      )
-      RETURNING id, patient_id, doctor_name, purpose, diagnosis, recommendations, valid_until, created_at
-    `;
-    const created = Array.isArray(rows) ? rows[0] : rows;
+    const created = await prisma.medical_certificates.create({
+      data: {
+        patient_id: patientId,
+        doctor_name: actorName,
+        purpose,
+        diagnosis,
+        recommendations,
+        valid_until: validUntil ? new Date(`${validUntil}T00:00:00.000Z`) : null
+      }
+    });
 
     prisma.activity_logs.create({
       data: {
@@ -83,7 +80,7 @@ router.post('/', requireRole(['doctor', 'admin']), async (req, res) => {
       doctorName: created.doctor_name
     });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    sendError(res, err, 'Unable to create medical certificate.');
   }
 });
 

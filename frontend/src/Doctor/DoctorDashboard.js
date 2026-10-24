@@ -2947,7 +2947,11 @@ function DoctorDashboard() {
   };
 
   const saveCertificate = async () => {
-    if (!selectedPatient?._id) return;
+    const certificatePatientId = String(selectedPatient?._id || selectedPatient?.id || '').trim();
+    if (!certificatePatientId) {
+      setToast({ type: 'error', message: 'Select a patient first.' });
+      return;
+    }
     const purpose = String(certForm.purpose || '').trim();
     if (!userRole) {
       setToast({ type: 'error', message: 'Session missing. Please login again.' });
@@ -2955,6 +2959,19 @@ function DoctorDashboard() {
     }
     if (!purpose) {
       setToast({ type: 'error', message: 'Purpose is required.' });
+      return;
+    }
+    if (purpose.length > 200) {
+      setToast({ type: 'error', message: 'Purpose must be 200 characters or fewer.' });
+      return;
+    }
+    if (String(certForm.diagnosis || '').trim().length > 2000 || String(certForm.recommendations || '').trim().length > 2000) {
+      setToast({ type: 'error', message: 'Diagnosis and recommendations must each be 2000 characters or fewer.' });
+      return;
+    }
+    const todayKey = new Date(Date.now() + (8 * 60 * 60 * 1000)).toISOString().slice(0, 10);
+    if (certForm.validUntil && certForm.validUntil < todayKey) {
+      setToast({ type: 'error', message: 'Valid Until cannot be earlier than today.' });
       return;
     }
 
@@ -2965,16 +2982,15 @@ function DoctorDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
-          patientId: selectedPatient._id,
-          doctorName,
+          patientId: certificatePatientId,
           purpose,
-          diagnosis: certForm.diagnosis || null,
-          recommendations: certForm.recommendations || null,
+          diagnosis: String(certForm.diagnosis || '').trim() || null,
+          recommendations: String(certForm.recommendations || '').trim() || null,
           validUntil: certForm.validUntil || null
         })
       });
       setCertForm({ purpose: '', diagnosis: '', recommendations: '', validUntil: '' });
-      await fetchCertificates(selectedPatient._id);
+      await fetchCertificates(certificatePatientId);
       setToast({ type: 'success', message: 'Certificate created.' });
     } catch (e) {
       setToast({ type: 'error', message: String(e?.message || 'Failed to create certificate.') });
@@ -4164,10 +4180,10 @@ function DoctorDashboard() {
         <div className="doc-empty">Select a patient to generate a medical certificate.</div>
       ) : (
         <div className="doc-form">
-          <input className="doc-input" placeholder="Purpose (required)" value={certForm.purpose} onChange={(e) => setCertForm((v) => ({ ...v, purpose: e.target.value }))} />
-          <input className="doc-input" placeholder="Diagnosis / Findings (optional)" value={certForm.diagnosis} onChange={(e) => setCertForm((v) => ({ ...v, diagnosis: e.target.value }))} />
-          <input className="doc-input" placeholder="Recommendations (optional)" value={certForm.recommendations} onChange={(e) => setCertForm((v) => ({ ...v, recommendations: e.target.value }))} />
-          <input className="doc-input" type="date" value={certForm.validUntil} onChange={(e) => setCertForm((v) => ({ ...v, validUntil: e.target.value }))} />
+          <input className="doc-input" placeholder="Purpose (required)" maxLength={200} value={certForm.purpose} onChange={(e) => setCertForm((v) => ({ ...v, purpose: e.target.value }))} />
+          <input className="doc-input" placeholder="Diagnosis / Findings (optional)" maxLength={2000} value={certForm.diagnosis} onChange={(e) => setCertForm((v) => ({ ...v, diagnosis: e.target.value }))} />
+          <input className="doc-input" placeholder="Recommendations (optional)" maxLength={2000} value={certForm.recommendations} onChange={(e) => setCertForm((v) => ({ ...v, recommendations: e.target.value }))} />
+          <input className="doc-input" type="date" aria-label="Valid Until" title="Valid Until" min={new Date(Date.now() + (8 * 60 * 60 * 1000)).toISOString().slice(0, 10)} value={certForm.validUntil} onChange={(e) => setCertForm((v) => ({ ...v, validUntil: e.target.value }))} />
           <button className="doc-primary" type="button" onClick={saveCertificate} disabled={savingCert}>
             Create Certificate
           </button>
