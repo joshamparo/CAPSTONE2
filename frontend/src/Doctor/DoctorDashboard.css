@@ -1046,6 +1046,56 @@
   box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.12);
 }
 
+.doc-certificate-form {
+  width: 100%;
+  box-sizing: border-box;
+  gap: 16px;
+}
+
+.doc-certificate-form .doc-form-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  color: var(--text-dark);
+  font-weight: 800;
+}
+
+.doc-certificate-form .doc-form-group > span {
+  display: block;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.doc-certificate-form .doc-input,
+.doc-certificate-form .doc-textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.doc-certificate-form .doc-textarea {
+  min-height: 96px;
+  line-height: 1.5;
+}
+
+.doc-certificate-form > .doc-primary {
+  align-self: flex-start;
+  min-width: 190px;
+}
+
+@media (max-width: 520px) {
+  .doc-certificate-form {
+    padding: 14px;
+  }
+
+  .doc-certificate-form > .doc-primary {
+    width: 100%;
+  }
+}
+
 .doc-primary {
   border: none;
   background: var(--primary);

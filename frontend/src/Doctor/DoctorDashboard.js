@@ -4101,7 +4101,7 @@ function DoctorDashboard() {
       {!selectedPatient ? (
         <div className="doc-empty">Select a patient to generate a medical certificate.</div>
       ) : (
-        <div className="doc-form">
+        <div className="doc-form doc-certificate-form">
           <label className="doc-form-group">
             <span>Purpose <span aria-hidden="true" style={{ color: '#dc2626' }}>*</span></span>
             <input className="doc-input" required placeholder="e.g. Fit-to-work documentation" maxLength={200} value={certForm.purpose} onChange={(e) => setCertForm((v) => ({ ...v, purpose: e.target.value }))} />
