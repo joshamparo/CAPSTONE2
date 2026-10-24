@@ -55,20 +55,14 @@ const fmtDate = (v) => {
 const fmtTime = (v) => {
   if (!v) return '—';
   const s = String(v);
-  let d = null;
-  if (s.includes('T')) {
-    d = new Date(v);
-  } else {
-    // Handle HH:mm or HH:mm:ss
-    const parts = s.split(':');
-    if (parts.length >= 2) {
-      d = new Date();
-      d.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+  // A database TIME is clinic wall-clock time, even if Prisma serializes it
+  // as 1970-01-01T09:00:00.000Z. Do not add the browser's timezone offset.
+  const match = s.match(/(?:T|^)(\d{2}):(\d{2})/);
+  if (match) {
+    const d = new Date(2000, 0, 1, Number(match[1]), Number(match[2]), 0, 0);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
-  }
-  
-  if (d && !Number.isNaN(d.getTime())) {
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
   return s.slice(0, 5);
 };
@@ -1068,10 +1062,8 @@ export default function DoctorSecretaryDashboard() {
     if (rawTime) {
       const s = String(rawTime);
       if (s.includes('T')) {
-        const d = new Date(s);
-        if (!Number.isNaN(d.getTime())) {
-          initialTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-        }
+        const match = s.match(/T(\d{2}):(\d{2})/);
+        if (match) initialTime = `${match[1]}:${match[2]}`;
       } else if (s.toLowerCase().includes('am') || s.toLowerCase().includes('pm')) {
         // Handle "05:00 PM" format
         try {

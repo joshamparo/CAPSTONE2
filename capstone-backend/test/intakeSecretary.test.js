@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { hasIntakeSecretary } = require('../utils/intakeSecretary');
+const { getIntakeDoctorIds, hasIntakeSecretary } = require('../utils/intakeSecretary');
 
 test('intake requires a usable secretary linked to an active doctor in the requested specialization', async () => {
   let rows = [];
@@ -16,10 +16,15 @@ test('intake requires a usable secretary linked to an active doctor in the reque
     } }
   };
   assert.equal(await hasIntakeSecretary(db, 'Dental'), false);
-  rows = [{ status: 'Inactive' }, { status: ' disabled ' }, { status: 'Suspended' }];
+  rows = [
+    { linked_doctor_id: 'dental-doctor', status: 'Inactive' },
+    { linked_doctor_id: 'dental-doctor', status: ' disabled ' },
+    { linked_doctor_id: 'dental-doctor', status: 'Suspended' }
+  ];
   assert.equal(await hasIntakeSecretary(db, 'Dental'), false);
-  rows.push({ status: 'Active' });
+  rows.push({ linked_doctor_id: 'dental-doctor', status: 'Active' });
   assert.equal(await hasIntakeSecretary(db, 'Dental'), true);
+  assert.deepEqual(await getIntakeDoctorIds(db, 'Dental'), ['dental-doctor']);
 });
 
 test('intake cannot use an unrelated secretary when no active specialist exists', async () => {

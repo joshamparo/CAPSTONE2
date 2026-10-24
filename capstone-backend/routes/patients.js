@@ -16,7 +16,7 @@ const { sendError } = require('../utils/httpErrors');
 const { isCentralIntakeRequest } = require('../utils/nursePatientAccess');
 const { resolveNursePatientScope } = require('../utils/nurseScope');
 const { appendNurseClinicalRecord } = require('../utils/nurseClinicalRecords');
-const { hasIntakeSecretary } = require('../utils/intakeSecretary');
+const { getIntakeDoctorIds, hasIntakeSecretary } = require('../utils/intakeSecretary');
 const { Prisma } = require('@prisma/client');
 const { createPatientLabFileUrl } = require('../utils/labFileAccessToken');
 
@@ -1835,10 +1835,7 @@ router.post('/walk-in-intake', requireRole(['admin', 'nurse']), requireIdempoten
                     const selectedSpec = String(payload.selectedSpecialization || '').trim();
 
                     const specDoctorIds = selectedSpec
-                      ? (await tx.doctors.findMany({
-                            where: { specialization: { equals: selectedSpec, mode: 'insensitive' } },
-                            select: { id: true }
-                        }).catch(() => []) || []).map((d) => String(d?.id || '')).filter(Boolean)
+                      ? await getIntakeDoctorIds(tx, selectedSpec).catch(() => [])
                       : [];
 
                     if (doctorSelection?.doctorUuid || specDoctorIds.length) {

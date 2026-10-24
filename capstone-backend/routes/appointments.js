@@ -2238,7 +2238,9 @@ router.get('/unassigned', requireRole(['admin', 'doctor_secretary', 'staff']), a
             doctorUuid: a.doctor_uuid || null,
             patientId: a.patient_id || null,
             appointmentDate: a.appointment_date,
-            appointmentTime: a.appointment_time,
+            // PostgreSQL TIME is a wall-clock value, not an instant. Returning
+            // the Prisma Date object makes browsers add their UTC offset.
+            appointmentTime: formatHHmm(a.appointment_time) || null,
             consultationMode: a.consultation_mode,
             assignmentStatus: a.assignment_status || null,
             assignedAt: a.assigned_at ?? null

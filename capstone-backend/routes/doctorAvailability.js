@@ -6,6 +6,7 @@ const requireRole = require('../middleware/requireRole');
 const { sendError } = require('../utils/httpErrors');
 const { normalizeEmail, parseLimit, parseOffset, parseDate } = require('../utils/normalize');
 const { createClient } = require('@supabase/supabase-js');
+const { getIntakeDoctorIds } = require('../utils/intakeSecretary');
 
 const DOCTOR_SPECIALIZATION_MASTER_LIST = [
   'Surgery',
@@ -866,13 +867,8 @@ router.get(
       const diffDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
       if (diffDays < 0 || diffDays > 62) return res.status(400).json({ message: 'Date range too large' });
 
-      const doctors = await prisma.doctors
-        .findMany({
-          where: { specialization: { equals: specialization, mode: 'insensitive' } },
-          select: { id: true }
-        })
-        .catch(() => []);
-      const doctorIds = (Array.isArray(doctors) ? doctors : []).map((d) => String(d.id)).filter(Boolean);
+      // Only advertise capacity that an active secretary can actually assign.
+      const doctorIds = await getIntakeDoctorIds(prisma, specialization).catch(() => []);
 
       const merged = new Map();
       if (doctorIds.length) {

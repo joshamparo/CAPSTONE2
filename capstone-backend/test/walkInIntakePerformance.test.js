@@ -31,7 +31,7 @@ test('consultation availability checks do not run schema DDL or repeat per docto
   assert.match(handler, /const availabilityByDoctor = new Map\(\)/);
   assert.match(handler, /availabilityByDoctor\.set\(dId, enforceRes\)/);
   assert.match(handler, /availabilityByDoctor\.get\(dId\)/);
-  assert.match(handler, /await tx\.doctors\.findMany/);
+  assert.match(handler, /await getIntakeDoctorIds\(tx, selectedSpec\)/);
 });
 
 test('walk-in failures log their internal stage and safe diagnostic message', () => {
