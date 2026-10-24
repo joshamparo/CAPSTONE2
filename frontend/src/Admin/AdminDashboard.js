@@ -4925,6 +4925,8 @@ function AdminDashboard() {
                 <form onSubmit={handleAddTodo} className="todo-input-group mb-4" noValidate>
                   {newTodoError ? (
                     <div
+                      id="todo-input-error"
+                      role="alert"
                       className="text-xs font-medium"
                       style={{
                         marginBottom: '8px',
@@ -4960,7 +4962,7 @@ function AdminDashboard() {
                       aria-invalid={Boolean(newTodoError)}
                       aria-describedby={newTodoError ? "todo-input-error" : undefined}
                     />
-                    <button type="submit" className="todo-add-btn" title="Add task" disabled={!String(newTodo || "").trim()}>
+                    <button type="submit" className="todo-add-btn" title="Add task" aria-label="Add task">
                       <Plus size={18} />
                     </button>
                   </div>
