@@ -1467,10 +1467,15 @@ function DoctorDashboard() {
   }, [activeNav, recordScope, recordQuery, recordSkip, userRole, isERDoctor]);
 
   useEffect(() => {
-    if (activeNav === 'dashboard' && patientQuery.trim()) {
+    if ((activeNav === 'dashboard' || activeNav === 'labs') && patientQuery.trim()) {
       fetchPatients();
     }
   }, [activeNav, patientQuery]);
+
+  useEffect(() => {
+    if (!userRole || activeNav !== 'labs') return;
+    fetchPatients();
+  }, [activeNav, userRole, isERDoctor]);
 
   useEffect(() => {
     if (selectedRecord?.patient?.id) {
@@ -1529,8 +1534,14 @@ function DoctorDashboard() {
     setLoadingPatients(true);
     setPatientsError('');
     try {
-      const data = await fetchJson(`/api/patients`, { apiBase: API_BASE, headers: { ...authHeaders } });
-      const mapped = (Array.isArray(data) ? data : []).map((p) => ({
+      const endpoint = isERDoctor
+        ? '/api/patients?take=500'
+        : '/api/doctor/patients/patients?scope=specialization&status=all&take=50&skip=0';
+      const data = await fetchJson(endpoint, { apiBase: API_BASE, headers: { ...authHeaders } });
+      const sourceRows = isERDoctor
+        ? (Array.isArray(data) ? data : (Array.isArray(data?.rows) ? data.rows : []))
+        : (Array.isArray(data?.rows) ? data.rows.map((row) => row?.patient).filter(Boolean) : []);
+      const mapped = sourceRows.map((p) => ({
         ...p,
         _id: p.id,
         firstName: p.first_name,
@@ -4019,6 +4030,9 @@ function DoctorDashboard() {
         <div className="doc-empty">Select a patient to add lab or imaging results.</div>
       ) : (
         <div className="doc-form">
+          <div className="doc-muted">
+            Required: result type, title, and a valid PDF or image file (maximum 10 MB). Result date is optional.
+          </div>
           <select className="doc-select" value={labForm.type} onChange={(e) => setLabForm((v) => ({ ...v, type: e.target.value }))}>
             <option value="Lab">Lab</option>
             <option value="Imaging">Imaging</option>
