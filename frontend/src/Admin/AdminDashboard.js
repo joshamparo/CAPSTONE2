@@ -1161,6 +1161,7 @@ function AdminDashboard() {
 
   // Real-time Dashboard Data
   const [recentActivities, setRecentActivities] = useState([]);
+  const [dashboardAuditLogs, setDashboardAuditLogs] = useState(null);
   const dashboardRefreshInFlightRef = useRef(false);
   const patientListRequestSequenceRef = useRef(0);
   const patientListLoadedRef = useRef(false);
@@ -1182,7 +1183,10 @@ function AdminDashboard() {
               details: l.details || ''
             })) : [];
             setRecentActivities(mapped.slice(0, 8));
-        } catch (_) {}
+            setDashboardAuditLogs(mapped.slice(0, 8));
+        } catch (_) {
+            setDashboardAuditLogs([]);
+        }
 
         try {
             await fetchWardRegistry();
@@ -5051,11 +5055,13 @@ function AdminDashboard() {
                   </h3>
                 </div>
                 <div className="modern-list scrollable-list-y compact-list admin-dashboard-audit-list">
-                  {activityLogs.length === 0 ? (
+                  {dashboardAuditLogs === null ? (
+                    <div className="empty-state-sm">Loading audit logs...</div>
+                  ) : dashboardAuditLogs.length === 0 ? (
                     <div className="empty-state-sm">No audit logs.</div>
                   ) : (
-                    activityLogs.map((log) => (
-                      <div key={log._id} className="modern-list-item compact-item-row">
+                    dashboardAuditLogs.map((log) => (
+                      <div key={log.id || log._id} className="modern-list-item compact-item-row">
                         <div className="activity-icon-box">
                           <FileText size={14} />
                         </div>
