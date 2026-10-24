@@ -431,6 +431,7 @@ function AdminDashboard() {
   const [doctorAvailLoading, setDoctorAvailLoading] = useState(false);
   const [doctorAvailSaving, setDoctorAvailSaving] = useState(false);
   const [doctorAvailError, setDoctorAvailError] = useState('');
+  const [doctorAvailRuleError, setDoctorAvailRuleError] = useState('');
   const [doctorAvailSuccess, setDoctorAvailSuccess] = useState('');
   const doctorAvailSuccessRef = useRef(null);
   const doctorAvailCacheRef = useRef({});
@@ -705,25 +706,25 @@ function AdminDashboard() {
     const s = normalizeTimeInput(doctorAvailAddRule.startTime);
     const e = normalizeTimeInput(doctorAvailAddRule.endTime);
     if (!s || !e) {
-      setDoctorAvailError('Start and end times are required.');
+      setDoctorAvailRuleError('Start and end times are required.');
       return;
     }
     const sMin = parseInt(s.slice(0, 2), 10) * 60 + parseInt(s.slice(3, 5), 10);
     const eMin = parseInt(e.slice(0, 2), 10) * 60 + parseInt(e.slice(3, 5), 10);
     if (!Number.isFinite(sMin) || !Number.isFinite(eMin) || eMin <= sMin) {
-      setDoctorAvailError('End time must be after start time.');
+      setDoctorAvailRuleError('End time must be after start time.');
       return;
     }
     const slotMinutesRaw = String(doctorAvailAddRule.slotMinutes ?? '').trim();
     const slotMinutes = Number(slotMinutesRaw);
     if (!slotMinutesRaw || !Number.isInteger(slotMinutes) || slotMinutes < 5 || slotMinutes > 180) {
-      setDoctorAvailError('Slot Minutes must be a whole number from 5 to 180.');
+      setDoctorAvailRuleError('Slot Minutes must be a whole number from 5 to 180.');
       return;
     }
     const maxPerSlotRaw = String(doctorAvailAddRule.maxPerSlot ?? '').trim();
     const maxPerSlot = Number(maxPerSlotRaw);
     if (!maxPerSlotRaw || !Number.isInteger(maxPerSlot) || maxPerSlot < 1 || maxPerSlot > 20) {
-      setDoctorAvailError('Max Patients / Slot must be a whole number from 1 to 20.');
+      setDoctorAvailRuleError('Max Patients / Slot must be a whole number from 1 to 20.');
       return;
     }
     const next = {
@@ -737,7 +738,7 @@ function AdminDashboard() {
       maxPerSlot,
       active: doctorAvailAddRule.active === false ? false : true
     };
-    setDoctorAvailError('');
+    setDoctorAvailRuleError('');
     setDoctorAvailRules((prev) => [...(Array.isArray(prev) ? prev : []), next]);
   };
 
@@ -5753,16 +5754,22 @@ function AdminDashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 10, marginTop: 14, alignItems: 'end' }}>
                   <div className="input-group" style={{ margin: 0 }}>
                     <label>Day</label>
-                    <select className="white-input" value={doctorAvailAddRule.dayOfWeek} onChange={(e) => setDoctorAvailAddRule((value) => ({ ...value, dayOfWeek: Number(e.target.value) }))} disabled={doctorAvailSaving}>
+                    <select className="white-input" value={doctorAvailAddRule.dayOfWeek} onChange={(e) => { setDoctorAvailRuleError(''); setDoctorAvailAddRule((value) => ({ ...value, dayOfWeek: Number(e.target.value) })); }} disabled={doctorAvailSaving}>
                       {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, index) => <option key={day} value={index}>{day}</option>)}
                     </select>
                   </div>
-                  <div className="input-group" style={{ margin: 0 }}><label>Start</label><input className="white-input" type="time" value={doctorAvailAddRule.startTime} onChange={(e) => setDoctorAvailAddRule((value) => ({ ...value, startTime: e.target.value }))} disabled={doctorAvailSaving} /></div>
-                  <div className="input-group" style={{ margin: 0 }}><label>End</label><input className="white-input" type="time" value={doctorAvailAddRule.endTime} onChange={(e) => setDoctorAvailAddRule((value) => ({ ...value, endTime: e.target.value }))} disabled={doctorAvailSaving} /></div>
-                  <div className="input-group" style={{ margin: 0 }}><label>Slot Minutes</label><input className="white-input" type="number" min="5" max="180" step="1" value={doctorAvailAddRule.slotMinutes} onChange={(e) => setDoctorAvailAddRule((value) => ({ ...value, slotMinutes: e.target.value }))} disabled={doctorAvailSaving} /></div>
-                  <div className="input-group" style={{ margin: 0 }}><label>Max Patients / Slot</label><input className="white-input" type="number" min="1" max="20" step="1" value={doctorAvailAddRule.maxPerSlot} onChange={(e) => setDoctorAvailAddRule((value) => ({ ...value, maxPerSlot: e.target.value }))} disabled={doctorAvailSaving} /></div>
+                  <div className="input-group" style={{ margin: 0 }}><label>Start</label><input className="white-input" type="time" value={doctorAvailAddRule.startTime} onChange={(e) => { setDoctorAvailRuleError(''); setDoctorAvailAddRule((value) => ({ ...value, startTime: e.target.value })); }} disabled={doctorAvailSaving} aria-invalid={Boolean(doctorAvailRuleError)} /></div>
+                  <div className="input-group" style={{ margin: 0 }}><label>End</label><input className="white-input" type="time" value={doctorAvailAddRule.endTime} onChange={(e) => { setDoctorAvailRuleError(''); setDoctorAvailAddRule((value) => ({ ...value, endTime: e.target.value })); }} disabled={doctorAvailSaving} aria-invalid={Boolean(doctorAvailRuleError)} /></div>
+                  <div className="input-group" style={{ margin: 0 }}><label>Slot Minutes</label><input className="white-input" type="number" min="5" max="180" step="1" value={doctorAvailAddRule.slotMinutes} onChange={(e) => { setDoctorAvailRuleError(''); setDoctorAvailAddRule((value) => ({ ...value, slotMinutes: e.target.value })); }} disabled={doctorAvailSaving} aria-invalid={Boolean(doctorAvailRuleError)} /></div>
+                  <div className="input-group" style={{ margin: 0 }}><label>Max Patients / Slot</label><input className="white-input" type="number" min="1" max="20" step="1" value={doctorAvailAddRule.maxPerSlot} onChange={(e) => { setDoctorAvailRuleError(''); setDoctorAvailAddRule((value) => ({ ...value, maxPerSlot: e.target.value })); }} disabled={doctorAvailSaving} aria-invalid={Boolean(doctorAvailRuleError)} /></div>
                   <button type="button" className="btn-gray shadow-btn" onClick={addDoctorAvailabilityRule} disabled={doctorAvailSaving}><Plus size={16} /> Add Weekly Rule</button>
                 </div>
+
+                {doctorAvailRuleError ? (
+                  <div role="alert" style={{ marginTop: 10, background: '#fee2e2', color: '#991b1b', padding: '10px 12px', borderRadius: 10, border: '1px solid #fecaca', fontWeight: 800 }}>
+                    {doctorAvailRuleError}
+                  </div>
+                ) : null}
 
                 <div style={{ marginTop: 14, border: '1px solid #e2e8f0', borderRadius: 12, overflowX: 'auto' }}>
                   <div style={{ minWidth: 720 }}>

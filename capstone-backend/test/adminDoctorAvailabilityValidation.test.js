@@ -21,6 +21,11 @@ test('admin weekly clinic hours rejects missing and reversed times', () => {
   assert.doesNotMatch(addRule, /\|\| '09:00'|\|\| '17:00'/);
 });
 
+test('weekly-rule validation is displayed beside the fields', () => {
+  assert.match(dashboard, /doctorAvailRuleError \? \([\s\S]*<div role="alert"[\s\S]*{doctorAvailRuleError}/);
+  assert.match(addRule, /setDoctorAvailRuleError\('End time must be after start time\.'\)/);
+});
+
 test('admin weekly clinic hours rejects invalid slot and capacity values without clamping', () => {
   assert.match(addRule, /!Number\.isInteger\(slotMinutes\)[\s\S]*slotMinutes < 5[\s\S]*slotMinutes > 180/);
   assert.match(addRule, /!Number\.isInteger\(maxPerSlot\)[\s\S]*maxPerSlot < 1[\s\S]*maxPerSlot > 20/);
