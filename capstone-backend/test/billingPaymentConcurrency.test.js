@@ -33,3 +33,16 @@ test('same-key retries remain idempotent inside the invoice lock', () => {
   assert.match(handler, /paymentResult\.reused \? 200 : 201/);
   assert.match(handler, /if \(!paymentResult\.reused\) setImmediate/);
 });
+
+test('payment transaction avoids a duplicate financial recomputation and allows hosted database latency', () => {
+  const occurrences = handler.match(/computeInvoiceFinancials\(tx, invoiceId\)/g) || [];
+  assert.equal(occurrences.length, 1);
+  assert.match(handler, /remainingBalance\s*=\s*Math\.max\(0, lockedBalance - Number\(amountMoney\)\)/);
+  assert.match(handler, /\{ maxWait: 5000, timeout: 15000 \}/);
+});
+
+test('payment failures do not expose Prisma transaction details to the client', () => {
+  assert.match(handler, /err\?\.code === 'P2028'/);
+  assert.match(handler, /Payment processing timed out\. No duplicate charge was recorded\./);
+  assert.match(handler, /return sendError\(res, err, 'Payment processing timed out[^;]+, 503\);/);
+});

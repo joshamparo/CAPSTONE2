@@ -3333,10 +3333,21 @@ router.post('/payments', async (req, res) => {
         }
       });
 
-      await recomputeInvoiceStatus(tx, invoiceId);
+      // The locked balance already includes every committed payment, refund,
+      // PhilHealth deduction, and approved HMO amount. Re-running the complete
+      // financial query set here doubled the transaction duration and caused
+      // Railway/Supabase payments to exceed Prisma's default five-second limit.
+      const remainingBalance = Math.max(0, lockedBalance - Number(amountMoney));
+      await tx.billing_invoices.update({
+        where: { id: invoiceId },
+        data: {
+          status: remainingBalance <= 0.00001 ? 'Paid' : 'Ready',
+          updated_at: new Date()
+        }
+      });
 
       return { payment: p, reused: false };
-    });
+    }, { maxWait: 5000, timeout: 15000 });
     const created = paymentResult.payment;
 
     res.status(paymentResult.reused ? 200 : 201).json(serialize({
@@ -3380,7 +3391,10 @@ router.post('/payments', async (req, res) => {
       return res.status(500).json({ message: msg });
     }
     console.error('billing: POST /payments failed:', err);
-    res.status(500).json({ message: msg || 'Server error' });
+    if (err?.code === 'P2028' || /transaction already closed|expired transaction|transaction timeout/i.test(msg)) {
+      return sendError(res, err, 'Payment processing timed out. No duplicate charge was recorded. Please refresh and try again.', 503);
+    }
+    return sendError(res, err, 'Unable to record payment. Please refresh and try again.');
   }
 });
 
