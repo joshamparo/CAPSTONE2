@@ -3812,8 +3812,10 @@ function AdminDashboard() {
 
   const downloadCSV = (data, filename, reportLabel = 'Report') => {
       if (!data || data.length === 0) {
-          alert("No data available to export.");
-          return;
+          setModalType('error');
+          setSuccessMessage('No data is available to export.');
+          setShowSuccessModal(true);
+          return false;
       }
       const columns = Object.keys(data[0]);
       const headers = columns.map(escapeCsvCell).join(',');
@@ -3824,9 +3826,14 @@ function AdminDashboard() {
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      a.remove();
+      // A short delay lets Chromium/Edge finish reading the Blob before it is revoked.
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
       logActivity('Export', `Exported ${reportLabel}`, `Report: ${filename}`).catch(() => {});
+      return true;
   };
 
   const parseDateStart = (value) => {
@@ -3949,26 +3956,36 @@ function AdminDashboard() {
   };
 
   const exportIncidentReport = async (rowsOverride) => {
-      let source = Array.isArray(rowsOverride) ? rowsOverride : await fetchAllReportRows('/api/incidents', 500);
-      if (!Array.isArray(rowsOverride) && (reportsDateFrom || reportsDateTo)) {
-          const from = parseDateStart(reportsDateFrom);
-          const to = parseDateEnd(reportsDateTo);
-          source = source.filter((incident) => {
-              const date = new Date(incident.incident_date || incident.created_at || 0);
-              return !Number.isNaN(date.getTime()) && withinRange(date, from, to);
-          });
+      try {
+          let source = Array.isArray(rowsOverride) ? rowsOverride : await fetchAllReportRows('/api/incidents', 500);
+          if (!Array.isArray(rowsOverride) && (reportsDateFrom || reportsDateTo)) {
+              const from = parseDateStart(reportsDateFrom);
+              const to = parseDateEnd(reportsDateTo);
+              source = source.filter((incident) => {
+                  const date = new Date(incident.incident_date || incident.created_at || 0);
+                  return !Number.isNaN(date.getTime()) && withinRange(date, from, to);
+              });
+          }
+          const data = source.map((i) => ({
+              Date: i.date || (i.incident_date ? new Date(i.incident_date).toLocaleDateString() : ''),
+              Time: i.time || (i.incident_time ? new Date(i.incident_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
+              Type: i.type || i.incident_type || '',
+              Location: i.location || '',
+              Reporter: i.reporter || i.created_by_email || '',
+              Status: i.status || '',
+              Description: i.description || '',
+              ActionTaken: i.action_taken || i.actionTaken || ''
+          }));
+          if (downloadCSV(data, `incident_reports_${manilaDateKey()}.csv`, 'incident reports')) {
+              setModalType('success');
+              setSuccessMessage('Incident report CSV downloaded.');
+              setShowSuccessModal(true);
+          }
+      } catch (error) {
+          setModalType('error');
+          setSuccessMessage(String(error?.message || 'Unable to export incident reports.'));
+          setShowSuccessModal(true);
       }
-      const data = source.map((i) => ({
-          Date: i.date || (i.incident_date ? new Date(i.incident_date).toLocaleDateString() : ''),
-          Time: i.time || (i.incident_time ? new Date(i.incident_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
-          Type: i.type || i.incident_type || '',
-          Location: i.location || '',
-          Reporter: i.reporter || i.created_by_email || '',
-          Status: i.status || '',
-          Description: i.description || '',
-          ActionTaken: i.action_taken || i.actionTaken || ''
-      }));
-      downloadCSV(data, `incident_reports_${manilaDateKey()}.csv`, 'incident reports');
   };
 
   const exportSalesMonitoringReport = () => {

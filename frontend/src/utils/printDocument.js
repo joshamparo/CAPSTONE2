@@ -33,8 +33,8 @@ export const printHtmlDocument = async ({ html, title = 'Pascualinga Report', on
     frameDocument.open();
     frameDocument.write(String(html));
     frameDocument.close();
-    await new Promise((resolve) => window.setTimeout(resolve, 250));
-    await frameDocument.fonts?.ready;
+    // Keep print in the original click event. Waiting with setTimeout first can
+    // make browsers treat it as an unsolicited popup and silently ignore it.
     frameWindow.onafterprint = () => removeLater(frame);
     frameWindow.focus();
     frameWindow.print();
