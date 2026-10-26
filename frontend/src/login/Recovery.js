@@ -147,13 +147,16 @@ const Recovery = () => {
             {isSuccess ? (
               <div className="didnt-receive" style={{ marginTop: 10, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, fontSize: 13 }}>
                 <span>Didn't receive the email?</span>
-                {resendTimer > 0 ? (
-                  <span style={{ color: '#64748b', fontWeight: 600 }}>Resend in {resendTimer}s</span>
-                ) : (
-                  <button type="button" onClick={handleRecovery} disabled={isSubmitting} style={{ padding: 0, border: 0, background: 'transparent', color: '#ea580c', fontWeight: 800, cursor: isSubmitting ? 'wait' : 'pointer', textDecoration: 'underline' }}>
-                    Resend Email
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleRecovery}
+                  disabled={isSubmitting || resendTimer > 0}
+                  aria-describedby={resendTimer > 0 ? 'recovery-resend-countdown' : undefined}
+                  style={{ padding: 0, border: 0, background: 'transparent', color: resendTimer > 0 ? '#64748b' : '#ea580c', fontWeight: 800, cursor: isSubmitting || resendTimer > 0 ? 'not-allowed' : 'pointer', textDecoration: 'underline' }}
+                >
+                  Resend Email
+                </button>
+                {resendTimer > 0 ? <span id="recovery-resend-countdown" style={{ color: '#64748b', fontWeight: 600 }}>available in {resendTimer}s</span> : null}
               </div>
             ) : null}
           </div>

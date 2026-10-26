@@ -33,3 +33,14 @@ test('password reset rejects reuse of the current password before updating crede
     assert.ok(updateAt > compareAt, 'password reuse must be rejected before the credential update');
     assert.match(source, /status\(409\)\.json\(\{ message: "Cannot use the old password\." \}\)/);
 });
+
+test('scenario 11: a successful password reset atomically consumes its one-time link', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'staff.js'), 'utf8');
+    const resetRoute = source.slice(source.indexOf("router.post('/reset-password'"), source.indexOf("router.get('/version'"));
+
+    assert.match(resetRoute, /updateMany\(\{[\s\S]*reset_password_token:\s*lookup\.reset_password_token/);
+    assert.match(resetRoute, /reset_password_token:\s*null/);
+    assert.match(resetRoute, /reset_password_expires:\s*null/);
+    assert.match(resetRoute, /consumed\.count !== 1/);
+    assert.match(resetRoute, /reset link has already been used/);
+});

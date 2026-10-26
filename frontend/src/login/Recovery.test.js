@@ -16,3 +16,13 @@ test('recovery link is requested only after account eligibility succeeds', () =>
   expect(eligibilityAt).toBeGreaterThan(-1);
   expect(requestAt).toBeGreaterThan(eligibilityAt);
 });
+
+test('scenario 7: resend stays disabled and displays the cooldown', () => {
+  expect(source).toMatch(/disabled=\{isSubmitting \|\| resendTimer > 0\}/);
+  expect(source).toMatch(/available in \{resendTimer\}s/);
+});
+
+test('scenario 8: successful resend restarts the server-provided cooldown', () => {
+  expect(source).toMatch(/setResendTimer\(Math\.max\(1, Number\(data\?\.resendAfterSeconds\) \|\| 60\)\)/);
+  expect(source).toMatch(/onClick=\{handleRecovery\}/);
+});
