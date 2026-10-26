@@ -36,6 +36,13 @@ function safeAccountResponse(record) {
     return result;
 }
 
+function accountPhoneForResponse(value) {
+    const digits = String(value ?? '').replace(/\D/g, '');
+    if (digits.length === 10 && digits.startsWith('9')) return `0${digits}`;
+    if (digits.length === 12 && digits.startsWith('639')) return `+${digits}`;
+    return digits;
+}
+
 async function deliverStaffInvitation({ name, email, rawToken }) {
     try {
         await sendStaffInvitationEmail({
@@ -662,7 +669,21 @@ router.get('/by-email', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
 
         const userData = safeAccountResponse(user);
         const avatarUrl = await getAvatarUrl(modelType, user.id).catch(() => null);
-        res.json({ ...userData, id: user.id ? user.id.toString() : undefined, avatarUrl, account_type: user.account_type || user.roles || modelType });
+        await ensureUserSettingsSchema();
+        const preferenceRows = await prisma.$queryRawUnsafe(
+            `SELECT prefs FROM public.user_settings WHERE lower(user_email) = lower($1) AND user_role = $2 LIMIT 1`,
+            email,
+            normalizeRole(user.account_type || user.roles || modelType)
+        ).catch(() => []);
+        const prefs = preferenceRows?.[0]?.prefs && typeof preferenceRows[0].prefs === 'object' ? preferenceRows[0].prefs : {};
+        res.json({
+            ...userData,
+            id: user.id ? user.id.toString() : undefined,
+            avatarUrl,
+            department: user.department || prefs.profileDepartment || '',
+            phone: user.phone || accountPhoneForResponse(user.contact_number),
+            account_type: user.account_type || user.roles || modelType
+        });
     } catch (err) {
         res.status(500).json({ message: "Server Error" });
     }
@@ -751,14 +772,17 @@ router.post('/avatar', requireRole(STAFF_ACCOUNT_TYPES), upload.single('avatar')
 
         const publicUrl = sb.storage.from(bucket).getPublicUrl(path)?.data?.publicUrl || null;
         if (!publicUrl) return res.status(500).json({ message: 'Unable to generate avatar URL' });
+        // The storage object path is intentionally stable. Version the persisted
+        // URL so an upsert cannot be hidden by a stale browser or CDN response.
+        const versionedPublicUrl = `${publicUrl}${publicUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
 
         const updateWhere = modelType === 'accounts' ? { id: Number(target.id) } : { id: String(target.id) };
         await prisma[modelType].update({
             where: updateWhere,
-            data: { avatar_url: publicUrl }
+            data: { avatar_url: versionedPublicUrl }
         });
 
-        res.json({ avatarUrl: publicUrl });
+        res.json({ avatarUrl: versionedPublicUrl });
     } catch (err) {
         res.status(500).json({ message: "Server Error" });
     }
@@ -2722,6 +2746,20 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             data: updateData
         });
 
+        if (model === 'accounts' && department !== undefined) {
+            await ensureUserSettingsSchema();
+            const payload = JSON.stringify({ profileDepartment: String(department || '').trim() });
+            await prisma.$executeRawUnsafe(
+                `INSERT INTO public.user_settings (user_email, user_role, prefs, created_at, updated_at)
+                 VALUES ($1, $2, $3::jsonb, now(), now())
+                 ON CONFLICT (user_email, user_role)
+                 DO UPDATE SET prefs = user_settings.prefs || EXCLUDED.prefs, updated_at = now()`,
+                normalizeEmail(updatedUser.email || emailClean),
+                originalRole,
+                payload
+            );
+        }
+
         const auditFields = ['name', 'first_name', 'last_name', 'email', 'phone', 'contact_number', 'department', 'specialization', 'status'];
         const before = Object.fromEntries(auditFields.filter((key) => user[key] !== undefined).map((key) => [key, typeof user[key] === 'bigint' ? user[key].toString() : user[key]]));
         const after = Object.fromEntries(auditFields.filter((key) => updatedUser[key] !== undefined).map((key) => [key, typeof updatedUser[key] === 'bigint' ? updatedUser[key].toString() : updatedUser[key]]));
@@ -2745,6 +2783,8 @@ router.put('/:id', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
         });
         const resUser = { ...safeUpdatedUser, id: updatedUser.id ? updatedUser.id.toString() : undefined, sessionToken };
         if (resUser.contact_number) resUser.contact_number = resUser.contact_number.toString();
+        resUser.phone = updatedUser.phone || accountPhoneForResponse(updatedUser.contact_number);
+        resUser.department = updatedUser.department || String(department || '').trim();
         res.json(resUser);
     } catch (err) {
         console.error("Error in PUT /:id:", err);

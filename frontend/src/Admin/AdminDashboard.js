@@ -9,6 +9,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import { checkBackendHealth, fetchJson } from "../utils/api";
 import { formatActivityLog } from "../utils/activityLogDisplay";
 import { printHtmlDocument } from "../utils/printDocument";
+import { adminAvatarError, adminDepartmentError, adminPasswordCriteria, adminPasswordIsValid, adminPhoneError } from './adminProfileValidation';
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const WEB_ORIGIN = String(process.env.REACT_APP_WEB_ORIGIN || '').trim() || 'https://pascualinga.com';
@@ -1978,6 +1979,8 @@ function AdminDashboard() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordCriteria, setPasswordCriteria] = useState({
     length: false,
+    hasUppercase: false,
+    hasLowercase: false,
     hasNumber: false,
     hasSpecial: false
   });
@@ -2054,6 +2057,13 @@ function AdminDashboard() {
         return;
     }
 
+    const departmentError = adminDepartmentError(adminProfile.department);
+    const phoneError = adminPhoneError(adminProfile.phone);
+    if (departmentError || phoneError) {
+        setUpdateNotice(departmentError || phoneError);
+        return;
+    }
+
     // 2. Check for Validation Errors
     if (emailNotice || phoneNotice || nameNotice) {
         setUpdateNotice("Please fix the errors in the form before saving.");
@@ -2065,12 +2075,6 @@ function AdminDashboard() {
     const isChangingPassword = currentPassword || newPassword || confirmNewPassword;
 
     const localPw = String(newPassword || '');
-    const localPwCriteria = {
-      length: localPw.length >= 11,
-      hasNumber: /\d/.test(localPw),
-      hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(localPw)
-    };
-
     if (isChangingPassword) {
         // If trying to change password, ALL fields must be filled
         if (!currentPassword || !newPassword || !confirmNewPassword) {
@@ -2085,8 +2089,8 @@ function AdminDashboard() {
         }
 
         // Check Complexity (min 11 chars, 1 number, 1 special
-        if (!localPwCriteria.length || !localPwCriteria.hasNumber || !localPwCriteria.hasSpecial) {
-            setUpdateNotice("New password does not meet all complexity requirements (at least 11 characters, 1 number, 1 special character).");
+        if (!adminPasswordIsValid(localPw)) {
+            setUpdateNotice("New password must have at least 11 characters, uppercase, lowercase, number, and special character.");
             return;
         }
     }
@@ -2173,9 +2177,20 @@ function AdminDashboard() {
         setShowSuccessModal(true);
         
         // Update local storage
-        const updatedUser = { ...resolvedUser, email: data.email, phone: data.phone, avatarUrl: savedAvatarUrl || resolvedUser.avatarUrl || '' };
+        const updatedUser = {
+          ...resolvedUser,
+          email: data.email || adminProfile.email,
+          phone: data.phone || adminProfile.phone,
+          department: data.department || adminProfile.department,
+          avatarUrl: savedAvatarUrl || resolvedUser.avatarUrl || ''
+        };
         localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-        setAdminProfile((prev) => ({ ...prev, profilePicture: savedAvatarUrl || prev.profilePicture }));
+        setAdminProfile((prev) => ({
+          ...prev,
+          phone: data.phone || prev.phone,
+          department: data.department || prev.department,
+          profilePicture: savedAvatarUrl || prev.profilePicture
+        }));
         setPendingAdminAvatarFile(null);
 
         // Clear password fields
@@ -2197,6 +2212,13 @@ function AdminDashboard() {
   const handleAdminAvatarPick = (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
+    const validationMessage = adminAvatarError(f);
+    if (validationMessage) {
+      setUpdateNotice(validationMessage);
+      e.target.value = '';
+      return;
+    }
+    setUpdateNotice('');
     setPendingAdminAvatarFile(f);
     const reader = new FileReader();
     reader.onload = () => {
@@ -2215,7 +2237,12 @@ function AdminDashboard() {
         const d = await fetchJson(`/api/staff/by-email?email=${encodeURIComponent(email)}`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
         if (cancelled) return;
         const url = d?.avatarUrl || '';
-        setAdminProfile((prev) => ({ ...prev, profilePicture: url || prev.profilePicture }));
+        setAdminProfile((prev) => ({
+          ...prev,
+          phone: d?.phone || prev.phone,
+          department: d?.department || prev.department,
+          profilePicture: url || prev.profilePicture
+        }));
         try {
           const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
           if (currentUser && currentUser.email && String(currentUser.email).toLowerCase() === email.toLowerCase()) {
@@ -2238,6 +2265,17 @@ function AdminDashboard() {
 
   const handleAdminProfileChange = (e) => {
     const { name, value } = e.target;
+
+    if (name === 'department') {
+      const message = adminDepartmentError(value);
+      setNameNoticeField(message ? 'admin-department' : null);
+      setNameNotice(message);
+    }
+    if (name === 'phone') {
+      const message = adminPhoneError(value);
+      setPhoneNoticeField(message ? 'admin-phone' : null);
+      setPhoneNotice(message);
+    }
 
     // Strict Email Validation for Controlled Component
     if (name === "email") {
@@ -2292,11 +2330,7 @@ function AdminDashboard() {
     }));
 
     if (name === "newPassword") {
-      setPasswordCriteria({
-        length: value.length >= 11,
-        hasNumber: /\d/.test(value),
-        hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(value)
-      });
+      setPasswordCriteria(adminPasswordCriteria(value));
     }
   };
 
@@ -6036,7 +6070,7 @@ function AdminDashboard() {
               <input
                 ref={adminAvatarInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 style={{ display: 'none' }}
                 onChange={handleAdminAvatarPick}
               />
@@ -6108,7 +6142,6 @@ function AdminDashboard() {
                         name="phone"
                         value={adminProfile.phone}
                         onChange={handleAdminProfileChange}
-                        onKeyDown={(e) => handlePhoneInput(e, "admin-phone")}
                         className="profile-input input-with-icon-padding"
                         placeholder="+63 900 000 0000"
                       />
@@ -6174,6 +6207,14 @@ function AdminDashboard() {
                       <div className={`checklist-item ${passwordCriteria.length ? 'valid' : ''}`}>
                         {passwordCriteria.length ? <Check size={14} /> : <X size={14} />}
                         <span>At least 11 characters</span>
+                      </div>
+                      <div className={`checklist-item ${passwordCriteria.hasUppercase ? 'valid' : ''}`}>
+                        {passwordCriteria.hasUppercase ? <Check size={14} /> : <X size={14} />}
+                        <span>Contains an uppercase letter</span>
+                      </div>
+                      <div className={`checklist-item ${passwordCriteria.hasLowercase ? 'valid' : ''}`}>
+                        {passwordCriteria.hasLowercase ? <Check size={14} /> : <X size={14} />}
+                        <span>Contains a lowercase letter</span>
                       </div>
                       <div className={`checklist-item ${passwordCriteria.hasSpecial ? 'valid' : ''}`}>
                         {passwordCriteria.hasSpecial ? <Check size={14} /> : <X size={14} />}
