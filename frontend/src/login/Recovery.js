@@ -39,6 +39,19 @@ const Recovery = () => {
     const normalizedEmail = email.trim().toLowerCase();
     setIsSubmitting(true);
     try {
+      const eligibilityResponse = await fetch(`${API_BASE}/api/staff/recovery-email-allowed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail })
+      });
+      const eligibility = await readJson(eligibilityResponse);
+      if (!eligibilityResponse.ok || eligibility?.allowed !== true) {
+        if (eligibilityResponse.status === 404) {
+          throw new Error('Email address not found or not registered.');
+        }
+        throw new Error(String(eligibility?.message || 'This email address cannot be used for account recovery.'));
+      }
+
       const response = await fetch(`${API_BASE}/api/staff/request-password-reset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,6 +140,8 @@ const Recovery = () => {
                 placeholder="Enter your email" 
                 value={email}
                 onChange={handleEmailChange}
+                aria-invalid={Boolean(message && !isSuccess)}
+                required
               />
             </div>
             {isSuccess ? (

@@ -3134,6 +3134,11 @@ router.post('/reset-password', passwordResetRateLimit, async (req, res) => {
         })) {
             return res.status(400).json({ message: "This password reset link is invalid or has expired. Please request a new one." });
         }
+
+        const reusesCurrentPassword = Boolean(user.password) && await bcrypt.compare(newPassword, user.password);
+        if (reusesCurrentPassword) {
+            return res.status(409).json({ message: "Cannot use the old password." });
+        }
         
         // Hash new password
         const salt = await bcrypt.genSalt(10);

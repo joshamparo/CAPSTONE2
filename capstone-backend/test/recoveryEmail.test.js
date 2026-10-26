@@ -23,3 +23,13 @@ test('password recovery resend has server cooldown and anti-enumeration response
     assert.match(source, /If the account is eligible, a password reset email will arrive shortly/i);
     assert.doesNotMatch(source, /Recovery email could not be delivered\. Please try again later\./i);
 });
+
+test('password reset rejects reuse of the current password before updating credentials', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'staff.js'), 'utf8');
+    const compareAt = source.indexOf('await bcrypt.compare(newPassword, user.password)');
+    const updateAt = source.indexOf('const consumed = await prisma[modelType].updateMany', compareAt);
+
+    assert.ok(compareAt >= 0, 'reset flow must compare the new password with the stored hash');
+    assert.ok(updateAt > compareAt, 'password reuse must be rejected before the credential update');
+    assert.match(source, /status\(409\)\.json\(\{ message: "Cannot use the old password\." \}\)/);
+});
