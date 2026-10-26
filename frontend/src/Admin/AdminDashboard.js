@@ -7811,12 +7811,12 @@ function AdminDashboard() {
                           </div>
                           <div className="metric-card" style={{ padding: '14px 16px', border: '1px solid #f1f5f9', borderRadius: 12 }}>
                             <div style={{ color: '#64748b', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Radiology</div>
-                            <div style={{ marginTop: 8, fontSize: 20, fontWeight: 900, color: '#0f172a' }}>â‚± {salesMonitor?.billing?.by_source?.radiology ?? '0.00'}</div>
+                            <div style={{ marginTop: 8, fontSize: 20, fontWeight: 900, color: '#0f172a' }}>{'\u20B1'} {salesMonitor?.billing?.by_source?.radiology ?? '0.00'}</div>
                             <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>{salesMonitor?.billing?.by_source?.counts?.radiology ?? 0} payment(s)</div>
                           </div>
                           <div className="metric-card" style={{ padding: '14px 16px', border: '1px solid #f1f5f9', borderRadius: 12 }}>
                             <div style={{ color: '#64748b', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Pharmacy Billing</div>
-                            <div style={{ marginTop: 8, fontSize: 20, fontWeight: 900, color: '#0f172a' }}>â‚± {salesMonitor?.billing?.by_source?.pharmacy ?? '0.00'}</div>
+                            <div style={{ marginTop: 8, fontSize: 20, fontWeight: 900, color: '#0f172a' }}>{'\u20B1'} {salesMonitor?.billing?.by_source?.pharmacy ?? '0.00'}</div>
                             <div style={{ marginTop: 6, color: '#64748b', fontSize: 13 }}>{salesMonitor?.billing?.by_source?.counts?.pharmacy ?? 0} payment(s)</div>
                           </div>
                         </div>
