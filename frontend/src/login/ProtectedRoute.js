@@ -36,24 +36,33 @@ function safeNormalizeArray(value) {
   return [];
 }
 
-export function isSessionTokenExpired(token, nowMs = Date.now()) {
+export function readSessionTokenPayload(token) {
   try {
-    const encoded = String(token || '').trim().split('.')[0];
-    if (!encoded) return true;
+    const parts = String(token || '').trim().split('.');
+    const encoded = parts.length === 3 ? parts[1] : parts.length === 2 ? parts[0] : '';
+    if (!encoded) return null;
     const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
     const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
     const payload = JSON.parse(window.atob(padded));
-    return !Number.isFinite(Number(payload?.exp)) || Number(payload.exp) <= Math.floor(nowMs / 1000);
+    return payload && typeof payload === 'object' ? payload : null;
   } catch (_) {
-    return true;
+    return null;
   }
+}
+
+export function isSessionTokenExpired(token, nowMs = Date.now()) {
+  const payload = readSessionTokenPayload(token);
+  return !Number.isFinite(Number(payload?.exp)) || Number(payload.exp) <= Math.floor(nowMs / 1000);
 }
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const user = safeGetUser();
   const [sessionInvalid, setSessionInvalid] = useState(false);
-  const userRole = safeNormalizeRole(user?.role);
   const sessionToken = String(user?.sessionToken || '').trim();
+  const tokenRole = safeNormalizeRole(readSessionTokenPayload(sessionToken)?.role);
+  // Staff tokens carry the backend-authorized role. Supabase patient JWTs use
+  // the generic `authenticated` claim, so those retain the resolved patient role.
+  const userRole = tokenRole && tokenRole !== 'authenticated' ? tokenRole : safeNormalizeRole(user?.role);
   const tokenExpired = Boolean(sessionToken) && isSessionTokenExpired(sessionToken);
   const normalizedRoles = safeNormalizeArray(allowedRoles);
 
@@ -113,7 +122,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   }
 
   if (normalizedRoles.length > 0 && !normalizedRoles.includes(userRole)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return children;

@@ -5,6 +5,8 @@ process.env.SESSION_SECRET = 'automated-session-test-secret';
 
 const { createSessionToken, verifySessionToken } = require('../utils/sessionToken');
 const requireRole = require('../middleware/requireRole');
+const fs = require('node:fs');
+const path = require('node:path');
 requireRole.setSessionAccountVerifier(async (session) => session.email !== 'deactivated@example.com' && session.sv === 0);
 requireRole.setSecretaryDoctorResolver(async () => 'trusted-doctor-id');
 
@@ -53,4 +55,14 @@ test('role middleware rejects a revoked or deactivated account session', async (
   const result = await invoke(requireRole(['doctor']), token);
   assert.equal(result.nextCalled, false);
   assert.equal(result.response.statusCode, 401);
+});
+
+test('logout revokes only the signed-in account session', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'staff.js'), 'utf8');
+  const logoutRoute = source.slice(source.indexOf("router.post('/logout'"), source.indexOf('// HEARTBEAT Route'));
+
+  assert.match(logoutRoute, /const id = req\.auth\?\.id/);
+  assert.match(logoutRoute, /const accountType = req\.auth\?\.role/);
+  assert.doesNotMatch(logoutRoute, /const \{ id, accountType \} = req\.body/);
+  assert.match(logoutRoute, /session_version:\s*\{ increment: 1 \}/);
 });

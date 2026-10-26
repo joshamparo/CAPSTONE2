@@ -21,6 +21,7 @@ import EcgOperatorDashboard from './ClinicalStaff/EcgOperatorDashboard';
 import PhysicalTherapistDashboard from './ClinicalStaff/PhysicalTherapistDashboard';
 import Recovery from './login/Recovery';
 import ResetPassword from './login/ResetPassword';
+import Unauthorized from './login/Unauthorized';
 import Appointment from './appointment/Appointment';
 import AssistantWidget from './components/AssistantWidget';
 import { API_BASE, checkBackendHealth } from './utils/api';
@@ -354,6 +355,7 @@ function AppShell() {
         {/* Account Recovery */}
         <Route path="/recovery" element={<Recovery />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/unauthorized" element={<Unauthorized />} />
 
         {/* Admin Dashboard Route */}
         <Route 

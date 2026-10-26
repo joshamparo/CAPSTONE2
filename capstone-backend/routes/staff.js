@@ -532,7 +532,11 @@ router.post('/login', loginRateLimit, async (req, res) => {
 // LOGOUT Route
 router.post('/logout', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
     try {
-        const { id, accountType } = req.body;
+        // Never trust a caller-supplied account ID or role for session revocation.
+        // requireRole has already verified both values from the signed token.
+        const id = req.auth?.id;
+        const accountType = req.auth?.role;
+        if (!id || !accountType) return res.status(401).json({ message: 'Authentication required. Please sign in again.' });
         
         let modelType;
         const normalized = String(accountType).toLowerCase();
@@ -546,13 +550,13 @@ router.post('/logout', requireRole(STAFF_ACCOUNT_TYPES), async (req, res) => {
             user = await prisma.accounts.findUnique({ where: { id: Number(id) } });
             await prisma.accounts.update({
                 where: { id: Number(id) },
-                data: {} // status is updated below in raw sql
-            }).catch(() => {});
+                data: { session_version: { increment: 1 } }
+            });
         } else {
             user = await prisma[modelType].update({
                 where: { id },
-                data: { status: 'Offline' }
-            }).catch(() => {});
+                data: { status: 'Offline', session_version: { increment: 1 } }
+            });
         }
         try {
             await setPresenceOffline(modelType, id);
