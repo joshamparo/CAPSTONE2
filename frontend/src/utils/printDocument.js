@@ -1,47 +1,36 @@
-const removeLater = (node, delay = 500) => {
-  window.setTimeout(() => {
-    if (node?.isConnected) node.remove();
-  }, delay);
-};
-
-// Print from an isolated same-origin frame. This avoids popup blockers and the
-// blank-tab race caused by closing a temporary window before it has rendered.
-export const printHtmlDocument = async ({ html, title = 'Pascualinga Report', onError } = {}) => {
+// A real window is opened synchronously from the button click. Chromium-based
+// browsers can silently ignore window.print() from a hidden iframe, especially
+// after deployment behind a strict iframe policy.
+export const printHtmlDocument = ({ html, title = 'Pascualinga Report', onError } = {}) => {
   if (typeof document === 'undefined' || !String(html || '').trim()) {
     onError?.('No printable content is available.');
     return false;
   }
 
-  const frame = document.createElement('iframe');
-  frame.title = `${title} printable document`;
-  frame.setAttribute('aria-hidden', 'true');
-  Object.assign(frame.style, {
-    position: 'fixed', right: '0', bottom: '0', width: '1px', height: '1px',
-    border: '0', opacity: '0', pointerEvents: 'none'
-  });
-  document.body.appendChild(frame);
-
-  const frameWindow = frame.contentWindow;
-  const frameDocument = frame.contentDocument || frameWindow?.document;
-  if (!frameWindow || !frameDocument) {
-    frame.remove();
-    onError?.('Unable to prepare the printable document.');
+  const printWindow = window.open('', '_blank', 'popup=yes,width=960,height=720');
+  if (!printWindow) {
+    onError?.('The print window was blocked. Allow pop-ups for this site, then try again.');
     return false;
   }
 
   try {
-    frameDocument.open();
-    frameDocument.write(String(html));
-    frameDocument.close();
-    // Keep print in the original click event. Waiting with setTimeout first can
-    // make browsers treat it as an unsolicited popup and silently ignore it.
-    frameWindow.onafterprint = () => removeLater(frame);
-    frameWindow.focus();
-    frameWindow.print();
-    window.setTimeout(() => removeLater(frame, 0), 60000);
+    let printed = false;
+    const openDialog = () => {
+      if (printed || printWindow.closed) return;
+      printed = true;
+      printWindow.focus();
+      printWindow.print();
+    };
+    printWindow.onafterprint = () => printWindow.close();
+    printWindow.onload = openDialog;
+    printWindow.document.open();
+    printWindow.document.write(String(html));
+    printWindow.document.close();
+    // Fallback for browsers that do not fire onload for document.write().
+    window.setTimeout(openDialog, 250);
     return true;
   } catch (error) {
-    frame.remove();
+    printWindow.close();
     onError?.(String(error?.message || 'Unable to open the print dialog.'));
     return false;
   }
