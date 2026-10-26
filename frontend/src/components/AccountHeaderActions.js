@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, ChevronDown, KeyRound, LayoutGrid, LogOut, RefreshCw, Settings, User } from 'lucide-react';
 import ChangePasswordModal from './ChangePasswordModal';
 import SignOutConfirmModal from './SignOutConfirmModal';
+import { buildAuthHeaders, getCurrentUser } from '../utils/api';
 import './AccountHeaderActions.css';
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
@@ -58,8 +59,6 @@ const getRoleLabel = (u, fallback) => {
   if (r === 'patient') return 'Patient';
   return r.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 };
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export default function AccountHeaderActions({
   user,
@@ -169,15 +168,20 @@ export default function AccountHeaderActions({
   }, []);
 
   const authHeaders = useMemo(() => {
-    const headers = { 'Content-Type': 'application/json' };
-    if (rawRole) headers['x-user-role'] = rawRole;
-    if (userEmail) headers['x-user-email'] = userEmail;
-    if (name) headers['x-user-name'] = name;
-    const idCandidates = [user?.patientId, user?.patient_id, user?.id, user?._id];
-    const patientId = idCandidates.find((v) => UUID_PATTERN.test(String(v || '').trim())) || '';
-    if (patientId) headers['x-patient-id'] = String(patientId);
-    return headers;
-  }, [rawRole, userEmail, name]);
+    const storedUser = getCurrentUser() || {};
+    const effectiveUser = {
+      ...storedUser,
+      ...(user && typeof user === 'object' ? user : {}),
+      sessionToken: String(user?.sessionToken || storedUser?.sessionToken || '').trim()
+    };
+    return {
+      'Content-Type': 'application/json',
+      ...buildAuthHeaders(effectiveUser, rawRole),
+      ...(rawRole ? { 'x-user-role': rawRole } : {}),
+      ...(userEmail ? { 'x-user-email': userEmail } : {}),
+      ...(name ? { 'x-user-name': name } : {})
+    };
+  }, [rawRole, userEmail, name, user?.sessionToken, user?.patientId, user?.patient_id, user?.id, user?._id]);
 
   const dismissAnnouncementToast = () => {
     setAnnouncementToast(null);
