@@ -13,6 +13,20 @@ function validationError(message) {
   return error;
 }
 
+function hasSystemPermission(settings, roleName, permission) {
+  const normalizedRole = String(roleName || '').trim().toLowerCase();
+  const displayName = normalizedRole === 'admin' ? 'Admin'
+    : normalizedRole === 'doctor' ? 'Doctor'
+      : normalizedRole === 'nurse' ? 'Nurse'
+        : normalizedRole === 'staff' ? 'Staff' : '';
+  if (!displayName) return true;
+  const policy = (Array.isArray(settings?.roles) ? settings.roles : [])
+    .find((entry) => String(entry?.name || '') === displayName);
+  const permissions = Array.isArray(policy?.permissions) ? policy.permissions : [];
+  if (permissions.includes('all') || permissions.includes(permission)) return true;
+  return permission === 'manage_patients' && permissions.includes('view_patients');
+}
+
 function validateSystemSettingsPatch(partial) {
   if (!partial || typeof partial !== 'object' || Array.isArray(partial)) {
     throw validationError('System settings must be a JSON object.');
@@ -239,5 +253,6 @@ module.exports = {
   getSystemSettings,
   saveSystemSettings,
   isMaintenanceModeEnabled,
-  validateSystemSettingsPatch
+  validateSystemSettingsPatch,
+  hasSystemPermission
 };

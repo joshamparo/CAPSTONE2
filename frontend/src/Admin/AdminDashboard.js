@@ -6083,12 +6083,16 @@ function AdminDashboard() {
                       <input 
                         type="text" 
                         name="department"
+                        list="configured-admin-departments"
                         value={adminProfile.department}
                         onChange={handleAdminProfileChange}
                         onKeyDown={(e) => handleNameInput(e, "admin-department")}
                         className="profile-input input-with-icon-padding"
                         placeholder="e.g. Administration"
                       />
+                      <datalist id="configured-admin-departments">
+                        {departments.map((department) => <option key={department} value={department} />)}
+                      </datalist>
                     </div>
                     {nameNoticeField === "admin-department" && nameNotice && (
                       <p className="field-notice-error">{nameNotice}</p>
@@ -8462,8 +8466,8 @@ function AdminDashboard() {
                                             <td style={{ textAlign: 'center', padding: '16px' }}>
                                                 <input type="checkbox" className="custom-checkbox" style={{ width: '18px', height: '18px', cursor: role.name === 'Admin' ? 'not-allowed' : 'pointer' }} checked={role.permissions.includes('all') || role.permissions.includes('view_patients') || role.permissions.includes('manage_patients')} onChange={(e) => {
                                                 let newPerms = [...role.permissions];
-                                                if(e.target.checked) newPerms.push('manage_patients');
-                                                else newPerms = newPerms.filter(p => p !== 'manage_patients' && p !== 'all');
+                                                if(e.target.checked) newPerms.push('manage_patients', 'view_patients');
+                                                else newPerms = newPerms.filter(p => !['manage_patients', 'view_patients', 'all'].includes(p));
                                                 setRoles(roles.map(r => r.name === role.name ? {...r, permissions: newPerms} : r));
                                             }} disabled={role.name === 'Admin'}/></td>
                                             <td style={{ textAlign: 'center', padding: '16px' }}>

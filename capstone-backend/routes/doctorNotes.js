@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const requireSystemPermission = require('../middleware/requireSystemPermission');
 const { enforceDoctorPatientAccess } = require('../utils/doctorPatientAccess');
 const { sendError } = require('../utils/httpErrors');
 
@@ -14,7 +15,7 @@ function cleanText(value, max = 5000) {
   return text.length <= max ? text : null;
 }
 
-router.get('/', requireRole(['doctor', 'admin']), async (req, res) => {
+router.get('/', requireRole(['doctor', 'admin']), requireSystemPermission('view_patients'), async (req, res) => {
   try {
     await ensureClinicalDetailsColumn();
     const { patientId } = req.query;
@@ -42,7 +43,7 @@ router.get('/', requireRole(['doctor', 'admin']), async (req, res) => {
   }
 });
 
-router.post('/', requireRole(['doctor', 'admin']), async (req, res) => {
+router.post('/', requireRole(['doctor', 'admin']), requireSystemPermission('write_notes'), async (req, res) => {
   try {
     await ensureClinicalDetailsColumn();
     const { patientId, doctorName, subjective, objective, assessment, plan, vitals, clinicalDetails } = req.body;

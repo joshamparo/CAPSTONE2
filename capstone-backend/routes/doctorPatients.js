@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../utils/prisma');
 const requireRole = require('../middleware/requireRole');
+const requireSystemPermission = require('../middleware/requireSystemPermission');
 const { normalizeEmail, parseLimit, parseOffset } = require('../utils/normalize');
 const { canRequestPatientScope } = require('../utils/doctorAccess');
 const { sendError } = require('../utils/httpErrors');
@@ -148,7 +149,7 @@ const assertDoctorAccessToPatient = async ({ role, actor, patient }) => {
   })));
 };
 
-router.get('/patients', requireRole(['doctor', 'admin']), async (req, res) => {
+router.get('/patients', requireRole(['doctor', 'admin']), requireSystemPermission('manage_patients'), async (req, res) => {
   try {
     const role = getRole(req);
     const actor = await getActor(req);
@@ -303,7 +304,7 @@ router.get('/patients', requireRole(['doctor', 'admin']), async (req, res) => {
   }
 });
 
-router.get('/patients/:id/profile', requireRole(['doctor', 'admin']), async (req, res) => {
+router.get('/patients/:id/profile', requireRole(['doctor', 'admin']), requireSystemPermission('manage_patients'), async (req, res) => {
   try {
     const role = getRole(req);
     const actor = await getActor(req);
@@ -354,7 +355,7 @@ router.get('/patients/:id/profile', requireRole(['doctor', 'admin']), async (req
   }
 });
 
-router.get('/patients/:id/history', requireRole(['doctor', 'admin']), async (req, res) => {
+router.get('/patients/:id/history', requireRole(['doctor', 'admin']), requireSystemPermission('manage_patients'), async (req, res) => {
   try {
     const role = getRole(req);
     const actor = await getActor(req);

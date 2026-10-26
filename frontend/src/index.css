@@ -445,3 +445,33 @@ html[data-theme='dark'] .office-main table tbody tr:hover td {
   background: rgba(148, 163, 184, 0.14) !important;
   box-shadow: inset 2px 0 0 0 var(--slate-500, #64748b) !important;
 }
+
+/* Quick Settings: Privacy Mode is global and consistent across every staff
+   dashboard. Users can temporarily reveal a value by hovering/focusing it. */
+html[data-privacy-mode='on'] :is(
+  .admin-main, .admin-dashboard-main-column, .dashboard-main, .doc-main,
+  .nurse-main, .nurse-main-content, .pharm-main, .office-main, .sec-main,
+  .cs-main, .app-main
+) :is(
+  tbody td, input:not([type='button']):not([type='submit']):not([type='checkbox']):not([type='radio']),
+  textarea, [data-sensitive='true'], .patient-name, .patient-email, .patient-phone,
+  .receipt-patient, .email, .contact-number
+) {
+  filter: blur(7px);
+  transition: filter 120ms ease;
+}
+
+html[data-privacy-mode='on'] :is(
+  .admin-main, .admin-dashboard-main-column, .dashboard-main, .doc-main,
+  .nurse-main, .nurse-main-content, .pharm-main, .office-main, .sec-main,
+  .cs-main, .app-main
+) :is(
+  tbody td, input, textarea, [data-sensitive='true'], .patient-name,
+  .patient-email, .patient-phone, .receipt-patient, .email, .contact-number
+):is(:hover, :focus, :focus-within) {
+  filter: none;
+}
+
+@media print {
+  html[data-privacy-mode='on'] * { filter: none !important; }
+}

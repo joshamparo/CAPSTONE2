@@ -12,6 +12,21 @@ const settingsWriteRateLimit = createRateLimiter({
   key: (req) => req.auth?.email || 'admin'
 });
 
+// Authenticated staff can consume centrally managed dropdown options without
+// exposing role policies or operational controls.
+router.get('/options', requireRole([
+  'admin', 'staff', 'nurse', 'doctor', 'pharmacist', 'cashier',
+  'doctor_secretary', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist'
+]), async (_req, res) => {
+  try {
+    const settings = await getSystemSettings({ force: false });
+    res.set('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+    res.json({ departments: Array.isArray(settings?.departments) ? settings.departments : [] });
+  } catch (err) {
+    sendError(res, err, 'Failed to load system options.');
+  }
+});
+
 // Public, no auth — globally exposes safe signals only (maintenance mode)
 router.get('/public', async (_req, res) => {
   try {
