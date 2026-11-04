@@ -401,7 +401,7 @@ function DoctorDashboard() {
       { key: 'dashboard', label: 'Dashboard', icon: <User size={20} /> },
       { key: 'patient-records', label: 'Patient Records', icon: <FileText size={20} /> },
       { key: 'doctor-chat', label: 'Doctor Chat', icon: <MessageSquare size={20} /> },
-      { key: 'approval-inbox', label: 'Approvals Inbox', icon: <MessageSquare size={20} /> },
+      { key: 'approval-inbox', label: 'Approvals', icon: <MessageSquare size={20} /> },
       { key: 'labs', label: 'Lab & Imaging', icon: <Search size={20} /> },
       { key: 'certificates', label: 'Certificates', icon: <FileText size={20} /> }
     ], []);
@@ -4754,7 +4754,7 @@ function DoctorDashboard() {
                     setActiveNav('approval-inbox');
                     openApprovalThread(n.meta.requestId);
                   } else {
-                    setToast({ type: 'error', message: 'Approvals Inbox is not available for your department.' });
+                    setToast({ type: 'error', message: 'Approvals is not available for your department.' });
                     setActiveNav(defaultDoctorNav);
                   }
                 } else if (String(n?.type || '').toLowerCase().includes('lab') || String(n?.type || '').toLowerCase().includes('result') || n?.type === 'lab_result') {
@@ -5462,7 +5462,7 @@ function DoctorDashboard() {
                 <div>
                   <div className="doc-card-title">
                     <MessageSquare size={18} />
-                    Approvals Inbox
+                    Approvals
                   </div>
                   <div className="doc-muted" style={{ marginTop: 4 }}>Newest booking requests appear first.</div>
                 </div>
