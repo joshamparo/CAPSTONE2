@@ -1739,16 +1739,30 @@ function AdminDashboard() {
       const to = parseDateEnd(toDate);
       const params = new URLSearchParams();
       params.set('take', '500');
+      params.set('includeTotal', '1');
       if (from) params.set('start', from.toISOString());
       if (to) params.set('end', to.toISOString());
-      const allRows = [];
-      for (let skip = 0; skip < 5000; skip += 500) {
-        params.set('skip', String(skip));
-        const page = await fetchJson(`/api/activity-logs?${params.toString()}`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
-        if (!Array.isArray(page)) break;
-        allRows.push(...page);
-        if (page.length < 500) break;
-      }
+      if (actionFilter && actionFilter !== 'All') params.set('action', actionFilter);
+      const requestPage = async (skip) => {
+        const pageParams = new URLSearchParams(params);
+        pageParams.set('skip', String(skip));
+        return fetchJson(`/api/activity-logs?${pageParams.toString()}`, { apiBase: API_BASE, headers: { ...getAuthHeaders() } });
+      };
+      const firstResponse = await requestPage(0);
+      const firstPage = Array.isArray(firstResponse)
+        ? firstResponse
+        : Array.isArray(firstResponse?.items) ? firstResponse.items : [];
+      const total = Number(firstResponse?.total);
+      const pageCount = Math.min(10, Math.max(1, Math.ceil((Number.isFinite(total) && total >= 0 ? total : firstPage.length) / 500)));
+      const remainingPages = await Promise.all(
+        Array.from({ length: pageCount - 1 }, (_, index) => requestPage((index + 1) * 500))
+      );
+      const allRows = [
+        ...firstPage,
+        ...remainingPages.flatMap((response) => (
+          Array.isArray(response) ? response : Array.isArray(response?.items) ? response.items : []
+        ))
+      ];
       return allRows.map((l) => formatActivityLog({
         ...l,
         id: String(l.id || l._id || ''),
@@ -3855,7 +3869,7 @@ function AdminDashboard() {
       return true;
   };
 
-  const printTableReport = (title, subtitle, columns, rows) => {
+  const printTableReport = (title, subtitle, columns, rows, options = {}) => {
       if (!Array.isArray(columns) || columns.length === 0 || !Array.isArray(rows) || rows.length === 0) {
           setModalType('error');
           setSuccessMessage('No report data is available to print.');
@@ -3867,7 +3881,10 @@ function AdminDashboard() {
           subtitle: String(subtitle || ''),
           columns,
           rows,
-          generatedAt: new Date().toLocaleString()
+          generatedAt: new Date().toLocaleString(),
+          loading: Boolean(options.loading),
+          loadError: '',
+          requestId: options.requestId || ''
       });
       logActivity('Export', `Printed ${String(title || 'report')}`, 'Report: printable output').catch(() => {});
   };
@@ -7605,22 +7622,43 @@ function AdminDashboard() {
                             <button
                               type="button"
                               className="inc-btn inc-btn-ghost"
-                              onClick={async () => {
-                                try {
-                                  const rows = await fetchActivityLogsForExport(logDateFrom, logDateTo, logFilter);
-                                  const data = rows.map((l) => ({
-                                    Time: new Date(l.timestamp).toLocaleString(),
-                                    Actor: l.actorName,
-                                    Action: l.action,
-                                    Target: l.target,
-                                    Details: l.details
-                                  }));
-                                  printTableReport('System Activity Logs', 'Filtered report', Object.keys(data[0] || {}), data);
-                                } catch (_) {
-                                  setModalType("error");
-                                  setSuccessMessage("Failed to prepare activity logs for printing. Please check the server.");
-                                  setShowSuccessModal(true);
-                                }
+                              onClick={() => {
+                                const toReportRows = (rows) => rows.map((log) => ({
+                                  Time: new Date(log.timestamp).toLocaleString(),
+                                  Actor: log.actorName,
+                                  Action: log.action,
+                                  Target: log.target,
+                                  Details: log.details
+                                }));
+                                const requestId = `activity-logs-${Date.now()}-${Math.random()}`;
+                                const columns = ['Time', 'Actor', 'Action', 'Target', 'Details'];
+                                printTableReport(
+                                  'System Activity Logs',
+                                  'Filtered report',
+                                  columns,
+                                  toReportRows(activityLogs),
+                                  { loading: true, requestId }
+                                );
+                                fetchActivityLogsForExport(logDateFrom, logDateTo, logFilter)
+                                  .then((rows) => {
+                                    const data = toReportRows(rows);
+                                    setReportPrintPreview((current) => (
+                                      current?.requestId === requestId
+                                        ? { ...current, columns, rows: data, loading: false }
+                                        : current
+                                    ));
+                                  })
+                                  .catch(() => {
+                                    setReportPrintPreview((current) => (
+                                      current?.requestId === requestId
+                                        ? {
+                                            ...current,
+                                            loading: false,
+                                            loadError: 'Could not load the full filtered report. This preview contains only the currently loaded logs.'
+                                          }
+                                        : current
+                                    ));
+                                  });
                               }}
                               disabled={activityLogs.length === 0 || activityLogsLoading}
                             >
@@ -9209,13 +9247,20 @@ function AdminDashboard() {
           >
             <div className="admin-report-preview-actions">
               <button type="button" className="admin-report-preview-close" onClick={() => setReportPrintPreview(null)}>Close</button>
-              <button type="button" className="admin-report-preview-print" onClick={() => window.print()}>Print report</button>
+              <button type="button" className="admin-report-preview-print" onClick={() => window.print()} disabled={reportPrintPreview.loading}>
+                {reportPrintPreview.loading ? 'Preparing report…' : 'Print report'}
+              </button>
             </div>
             <header className="admin-report-preview-header">
               <h1 id="admin-report-preview-title">{reportPrintPreview.title}</h1>
               {reportPrintPreview.subtitle ? <p>{reportPrintPreview.subtitle}</p> : null}
               <small>Generated: {reportPrintPreview.generatedAt}</small>
             </header>
+            {reportPrintPreview.loading ? (
+              <p className="admin-report-preview-status" role="status">Showing the current page while the full filtered report loads…</p>
+            ) : reportPrintPreview.loadError ? (
+              <p className="admin-report-preview-status error" role="alert">{reportPrintPreview.loadError}</p>
+            ) : null}
             <div className="admin-report-preview-table-wrap">
               <table className="admin-report-preview-table">
                 <thead>
