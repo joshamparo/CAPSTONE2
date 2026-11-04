@@ -1630,6 +1630,10 @@ export default function DoctorSecretaryDashboard() {
               <LayoutDashboard size={20} />
               <span>Dashboard</span>
             </button>
+            <button className={`sec-nav-btn ${activeTab === 'patient-records' ? 'active' : ''}`} onClick={() => setActiveTab('patient-records')} type="button">
+              <Calendar size={20} />
+              <span>Patient Records</span>
+            </button>
             <button className={`sec-nav-btn ${activeTab === 'approvals' ? 'active' : ''}`} onClick={() => setActiveTab('approvals')} type="button">
               <ClipboardList size={20} />
               <span>Approvals</span>
@@ -1640,10 +1644,6 @@ export default function DoctorSecretaryDashboard() {
             </button>
 
             <div className="sidebar-section-label">WORKFLOW</div>
-            <button className={`sec-nav-btn ${activeTab === 'patient-records' ? 'active' : ''}`} onClick={() => setActiveTab('patient-records')} type="button">
-              <Calendar size={20} />
-              <span>Patient Records</span>
-            </button>
             <button className={`sec-nav-btn ${activeTab === 'availability' ? 'active' : ''}`} onClick={() => setActiveTab('availability')} type="button">
               <Calendar size={20} />
               <span>Availability</span>

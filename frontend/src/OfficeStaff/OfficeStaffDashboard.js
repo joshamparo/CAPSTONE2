@@ -1497,12 +1497,12 @@ export default function OfficeStaffDashboard({ mode }) {
   const navItems = useMemo(() => {
     const base = [
       { key: 'dashboard', label: 'Dashboard', icon: <ClipboardList size={18} /> },
-      { key: 'patients', label: 'Patients', icon: <User size={18} /> },
+      { key: 'patients', label: 'Patient Records', icon: <User size={18} /> },
       { key: 'billing', label: 'Billing', icon: <FileText size={18} /> },
       { key: 'hmo', label: 'HMO Monitoring', icon: <Shield size={18} /> }
     ];
     if (role === 'doctor_secretary') {
-      base.splice(1, 0, { key: 'appointments', label: 'Appointments', icon: <ClipboardList size={18} /> });
+      base.splice(2, 0, { key: 'appointments', label: 'Appointments', icon: <ClipboardList size={18} /> });
     }
     if (role === 'cashier') {
       base.push({ key: 'lab-payments', label: 'Clinical Service Payments', icon: <CreditCard size={18} /> });

@@ -418,9 +418,9 @@ function DoctorDashboard() {
     
     let items = [
       { key: 'dashboard', label: 'Dashboard', icon: <User size={20} /> },
+      { key: 'patient-records', label: 'Patient Records', icon: <FileText size={20} /> },
       { key: 'doctor-chat', label: 'Doctor Chat', icon: <MessageSquare size={20} /> },
       { key: 'approval-inbox', label: 'Approvals Inbox', icon: <MessageSquare size={20} /> },
-      { key: 'patient-records', label: 'Patient Records', icon: <FileText size={20} /> },
       { key: 'labs', label: 'Lab & Imaging', icon: <Search size={20} /> },
       { key: 'certificates', label: 'Certificates', icon: <FileText size={20} /> }
     ];

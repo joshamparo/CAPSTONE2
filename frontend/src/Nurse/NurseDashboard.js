@@ -548,19 +548,19 @@ function NurseDashboard() {
   const nurseNavLabels = useMemo(() => {
     const key = normalizeSpecializationKey(user.specialization || activeDept || user.departmentLabel);
     const specialized = {
-      DENTALCLINIC: { patients: 'Dental Patient Records', appointments: 'Dental Appointments & Queue', vitals: 'Pre-Procedure Screening', orders: 'Dental Orders & Supplies' },
+      DENTALCLINIC: { patients: 'Patient Records', appointments: 'Dental Appointments & Queue', vitals: 'Pre-Procedure Screening', orders: 'Dental Orders & Supplies' },
       LABORATORY: { patients: 'Laboratory Patient Queue', appointments: 'Specimen Schedule', orders: 'Laboratory Orders' },
       PATHOLOGY: { patients: 'Pathology Patient Queue', appointments: 'Specimen Schedule', orders: 'Pathology Orders' },
       RADIOLOGY: { patients: 'Imaging Patient Queue', appointments: 'Imaging Schedule', orders: 'Imaging Orders' },
       ECG: { patients: 'ECG Patient Queue', appointments: 'ECG Schedule', orders: 'ECG Orders' },
-      PHYSICALTHERAPY: { patients: 'Therapy Patient Records', appointments: 'Therapy Schedule', vitals: 'Therapy Assessment', orders: 'Therapy Supplies' },
-      OTOLARYNGOLOGYENT: { patients: 'ENT Patient Records', appointments: 'ENT Appointments', vitals: 'ENT Pre-Consult Screening', orders: 'ENT Orders & Supplies' },
+      PHYSICALTHERAPY: { patients: 'Patient Records', appointments: 'Therapy Schedule', vitals: 'Therapy Assessment', orders: 'Therapy Supplies' },
+      OTOLARYNGOLOGYENT: { patients: 'Patient Records', appointments: 'ENT Appointments', vitals: 'ENT Pre-Consult Screening', orders: 'ENT Orders & Supplies' },
       VIDEOCONSULTATION: { patients: 'Virtual Care Patients', appointments: 'Video Consultations' },
       SURGERYMINOR: { patients: 'Procedure Patients', appointments: 'Procedure Schedule', vitals: 'Pre-Op & Recovery Monitoring', orders: 'Procedure Orders' },
       ANESTHESIA: { patients: 'Anesthesia Patients', appointments: 'Anesthesia Schedule', vitals: 'Pre-Anesthesia Assessment', orders: 'Anesthesia Orders' }
     };
     const labelsByType = {
-      emergency: { patients: 'ER Patient Records', appointments: 'ER Consults', vitals: 'ER Vitals Monitoring', orders: 'ER Orders Management', wards: 'Emergency Room Board' },
+      emergency: { patients: 'Patient Records', appointments: 'ER Consults', vitals: 'ER Vitals Monitoring', orders: 'ER Orders Management', wards: 'Emergency Room Board' },
       pedia: { patients: 'Pediatric Patients', appointments: 'Pediatric Appointments', vitals: 'Pediatric Vitals', orders: 'Pediatric Orders' },
       bedside: { patients: 'Assigned Patients', vitals: 'Bedside Vitals', orders: 'Medication & Clinical Orders', wards: 'Ward Management' },
       clinic: { patients: 'Clinic Patients', appointments: 'Clinic Appointments', vitals: 'Clinic Vitals & Rooming', orders: 'Clinic Orders' },
