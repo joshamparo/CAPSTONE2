@@ -1097,11 +1097,13 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
           {isPhysicalTherapist ? <TabButton id="video" icon={<Video size={18} />} label="Video Consultations" /> : null}
         </nav>
 
-        <div className="cs-sidebar-footer">
-          <button type="button" className="cs-logout-btn" onClick={() => setLogoutConfirmOpen(true)}>
-            Logout
-          </button>
-        </div>
+        {!isPhysicalTherapist ? (
+          <div className="cs-sidebar-footer">
+            <button type="button" className="cs-logout-btn" onClick={() => setLogoutConfirmOpen(true)}>
+              Logout
+            </button>
+          </div>
+        ) : null}
       </aside>
 
       <main className="cs-main">

@@ -38,6 +38,11 @@ test('clinical patient records are scoped to service-assigned patients and the s
   assert.match(patientsRoute, /This patient is not assigned to your clinical service\./);
 });
 
+test('Physical Therapists use the header sign-out and do not get a sidebar logout button', () => {
+  assert.match(clinicalDashboard, /\{!isPhysicalTherapist \? \([\s\S]{0,260}cs-sidebar-footer[\s\S]{0,180}Logout[\s\S]{0,80}: null\}/);
+  assert.match(clinicalDashboard, /<AccountHeaderActions[\s\S]{0,160}onSignOut=\{confirmLogout\}/);
+});
+
 for (const role of roles) {
   test(`${role} queue is shared until claimed and private after assignment`, () => {
     const actorA = { actorRole: role, actorEmail: 'staff.a@example.test' };
