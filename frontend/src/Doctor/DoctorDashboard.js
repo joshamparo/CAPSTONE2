@@ -372,32 +372,16 @@ function DoctorDashboard() {
     return spec.includes('pediatric') || spec.includes('pediatrics');
   }, [doctorSpecialization]);
 
-  const doctorSpecKey = useMemo(() => {
-    const raw = String(doctorSpecialization || '').trim().toLowerCase();
-    if (!raw) return '';
-    if (raw.includes('pedi')) return 'pediatrics';
-    if (raw.includes('ob-gyn') || raw.includes('obgyn') || raw.includes('obstetric') || raw.includes('gynecol') || raw === 'ob') return 'ob_gyn';
-    if (raw.includes('cardio')) return 'cardiology';
-    if (raw.includes('derma')) return 'dermatology';
-    if (raw.includes('surg')) return 'surgery';
-    if (raw.includes('ortho')) return 'orthopedics';
-    if (raw.includes('medicine') || raw.includes('internal') || raw.includes('emergency')) return 'medicine';
-    return raw.replace(/\s+/g, '_');
-  }, [doctorSpecialization]);
-
-  const allowedDoctorNav = useMemo(() => {
-    const base = ['dashboard', 'approval-inbox', 'patient-records', 'certificates', 'doctor-chat'];
-    const withLabs = ['labs'];
-
-    const spec = doctorSpecKey;
-    if (!spec) return new Set([...base, ...withLabs]);
-
-    if (isERDoctor) return new Set([...base]);
-    if (spec === 'pediatrics') return new Set([...base]);
-    if (spec === 'dermatology') return new Set([...base]);
-
-    return new Set([...base, ...withLabs]);
-  }, [doctorSpecKey, isERDoctor]);
+  // Keep the doctor navigation identical across specialties. Patient and
+  // clinical-result access remains enforced by the authenticated API routes.
+  const allowedDoctorNav = useMemo(() => new Set([
+    'dashboard',
+    'patient-records',
+    'doctor-chat',
+    'approval-inbox',
+    'labs',
+    'certificates'
+  ]), []);
 
   const defaultDoctorNav = useMemo(() => {
     const preferred = ['dashboard', 'patient-records', 'certificates', 'doctor-chat', 'labs', 'approval-inbox'];
@@ -413,24 +397,14 @@ function DoctorDashboard() {
     }
   }, [activeNav, allowedDoctorNav, defaultDoctorNav]);
 
-  const doctorNavItems = useMemo(() => {
-    const isPathoOrRadio = doctorSpecialization.toLowerCase().includes('patholog') || doctorSpecialization.toLowerCase().includes('radiolog');
-    
-    let items = [
+  const doctorNavItems = useMemo(() => [
       { key: 'dashboard', label: 'Dashboard', icon: <User size={20} /> },
       { key: 'patient-records', label: 'Patient Records', icon: <FileText size={20} /> },
       { key: 'doctor-chat', label: 'Doctor Chat', icon: <MessageSquare size={20} /> },
       { key: 'approval-inbox', label: 'Approvals Inbox', icon: <MessageSquare size={20} /> },
       { key: 'labs', label: 'Lab & Imaging', icon: <Search size={20} /> },
       { key: 'certificates', label: 'Certificates', icon: <FileText size={20} /> }
-    ];
-    
-    if (isPathoOrRadio) {
-      items = items.filter(it => it.key !== 'labs' && it.key !== 'certificates');
-    }
-    
-    return items.filter((it) => allowedDoctorNav.has(it.key));
-  }, [allowedDoctorNav, doctorSpecialization]);
+    ], []);
 
   const [doctorChatMessages, setDoctorChatMessages] = useState([]);
   const [doctorChatLoading, setDoctorChatLoading] = useState(false);
@@ -6489,14 +6463,14 @@ function DoctorDashboard() {
 
         {activeNav === 'patient-records' && patientRecordsView}
 
-        {activeNav === 'labs' && !doctorSpecialization.toLowerCase().includes('patholog') && !doctorSpecialization.toLowerCase().includes('radiolog') && (
+        {activeNav === 'labs' && (
           <div className="doctor-grid doc-section">
             {patientCard}
             {labsCard}
           </div>
         )}
 
-        {activeNav === 'certificates' && !doctorSpecialization.toLowerCase().includes('patholog') && !doctorSpecialization.toLowerCase().includes('radiolog') && (
+        {activeNav === 'certificates' && (
           <div className="doctor-grid doc-section">
             {patientCard}
             {certificatesCard}

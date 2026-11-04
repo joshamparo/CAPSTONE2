@@ -25,6 +25,28 @@ test('opening Lab and Imaging refreshes its patient selector in review-only mode
   assert.doesNotMatch(dashboard, /const saveLabResult\s*=/);
 });
 
+test('every doctor specialization receives the same complete sidebar modules', () => {
+  const navStart = dashboard.indexOf('const doctorNavItems = useMemo(() => [');
+  const navEnd = dashboard.indexOf('], []);', navStart);
+  assert.notEqual(navStart, -1);
+  assert.notEqual(navEnd, -1);
+  const nav = dashboard.slice(navStart, navEnd);
+  assert.deepEqual(
+    [...nav.matchAll(/key: '([^']+)', label: '([^']+)'/g)].map(([, key, label]) => [key, label]),
+    [
+      ['dashboard', 'Dashboard'],
+      ['patient-records', 'Patient Records'],
+      ['doctor-chat', 'Doctor Chat'],
+      ['approval-inbox', 'Approvals Inbox'],
+      ['labs', 'Lab & Imaging'],
+      ['certificates', 'Certificates']
+    ]
+  );
+  assert.match(dashboard, /\{activeNav === 'labs' && \(/);
+  assert.match(dashboard, /\{activeNav === 'certificates' && \(/);
+  assert.doesNotMatch(nav, /specialization|isERDoctor/);
+});
+
 test('lab result upload and creation enforce signed doctor patient access', () => {
   const uploadRoute = labRoutes.slice(labRoutes.indexOf("router.post('/upload'"), labRoutes.indexOf("router.get('/mine'"));
   const createRoute = labRoutes.slice(labRoutes.indexOf("router.post('/',"), labRoutes.indexOf("router.get('/:id'"));

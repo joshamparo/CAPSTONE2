@@ -43,3 +43,10 @@ test('missing purpose and invalid validity dates are rejected', () => {
     { ok: false, message: 'Valid Until cannot be earlier than today.' }
   );
 });
+
+test('certificate read and write endpoints remain restricted to doctors with patient access', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'routes', 'medicalCertificates.js'), 'utf8');
+  assert.match(source, /router\.get\('\/', requireRole\(\['doctor', 'admin'\]\)/);
+  assert.match(source, /router\.post\('\/', requireRole\(\['doctor', 'admin'\]\)/);
+  assert.equal((source.match(/enforceDoctorPatientAccess\(req, res, patientId\)/g) || []).length, 2);
+});
