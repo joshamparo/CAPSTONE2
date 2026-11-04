@@ -1092,6 +1092,7 @@ function AdminDashboard() {
   const [purgeEmailLoading, setPurgeEmailLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false); // Success modal state
   const [modalType, setModalType] = useState("success"); // success or error
+  const [reportPrintPreview, setReportPrintPreview] = useState(null);
   const [showOnlineDropdown, setShowOnlineDropdown] = useState(false);
   const [onlineSearch, setOnlineSearch] = useState("");
   const [successMessage, setSuccessMessage] = useState("Account created successfully."); // Dynamic success message
@@ -3806,10 +3807,6 @@ function AdminDashboard() {
       return `"${text}"`;
   };
 
-  const escapeReportHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[char]));
-
   const downloadCSV = (data, filename, reportLabel = 'Report') => {
       if (!data || data.length === 0) {
           setModalType('error');
@@ -3829,9 +3826,11 @@ function AdminDashboard() {
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
-      a.remove();
-      // A short delay lets Chromium/Edge finish reading the Blob before it is revoked.
-      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      // Keep the anchor and Blob URL alive briefly so Chromium/Edge can start the download.
+      window.setTimeout(() => {
+          a.remove();
+          window.URL.revokeObjectURL(url);
+      }, 1000);
       logActivity('Export', `Exported ${reportLabel}`, `Report: ${filename}`).catch(() => {});
       return true;
   };
@@ -3863,52 +3862,15 @@ function AdminDashboard() {
           setShowSuccessModal(true);
           return;
       }
-      const now = new Date().toLocaleString();
-      const safeTitle = escapeReportHtml(title || 'Report');
-      const safeSubtitle = escapeReportHtml(subtitle || '');
-      const th = columns.map((c) => `<th>${escapeReportHtml(c)}</th>`).join('');
-      const td = rows.map((r) => `<tr>${columns.map((c) => `<td>${escapeReportHtml(r[c])}</td>`).join('')}</tr>`).join('');
-
-      const reportHtml = `
-        <html>
-          <head>
-            <title>${safeTitle}</title>
-            <style>
-              body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #0f172a; }
-              h1 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
-              .sub { margin-top: 6px; color: #64748b; font-size: 14px; }
-              .meta { margin-top: 18px; color: #94a3b8; font-size: 12px; }
-              table { width: 100%; border-collapse: collapse; margin-top: 22px; }
-              th { text-align: left; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 10px 12px; position: sticky; top: 0; }
-              td { border-bottom: 1px solid #f1f5f9; padding: 10px 12px; font-size: 13px; color: #0f172a; vertical-align: top; }
-              .footer { margin-top: 26px; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 14px; }
-              @media print { body { padding: 18px; } }
-            </style>
-          </head>
-          <body>
-            <h1>${safeTitle}</h1>
-            ${safeSubtitle ? `<div class="sub">${safeSubtitle}</div>` : ``}
-            <div class="meta">Generated: ${now}</div>
-            <table>
-              <thead><tr>${th}</tr></thead>
-              <tbody>${td}</tbody>
-            </table>
-            <div class="footer">Confidential • Internal use only</div>
-          </body>
-        </html>
-      `;
-      void printHtmlDocument({
-          html: reportHtml,
-          title: safeTitle,
-          onError: (message) => {
-              setModalType('error');
-              setSuccessMessage(message);
-              setShowSuccessModal(true);
-          }
+      setReportPrintPreview({
+          title: String(title || 'Report'),
+          subtitle: String(subtitle || ''),
+          columns,
+          rows,
+          generatedAt: new Date().toLocaleString()
       });
       logActivity('Export', `Printed ${String(title || 'report')}`, 'Report: printable output').catch(() => {});
   };
-
   const isLowStockItem = (item) => {
       const status = String(item.status || '').toLowerCase();
       const stock = Number(item.stock);
@@ -6966,7 +6928,7 @@ function AdminDashboard() {
                         setIncidentActionsOpen(false);
                         exportIncidentReport(rangedIncidents);
                       }}
-                      disabled={incidentsLoading || rangedIncidents.length === 0}
+                      disabled={incidentsLoading}
                     >
                       Export CSV
                     </button>
@@ -6987,7 +6949,7 @@ function AdminDashboard() {
                         }));
                         printTableReport('Incident Reports', 'Filtered report', Object.keys(data[0] || {}), data);
                       }}
-                      disabled={incidentsLoading || rangedIncidents.length === 0}
+                      disabled={incidentsLoading}
                     >
                       Print
                     </button>
@@ -9234,6 +9196,46 @@ function AdminDashboard() {
                 OK
             </button>
           </div>
+        </div>
+      )}
+      {reportPrintPreview && (
+        <div className="admin-report-preview-overlay" role="presentation" onClick={() => setReportPrintPreview(null)}>
+          <section
+            className="admin-report-preview-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-report-preview-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="admin-report-preview-actions">
+              <button type="button" className="admin-report-preview-close" onClick={() => setReportPrintPreview(null)}>Close</button>
+              <button type="button" className="admin-report-preview-print" onClick={() => window.print()}>Print report</button>
+            </div>
+            <header className="admin-report-preview-header">
+              <h1 id="admin-report-preview-title">{reportPrintPreview.title}</h1>
+              {reportPrintPreview.subtitle ? <p>{reportPrintPreview.subtitle}</p> : null}
+              <small>Generated: {reportPrintPreview.generatedAt}</small>
+            </header>
+            <div className="admin-report-preview-table-wrap">
+              <table className="admin-report-preview-table">
+                <thead>
+                  <tr>{reportPrintPreview.columns.map((column, index) => <th key={`${column}-${index}`}>{column}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {reportPrintPreview.rows.map((row, rowIndex) => (
+                    <tr key={row.id || row._id || rowIndex}>
+                      {reportPrintPreview.columns.map((column, columnIndex) => {
+                        const value = row[column];
+                        const cellText = value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+                        return <td key={`${column}-${columnIndex}`}>{cellText}</td>;
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="admin-report-preview-footer">Confidential • Internal use only</div>
+          </section>
         </div>
       )}
       </div>
