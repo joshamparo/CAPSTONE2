@@ -5612,38 +5612,6 @@ body.compact-mode .workspace-queue-item {
   background: #f8fafc;
 }
 
-.er-intake-pagination {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: #475569;
-  font-size: .8rem;
-  font-weight: 800;
-}
-
-.er-intake-table-wrap {
-  width: 100%;
-  overflow-x: auto;
-  overscroll-behavior-inline: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
-.er-intake-table {
-  min-width: 720px;
-}
-
-.er-intake-table th:last-child,
-.er-intake-table td:last-child {
-  position: sticky;
-  right: 0;
-  background: #fff;
-  box-shadow: -8px 0 12px -12px rgba(15, 23, 42, 0.45);
-}
-
-.er-intake-table th:last-child {
-  z-index: 2;
-}
-
 .patient-record-filters { display: flex; align-items: center; gap: 10px; flex: 1 1 520px; }
 .patient-route-filter select {
   min-height: 42px;
@@ -5692,8 +5660,6 @@ body.compact-mode .workspace-queue-item {
 }
 
 @media (max-width: 560px) {
-  .er-intake-view .card-header { align-items: flex-start; gap: 10px; }
-  .er-intake-pagination { width: 100%; justify-content: space-between; }
   .ward-summary-horizontal { grid-template-columns: repeat(2, minmax(150px, 1fr)); overflow-x: auto; }
   .patient-record-filters { flex-direction: column; align-items: stretch; flex-basis: 100%; }
   .patient-record-filters .search-input-modern,

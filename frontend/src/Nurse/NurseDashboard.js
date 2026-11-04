@@ -25,7 +25,6 @@ const NURSE_VIEW_PATHS = Object.freeze({
   patients: '/nurse/patients',
   appointments: '/nurse/appointments',
   vitals: '/nurse/vitals',
-  'er-intake': '/nurse/er-intake',
   orders: '/nurse/orders-management',
   'ward-management': '/nurse/wards',
   inpatients: '/nurse/inpatients',
@@ -37,9 +36,11 @@ const NURSE_VIEW_PATHS = Object.freeze({
   profile: '/nurse/profile'
 });
 
-const NURSE_PATH_VIEWS = Object.freeze(
-  Object.fromEntries(Object.entries(NURSE_VIEW_PATHS).map(([viewName, pathname]) => [pathname, viewName]))
-);
+const NURSE_PATH_VIEWS = Object.freeze({
+  ...Object.fromEntries(Object.entries(NURSE_VIEW_PATHS).map(([viewName, pathname]) => [pathname, viewName])),
+  // Keep old bookmarks working by opening ER patients in Patient Records.
+  '/nurse/er-intake': 'patients'
+});
 
 const nurseViewFromPath = (pathname) => NURSE_PATH_VIEWS[String(pathname || '').replace(/\/+$/, '') || '/nurse'] || 'overview';
 
@@ -549,7 +550,6 @@ function NurseDashboard() {
     const allowed = new Set(['overview', 'patients', 'profile', 'activity']);
     if (nurseCapabilities.appointments) allowed.add('appointments');
     if (nurseCapabilities.vitals) allowed.add('vitals');
-    if (nurseCapabilities.erIntake) allowed.add('er-intake');
     if (nurseCapabilities.orders) allowed.add('orders');
     if (nurseCapabilities.wards) { allowed.add('ward-management'); allowed.add('inpatients'); }
     if (nurseCapabilities.schedules) ['tasks', 'calendar', 'shifts', 'schedules'].forEach((item) => allowed.add(item));
@@ -761,7 +761,6 @@ function NurseDashboard() {
   const [walkInPatientPage, setWalkInPatientPage] = useState(1);
   const [vitalsPage, setVitalsPage] = useState(1);
   const [vitalsSearch, setVitalsSearch] = useState('');
-  const [erIntakePage, setErIntakePage] = useState(1);
   const [addPatientData, setAddPatientData] = useState({
     patientMode: "new",
     routeType: "er_consult",
@@ -834,21 +833,6 @@ function NurseDashboard() {
     { value: 'admission_eval', title: 'Admission Evaluation', hint: 'Prepare the case for doctor-led admission review before room assignment.' }
   ];
 
-  const erIntakePageSize = 8;
-  const activeErPatients = useMemo(
-    () => patientsList.filter((patient) => String(patient?.admissionStatus || patient?.admission_status || '').trim().toLowerCase() === 'emergency'),
-    [patientsList]
-  );
-  const erIntakePageCount = Math.max(1, Math.ceil(activeErPatients.length / erIntakePageSize));
-  const currentErIntakePage = Math.min(erIntakePage, erIntakePageCount);
-  const pagedErPatients = useMemo(() => {
-    const start = (currentErIntakePage - 1) * erIntakePageSize;
-    return activeErPatients.slice(start, start + erIntakePageSize);
-  }, [activeErPatients, currentErIntakePage]);
-
-  useEffect(() => {
-    setErIntakePage((page) => Math.min(Math.max(1, page), erIntakePageCount));
-  }, [erIntakePageCount]);
 
   const toMoney = (v) => {
     const n = Number(v);
@@ -2913,6 +2897,11 @@ function NurseDashboard() {
 
   const [patientSearch, setPatientSearch] = useState("");
   const [patientRouteFilter, setPatientRouteFilter] = useState("ALL");
+  useEffect(() => {
+    if (String(location.pathname || '').replace(/\/+$/, '') !== '/nurse/er-intake') return;
+    setPatientRouteFilter('ER');
+    navigate('/nurse/patients', { replace: true });
+  }, [location.pathname, navigate]);
   const [patientGenderFilter, setPatientGenderFilter] = useState("All");
   const [patientPage, setPatientPage] = useState(1);
   const itemsPerPage = 8;
@@ -3087,7 +3076,7 @@ function NurseDashboard() {
       if (view === 'ward-management' || view === 'overview') {
         fetchWardRegistry();
       }
-      if (view === 'overview' || view === 'er-intake' || view === 'patients') {
+      if (view === 'overview' || view === 'patients') {
         refreshPatientsList();
       }
     }, [view]);
@@ -3104,6 +3093,14 @@ function NurseDashboard() {
     });
     return counts;
   }, [patientsList]);
+
+  const openErPatientRecords = () => {
+    setPatientSearch('');
+    setPatientPage(1);
+    setPatientRouteFilter('ER');
+    setView('patients');
+  };
+  const isErPatientRecordView = activeDept === 'ER' && patientRouteFilter === 'ER';
 
   const handleDownloadPatientCsv = async () => {
     const rows = filteredPatientsForRecords;
@@ -3822,7 +3819,7 @@ function NurseDashboard() {
     const interval = setInterval(async () => {
       if (document.visibilityState !== 'visible' || refreshInFlight) return;
       const tasks = [];
-      if (['overview', 'patients', 'er-intake'].includes(view) && typeof refreshPatientsList === 'function') tasks.push(refreshPatientsList({ silent: true }));
+      if (['overview', 'patients'].includes(view) && typeof refreshPatientsList === 'function') tasks.push(refreshPatientsList({ silent: true }));
       if (view === 'appointments' && typeof fetchAppointments === 'function') tasks.push(fetchAppointments());
       if (['overview', 'ward-management'].includes(view) && typeof fetchWardRegistry === 'function') tasks.push(fetchWardRegistry());
       if (!tasks.length) return;
@@ -6299,17 +6296,11 @@ function NurseDashboard() {
             <span>{NURSE_SIDEBAR_LABELS.appointments}</span>
           </button> : null}
 
-          {nurseCapabilities.vitals || nurseCapabilities.erIntake || nurseCapabilities.orders ? <div className="sidebar-section-label">CLINICAL STATIONS</div> : null}
+          {nurseCapabilities.vitals || nurseCapabilities.orders ? <div className="sidebar-section-label">CLINICAL STATIONS</div> : null}
             {nurseCapabilities.vitals ? <button className={`nurse-nav-item ${view === 'vitals' ? 'active' : ''}`} onClick={() => setView('vitals')}>
               <Activity size={20} />
               <span>{NURSE_SIDEBAR_LABELS.vitals}</span>
             </button> : null}
-            {nurseCapabilities.erIntake ? <button className={`nurse-nav-item ${view === 'er-intake' ?
-'active' : ''}`} onClick={() => setView('er-intake')}>
-              <AlertCircle size={20} />
-              <span>ER Intake</span>
-            </button> : null}
-
           {nurseCapabilities.orders ? <button className={`nurse-nav-item ${view === 'orders' ? 'active' : ''}`} onClick={() => setView('orders')}>
             <FileText size={20} />
             <span>{NURSE_SIDEBAR_LABELS.orders}</span>
@@ -6369,7 +6360,7 @@ function NurseDashboard() {
                 {patientsList.filter(p => p.triage_level === 1 && p.admission_status === 'Emergency').length} Level 1 (Resuscitation) patient(s) need immediate attention.
               </span>
             </div>
-            <button className="btn-red-sm" onClick={() => setView('er-intake')}>View ER Queue</button>
+            <button className="btn-red-sm" onClick={openErPatientRecords}>View ER Patients</button>
           </div>
         )}
         <header className="nurse-header">
@@ -7010,9 +7001,9 @@ function NurseDashboard() {
                                     <Plus size={18} />
                                     <span>Register Walk-In</span>
                                 </button> : null}
-                                {nurseCapabilities.erIntake ? <button className="btn-gray" onClick={() => setView('er-intake')}>
+                                {nurseCapabilities.erIntake ? <button className="btn-gray" onClick={openErPatientRecords}>
                                     <AlertTriangle size={18} />
-                                    <span>Emergency Triage</span>
+                                    <span>ER Patient Queue</span>
                                 </button> : null}
                                 {!nurseCapabilities.reception && nurseCapabilities.appointments ? <button className="btn-orange" onClick={() => setView('appointments')}><Calendar size={18} /><span>{NURSE_SIDEBAR_LABELS.appointments}</span></button> : null}
                                 {!nurseCapabilities.reception ? <button className="btn-gray" onClick={() => setView('patients')}><Users size={18} /><span>{NURSE_SIDEBAR_LABELS.patients}</span></button> : null}
@@ -7097,75 +7088,6 @@ function NurseDashboard() {
                                 </button> : null}
                             </div>
                         </div>}
-                    </div>
-                </div>
-            )}
-            {view === 'er-intake' && (
-                <div className="er-intake-view">
-                    <div className="welcome-banner full-width">
-                        <div className="welcome-text">
-                            <div className="workspace-badge workspace-emergency">Emergency Station</div>
-                            <h1>Emergency Triage & Registration</h1>
-                            <p>Fast-track registration and triage for urgent cases.</p>
-                        </div>
-                        <div className="header-actions">
-                            <button className="btn-orange" onClick={() => { setAddPatientData(prev => ({ ...prev, routeType: 'er_consult' })); setShowAddPatientModal(true); }}>
-                                <Plus size={18} />
-                                <span>New ER Registration</span>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div className="overview-card" style={{ marginTop: '24px' }}>
-                        <div className="card-header">
-                            <h3>Active ER Patients</h3>
-                            <div className="er-intake-pagination" aria-label="ER intake pages">
-                                <button type="button" className="patient-page-btn" onClick={() => setErIntakePage((page) => Math.max(1, page - 1))} disabled={currentErIntakePage <= 1} aria-label="Previous ER patients page">
-                                    <ChevronLeft size={17} />
-                                </button>
-                                <span>Page {currentErIntakePage} of {erIntakePageCount}</span>
-                                <button type="button" className="patient-page-btn" onClick={() => setErIntakePage((page) => Math.min(erIntakePageCount, page + 1))} disabled={currentErIntakePage >= erIntakePageCount} aria-label="Next ER patients page">
-                                    <ChevronRight size={17} />
-                                </button>
-                            </div>
-                        </div>
-                        <div className="er-intake-table-wrap">
-                        <table className="staff-table er-intake-table" style={{ width: '100%' }}>
-                            <thead>
-                                <tr>
-                                    <th>Patient</th>
-                                    <th>Triage Level</th>
-                                    <th>Status</th>
-                                    <th>Time Since Entry</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {activeErPatients.length === 0 ? (
-                                    <tr><td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>No active ER patients.</td></tr>
-                                ) : (
-                                    pagedErPatients.map(p => {
-                                        const triageLevel = p.clinical_records?.erRegistration?.triage?.level || p.triage_level || 4;
-                                        return (
-                                        <tr key={p.id}>
-                                            <td style={{ fontWeight: 700 }}>{p.first_name} {p.last_name}</td>
-                                            <td>
-                                                <span className={`triage-badge triage-${triageLevel}`}>
-                                                    Level {triageLevel}
-                                                </span>
-                                            </td>
-                                            <td><span className="bed-status-label" style={{ color: '#0f172a', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px' }}>{p.admissionStatus || p.admission_status}</span></td>
-                                            <td style={{ color: '#64748b', fontSize: '0.85rem' }}>{new Date(p.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-                                            <td>
-                                                <button className="btn-gray" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => { setCentralRecordPatientId(p._id || p.id); setCentralRecordOpen(true); }}>View Record</button>
-                                            </td>
-                                        </tr>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
-                        </div>
                     </div>
                 </div>
             )}
@@ -7819,7 +7741,10 @@ function NurseDashboard() {
                                 <h1 className="page-title-large" style={{marginBottom: '4px'}}>{NURSE_SIDEBAR_LABELS.patients}</h1>
                                 <p className="page-subtitle">Patients and clinical records assigned to {nurseWorkspace.label}.</p>
                             </div>
-                            <div style={{display: 'flex', gap: '12px'}}>
+                            <div style={{display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
+                                {isErPatientRecordView && nurseCapabilities.reception ? <button className="btn-orange" onClick={() => { setAddPatientData(prev => ({ ...prev, routeType: 'er_consult' })); setShowAddPatientModal(true); }}>
+                                    <Plus size={18} /> New ER Registration
+                                </button> : null}
                                 <button className="btn-primary-action" onClick={handlePrintPatientRecords}>
                                     <Printer size={18} /> Print Records
                                 </button>
@@ -7903,7 +7828,7 @@ function NurseDashboard() {
                                 </div>
                                 {activeDept === 'ER' ? <label className="patient-route-filter">
                                   <span className="sr-only">Filter patient records by route</span>
-                                  <select value={patientRouteFilter} onChange={(event) => setPatientRouteFilter(event.target.value)}>
+                                  <select value={patientRouteFilter} onChange={(event) => { setPatientRouteFilter(event.target.value); setPatientPage(1); }}>
                                     <option value="ALL">All reception patients ({patientRouteCounts.ALL || 0})</option>
                                     <option value="ER">ER patients ({patientRouteCounts.ER || 0})</option>
                                     <option value="ONSITE">On-site patients ({patientRouteCounts.ONSITE || 0})</option>
@@ -7955,7 +7880,9 @@ function NurseDashboard() {
                                             <th style={{width: '14%'}}>Patient ID</th>
                                             <th style={{width: '26%'}}>Patient</th>
                                             <th style={{width: '12%'}}>Route</th>
+                                            {isErPatientRecordView ? <th style={{width: '10%'}}>Triage</th> : null}
                                             <th style={{width: '18%'}}>Routing Status</th>
+                                            {isErPatientRecordView ? <th style={{width: '12%'}}>Time Entered</th> : null}
                                             <th style={{width: '14%'}}>Ward / Room</th>
                                             <th style={{width: '8%', textAlign: 'center'}}>Actions</th>
                                         </tr>
@@ -7963,13 +7890,13 @@ function NurseDashboard() {
                                     <tbody>
                                         {loadingPatients ? (
                                             <tr>
-                                                <td colSpan="6" className="empty-state-row">
+                                                <td colSpan={isErPatientRecordView ? 8 : 6} className="empty-state-row">
                                                     Loading patients...
                                                 </td>
                                             </tr>
                                         ) : filteredPatientsForRecords.length === 0 ? (
                                             <tr>
-                                                <td colSpan="6" className="empty-state-row">
+                                                <td colSpan={isErPatientRecordView ? 8 : 6} className="empty-state-row">
                                                     No patients found.
                                                 </td>
                                             </tr>
@@ -7984,11 +7911,16 @@ function NurseDashboard() {
                                                         <div style={{fontSize: '0.8rem', color: '#64748b'}}>{patient.sex ? `${patient.sex}` : ''}</div>
                                                     </td>
                                                     <td>
-                                                        <span className={`reception-route-badge ${String(patient.receptionRoute || 'ONSITE').toLowerCase()}`}>
-                                                          {RECEPTION_ROUTE_LABELS[String(patient.receptionRoute || 'ONSITE').toUpperCase()] || 'On-site'}
+                                                        <span className={`reception-route-badge ${String(patient.receptionRoute || (String(patient.admissionStatus || '').toUpperCase() === 'EMERGENCY' ? 'ER' : 'ONSITE')).toLowerCase()}`}>
+                                                          {RECEPTION_ROUTE_LABELS[String(patient.receptionRoute || (String(patient.admissionStatus || '').toUpperCase() === 'EMERGENCY' ? 'ER' : 'ONSITE')).toUpperCase()] || 'On-site'}
                                                         </span>
                                                     </td>
+                                                    {isErPatientRecordView ? (() => {
+                                                      const triageLevel = patient.clinicalRecords?.erRegistration?.triage?.level || patient.clinical_records?.erRegistration?.triage?.level || patient.triageLevel || patient.triage_level;
+                                                      return <td>{triageLevel ? <span className={`triage-badge triage-${triageLevel}`}>Level {triageLevel}</span> : 'Not triaged'}</td>;
+                                                    })() : null}
                                                     <td><span className="routing-status-text">{patient.routingStatus || patient.admissionStatus || 'Registered'}</span></td>
+                                                    {isErPatientRecordView ? <td style={{color: '#64748b', fontSize: '0.85rem'}}>{(patient.createdAt || patient.created_at) ? new Date(patient.createdAt || patient.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}</td> : null}
                                                     <td>{patient.wardNumber || 'Outpatient'}</td>
                                                     <td>
                                                         <div className="action-buttons-wrapper">
