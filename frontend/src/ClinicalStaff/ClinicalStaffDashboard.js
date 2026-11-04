@@ -429,7 +429,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
       try {
         const tasks = [refreshOrders(), refreshSchedule(), refreshApprovals()];
         if (isPhysicalTherapist) tasks.push(refreshVideoAppointments());
-        if (includePatients && !isEcgOperator) tasks.push(refreshPatients());
+        if (includePatients) tasks.push(refreshPatients());
         await Promise.allSettled(tasks);
       } finally {
         refreshInFlight = false;
@@ -445,7 +445,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
   useEffect(() => {
     if (!isEcgOperator) return;
-    if (activeTab === 'appointments' || activeTab === 'patients') {
+    if (activeTab === 'appointments') {
       setActiveTab('dashboard');
     }
   }, [activeTab, isEcgOperator]);
@@ -1097,7 +1097,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
         <nav className="cs-nav">
           <TabButton id="dashboard" icon={<LayoutDashboard size={18} />} label="Dashboard" />
-          {!isEcgOperator ? <TabButton id="patients" icon={<UserRound size={18} />} label="Patient Records" /> : null}
+          <TabButton id="patients" icon={<UserRound size={18} />} label="Patient Records" />
           <TabButton id="approvals" icon={<ClipboardList size={18} />} label="Approvals" />
           {!isEcgOperator && !isPhysicalTherapist ? <TabButton id="appointments" icon={<Calendar size={18} />} label="Appointments" /> : null}
           {isPhysicalTherapist ? <TabButton id="video" icon={<Video size={18} />} label="Video Consultations" /> : null}
