@@ -443,13 +443,6 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     };
   }, [role, orderStatusFilter, isEcgOperator, isPhysicalTherapist]);
 
-  useEffect(() => {
-    if (!isEcgOperator) return;
-    if (activeTab === 'appointments') {
-      setActiveTab('dashboard');
-    }
-  }, [activeTab, isEcgOperator]);
-
   const filteredPatients = useMemo(() => {
     const q = String(patientSearch || '').trim().toLowerCase();
     const list = Array.isArray(patients) ? patients : [];
@@ -1099,9 +1092,9 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
           <TabButton id="dashboard" icon={<LayoutDashboard size={18} />} label="Dashboard" />
           <TabButton id="patients" icon={<UserRound size={18} />} label="Patient Records" />
           <TabButton id="approvals" icon={<ClipboardList size={18} />} label="Approvals" />
-          {!isEcgOperator && !isPhysicalTherapist ? <TabButton id="appointments" icon={<Calendar size={18} />} label="Appointments" /> : null}
+          <TabButton id="appointments" icon={<Calendar size={18} />} label="Appointments" />
+          <TabButton id="orders" icon={<ClipboardList size={18} />} label="Medical Orders" />
           {isPhysicalTherapist ? <TabButton id="video" icon={<Video size={18} />} label="Video Consultations" /> : null}
-          {!isPhysicalTherapist ? <TabButton id="orders" icon={<ClipboardList size={18} />} label="Medical Orders" /> : null}
         </nav>
 
         <div className="cs-sidebar-footer">

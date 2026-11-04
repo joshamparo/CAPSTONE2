@@ -1,10 +1,42 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const router = require('../routes/clinicalOrders');
 const { canAccessOrderRow, canTransitionStatus, inferActor } = router.__test;
+const root = path.join(__dirname, '..', '..');
+const clinicalDashboard = fs.readFileSync(path.join(root, 'frontend', 'src', 'ClinicalStaff', 'ClinicalStaffDashboard.js'), 'utf8');
+const patientsRoute = fs.readFileSync(path.join(__dirname, '..', 'routes', 'patients.js'), 'utf8');
 
 const roles = ['medtech', 'radiographer', 'ecg_operator', 'physical_therapist'];
+
+test('all clinical roles share the same sidebar sequence, with video consultations only for PT', () => {
+  const navStart = clinicalDashboard.indexOf('<nav className="cs-nav">');
+  const navEnd = clinicalDashboard.indexOf('</nav>', navStart);
+  assert.notEqual(navStart, -1);
+  assert.notEqual(navEnd, -1);
+  const nav = clinicalDashboard.slice(navStart, navEnd);
+  assert.deepEqual(
+    [...nav.matchAll(/label="([^"]+)"/g)].map(([, label]) => label),
+    ['Dashboard', 'Patient Records', 'Approvals', 'Appointments', 'Medical Orders', 'Video Consultations']
+  );
+  assert.match(nav, /isPhysicalTherapist \? <TabButton id="video"/);
+  assert.doesNotMatch(nav, /isEcgOperator|isPhysicalTherapist \? <TabButton id="appointments"|isPhysicalTherapist \? <TabButton id="orders"/);
+  assert.doesNotMatch(clinicalDashboard, /if \(!isEcgOperator\) return;\s*if \(activeTab === 'appointments'\)/);
+});
+
+test('clinical patient records are scoped to service-assigned patients and the signed staff identity', () => {
+  const scopeStart = patientsRoute.indexOf('async function clinicalPatientOrderScope');
+  const scopeEnd = patientsRoute.indexOf('\n}\n', scopeStart);
+  assert.notEqual(scopeStart, -1);
+  const scope = patientsRoute.slice(scopeStart, scopeEnd);
+  assert.match(scope, /assigned_role: role/);
+  assert.match(scope, /assigned_to: email/);
+  assert.match(scope, /assigned_to: null/);
+  assert.match(patientsRoute, /const scopedWhere = clinicalScope[\s\S]{0,220}clinicalScope[\s\S]{0,160}where: scopedWhere/);
+  assert.match(patientsRoute, /This patient is not assigned to your clinical service\./);
+});
 
 for (const role of roles) {
   test(`${role} queue is shared until claimed and private after assignment`, () => {
