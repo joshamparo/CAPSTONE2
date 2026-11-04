@@ -2740,7 +2740,7 @@ function PharmacistDashboard() {
         <nav className="pharm-nav">
           <button type="button" className={`pharm-nav-item ${activeTab === 'pos' ? 'active' : ''}`} onClick={() => setActiveTab('pos')}>
             <ShoppingCart size={20} />
-            {!isCollapsed && <span>POS System</span>}
+            {!isCollapsed && <span>Dashboard</span>}
           </button>
           {!isCollapsed && <div className="pharm-nav-group-title">Inventory</div>}
           <button type="button" className="pharm-nav-item" onClick={() => setScanCenterOpen(true)}>
