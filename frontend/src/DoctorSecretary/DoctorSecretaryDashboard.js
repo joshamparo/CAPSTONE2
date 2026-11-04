@@ -1649,11 +1649,6 @@ export default function DoctorSecretaryDashboard() {
               <span>Availability</span>
             </button>
 
-            <div className="sidebar-section-label">SESSION</div>
-            <button className="sec-nav-btn danger" onClick={() => setShowLogoutConfirm(true)} type="button">
-              <XCircle size={20} />
-              <span>Sign Out</span>
-            </button>
           </nav>
 
         </div>
