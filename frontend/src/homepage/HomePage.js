@@ -633,7 +633,7 @@ function HomePage() {
               setShowAllServices(true);
             }}
           >
-            {showAllServices ? 'Show Less' : 'View All Services'}
+            {showAllServices ? 'Show Less' : `Show All ${allServices.length} Services`}
           </button>
         </div>
       </section>
