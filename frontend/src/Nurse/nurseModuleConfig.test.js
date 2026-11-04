@@ -1,4 +1,15 @@
-import { getNurseModuleConfig, normalizeNurseModuleKey } from './nurseModuleConfig';
+import { getNurseModuleConfig, normalizeNurseModuleKey, NURSE_SIDEBAR_LABELS } from './nurseModuleConfig';
+
+test('Nurse sidebar uses consistent module names across specializations', () => {
+  expect(NURSE_SIDEBAR_LABELS).toEqual({
+    patients: 'Patient Records',
+    appointments: 'Appointments',
+    vitals: 'Vitals & Assessments',
+    orders: 'Orders',
+    wards: 'Ward / Room Overview',
+    tasks: 'Tasks'
+  });
+});
 
 test('dental clinic excludes inpatient and e-MAR modules', () => {
   const config = getNurseModuleConfig('DENTALCLINIC', 'clinic');

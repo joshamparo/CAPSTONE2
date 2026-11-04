@@ -13,6 +13,15 @@ const BASE = Object.freeze({
   orderTabs: []
 });
 
+export const NURSE_SIDEBAR_LABELS = Object.freeze({
+  patients: 'Patient Records',
+  appointments: 'Appointments',
+  vitals: 'Vitals & Assessments',
+  orders: 'Orders',
+  wards: 'Ward / Room Overview',
+  tasks: 'Tasks'
+});
+
 const CONFIGS = {
   ER: { appointments: true, vitals: true, orders: true, medications: true, wards: true, reception: true, erIntake: true, orderTabs: ['medications', 'labs', 'supplies'] },
   PEDIA: { appointments: true, vitals: true, orders: true, medications: true, wards: true, orderTabs: ['medications', 'labs', 'supplies'] },

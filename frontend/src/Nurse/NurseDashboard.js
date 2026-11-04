@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabaseClient';
 import { API_BASE, checkBackendHealth, fetchJson } from '../utils/api';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import PatientFullRecordModal from '../components/PatientFullRecordModal';
-import { getNurseModuleConfig, normalizeNurseModuleKey } from './nurseModuleConfig';
+import { getNurseModuleConfig, normalizeNurseModuleKey, NURSE_SIDEBAR_LABELS } from './nurseModuleConfig';
 import { hasActiveHmoCoverage, normalizeHmoDisplayStatus } from './hmoWorkflow';
 
 const RECEPTION_ROUTE_LABELS = {
@@ -544,34 +544,6 @@ function NurseDashboard() {
     return getNurseModuleConfig(key, nurseWorkspace.type);
   }, [activeDept, nurseWorkspace.type, user.departmentLabel, user.specialization]);
   const canManageHospitalBeds = ['ER', 'MEDICINE'].includes(normalizeDeptId(user.specialization || activeDept));
-
-  const nurseNavLabels = useMemo(() => {
-    const key = normalizeSpecializationKey(user.specialization || activeDept || user.departmentLabel);
-    const specialized = {
-      DENTALCLINIC: { patients: 'Patient Records', appointments: 'Dental Appointments & Queue', vitals: 'Pre-Procedure Screening', orders: 'Dental Orders & Supplies' },
-      LABORATORY: { patients: 'Laboratory Patient Queue', appointments: 'Specimen Schedule', orders: 'Laboratory Orders' },
-      PATHOLOGY: { patients: 'Pathology Patient Queue', appointments: 'Specimen Schedule', orders: 'Pathology Orders' },
-      RADIOLOGY: { patients: 'Imaging Patient Queue', appointments: 'Imaging Schedule', orders: 'Imaging Orders' },
-      ECG: { patients: 'ECG Patient Queue', appointments: 'ECG Schedule', orders: 'ECG Orders' },
-      PHYSICALTHERAPY: { patients: 'Patient Records', appointments: 'Therapy Schedule', vitals: 'Therapy Assessment', orders: 'Therapy Supplies' },
-      OTOLARYNGOLOGYENT: { patients: 'Patient Records', appointments: 'ENT Appointments', vitals: 'ENT Pre-Consult Screening', orders: 'ENT Orders & Supplies' },
-      VIDEOCONSULTATION: { patients: 'Virtual Care Patients', appointments: 'Video Consultations' },
-      SURGERYMINOR: { patients: 'Procedure Patients', appointments: 'Procedure Schedule', vitals: 'Pre-Op & Recovery Monitoring', orders: 'Procedure Orders' },
-      ANESTHESIA: { patients: 'Anesthesia Patients', appointments: 'Anesthesia Schedule', vitals: 'Pre-Anesthesia Assessment', orders: 'Anesthesia Orders' }
-    };
-    const labelsByType = {
-      emergency: { patients: 'Patient Records', appointments: 'ER Consults', vitals: 'ER Vitals Monitoring', orders: 'ER Orders Management', wards: 'Emergency Room Board' },
-      pedia: { patients: 'Pediatric Patients', appointments: 'Pediatric Appointments', vitals: 'Pediatric Vitals', orders: 'Pediatric Orders' },
-      bedside: { patients: 'Assigned Patients', vitals: 'Bedside Vitals', orders: 'Medication & Clinical Orders', wards: 'Ward Management' },
-      clinic: { patients: 'Clinic Patients', appointments: 'Clinic Appointments', vitals: 'Clinic Vitals & Rooming', orders: 'Clinic Orders' },
-      diagnostic: { patients: 'Patient Queue', appointments: 'Diagnostic Schedule', orders: 'Diagnostic Orders' },
-      imaging: { patients: 'Patient Queue', appointments: 'Exam Schedule', orders: 'Imaging Orders' },
-      remote: { patients: 'Virtual Care Patients', appointments: 'Video Consultations' },
-      procedure: { patients: 'Procedure Patients', appointments: 'Procedure Schedule', vitals: 'Recovery Vitals', orders: 'Procedure Orders' },
-      general: { patients: 'Patient Records', appointments: 'Appointments', vitals: 'Vitals Monitoring', orders: 'Orders Management', wards: 'Ward Management' }
-    };
-    return { ...(labelsByType[nurseWorkspace.type] || labelsByType.general), ...(specialized[key] || {}), wards: 'Ward / Room Overview' };
-  }, [activeDept, nurseWorkspace.type, user.departmentLabel, user.specialization]);
 
   const allowedNurseViews = useMemo(() => {
     const allowed = new Set(['overview', 'patients', 'profile', 'activity']);
@@ -6319,18 +6291,18 @@ function NurseDashboard() {
           
           <button className={`nurse-nav-item ${view === 'patients' ? 'active' : ''}`} onClick={() => setView('patients')}>
             <Users size={20} />
-            <span>{nurseNavLabels.patients}</span>
+            <span>{NURSE_SIDEBAR_LABELS.patients}</span>
           </button>
 
           {nurseCapabilities.appointments ? <button className={`nurse-nav-item ${view === 'appointments' ? 'active' : ''}`} onClick={() => setView('appointments')}>
             <Calendar size={20} />
-            <span>{nurseNavLabels.appointments}</span>
+            <span>{NURSE_SIDEBAR_LABELS.appointments}</span>
           </button> : null}
 
           {nurseCapabilities.vitals || nurseCapabilities.erIntake || nurseCapabilities.orders ? <div className="sidebar-section-label">CLINICAL STATIONS</div> : null}
             {nurseCapabilities.vitals ? <button className={`nurse-nav-item ${view === 'vitals' ? 'active' : ''}`} onClick={() => setView('vitals')}>
               <Activity size={20} />
-              <span>{nurseNavLabels.vitals}</span>
+              <span>{NURSE_SIDEBAR_LABELS.vitals}</span>
             </button> : null}
             {nurseCapabilities.erIntake ? <button className={`nurse-nav-item ${view === 'er-intake' ?
 'active' : ''}`} onClick={() => setView('er-intake')}>
@@ -6340,13 +6312,13 @@ function NurseDashboard() {
 
           {nurseCapabilities.orders ? <button className={`nurse-nav-item ${view === 'orders' ? 'active' : ''}`} onClick={() => setView('orders')}>
             <FileText size={20} />
-            <span>{nurseNavLabels.orders}</span>
+            <span>{NURSE_SIDEBAR_LABELS.orders}</span>
           </button> : null}
 
           {nurseCapabilities.wards ? <div className="sidebar-section-label">INPATIENT CARE</div> : null}
           {nurseCapabilities.wards ? <button className={`nurse-nav-item ${view === 'ward-management' ? 'active' : ''}`} onClick={() => setView('ward-management')}>
             <BedDouble size={20} />
-            <span>{nurseNavLabels.wards}</span>
+            <span>{NURSE_SIDEBAR_LABELS.wards}</span>
           </button> : null}
 
           {/* Schedules Dropdown */}
@@ -6362,7 +6334,7 @@ function NurseDashboard() {
             <div className="nurse-nav-sub-menu" style={{paddingLeft: isSidebarCollapsed ? '0' : '16px'}}>
               <button className={`nurse-nav-item sub-item ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')} style={{fontSize: '0.9rem'}}>
                   <ClipboardList size={18} />
-                  <span>{nurseCapabilities.medications ? 'Tasks & e-MAR' : 'Tasks & Handover'}</span>
+                  <span>{NURSE_SIDEBAR_LABELS.tasks}</span>
                 </button>
               <button className={`nurse-nav-item sub-item ${view === 'calendar' ? 'active' : ''}`} onClick={() => setView('calendar')} style={{fontSize: '0.9rem'}}>
                 <Calendar size={18} />
@@ -7042,15 +7014,15 @@ function NurseDashboard() {
                                     <AlertTriangle size={18} />
                                     <span>Emergency Triage</span>
                                 </button> : null}
-                                {!nurseCapabilities.reception && nurseCapabilities.appointments ? <button className="btn-orange" onClick={() => setView('appointments')}><Calendar size={18} /><span>{nurseNavLabels.appointments}</span></button> : null}
-                                {!nurseCapabilities.reception ? <button className="btn-gray" onClick={() => setView('patients')}><Users size={18} /><span>{nurseNavLabels.patients}</span></button> : null}
+                                {!nurseCapabilities.reception && nurseCapabilities.appointments ? <button className="btn-orange" onClick={() => setView('appointments')}><Calendar size={18} /><span>{NURSE_SIDEBAR_LABELS.appointments}</span></button> : null}
+                                {!nurseCapabilities.reception ? <button className="btn-gray" onClick={() => setView('patients')}><Users size={18} /><span>{NURSE_SIDEBAR_LABELS.patients}</span></button> : null}
                                 {nurseCapabilities.medications ? <button className="btn-gray" onClick={() => { setActiveOrderTab('medications'); setView('orders'); }}><Pill size={18} /><span>Medication Administration</span></button> : null}
-                                {nurseCapabilities.vitals && !nurseCapabilities.erIntake ? <button className="btn-gray" onClick={() => setView('vitals')}><Activity size={18} /><span>{nurseNavLabels.vitals}</span></button> : null}
+                                {nurseCapabilities.vitals && !nurseCapabilities.erIntake ? <button className="btn-gray" onClick={() => setView('vitals')}><Activity size={18} /><span>{NURSE_SIDEBAR_LABELS.vitals}</span></button> : null}
                                 {nurseCapabilities.wards ? <button className="btn-gray" onClick={() => setView('ward-management')}>
                                     <BedDouble size={18} />
-                                    <span>{nurseNavLabels.wards}</span>
+                                    <span>{NURSE_SIDEBAR_LABELS.wards}</span>
                                 </button> : null}
-                                {!nurseCapabilities.vitals && nurseCapabilities.orders ? <button className="btn-gray" onClick={() => setView('orders')}><FileText size={18} /><span>{nurseNavLabels.orders}</span></button> : null}
+                                {!nurseCapabilities.vitals && nurseCapabilities.orders ? <button className="btn-gray" onClick={() => setView('orders')}><FileText size={18} /><span>{NURSE_SIDEBAR_LABELS.orders}</span></button> : null}
                             </div>
                         </div>
                     </div>
@@ -7844,7 +7816,7 @@ function NurseDashboard() {
                         <>
                         <div className="patient-view-header">
                             <div>
-                                <h1 className="page-title-large" style={{marginBottom: '4px'}}>{nurseNavLabels.patients}</h1>
+                                <h1 className="page-title-large" style={{marginBottom: '4px'}}>{NURSE_SIDEBAR_LABELS.patients}</h1>
                                 <p className="page-subtitle">Patients and clinical records assigned to {nurseWorkspace.label}.</p>
                             </div>
                             <div style={{display: 'flex', gap: '12px'}}>
@@ -8203,7 +8175,7 @@ function NurseDashboard() {
                           <div className="welcome-banner full-width">
                               <div className="welcome-text">
                                   <div className="workspace-badge workspace-er">Monitoring</div>
-                                  <h1>{nurseCapabilities.screeningMode === 'dental' ? 'Dental Pre-Procedure Screening' : activeDept === 'PEDIA' ? 'Infant Vitals Board' : nurseNavLabels.vitals}</h1>
+                                  <h1>{NURSE_SIDEBAR_LABELS.vitals}</h1>
                                   <p>{nurseCapabilities.screeningMode === 'dental' ? 'Review medical history, allergies, consent, and blood pressure before dental treatment.' : activeDept === 'PEDIA' ? 'Monitor Pedia patients under 12 months with a verified date of birth.' : 'Monitor patient observations and record new measurements.'}</p>
                               </div>
                               <div className="header-actions">
@@ -8363,7 +8335,7 @@ function NurseDashboard() {
                 <div className="orders-container">
                     <div className="orders-header">
                         <div>
-                            <h2 className="page-title">{nurseNavLabels.orders}</h2>
+                            <h2 className="page-title">{NURSE_SIDEBAR_LABELS.orders}</h2>
                             <p className="page-subtitle">{nurseCapabilities.screeningMode === 'dental' ? 'Request dental supplies and laboratory or prosthetic work for authorized clinic patients.' : 'Manage authorized clinical requests for your assigned department.'}</p>
                         </div>
                         <button className="btn-primary-action" onClick={() => setView('activity')}>
@@ -8858,7 +8830,7 @@ function NurseDashboard() {
                   <div className="tasks-board-container">
                       <div className="tasks-header">
                           <div>
-                              <h2 className="page-title">{nurseCapabilities.medications ? 'Tasks & e-MAR' : 'Tasks & Handover'}</h2>
+                              <h2 className="page-title">{NURSE_SIDEBAR_LABELS.tasks}</h2>
                               <p className="page-subtitle">Shared board for {user.departmentLabel || formatDepartmentLabel(activeDept)} • {currentShiftLabel}</p>
                         </div>
                         <form onSubmit={addTask} className="quick-task-form">
