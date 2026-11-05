@@ -870,11 +870,10 @@ export default function DoctorSecretaryDashboard() {
     setChargeError('');
     const inferredKey = inferServiceKeyForAppointment(apt);
     const fee = inferredKey ? serviceFeeMap.get(String(inferredKey).toLowerCase()) : null;
-    const existingAmount = apt.amount != null ? Number(apt.amount) : null;
     const suggested = fee ? Number(fee.defaultFee || 0) : 0;
     setChargeForm({
       serviceKey: inferredKey || '',
-      amount: existingAmount && Number.isFinite(existingAmount) && existingAmount > 0 ? String(existingAmount) : (suggested > 0 ? String(suggested) : '1')
+      amount: Number.isFinite(suggested) && suggested > 0 ? String(suggested) : ''
     });
     setChargeModalOpen(true);
   };
@@ -2011,7 +2010,7 @@ export default function DoctorSecretaryDashboard() {
               <div className="sec-records-toolbar">
                 <div className="sec-records-left">
                   <div className="sec-toolbar-title">Onsite Consultations</div>
-                  <div className="sec-toolbar-sub">Records for the linked doctor. Payments are recorded here.</div>
+                  <div className="sec-toolbar-sub">Set onsite consultation charges here and send them to the Cashier. The Cashier records payments.</div>
                 </div>
                 <div className="sec-records-right">
                   <input className="sec-date" type="date" value={recordsDate} onChange={(e) => setRecordsDate(e.target.value)} />
@@ -2671,7 +2670,7 @@ export default function DoctorSecretaryDashboard() {
                       onChange={(e) => {
                         const nextKey = String(e.target.value || '').trim();
                         const fee = nextKey ? serviceFeeMap.get(nextKey.toLowerCase()) : null;
-                        const nextAmount = fee && Number(fee.defaultFee || 0) > 0 ? String(Number(fee.defaultFee || 0)) : (chargeForm.amount || '1');
+                        const nextAmount = fee && Number(fee.defaultFee || 0) > 0 ? String(Number(fee.defaultFee || 0)) : '';
                         setChargeForm((v) => ({ ...v, serviceKey: nextKey, amount: nextAmount }));
                       }}
                       disabled={serviceFeesLoading}
@@ -2691,16 +2690,16 @@ export default function DoctorSecretaryDashboard() {
                       className="sec-input"
                       value={chargeForm.amount}
                       onChange={(e) => setChargeForm((v) => ({ ...v, amount: e.target.value }))}
-                      placeholder="e.g. 1"
+                      placeholder="Enter approved consultation fee"
                       type="number"
-                      min="1"
+                      min="0.01"
                       step="0.01"
                     />
                   </div>
                   <div className="sec-field">
                     <label>Amount Note</label>
                     <div className="sec-input" style={{ display: 'flex', alignItems: 'center', minHeight: 44, background: '#f8fafc', color: '#64748b' }}>
-                      Use ₱1 for testing payments.
+                      The Cashier records and collects payment.
                     </div>
                   </div>
                 </div>

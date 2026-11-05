@@ -3901,6 +3901,11 @@ router.post('/charge-onsite', async (req, res) => {
 
     const apptMode = String(appt.consultation_mode || 'onsite').toLowerCase();
     if (apptMode !== 'onsite') return res.status(400).json({ message: 'Only onsite consultations are supported here.' });
+    const appointmentStatus = String(appt.status || '').trim().toLowerCase();
+    if (['cancelled', 'canceled', 'rejected', 'declined', 'no show', 'no-show'].includes(appointmentStatus)) {
+      return res.status(409).json({ message: 'Cannot charge a cancelled or rejected appointment.' });
+    }
+    if (!appt.doctor_uuid) return res.status(409).json({ message: 'Assign the appointment to a doctor before preparing its cashier charge.' });
 
     let patientId = appt.patient_id ? String(appt.patient_id) : null;
     if (!patientId) {
@@ -3909,6 +3914,9 @@ router.post('/charge-onsite', async (req, res) => {
         const p = await prisma.patients.findFirst({ where: { email }, select: { id: true } }).catch(() => null);
         if (p?.id) patientId = String(p.id);
       }
+    }
+    if (!patientId) {
+      return res.status(409).json({ message: 'Register this patient before sending the consultation charge to the Cashier.' });
     }
 
     // Only allow secretary to charge for their linked doctor once appointment is assigned to that doctor.
@@ -3939,7 +3947,19 @@ router.post('/charge-onsite', async (req, res) => {
     }
 
     const invoice = await prisma.$transaction(async (tx) => {
+      // Serialize charges for this appointment and lock any existing invoice so
+      // a cashier payment cannot race with a secretary changing the charge.
+      await tx.$queryRaw`SELECT id FROM public.appointments WHERE id = ${appointmentId} FOR UPDATE`;
       let inv = await tx.billing_invoices.findFirst({ where: { appointment_id: appointmentId }, orderBy: { created_at: 'desc' } }).catch(() => null);
+      if (inv) {
+        await tx.$queryRaw`SELECT id FROM public.billing_invoices WHERE id = ${inv.id} FOR UPDATE`;
+        const paymentCount = await tx.billing_payments.count({ where: { invoice_id: inv.id } });
+        if (paymentCount > 0 || String(inv.status || '').toLowerCase() === 'paid') {
+          const error = new Error('This consultation invoice already has a payment and cannot be changed.');
+          error.statusCode = 409;
+          throw error;
+        }
+      }
       if (!inv) {
         inv = await tx.billing_invoices.create({
           data: {
@@ -3996,12 +4016,13 @@ router.post('/charge-onsite', async (req, res) => {
 
       const full = await tx.billing_invoices.findUnique({ where: { id: inv.id } }).catch(() => null);
       return full || inv;
-    });
+    }, { maxWait: 5000, timeout: 15000 });
 
     res.json(serialize(invoice || {}));
   } catch (err) {
     const msg = String(err?.message || '');
-    res.status(500).json({ message: msg || 'Server error' });
+    const statusCode = Number(err?.statusCode);
+    res.status(statusCode >= 400 && statusCode < 500 ? statusCode : 500).json({ message: msg || 'Server error' });
   }
 });
 

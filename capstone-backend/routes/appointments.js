@@ -22,7 +22,6 @@ function authorizeNurseAppointment(req, res, next) {
 }
 const { newAppointmentRouting, canAssignOnsiteAppointment, doctorAppointmentScope, doctorDepartmentAppointmentScope } = require('../utils/appointmentRouting');
 const { createClient } = require('@supabase/supabase-js');
-const { ensureBillingTablesExist, toMoney } = require('../utils/billingLedger');
 const { sendEmail } = require('../utils/mailer');
 const { appointmentEmail } = require('../utils/emailTemplates');
 const { sendError } = require('../utils/httpErrors');
@@ -2521,91 +2520,8 @@ router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary'
         const modeKey = String(updatedAppointment.consultation_mode || existing.consultation_mode || 'onsite').trim().toLowerCase() || 'onsite';
 
         if (nextAssign === 'ASSIGNED' && modeKey === 'onsite' && doctorUuidAssigned && (becameAssigned || doctorUuidChanged)) {
-            const { serviceKey, serviceName } = inferConsultServiceFromAppointment(updatedAppointment);
-            const apptId = BigInt(req.params.id);
-            const patientId = updatedAppointment.patient_id ? String(updatedAppointment.patient_id) : null;
-
-            let resolvedServiceName = serviceName;
-            try {
-                await ensureBillingTablesExist(prisma);
-                await prisma.$executeRawUnsafe(`
-                    CREATE TABLE IF NOT EXISTS public.doctor_service_fees (
-                      id bigserial PRIMARY KEY,
-                      doctor_uuid uuid NOT NULL,
-                      service_key text NOT NULL,
-                      service_name text NOT NULL,
-                      default_fee numeric(10,2) NOT NULL DEFAULT 0,
-                      active boolean NOT NULL DEFAULT true,
-                      created_at timestamptz NOT NULL DEFAULT now(),
-                      updated_at timestamptz NOT NULL DEFAULT now(),
-                      UNIQUE (doctor_uuid, service_key)
-                    );
-                `).catch(() => {});
-            } catch (_) {}
-
-            const amountMoney = toMoney(100);
-            const itemDescription = `Consultation Fee - ${resolvedServiceName || serviceName || 'Consultation'}`.trim();
-
-            try {
-                await ensureBillingTablesExist(prisma);
-                await prisma.$transaction(async (tx) => {
-                    let inv = await tx.billing_invoices.findFirst({
-                        where: { appointment_id: apptId },
-                        orderBy: { created_at: 'desc' }
-                    }).catch(() => null);
-
-                    if (!inv) {
-                        inv = await tx.billing_invoices.create({
-                            data: {
-                                patient_id: patientId,
-                                appointment_id: apptId,
-                                status: 'Ready',
-                                notes: `Onsite consultation • ${String(updatedAppointment.reason || '').trim() || 'Consultation'}`.trim(),
-                                created_by: String(req.headers['x-user-email'] || '').trim() || null,
-                                total_amount: amountMoney
-                            }
-                        });
-                        await tx.billing_invoice_items.create({
-                            data: {
-                                invoice_id: inv.id,
-                                description: itemDescription,
-                                quantity: 1,
-                                unit_price: amountMoney,
-                                line_total: amountMoney
-                            }
-                        }).catch(() => null);
-                    } else {
-                        await tx.billing_invoices.update({
-                            where: { id: inv.id },
-                            data: { status: 'Ready', total_amount: amountMoney, updated_at: new Date() }
-                        }).catch(() => null);
-                        const item = await tx.billing_invoice_items
-                            .findFirst({ where: { invoice_id: inv.id }, orderBy: { created_at: 'asc' } })
-                            .catch(() => null);
-                        if (item) {
-                            await tx.billing_invoice_items
-                                .update({
-                                    where: { id: item.id },
-                                    data: { description: itemDescription, quantity: 1, unit_price: amountMoney, line_total: amountMoney }
-                                })
-                                .catch(() => null);
-                        } else {
-                            await tx.billing_invoice_items
-                                .create({
-                                    data: {
-                                        invoice_id: inv.id,
-                                        description: itemDescription,
-                                        quantity: 1,
-                                        unit_price: amountMoney,
-                                        line_total: amountMoney
-                                    }
-                                })
-                                .catch(() => null);
-                        }
-                    }
-                });
-            } catch (_) {}
-
+            const { serviceName } = inferConsultServiceFromAppointment(updatedAppointment);
+            const resolvedServiceName = serviceName;
             const patientEmail = String(updatedAppointment.email || '').trim();
             const statusKey = String(updatedAppointment.status || '').trim();
             const apptDate = updatedAppointment.appointment_date ? new Date(updatedAppointment.appointment_date) : null;
@@ -2623,7 +2539,7 @@ router.patch('/:id', requireRole(['admin', 'nurse', 'doctor', 'doctor_secretary'
                     service_label: serviceLabel,
                     scheduled_time: `${dateLabel} at ${timeLabel}`,
                     status_label: statusKey || 'Confirmed',
-                    footer_note: `Doctor: ${doctorLabel || 'To be assigned'}. Billing: PHP ${amountMoney}. Important: Please arrive at the hospital at least 15 minutes before your scheduled time for registration.`
+                    footer_note: `Doctor: ${doctorLabel || 'To be assigned'}. The consultation fee will be sent to the cashier after it is set by the secretary. Important: Please arrive at the hospital at least 15 minutes before your scheduled time for registration.`
                 };
                 
                 sendAppointmentSummaryEmail({
