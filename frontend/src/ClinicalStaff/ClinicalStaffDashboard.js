@@ -48,6 +48,17 @@ const fmtWhen = (v) => {
   return d.toLocaleString();
 };
 
+const getAppointmentStartTimestamp = (appointment) => {
+  const dateValue = appointment?.appointmentDate || appointment?.appointment_date;
+  const timeValue = String(appointment?.appointmentTime || appointment?.appointment_time || '').trim();
+  const parsedDate = dateValue ? new Date(dateValue) : null;
+  const timeMatch = timeValue.match(/(\d{1,2}):(\d{2})/);
+  if (!parsedDate || Number.isNaN(parsedDate.getTime()) || !timeMatch) return null;
+  const dateKey = parsedDate.toISOString().slice(0, 10);
+  const hours = String(timeMatch[1]).padStart(2, '0');
+  return new Date(`${dateKey}T${hours}:${timeMatch[2]}:00+08:00`).getTime();
+};
+
 const statusBadgeClass = (status) => {
   const s = String(status || '').toLowerCase();
   if (s === 'completed') return 'cs-badge green';
@@ -469,13 +480,23 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
     const scheduled = all.filter((o) => String(o.status || '').toLowerCase() === 'scheduled').length;
     const inProgress = all.filter((o) => String(o.status || '').toLowerCase() === 'in progress').length;
     const completed = all.filter((o) => String(o.status || '').toLowerCase() === 'completed').length;
-    const upcoming = (schedule || []).filter((ev) => {
+    const now = Date.now();
+    const upcomingScheduleEvents = (schedule || []).filter((ev) => {
+      if (!ev?.orderId && !ev?.patientId) return false;
       const d = ev?.startAt ? new Date(ev.startAt) : null;
       if (!d || Number.isNaN(d.getTime())) return false;
-      return d.getTime() >= Date.now() - 15 * 60 * 1000;
+      return d.getTime() > now && String(ev.status || 'Scheduled').trim().toLowerCase() === 'scheduled';
     }).length;
+    const upcomingVideoAppointments = isPhysicalTherapist
+      ? (videoAppointments || []).filter((appointment) => {
+          const status = String(appointment?.status || 'Confirmed').trim().toLowerCase();
+          const startsAt = getAppointmentStartTimestamp(appointment);
+          return startsAt != null && startsAt > now && !/(cancel|reject|declin|complete|done|no.?show)/i.test(status);
+        }).length
+      : 0;
+    const upcoming = upcomingScheduleEvents + upcomingVideoAppointments;
     return { pending, forPayment, paid, exam, result, scheduled, inProgress, completed, upcoming };
-  }, [orders, schedule]);
+  }, [orders, schedule, videoAppointments, isPhysicalTherapist]);
 
   const inRange = (dateValue, range) => {
     const d = dateValue ? new Date(dateValue) : null;
