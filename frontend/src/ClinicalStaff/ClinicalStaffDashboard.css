@@ -527,6 +527,82 @@
   gap: 12px;
 }
 
+.cs-order-detail-modal {
+  box-sizing: border-box;
+  width: min(1480px, calc(100vw - 36px));
+  max-width: none;
+  max-height: calc(100vh - 36px);
+  display: flex;
+  flex-direction: column;
+}
+
+.cs-order-detail-modal .cs-modal-head {
+  flex: 0 0 auto;
+}
+
+.cs-order-detail-body {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.cs-order-summary-card,
+.cs-order-results-card {
+  min-width: 0;
+}
+
+.cs-order-summary-card .cs-muted {
+  overflow-wrap: anywhere;
+}
+
+.cs-result-upload-grid {
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+  align-items: start;
+}
+
+.cs-result-upload-form,
+.cs-result-table-panel {
+  min-width: 0;
+}
+
+.cs-result-upload-form .cs-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.cs-result-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.cs-result-table {
+  min-width: 720px;
+}
+
+.cs-result-table th,
+.cs-result-table td {
+  vertical-align: middle;
+}
+
+.cs-result-table td:first-child {
+  min-width: 150px;
+  overflow-wrap: anywhere;
+}
+
+.cs-result-table td:nth-child(2) {
+  white-space: nowrap;
+}
+
+.cs-result-table .cs-btn {
+  white-space: nowrap;
+}
+
 .cs-approval-layout { align-items: start; }
 .cs-approval-review { position: sticky; top: 0; }
 
@@ -585,6 +661,10 @@
   }
   .cs-two-col {
     grid-template-columns: 1fr;
+  }
+  .cs-order-detail-modal {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
   }
   .cs-approval-review { position: static; }
   .cs-metrics {

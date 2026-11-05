@@ -1868,20 +1868,19 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
       {viewingOrder && (
         <div className="cs-modal-overlay" onClick={() => setViewingOrder(null)}>
-          <div className="cs-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="cs-modal cs-order-detail-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cs-modal-head">
               <div className="cs-modal-title">Order Details</div>
               <button type="button" className="cs-btn secondary" onClick={() => setViewingOrder(null)}>
                 <X size={16} />
               </button>
             </div>
-            <div className="cs-modal-body">
+            <div className="cs-modal-body cs-order-detail-body">
               {orderDetailLoading ? (
                 <div className="cs-muted">Loading…</div>
               ) : (
                 <>
-                  <div className="cs-two-col">
-                    <div className="cs-card" style={{ boxShadow: 'none' }}>
+                  <div className="cs-card cs-order-summary-card" style={{ boxShadow: 'none' }}>
                       <div className="cs-card-title">Summary</div>
                       <div className="cs-muted">Patient: {viewingOrder.patientName || viewingOrder.patientId || '—'}</div>
                       <div className="cs-muted" style={{ marginTop: 6 }}>Service: {viewingOrder.service || viewingOrder.kind || '—'}</div>
@@ -1897,16 +1896,15 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                           Complete
                         </button>
                       </div>
-                    </div>
                   </div>
 
-                  <div className="cs-card" style={{ marginTop: 12 }}>
+                  <div className="cs-card cs-order-results-card" style={{ marginTop: 12 }}>
                     <div className="cs-card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>Upload Result</span>
                       <span className="cs-badge">{cfg.resultType}</span>
                     </div>
-                    <div className="cs-two-col" style={{ marginTop: 10 }}>
-                      <div className="cs-toolbar" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                    <div className="cs-two-col cs-result-upload-grid" style={{ marginTop: 10 }}>
+                      <div className="cs-toolbar cs-result-upload-form" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
                         <input className="cs-input" value={resultTitle} onChange={(e) => setResultTitle(e.target.value)} placeholder="Result title" />
                         <input className="cs-input" type="date" value={resultDate} onChange={(e) => setResultDate(e.target.value)} />
                         <input
@@ -1926,10 +1924,11 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                         {resultError ? <div className="cs-muted">{resultError}</div> : null}
                       </div>
 
-                      <div>
+                      <div className="cs-result-table-panel">
                         <div className="cs-muted" style={{ marginBottom: 8 }}>Results for this order</div>
                         {orderDetail?.results?.length ? (
-                          <table className="cs-table">
+                          <div className="cs-result-table-scroll">
+                          <table className="cs-table cs-result-table">
                             <thead>
                               <tr>
                                 <th>Title</th>
@@ -1967,6 +1966,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                               ))}
                             </tbody>
                           </table>
+                          </div>
                         ) : (
                           <div className="cs-muted">No results yet.</div>
                         )}
