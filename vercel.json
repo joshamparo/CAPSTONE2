@@ -22,28 +22,6 @@
       ]
     }
   ],
-  "routes": [
-    { "src": "^/cashier(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/doctor(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/nurse(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/pharmacist(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/admin(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/medtech(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/radiographer(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/ecg(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/pt(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/patient(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/appointment(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/clinical-staff(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/staff(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/secretary(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/login(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/otp(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/recovery(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "src": "^/reset-password(?:/.*)?$", "dest": "/index.html", "status": 200 },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html", "status": 200 }
-  ],
   "rewrites": [
     { "source": "/((?!static/|.*\\.(?:js|css|map|json|png|jpg|jpeg|svg|gif|webp|ico|woff|woff2|ttf|eot|otf|txt|xml|webmanifest)$).*)", "destination": "/index.html" }
   ]
