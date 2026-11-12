@@ -23,7 +23,7 @@ const Recovery = lazy(() => import('./login/Recovery'));
 const ResetPassword = lazy(() => import('./login/ResetPassword'));
 const Unauthorized = lazy(() => import('./login/Unauthorized'));
 const Appointment = lazy(() => import('./appointment/Appointment'));
-import AssistantWidget from './components/AssistantWidget';
+import AssistantWidgetLauncher from './components/AssistantWidgetLauncher';
 import { API_BASE, checkBackendHealth } from './utils/api';
 
 class AppErrorBoundary extends Component {
@@ -472,7 +472,7 @@ function AppShell() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </Suspense>
-      {!hideAssistant ? <AssistantWidget pathname={pathname} /> : null}
+      {!hideAssistant ? <AssistantWidgetLauncher pathname={pathname} /> : null}
     </div>
   );
 }

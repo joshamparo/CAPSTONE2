@@ -141,8 +141,8 @@ function detectCurrentModule() {
     .replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
 }
 
-export default function AssistantWidget({ pathname = '/' }) {
-  const [isOpen, setIsOpen] = useState(false);
+export default function AssistantWidget({ pathname = '/', initialOpen = false }) {
+  const [isOpen, setIsOpen] = useState(initialOpen);
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);

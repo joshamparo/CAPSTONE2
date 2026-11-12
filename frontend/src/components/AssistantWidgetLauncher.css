@@ -1,0 +1,75 @@
+.assistant-launcher-root {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1200;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.assistant-launcher-root.assistant-widget-page-dashboard {
+  right: 24px;
+  bottom: 24px;
+}
+
+.assistant-launcher-root.assistant-widget-page-sidebar {
+  left: 12px;
+  right: auto;
+  bottom: 16px;
+}
+
+body:has(.sidebar.collapsed, .pharm-sidebar.collapsed, .doc-sidebar.collapsed, .nurse-sidebar.collapsed, .office-sidebar.collapsed, .sec-sidebar.collapsed, .cs-sidebar.collapsed)
+  .assistant-launcher-root.assistant-widget-page-sidebar {
+  display: none;
+}
+
+.assistant-launcher-button {
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ea580c 0%, #f59e0b 100%);
+  color: #fff;
+  padding: 14px 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: 0 18px 40px rgba(234, 88, 12, 0.25);
+  font-weight: 800;
+  font-size: 0.96rem;
+}
+
+.assistant-launcher-root.assistant-widget-page-dashboard .assistant-launcher-button {
+  width: 224px;
+  justify-content: flex-start;
+  padding: 14px 18px 14px 16px;
+}
+
+.assistant-launcher-button:disabled {
+  cursor: wait;
+}
+
+.assistant-launcher-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+
+.assistant-launcher-label small {
+  font-size: 0.73rem;
+  font-weight: 600;
+  opacity: 0.92;
+}
+
+@media (max-width: 768px) {
+  .assistant-launcher-root,
+  .assistant-launcher-root.assistant-widget-page-dashboard {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: max(12px, env(safe-area-inset-left));
+  }
+
+  .assistant-launcher-button {
+    margin-left: auto;
+    max-width: calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right));
+  }
+}
