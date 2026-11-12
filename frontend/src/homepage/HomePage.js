@@ -116,6 +116,7 @@ const slides = [
   {
     image: "/images/hospital-main-1600.jpg",
     mobileImage: "/images/hospital-main-800.jpg",
+    mobileWebp: "/images/hospital-main-800.webp",
     title: "Pascual General Hospital",
     subtitle: "Trusted care, guided by compassion and innovation."
   },
@@ -421,7 +422,7 @@ function HomePage() {
         <div className="header-container">
           <div className="header-mobile-row">
             <a className="logo-section" href="#top" onClick={closeMobileNav} aria-label="Pascualinga homepage">
-              <img src={process.env.PUBLIC_URL + "/images/pgh-logo-128.png"} alt="" className="logo-img" width="128" height="128" />
+              <img src={process.env.PUBLIC_URL + "/images/pgh-logo-96.png"} alt="" className="logo-img" width="96" height="96" />
               <div className="logo-text">
                 <div className="logo-name">PASCUALINGA</div>
                 <span>Pascual General Hospital</span>
@@ -483,6 +484,9 @@ function HomePage() {
               className={`hero-slide ${isActiveSlide ? "active" : ""}`}
             >
               <picture>
+                {slide.mobileWebp && (
+                  <source media="(max-width: 768px)" type="image/webp" srcSet={process.env.PUBLIC_URL + slide.mobileWebp} />
+                )}
                 <source media="(max-width: 768px)" srcSet={process.env.PUBLIC_URL + slide.mobileImage} />
                 <img
                   src={process.env.PUBLIC_URL + slide.image}
