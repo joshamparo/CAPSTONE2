@@ -422,7 +422,10 @@ function HomePage() {
         <div className="header-container">
           <div className="header-mobile-row">
             <a className="logo-section" href="#top" onClick={closeMobileNav} aria-label="Pascualinga homepage">
-              <img src={process.env.PUBLIC_URL + "/images/pgh-logo-96.png"} alt="" className="logo-img" width="96" height="96" />
+              <picture>
+                <source type="image/webp" srcSet={process.env.PUBLIC_URL + "/images/pgh-logo-96.webp"} />
+                <img src={process.env.PUBLIC_URL + "/images/pgh-logo-96.png"} alt="" className="logo-img" width="96" height="96" />
+              </picture>
               <div className="logo-text">
                 <div className="logo-name">PASCUALINGA</div>
                 <span>Pascual General Hospital</span>
