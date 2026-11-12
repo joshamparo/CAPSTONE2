@@ -1,28 +1,28 @@
-import React, { Component, useEffect, useRef, useState } from 'react';
+import React, { Component, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ServerCrash, X, Clock, RefreshCw, Home as HomeIcon } from 'lucide-react';
 // Auth Wrapper
 import ProtectedRoute from './login/ProtectedRoute';
 // Import your components
 import HomePage from './homepage/HomePage';
-import Login from './login/Login';
-import OtpPage from './login/OtpPage';
-import AdminDashboard from './Admin/AdminDashboard';
-import PatientDashboard from './Patient/PatientDashboard';
-import StaffDashboard from './Staff/StaffDashboard';
-import NurseDashboard from './Nurse/NurseDashboard';
-import DoctorDashboard from './Doctor/DoctorDashboard';
-import PharmacistDashboard from './Pharmacist/PharmacistDashboard';
-import CashierDashboard from './Cashier/CashierDashboard';
-import DoctorSecretaryDashboard from './DoctorSecretary/DoctorSecretaryDashboard';
-import MedtechDashboard from './ClinicalStaff/MedtechDashboard';
-import RadiographerDashboard from './ClinicalStaff/RadiographerDashboard';
-import EcgOperatorDashboard from './ClinicalStaff/EcgOperatorDashboard';
-import PhysicalTherapistDashboard from './ClinicalStaff/PhysicalTherapistDashboard';
-import Recovery from './login/Recovery';
-import ResetPassword from './login/ResetPassword';
-import Unauthorized from './login/Unauthorized';
-import Appointment from './appointment/Appointment';
+const Login = lazy(() => import('./login/Login'));
+const OtpPage = lazy(() => import('./login/OtpPage'));
+const AdminDashboard = lazy(() => import('./Admin/AdminDashboard'));
+const PatientDashboard = lazy(() => import('./Patient/PatientDashboard'));
+const StaffDashboard = lazy(() => import('./Staff/StaffDashboard'));
+const NurseDashboard = lazy(() => import('./Nurse/NurseDashboard'));
+const DoctorDashboard = lazy(() => import('./Doctor/DoctorDashboard'));
+const PharmacistDashboard = lazy(() => import('./Pharmacist/PharmacistDashboard'));
+const CashierDashboard = lazy(() => import('./Cashier/CashierDashboard'));
+const DoctorSecretaryDashboard = lazy(() => import('./DoctorSecretary/DoctorSecretaryDashboard'));
+const MedtechDashboard = lazy(() => import('./ClinicalStaff/MedtechDashboard'));
+const RadiographerDashboard = lazy(() => import('./ClinicalStaff/RadiographerDashboard'));
+const EcgOperatorDashboard = lazy(() => import('./ClinicalStaff/EcgOperatorDashboard'));
+const PhysicalTherapistDashboard = lazy(() => import('./ClinicalStaff/PhysicalTherapistDashboard'));
+const Recovery = lazy(() => import('./login/Recovery'));
+const ResetPassword = lazy(() => import('./login/ResetPassword'));
+const Unauthorized = lazy(() => import('./login/Unauthorized'));
+const Appointment = lazy(() => import('./appointment/Appointment'));
 import AssistantWidget from './components/AssistantWidget';
 import { API_BASE, checkBackendHealth } from './utils/api';
 
@@ -344,6 +344,7 @@ function AppShell() {
           </div>
         </div>
       )}
+      <Suspense fallback={<div role="status" style={{ minHeight: '50vh', display: 'grid', placeItems: 'center', color: '#475569' }}>Loading page…</div>}>
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<HomePage />} />
@@ -464,6 +465,7 @@ function AppShell() {
         {/* Redirect any unknown paths to Home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
       {!hideAssistant ? <AssistantWidget pathname={pathname} /> : null}
     </div>
   );
