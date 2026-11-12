@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "./HomePage.css";
 import "../components/AccountHeaderActions.css";
@@ -225,6 +225,8 @@ function HomePage() {
   const [newsItems, setNewsItems] = useState(OFFICIAL_NEWS_FALLBACK);
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState('');
+  const newsSectionRef = useRef(null);
+  const newsRequestedRef = useRef(false);
   const [newsCursor, setNewsCursor] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(() => !hasPrivacyConsent());
@@ -301,30 +303,55 @@ function HomePage() {
   }, []);
 
   useEffect(() => {
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = controller ? setTimeout(() => controller.abort(), 12000) : null;
+    const section = newsSectionRef.current;
+    if (!section) return undefined;
+
+    let cancelled = false;
+    let observer = null;
+    let controller = null;
+    let timer = null;
     const loadOfficialNews = async () => {
+      if (cancelled || newsRequestedRef.current) return;
+      newsRequestedRef.current = true;
+      controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      timer = controller ? setTimeout(() => controller.abort(), 12000) : null;
       setNewsLoading(true);
       setNewsError('');
       try {
         const response = await fetch(`${API_BASE}/api/announcements/news?limit=6`, controller ? { signal: controller.signal } : undefined);
         const data = await response.json().catch(() => []);
+        if (cancelled) return;
         if (!response.ok || !Array.isArray(data) || data.length === 0) throw new Error('Official news feed is unavailable.');
         const trusted = data.filter((item) => isOfficialNewsLink(item?.url));
         if (!trusted.length) throw new Error('Official news feed returned no trusted links.');
         setNewsItems(trusted);
       } catch (error) {
+        if (cancelled) return;
         setNewsError(error?.name === 'AbortError'
           ? 'Showing verified official links because the live feed timed out.'
           : 'Showing verified official links while the live feed refreshes.');
         setNewsItems(OFFICIAL_NEWS_FALLBACK);
       } finally {
-        setNewsLoading(false);
+        if (timer) clearTimeout(timer);
+        if (!cancelled) setNewsLoading(false);
       }
     };
-    loadOfficialNews();
+
+    if (typeof IntersectionObserver === 'undefined') {
+      loadOfficialNews();
+    } else {
+      observer = new IntersectionObserver((entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        loadOfficialNews();
+      }, { rootMargin: '600px 0px' });
+      observer.observe(section);
+    }
+
     return () => {
       if (timer) clearTimeout(timer);
+      if (observer) observer.disconnect();
+      cancelled = true;
       if (controller) controller.abort();
     };
   }, []);
@@ -785,7 +812,7 @@ function HomePage() {
       </section>
 
       {/* News & Updates Section */}
-      <section className="news-section page-section" id="news">
+      <section className="news-section page-section" id="news" ref={newsSectionRef}>
         <div className="page-shell">
           <div className="news-head reveal-on-scroll">
             <div className="eyebrow">Current Updates</div>
