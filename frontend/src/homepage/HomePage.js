@@ -526,7 +526,7 @@ function HomePage() {
                   height="1200"
                   loading={index === 0 ? 'eager' : 'lazy'}
                   fetchPriority={index === 0 ? 'high' : 'auto'}
-                  decoding={index === 0 ? 'sync' : 'async'}
+                  decoding="async"
                 />
               </picture>
             </div>
