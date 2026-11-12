@@ -251,13 +251,18 @@ function AppShell() {
   };
 
   useEffect(() => {
-    // First run AFTER first paint — keep mount path fast and clean.
+    // Keep advisory health requests off the initial navigation path.
     const mark = { current: 0 };
     let cancelled = false;
-    const firstRun = setTimeout(() => {
+    let firstRun;
+    const scheduleInitialCheck = () => {
       if (cancelled) return;
-      runSystemHealthCheck(mark);
-    }, 250);
+      firstRun = setTimeout(() => {
+        if (!cancelled) runSystemHealthCheck(mark);
+      }, 1500);
+    };
+    if (document.readyState === 'complete') scheduleInitialCheck();
+    else window.addEventListener('load', scheduleInitialCheck, { once: true });
     // Health is advisory and shared by every dashboard tab. Keep it light on
     // the small database tier; online events and manual actions still retry.
     const intv = setInterval(() => {
@@ -267,7 +272,8 @@ function AppShell() {
     try { window.addEventListener('online', onLine); } catch (_) {}
     return () => {
       cancelled = true;
-      clearTimeout(firstRun);
+      if (firstRun) clearTimeout(firstRun);
+      try { window.removeEventListener('load', scheduleInitialCheck); } catch (_) {}
       clearInterval(intv);
       try { window.removeEventListener('online', onLine); } catch (_) {}
     };
