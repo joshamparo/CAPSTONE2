@@ -1683,6 +1683,18 @@ html {
         }
 
         @media (max-width: 768px) {
+          .hero-slide,
+          .hero-img,
+          .hero .reveal-on-scroll {
+            transition: none;
+          }
+          .hero-img {
+            transform: none;
+          }
+          .hero .reveal-on-scroll {
+            opacity: 1;
+            transform: none;
+          }
           .header-container {
             flex-direction: column;
             align-items: stretch;

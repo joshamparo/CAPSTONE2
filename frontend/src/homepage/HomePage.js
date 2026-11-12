@@ -214,6 +214,9 @@ function formatNewsDate(value) {
 
 function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    window.matchMedia('(max-width: 768px)').matches
+  );
   const [user, setUser] = useState(null);
   const [activeServiceGroup, setActiveServiceGroup] = useState('all');
   const [showAllServices, setShowAllServices] = useState(false);
@@ -264,12 +267,21 @@ function HomePage() {
     }
 
     const slideInterval = setInterval(() => {
+      if (window.matchMedia('(max-width: 768px)').matches) return;
       setCurrentSlide((prev) => (prev === slides.length - 1 ? 0 : prev + 1));
     }, 5000);
     return () => {
       clearInterval(slideInterval);
       sessionController?.abort();
     };
+  }, []);
+
+  useEffect(() => {
+    const mobileQuery = window.matchMedia('(max-width: 768px)');
+    const updateViewport = () => setIsMobileViewport(mobileQuery.matches);
+    updateViewport();
+    mobileQuery.addEventListener('change', updateViewport);
+    return () => mobileQuery.removeEventListener('change', updateViewport);
   }, []);
 
   useEffect(() => {
@@ -462,26 +474,30 @@ function HomePage() {
 
       <main id="top">
       <section className="hero">
-        {slides.map((slide, index) => (
-          <div
-            key={index}
-            className={`hero-slide ${index === currentSlide ? "active" : ""}`}
-          >
-            <picture>
-              <source media="(max-width: 768px)" srcSet={process.env.PUBLIC_URL + slide.mobileImage} />
-              <img
-                src={process.env.PUBLIC_URL + slide.image}
-                alt={slide.title}
-                className="hero-img"
-                width="1600"
-                height="1200"
-                loading={index === 0 ? 'eager' : 'lazy'}
-                fetchPriority={index === 0 ? 'high' : 'auto'}
-                decoding="async"
-              />
-            </picture>
-          </div>
-        ))}
+        {slides.map((slide, index) => {
+          if (isMobileViewport && index > 0) return null;
+          const isActiveSlide = isMobileViewport ? index === 0 : index === currentSlide;
+          return (
+            <div
+              key={index}
+              className={`hero-slide ${isActiveSlide ? "active" : ""}`}
+            >
+              <picture>
+                <source media="(max-width: 768px)" srcSet={process.env.PUBLIC_URL + slide.mobileImage} />
+                <img
+                  src={process.env.PUBLIC_URL + slide.image}
+                  alt={slide.title}
+                  className="hero-img"
+                  width="1600"
+                  height="1200"
+                  loading={index === 0 ? 'eager' : 'lazy'}
+                  fetchPriority={index === 0 ? 'high' : 'auto'}
+                  decoding="async"
+                />
+              </picture>
+            </div>
+          );
+        })}
         <div className="hero-overlay" />
         <div className="hero-shell">
           <div className="hero-layout page-shell">
