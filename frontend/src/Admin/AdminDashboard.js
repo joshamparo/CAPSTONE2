@@ -4390,6 +4390,7 @@ function AdminDashboard() {
             <input
               type="text"
               placeholder="Announcement Title"
+              aria-label="Announcement title"
               className="announcement-input"
               value={newAnnouncement.title}
               onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
@@ -4397,6 +4398,7 @@ function AdminDashboard() {
             <div className="announcement-actions">
               <select
                 className="announcement-select"
+                aria-label="Announcement priority"
                 value={newAnnouncement.priority}
                 onChange={(e) => setNewAnnouncement({ ...newAnnouncement, priority: e.target.value })}
               >
@@ -4407,12 +4409,14 @@ function AdminDashboard() {
               <input
                 type="text"
                 placeholder="Message content..."
+                aria-label="Announcement message"
                 className="announcement-input flex-grow"
                 value={newAnnouncement.content}
                 onChange={(e) => setNewAnnouncement({ ...newAnnouncement, content: e.target.value })}
               />
               <select
                 className="announcement-select"
+                aria-label="Announcement audience"
                 value={announcementTargets[0] || ''}
                 onChange={(e) => setAnnouncementTargets([e.target.value])}
               >
@@ -4423,6 +4427,7 @@ function AdminDashboard() {
               </select>
               <select
                 className="announcement-select"
+                aria-label="Announcement expiration"
                 value={announcementExpiryDays}
                 onChange={(e) => setAnnouncementExpiryDays(e.target.value)}
               >
@@ -4609,6 +4614,7 @@ function AdminDashboard() {
             </h3>
             <select
               className="settings-select"
+              aria-label="Patient trend date range"
               style={{ padding: '4px 8px', fontSize: '0.85rem' }}
               value={dashboardRange}
               onChange={(e) => setDashboardRange(Number(e.target.value))}
@@ -6953,6 +6959,7 @@ function AdminDashboard() {
                   onChange={(e) => setIncidentSearch(e.target.value)}
                   className="search-input-with-icon"
                   placeholder="Search incidents..."
+                  aria-label="Search incidents"
                 />
               </div>
               <div className="inc-date-range">
@@ -6961,12 +6968,14 @@ function AdminDashboard() {
                   className="patient-filter-select"
                   value={incidentDateFrom}
                   onChange={(e) => setIncidentDateFrom(e.target.value)}
+                  aria-label="Filter incidents from date"
                 />
                 <input
                   type="date"
                   className="patient-filter-select"
                   value={incidentDateTo}
                   onChange={(e) => setIncidentDateTo(e.target.value)}
+                  aria-label="Filter incidents through date"
                 />
               </div>
               <button type="button" className="inc-btn inc-btn-ghost inc-btn-icon" onClick={fetchIncidents} disabled={incidentsLoading} title="Refresh">
@@ -7180,6 +7189,7 @@ function AdminDashboard() {
                   }}
                   className="search-input-with-icon"
                   placeholder="Search staff..."
+                  aria-label="Search staff"
                 />
               </div>
 
@@ -7190,6 +7200,7 @@ function AdminDashboard() {
                   setStaffGenderFilter(e.target.value);
                   setStaffPage(1);
                 }}
+                aria-label="Filter staff by gender"
               >
                 <option value="All">All</option>
                 <option value="Male">Male</option>
@@ -7203,6 +7214,7 @@ function AdminDashboard() {
                   setStaffRoleFilter(e.target.value);
                   setStaffPage(1);
                 }}
+                aria-label="Filter staff by role"
               >
                 <option value="All">All Roles</option>
                 <option value="staff">Staff</option>
@@ -7225,6 +7237,7 @@ function AdminDashboard() {
                   setStaffStatusFilter(e.target.value);
                   setStaffPage(1);
                 }}
+                aria-label="Filter staff by status"
               >
                 <option value="All">All Status</option>
                 <option value="Online">Online</option>
@@ -7238,6 +7251,7 @@ function AdminDashboard() {
                   setStaffSort(e.target.value);
                   setStaffPage(1);
                 }}
+                aria-label="Sort staff records"
               >
                 <option value="Newest">Newest</option>
                 <option value="Name (A-Z)">Name (A-Z)</option>
@@ -7629,6 +7643,7 @@ function AdminDashboard() {
                                     setLogFilter(e.target.value);
                                     setLogPage(1);
                                 }}
+                                aria-label="Filter activity logs by action"
                             >
                                 <option value="All">All</option>
                                 <option value="Create">Create</option>
@@ -8705,15 +8720,22 @@ function AdminDashboard() {
             <img className="admin-brand-logo" src="/images/pgh-logo-128.png" alt="PASCUALINGA" decoding="async" />
             {!isCollapsed ? <span className="admin-brand-text">PASCUALINGA</span> : null}
           </div>
-          <button onClick={() => setIsCollapsed(!isCollapsed)} className="sidebar-toggle">
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="sidebar-toggle"
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!isCollapsed}
+          >
             <ChevronLeft size={20} className={`toggle-icon ${isCollapsed ? "rotated" : ""}`} />
           </button>
         </div>
 
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" aria-label="Admin navigation">
           <button 
             className={`nav-item ${view === "dashboard" ? "active" : ""}`} 
             onClick={() => setView("dashboard")}
+            aria-current={view === 'dashboard' ? 'page' : undefined}
           >
             <LayoutDashboard size={20} />
             {!isCollapsed && <span>Dashboard</span>}
@@ -8721,6 +8743,9 @@ function AdminDashboard() {
 
           <button 
             className={`nav-item ${(view === "reports" || view === "incidents") ? "active" : ""}`}
+            aria-expanded={isReportsOpen}
+            aria-controls={isReportsOpen && !isCollapsed ? 'admin-reports-submenu' : undefined}
+            aria-current={view === 'reports' || view === 'incidents' ? 'page' : undefined}
             onClick={() => {
               if (isCollapsed) {
                 setView("reports");
@@ -8738,9 +8763,10 @@ function AdminDashboard() {
           </button>
 
           {!isCollapsed && isReportsOpen && (
-            <div className="nav-submenu">
+            <div className="nav-submenu" id="admin-reports-submenu">
               <button
                 className={`nav-subitem ${view === "reports" ? "active" : ""}`}
+                aria-current={view === 'reports' ? 'page' : undefined}
                 type="button"
                 onClick={() => {
                   setView("reports");
@@ -8751,6 +8777,7 @@ function AdminDashboard() {
               </button>
               <button
                 className={`nav-subitem ${view === "incidents" ? "active" : ""}`}
+                aria-current={view === 'incidents' ? 'page' : undefined}
                 type="button"
                 onClick={() => {
                   setView("incidents");
@@ -8765,6 +8792,7 @@ function AdminDashboard() {
           <button 
             className={`nav-item ${view === "register-staff" ? "active" : ""}`} 
             onClick={() => setView("register-staff")}
+            aria-current={view === 'register-staff' ? 'page' : undefined}
           >
             <UserPlus size={20} />
             {!isCollapsed && <span>Register Staff</span>}
@@ -8774,6 +8802,7 @@ function AdminDashboard() {
           <button 
             className={`nav-item ${view === "staff-management" ? "active" : ""}`}
             onClick={() => setView("staff-management")}
+            aria-current={view === 'staff-management' ? 'page' : undefined}
           >
             <Users size={20} />
             {!isCollapsed && <span>Staff</span>}
@@ -8782,6 +8811,7 @@ function AdminDashboard() {
           <button
             className={`nav-item ${view === "doctor-availability" ? "active" : ""}`}
             onClick={() => setView("doctor-availability")}
+            aria-current={view === 'doctor-availability' ? 'page' : undefined}
           >
             <Calendar size={20} />
             {!isCollapsed && <span>Doctor Availability</span>}
@@ -8790,6 +8820,7 @@ function AdminDashboard() {
           <button 
             className={`nav-item ${view === "activity-logs" ? "active" : ""}`}
             onClick={() => setView("activity-logs")}
+            aria-current={view === 'activity-logs' ? 'page' : undefined}
           >
             <History size={20} />
             {!isCollapsed && <span>Activity Logs</span>}
@@ -8798,6 +8829,7 @@ function AdminDashboard() {
           <button 
             className={`nav-item ${view === "system-settings" ? "active" : ""}`}
             onClick={() => setView("system-settings")}
+            aria-current={view === 'system-settings' ? 'page' : undefined}
           >
             <Settings size={20} />
             {!isCollapsed && <span>System Settings</span>}
@@ -8839,11 +8871,13 @@ function AdminDashboard() {
                 }}
                 style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: '8px', color: '#64748b' }}
                 title="Who's online"
+                aria-label={`Who's online, ${onlineStaffNow.length} currently online`}
+                aria-expanded={showOnlineDropdown}
                 type="button"
               >
                 <Users size={22} />
                 {onlineStaffNow.length > 0 && (
-                  <span style={{ position: 'absolute', top: 2, right: 4, background: '#16a34a', color: 'white', fontSize: '9px', minWidth: '16px', height: '16px', borderRadius: '999px', padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                  <span style={{ position: 'absolute', top: 2, right: 4, background: '#15803d', color: 'white', fontSize: '9px', minWidth: '16px', height: '16px', borderRadius: '999px', padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
                     {onlineStaffNow.length}
                   </span>
                 )}
@@ -8874,6 +8908,7 @@ function AdminDashboard() {
                         onChange={(e) => setOnlineSearch(e.target.value)}
                         className="search-input-with-icon"
                         placeholder="Search online staff..."
+                        aria-label="Search currently online staff"
                         style={{ width: '100%' }}
                       />
                     </div>
@@ -8952,7 +8987,7 @@ function AdminDashboard() {
                   <span>{incidentDetails.time}</span>
                 </div>
               </div>
-              <button type="button" className="inc-icon-btn" onClick={() => setIncidentDetails(null)}>
+              <button type="button" className="inc-icon-btn" onClick={() => setIncidentDetails(null)} aria-label="Close incident details">
                 <X size={18} />
               </button>
             </div>
@@ -9027,7 +9062,7 @@ function AdminDashboard() {
           <div className="modern-modal-card staff-profile-modal" onClick={(e) => e.stopPropagation()}>
             <div className="staff-profile-head">
               <div className="staff-profile-title">Staff Profile</div>
-              <button type="button" className="staff-profile-close" onClick={() => setViewingStaff(null)}>
+              <button type="button" className="staff-profile-close" onClick={() => setViewingStaff(null)} aria-label="Close staff profile">
                 <X size={18} />
               </button>
             </div>
@@ -9228,6 +9263,7 @@ function AdminDashboard() {
                     value={restockQty}
                     onChange={(e) => setRestockQty(e.target.value)}
                     disabled={restockSubmitting}
+                    aria-label="Restock quantity"
                   />
                 </div>
                 <div className="restock-field">
@@ -9237,6 +9273,7 @@ function AdminDashboard() {
                     value={restockPriority}
                     onChange={(e) => setRestockPriority(e.target.value)}
                     disabled={restockSubmitting}
+                    aria-label="Restock priority"
                   >
                     <option value="Low">Low</option>
                     <option value="Normal">Normal</option>

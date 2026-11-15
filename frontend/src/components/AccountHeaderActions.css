@@ -14,8 +14,8 @@
 .aha-dropdown-body{padding:10px;}
 .aha-muted{color:#64748b; font-weight:700; font-size:0.9rem;}
 .aha-settings-saved{margin-bottom:10px; color:#15803d; font-weight:800; font-size:0.82rem;}
-.aha-badge{position:absolute; top:8px; right:8px; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#ea580c; color:#fff; font-size:0.72rem; font-weight:900; display:flex; align-items:center; justify-content:center; border:2px solid #fff; line-height:1;}
-.aha-link-btn{border:0; background:transparent; color:#ea580c; font-weight:900; cursor:pointer; padding:0; font-size:0.82rem; display:inline-flex; align-items:center; gap:4px;}
+.aha-badge{position:absolute; top:8px; right:8px; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#c2410c; color:#fff; font-size:0.72rem; font-weight:900; display:flex; align-items:center; justify-content:center; border:2px solid #fff; line-height:1;}
+.aha-link-btn{border:0; background:transparent; color:#c2410c; font-weight:900; cursor:pointer; padding:0; font-size:0.82rem; display:inline-flex; align-items:center; gap:4px;}
 .aha-link-btn:disabled{opacity:.55; cursor:not-allowed;}
 .aha-spin{animation:aha-spin-keyframes .8s linear infinite;}
 @keyframes aha-spin-keyframes{to{transform:rotate(360deg)}}
@@ -60,7 +60,7 @@ html[data-theme='dark'] .aha-toggle-thumb{background:#fff;}
 .aha-profile-info{display:flex; flex-direction:column; line-height:1.05; text-align:left;}
 .aha-profile-name{font-weight:900; color:#0f172a; font-size:0.92rem; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .aha-profile-role{color:#64748b; font-size:0.78rem; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.aha-avatar-circle{width:36px; height:36px; border-radius:999px; background:linear-gradient(135deg, #f97316 0%, #fb923c 100%); overflow:hidden; display:flex; align-items:center; justify-content:center; font-weight:900; color:#fff; box-shadow:0 8px 22px -10px rgba(249,115,22,.6);}
+.aha-avatar-circle{width:36px; height:36px; border-radius:999px; background:linear-gradient(135deg, #c2410c 0%, #9a3412 100%); overflow:hidden; display:flex; align-items:center; justify-content:center; font-weight:900; color:#fff; box-shadow:0 8px 22px -10px rgba(249,115,22,.6);}
 .aha-avatar-circle img{width:100%; height:100%; object-fit:cover; display:block;}
 .aha-chevron{color:#94a3b8; transition:transform .15s ease;}
 .aha-chevron.open{transform:rotate(180deg);}
@@ -68,7 +68,7 @@ html[data-theme='dark'] .aha-toggle-thumb{background:#fff;}
 .aha-profile-menu{position:absolute; top:calc(100% + 10px); right:0; width:320px; background:#fff; border:1px solid #e2e8f0; border-radius:16px; box-shadow:0 22px 60px -16px rgba(2,6,23,.18); overflow:hidden; z-index:80;}
 .aha-profile-head{padding:20px 18px 18px; border-bottom:1px solid #e2e8f0; background:linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);}
 .aha-user-row{display:flex; align-items:center; gap:14px;}
-.aha-user-avatar{width:64px; height:64px; border-radius:999px; background:linear-gradient(135deg, #f97316 0%, #fb923c 100%); color:#fff; overflow:hidden; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:1.75rem; box-shadow:0 10px 28px -12px rgba(249,115,22,.72); flex:0 0 auto;}
+.aha-user-avatar{width:64px; height:64px; border-radius:999px; background:linear-gradient(135deg, #c2410c 0%, #9a3412 100%); color:#fff; overflow:hidden; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:1.75rem; box-shadow:0 10px 28px -12px rgba(249,115,22,.72); flex:0 0 auto;}
 .aha-user-avatar img{width:100%; height:100%; object-fit:cover; display:block;}
 .aha-user-name{font-weight:900; color:#0f172a; font-size:1.12rem; line-height:1.1;}
 .aha-user-role{color:#64748b; font-weight:700; font-size:0.96rem; margin-top:2px;}
@@ -106,7 +106,7 @@ html[data-theme='dark'] .aha-toggle-thumb{background:#fff;}
 .aha-confirm-actions{margin-top:16px; display:flex; justify-content:flex-end; gap:10px;}
 .aha-confirm-btn{border:1px solid #e2e8f0; background:#fff; color:#0f172a; border-radius:12px; padding:10px 16px; font-weight:900; cursor:pointer; min-width:86px;}
 .aha-confirm-btn:hover{background:#f8fafc;}
-.aha-confirm-btn.primary{border-color:#ea580c; background:#ea580c; color:#fff;}
+.aha-confirm-btn.primary{border-color:#c2410c; background:#c2410c; color:#fff;}
 .aha-confirm-btn.primary:hover{background:#c2410c; border-color:#c2410c;}
 .aha-confirm-btn.danger{border-color:#ef4444; background:#ef4444; color:#fff;}
 .aha-confirm-btn.danger:hover{background:#dc2626; border-color:#dc2626;}
@@ -141,7 +141,7 @@ html[data-theme='dark'] .aha-profile-wrapper{border-color:var(--app-border); bac
 html[data-theme='dark'] .aha-profile-wrapper:hover{background:var(--app-hover);}
 html[data-theme='dark'] .aha-profile-name{color:var(--app-text);}
 html[data-theme='dark'] .aha-profile-role{color:var(--app-muted);}
-html[data-theme='dark'] .aha-avatar-circle{background:linear-gradient(135deg, #f97316 0%, #fb923c 100%); color:#fff;}
+html[data-theme='dark'] .aha-avatar-circle{background:linear-gradient(135deg, #c2410c 0%, #9a3412 100%); color:#fff;}
 html[data-theme='dark'] .aha-chevron{color:rgba(148,163,184,.85);}
 html[data-theme='dark'] .aha-profile-menu{background:var(--app-card); border-color:var(--app-border);}
 html[data-theme='dark'] .aha-profile-head{border-bottom-color:var(--app-border); background:linear-gradient(180deg, rgba(148,163,184,.06) 0%, rgba(148,163,184,.10) 100%);}

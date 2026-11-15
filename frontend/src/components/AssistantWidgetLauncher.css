@@ -25,7 +25,7 @@ body:has(.sidebar.collapsed, .pharm-sidebar.collapsed, .doc-sidebar.collapsed, .
 .assistant-launcher-button {
   border: none;
   border-radius: 999px;
-  background: linear-gradient(135deg, #ea580c 0%, #f59e0b 100%);
+  background: linear-gradient(135deg, #c2410c 0%, #9a3412 100%);
   color: #fff;
   padding: 14px 18px;
   display: inline-flex;
