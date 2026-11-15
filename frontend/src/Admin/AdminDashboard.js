@@ -8702,7 +8702,7 @@ function AdminDashboard() {
       <aside className={`sidebar ${isCollapsed ? "collapsed" : ""}`} onClick={(event) => { if (window.innerWidth <= 1024 && event.target.closest('.nav-item, .nav-subitem')) setIsCollapsed(true); }}>
         <div className="sidebar-header">
           <div className="admin-brand">
-            <img className="admin-brand-logo" src="/images/pgh%20logo.png" alt="PASCUALINGA" />
+            <img className="admin-brand-logo" src="/images/pgh-logo-128.png" alt="PASCUALINGA" decoding="async" />
             {!isCollapsed ? <span className="admin-brand-text">PASCUALINGA</span> : null}
           </div>
           <button onClick={() => setIsCollapsed(!isCollapsed)} className="sidebar-toggle">
