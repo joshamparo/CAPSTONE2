@@ -6274,46 +6274,52 @@ function NurseDashboard() {
              <img src="/images/pgh%20logo.png" alt="PASCUALINGA" className="nurse-brand-logo" />
              {!isSidebarCollapsed ? <span className="nurse-brand-text">PASCUALINGA</span> : null}
            </div>
-           <button className="nurse-sidebar-toggle-btn" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}>
+           <button
+             type="button"
+             className="nurse-sidebar-toggle-btn"
+             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+             aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+             aria-expanded={!isSidebarCollapsed}
+           >
                {isSidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
            </button>
         </div>
         
-        <nav className="nurse-sidebar-nav">
+        <nav className="nurse-sidebar-nav" aria-label="Nurse navigation">
           <div className="sidebar-section-label">MAIN</div>
-          <button className={`nurse-nav-item ${view === 'overview' ? 'active' : ''}`} onClick={() => setView('overview')}>
+          <button className={`nurse-nav-item ${view === 'overview' ? 'active' : ''}`} onClick={() => setView('overview')} aria-label="Dashboard" aria-current={view === 'overview' ? 'page' : undefined}>
             <LayoutDashboard size={20} />
             <span>Dashboard</span>
           </button>
           
-          <button className={`nurse-nav-item ${view === 'patients' ? 'active' : ''}`} onClick={() => setView('patients')}>
+          <button className={`nurse-nav-item ${view === 'patients' ? 'active' : ''}`} onClick={() => setView('patients')} aria-label={NURSE_SIDEBAR_LABELS.patients} aria-current={view === 'patients' ? 'page' : undefined}>
             <Users size={20} />
             <span>{NURSE_SIDEBAR_LABELS.patients}</span>
           </button>
 
-          {nurseCapabilities.appointments ? <button className={`nurse-nav-item ${view === 'appointments' ? 'active' : ''}`} onClick={() => setView('appointments')}>
+          {nurseCapabilities.appointments ? <button className={`nurse-nav-item ${view === 'appointments' ? 'active' : ''}`} onClick={() => setView('appointments')} aria-label={NURSE_SIDEBAR_LABELS.appointments} aria-current={view === 'appointments' ? 'page' : undefined}>
             <Calendar size={20} />
             <span>{NURSE_SIDEBAR_LABELS.appointments}</span>
           </button> : null}
 
           {nurseCapabilities.vitals || nurseCapabilities.orders ? <div className="sidebar-section-label">CLINICAL STATIONS</div> : null}
-            {nurseCapabilities.vitals ? <button className={`nurse-nav-item ${view === 'vitals' ? 'active' : ''}`} onClick={() => setView('vitals')}>
+            {nurseCapabilities.vitals ? <button className={`nurse-nav-item ${view === 'vitals' ? 'active' : ''}`} onClick={() => setView('vitals')} aria-label={NURSE_SIDEBAR_LABELS.vitals} aria-current={view === 'vitals' ? 'page' : undefined}>
               <Activity size={20} />
               <span>{NURSE_SIDEBAR_LABELS.vitals}</span>
             </button> : null}
-          {nurseCapabilities.orders ? <button className={`nurse-nav-item ${view === 'orders' ? 'active' : ''}`} onClick={() => setView('orders')}>
+          {nurseCapabilities.orders ? <button className={`nurse-nav-item ${view === 'orders' ? 'active' : ''}`} onClick={() => setView('orders')} aria-label={NURSE_SIDEBAR_LABELS.orders} aria-current={view === 'orders' ? 'page' : undefined}>
             <FileText size={20} />
             <span>{NURSE_SIDEBAR_LABELS.orders}</span>
           </button> : null}
 
           {nurseCapabilities.wards ? <div className="sidebar-section-label">INPATIENT CARE</div> : null}
-          {nurseCapabilities.wards ? <button className={`nurse-nav-item ${view === 'ward-management' ? 'active' : ''}`} onClick={() => setView('ward-management')}>
+          {nurseCapabilities.wards ? <button className={`nurse-nav-item ${view === 'ward-management' ? 'active' : ''}`} onClick={() => setView('ward-management')} aria-label={NURSE_SIDEBAR_LABELS.wards} aria-current={view === 'ward-management' ? 'page' : undefined}>
             <BedDouble size={20} />
             <span>{NURSE_SIDEBAR_LABELS.wards}</span>
           </button> : null}
 
           {/* Schedules Dropdown */}
-          {nurseCapabilities.schedules ? <button className={`nurse-nav-item ${['schedules', 'tasks', 'calendar', 'shifts'].includes(view) ? 'active' : ''}`} onClick={() => setIsSchedulesOpen(!isSchedulesOpen)}>
+          {nurseCapabilities.schedules ? <button className={`nurse-nav-item ${['schedules', 'tasks', 'calendar', 'shifts'].includes(view) ? 'active' : ''}`} onClick={() => setIsSchedulesOpen(!isSchedulesOpen)} aria-label="Schedules" aria-expanded={isSchedulesOpen} aria-controls={isSchedulesOpen ? 'nurse-schedules-submenu' : undefined}>
             <div style={{display: 'flex', alignItems: 'center', gap: '12px', flex: 1}}>
                 <Clock size={20} />
                 <span>Schedules</span>
@@ -6322,16 +6328,16 @@ function NurseDashboard() {
           </button> : null}
           
           {nurseCapabilities.schedules && isSchedulesOpen && (
-            <div className="nurse-nav-sub-menu" style={{paddingLeft: isSidebarCollapsed ? '0' : '16px'}}>
-              <button className={`nurse-nav-item sub-item ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')} style={{fontSize: '0.9rem'}}>
+            <div className="nurse-nav-sub-menu" id="nurse-schedules-submenu" style={{paddingLeft: isSidebarCollapsed ? '0' : '16px'}}>
+              <button className={`nurse-nav-item sub-item ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')} style={{fontSize: '0.9rem'}} aria-label={NURSE_SIDEBAR_LABELS.tasks} aria-current={view === 'tasks' ? 'page' : undefined}>
                   <ClipboardList size={18} />
                   <span>{NURSE_SIDEBAR_LABELS.tasks}</span>
                 </button>
-              <button className={`nurse-nav-item sub-item ${view === 'calendar' ? 'active' : ''}`} onClick={() => setView('calendar')} style={{fontSize: '0.9rem'}}>
+              <button className={`nurse-nav-item sub-item ${view === 'calendar' ? 'active' : ''}`} onClick={() => setView('calendar')} style={{fontSize: '0.9rem'}} aria-label="Calendar" aria-current={view === 'calendar' ? 'page' : undefined}>
                 <Calendar size={18} />
                 <span>Calendar</span>
               </button>
-              <button className={`nurse-nav-item sub-item ${view === 'shifts' ? 'active' : ''}`} onClick={() => setView('shifts')} style={{fontSize: '0.9rem'}}>
+              <button className={`nurse-nav-item sub-item ${view === 'shifts' ? 'active' : ''}`} onClick={() => setView('shifts')} style={{fontSize: '0.9rem'}} aria-label="My Shifts" aria-current={view === 'shifts' ? 'page' : undefined}>
                 <Clock size={18} />
                 <span>My Shifts</span>
               </button>
@@ -6863,7 +6869,7 @@ function NurseDashboard() {
                                         value={bedSearch}
                                         onChange={(e) => setBedSearch(e.target.value)}
                                         autoFocus
-                                    />
+                                     aria-label="Bed Search"/>
                                 </div>
                                 
                                 <div className="picker-list" style={{ 
@@ -7009,11 +7015,11 @@ function NurseDashboard() {
                                 {!nurseCapabilities.reception ? <button className="btn-gray" onClick={() => setView('patients')}><Users size={18} /><span>{NURSE_SIDEBAR_LABELS.patients}</span></button> : null}
                                 {nurseCapabilities.medications ? <button className="btn-gray" onClick={() => { setActiveOrderTab('medications'); setView('orders'); }}><Pill size={18} /><span>Medication Administration</span></button> : null}
                                 {nurseCapabilities.vitals && !nurseCapabilities.erIntake ? <button className="btn-gray" onClick={() => setView('vitals')}><Activity size={18} /><span>{NURSE_SIDEBAR_LABELS.vitals}</span></button> : null}
+                                {!nurseCapabilities.vitals && nurseCapabilities.orders ? <button className="btn-gray" onClick={() => setView('orders')}><FileText size={18} /><span>{NURSE_SIDEBAR_LABELS.orders}</span></button> : null}
                                 {nurseCapabilities.wards ? <button className="btn-gray" onClick={() => setView('ward-management')}>
                                     <BedDouble size={18} />
                                     <span>{NURSE_SIDEBAR_LABELS.wards}</span>
                                 </button> : null}
-                                {!nurseCapabilities.vitals && nurseCapabilities.orders ? <button className="btn-gray" onClick={() => setView('orders')}><FileText size={18} /><span>{NURSE_SIDEBAR_LABELS.orders}</span></button> : null}
                             </div>
                         </div>
                     </div>
@@ -7136,7 +7142,7 @@ function NurseDashboard() {
                                 value={shiftNotes}
                                 onChange={(e) => { handoverDirtyRef.current = true; setHandoverDirty(true); setShiftNotes(e.target.value); }}
                                 placeholder="Write the live shift handover for the next nurse..."
-                            />
+                             aria-label="Write the live shift handover for the next nurse..."/>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginTop: '16px', alignItems: 'center' }}>
                                 <div style={{ fontSize: '0.86rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <Clock size={14} />
@@ -7186,7 +7192,7 @@ function NurseDashboard() {
                                             onChange={handleIncidentChange}
                                             className="white-input"
                                             required
-                                        />
+                                         aria-label="Date of Incident"/>
                                     </div>
                                     <div className="input-group">
                                         <label><Clock size={14} style={{marginRight: '6px'}}/> Time</label>
@@ -7197,7 +7203,7 @@ function NurseDashboard() {
                                             onChange={handleIncidentChange}
                                             className="white-input"
                                             required
-                                        />
+                                         aria-label="Time"/>
                                     </div>
                                     <div className="input-group">
                                         <label><AlertCircle size={14} style={{marginRight: '6px'}}/> Incident Type</label>
@@ -7206,7 +7212,7 @@ function NurseDashboard() {
                                             value={incidentFormData.type}
                                             onChange={handleIncidentChange}
                                             className="white-input"
-                                        >
+                                         aria-label="Incident Type">
                                             <option value="Fall">Patient Fall</option>
                                             <option value="Medication">Medication Error</option>
                                             <option value="Equipment">Equipment Failure</option>
@@ -7221,7 +7227,7 @@ function NurseDashboard() {
                                             value={incidentFormData.severity}
                                             onChange={handleIncidentChange}
                                             className="white-input"
-                                        >
+                                         aria-label="Severity">
                                             <option value="Low">Low</option>
                                             <option value="Moderate">Moderate</option>
                                             <option value="High">High</option>
@@ -7238,7 +7244,7 @@ function NurseDashboard() {
                                             placeholder="e.g. Ward 101, Room 3"
                                             className="white-input"
                                             required
-                                        />
+                                         aria-label="Location"/>
                                     </div>
                                     <div className="input-group">
                                         <label><UserCheck size={14} style={{marginRight: '6px'}}/> Affected Patient</label>
@@ -7255,7 +7261,7 @@ function NurseDashboard() {
                                                 }));
                                             }}
                                             className="white-input"
-                                        >
+                                         aria-label="Affected Patient">
                                             <option value="">-- None selected --</option>
                                             {deptPatients.map((patient) => (
                                                 <option key={patient._id} value={patient._id}>
@@ -7276,7 +7282,7 @@ function NurseDashboard() {
                                         className="white-input box-textarea"
                                         style={{height: '120px'}}
                                         required
-                                    />
+                                     aria-label="Description of Incident"/>
                                 </div>
 
                                 <div className="input-group full-width" style={{marginTop: '16px'}}>
@@ -7288,7 +7294,7 @@ function NurseDashboard() {
                                         placeholder="What immediate action was taken?"
                                         className="white-input box-textarea"
                                         style={{height: '80px'}}
-                                    />
+                                     aria-label="Action Taken"/>
                                 </div>
 
                                 <div className="form-grid-2-col" style={{ marginTop: '16px' }}>
@@ -7301,7 +7307,7 @@ function NurseDashboard() {
                                             onChange={handleIncidentChange}
                                             placeholder="Charge nurse / admin / doctor"
                                             className="white-input"
-                                        />
+                                         aria-label="Escalate To"/>
                                     </div>
                                     <div className="input-group">
                                         <label>Follow-up Status</label>
@@ -7310,7 +7316,7 @@ function NurseDashboard() {
                                             value={incidentFormData.followUpStatus}
                                             onChange={handleIncidentChange}
                                             className="white-input"
-                                        >
+                                         aria-label="Follow-up Status">
                                             <option value="For Review">For Review</option>
                                             <option value="Escalated">Escalated</option>
                                             <option value="Monitoring">Monitoring</option>
@@ -7356,7 +7362,7 @@ function NurseDashboard() {
                                             <span className={`status-pill ${report.status.toLowerCase()}`}>
                                                 {report.status}
                                             </span>
-                                            <button className="btn-icon-small"><Eye size={14}/></button>
+                                            <button type="button" className="btn-icon-small" aria-label={`View incident report ${report.id}`}><Eye size={14}/></button>
                                         </div>
                                     </div>
                                 ))}
@@ -7401,7 +7407,7 @@ function NurseDashboard() {
                                         value={editFormData.firstName || ''}
                                         readOnly
                                         className="white-input input-disabled-bg"
-                                      />
+                                       aria-label="First Name"/>
                                     </div>
                                     <div className="input-group">
                                       <label>Last Name</label>
@@ -7411,7 +7417,7 @@ function NurseDashboard() {
                                         value={editFormData.lastName || ''}
                                         readOnly
                                         className="white-input input-disabled-bg"
-                                      />
+                                       aria-label="Last Name"/>
                                     </div>
                                     <div className="input-group">
                                       <label>Middle Name</label>
@@ -7421,7 +7427,7 @@ function NurseDashboard() {
                                         value={editFormData.middleName || ''}
                                         readOnly
                                         className="white-input input-disabled-bg"
-                                      />
+                                       aria-label="Middle Name"/>
                                     </div>
                                     <div className="input-group">
                                       <label>Date of Birth</label>
@@ -7431,11 +7437,11 @@ function NurseDashboard() {
                                         className="white-input input-disabled-bg" 
                                         value={editFormData.dateOfBirth || ''}
                                         readOnly
-                                      />
+                                       aria-label="Date of Birth"/>
                                     </div>
                                     <div className="input-group">
                                       <label>Age</label>
-                                      <input type="number" name="age" className="white-input input-disabled-bg" value={editFormData.age || ''} readOnly />
+                                      <input type="number" name="age" className="white-input input-disabled-bg" value={editFormData.age || ''} readOnly  aria-label="Age"/>
                                     </div>
                                     <div className="input-group">
                                       <label>Sex</label>
@@ -7444,7 +7450,7 @@ function NurseDashboard() {
                                         name="sex" 
                                         value={editFormData.sex || ''} 
                                         disabled
-                                      >
+                                       aria-label="Sex">
                                         <option value="">Select Sex</option>
                                         <option value="Male">Male</option>
                                         <option value="Female">Female</option>
@@ -7458,7 +7464,7 @@ function NurseDashboard() {
                                         value={editFormData.phone || ''}
                                         readOnly
                                         className="white-input input-disabled-bg"
-                                      />
+                                       aria-label="Phone Number"/>
                                     </div>
                                     <div className="input-group">
                                       <label>Street Address</label>
@@ -7468,7 +7474,7 @@ function NurseDashboard() {
                                         value={editFormData.streetAddress || ''}
                                         readOnly
                                         className="white-input input-disabled-bg"
-                                      />
+                                       aria-label="Street Address"/>
                                     </div>
                                     <div className="input-group">
                                       <label>City / Municipality</label>
@@ -7477,7 +7483,7 @@ function NurseDashboard() {
                                         name="city" 
                                         value={selectedCity}
                                         disabled
-                                      >
+                                       aria-label="City / Municipality">
                                         <option value="">Select City</option>
                                         {ncrCalabarzonCities.map((item, index) => (
                                           <option key={index} value={item.city}>{item.city}</option>
@@ -7492,7 +7498,7 @@ function NurseDashboard() {
                                         value={editFormData.employeeId || ''}
                                         readOnly
                                         className="white-input input-disabled-bg"
-                                      />
+                                       aria-label="Patient ID (Employee ID)"/>
                                     </div>
                                     <div className="input-group">
                                       <label>Civil Status</label>
@@ -7501,7 +7507,7 @@ function NurseDashboard() {
                                         name="civilStatus" 
                                         value={editFormData.civilStatus || ''}
                                         disabled
-                                      >
+                                       aria-label="Civil Status">
                                         <option value="">Select Status</option>
                                         <option value="Single">Single</option>
                                         <option value="Married">Married</option>
@@ -7516,7 +7522,7 @@ function NurseDashboard() {
                                         name="nationality" 
                                         value={editFormData.nationality || ''}
                                         disabled
-                                      >
+                                       aria-label="Nationality">
                                         <option value="">Select Nationality</option>
                                         <option value="Filipino">Filipino</option>
                                         <option value="American">American</option>
@@ -7528,11 +7534,11 @@ function NurseDashboard() {
                                     </div>
                                     <div className="input-group">
                                       <label>Province</label>
-                                      <input type="text" name="province" className="white-input input-disabled-bg" value={selectedProvince} readOnly />
+                                      <input type="text" name="province" className="white-input input-disabled-bg" value={selectedProvince} readOnly  aria-label="Province"/>
                                     </div>
                                     <div className="input-group">
                                       <label>Postal Code</label>
-                                      <input type="text" name="postalCode" className="white-input input-disabled-bg" value={postalCode} readOnly />
+                                      <input type="text" name="postalCode" className="white-input input-disabled-bg" value={postalCode} readOnly  aria-label="Postal Code"/>
                                     </div>
 
                                   </div>
@@ -7553,7 +7559,7 @@ function NurseDashboard() {
                                       onChange={handleEditFormChange}
                                       required
                                       onKeyDown={(e) => handleNameInput(e, "emergency-name-1")}
-                                    />
+                                     aria-label="Emergency Contact Name"/>
                                     {nameNoticeField === "emergency-name-1" && nameNotice && (
                                       <p className="field-notice">{nameNotice}</p>
                                     )}
@@ -7568,7 +7574,7 @@ function NurseDashboard() {
                                       onChange={handleEditFormChange}
                                       required
                                       onKeyDown={(e) => handleNameInput(e, "emergency-rel-1")}
-                                    />
+                                     aria-label="Relationship"/>
                                     {nameNoticeField === "emergency-rel-1" && nameNotice && (
                                       <p className="field-notice">{nameNotice}</p>
                                     )}
@@ -7583,7 +7589,7 @@ function NurseDashboard() {
                                       onChange={handleEditFormChange}
                                       required
                                       onKeyDown={(e) => handlePhoneInput(e, "emergency-contact-1")}
-                                    />
+                                     aria-label="Contact Number"/>
                                     {phoneNoticeField === "emergency-contact-1" && phoneNotice && (
                                       <p className="field-notice">{phoneNotice}</p>
                                     )}
@@ -7599,7 +7605,7 @@ function NurseDashboard() {
                                       value={editFormData.emergencyName2 || ''}
                                       onChange={handleEditFormChange}
                                       onKeyDown={(e) => handleNameInput(e, "emergency-name-2")}
-                                    />
+                                     aria-label="Emergency Contact Name"/>
                                     {nameNoticeField === "emergency-name-2" && nameNotice && (
                                       <p className="field-notice">{nameNotice}</p>
                                     )}
@@ -7613,7 +7619,7 @@ function NurseDashboard() {
                                       value={editFormData.emergencyRel2 || ''}
                                       onChange={handleEditFormChange}
                                       onKeyDown={(e) => handleNameInput(e, "emergency-rel-2")}
-                                    />
+                                     aria-label="Relationship"/>
                                     {nameNoticeField === "emergency-rel-2" && nameNotice && (
                                       <p className="field-notice">{nameNotice}</p>
                                     )}
@@ -7627,7 +7633,7 @@ function NurseDashboard() {
                                       value={editFormData.emergencyContact2 || ''}
                                       onChange={handleEditFormChange}
                                       onKeyDown={(e) => handlePhoneInput(e, "emergency-contact-2")}
-                                    />
+                                     aria-label="Contact Number"/>
                                     {phoneNoticeField === "emergency-contact-2" && phoneNotice && (
                                       <p className="field-notice">{phoneNotice}</p>
                                     )}
@@ -7643,7 +7649,7 @@ function NurseDashboard() {
                                       value={editFormData.emergencyName3 || ''}
                                       onChange={handleEditFormChange}
                                       onKeyDown={(e) => handleNameInput(e, "emergency-name-3")}
-                                    />
+                                     aria-label="Emergency Contact Name"/>
                                     {nameNoticeField === "emergency-name-3" && nameNotice && (
                                       <p className="field-notice">{nameNotice}</p>
                                     )}
@@ -7657,7 +7663,7 @@ function NurseDashboard() {
                                       value={editFormData.emergencyRel3 || ''}
                                       onChange={handleEditFormChange}
                                       onKeyDown={(e) => handleNameInput(e, "emergency-rel-3")}
-                                    />
+                                     aria-label="Relationship"/>
                                     {nameNoticeField === "emergency-rel-3" && nameNotice && (
                                       <p className="field-notice">{nameNotice}</p>
                                     )}
@@ -7671,7 +7677,7 @@ function NurseDashboard() {
                                       value={editFormData.emergencyContact3 || ''}
                                       onChange={handleEditFormChange}
                                       onKeyDown={(e) => handlePhoneInput(e, "emergency-contact-3")}
-                                    />
+                                     aria-label="Contact Number"/>
                                     {phoneNoticeField === "emergency-contact-3" && phoneNotice && (
                                       <p className="field-notice">{phoneNotice}</p>
                                     )}
@@ -7690,7 +7696,7 @@ function NurseDashboard() {
                                     name="bloodType" 
                                     value={editFormData.bloodType || ''}
                                     onChange={handleEditFormChange}
-                                  />
+                                   aria-label="Blood Type"/>
                                 </div>
                                 <div className="input-group">
                                   <label>Allergies</label>
@@ -7699,7 +7705,7 @@ function NurseDashboard() {
                                     name="allergies" 
                                     value={editFormData.allergies || ''}
                                     onChange={handleEditFormChange}
-                                  />
+                                   aria-label="Allergies"/>
                                 </div>
                                 <div className="input-group">
                                   <label>PhilHealth Number</label>
@@ -7708,7 +7714,7 @@ function NurseDashboard() {
                                     name="philHealthNumber" 
                                     value={editFormData.philHealthNumber || ''}
                                     onChange={handleEditFormChange}
-                                  />
+                                   aria-label="PhilHealth Number"/>
                                 </div>
                                 <div className="input-group">
                                   <label>Ward / Room No.</label>
@@ -7718,7 +7724,7 @@ function NurseDashboard() {
                                     value={editFormData.wardNumber || ''} readOnly title="Use Ward / Room Overview to change patient assignment"
                                     onChange={handleEditFormChange}
                                     placeholder="e.g. 101"
-                                  />
+                                   aria-label="Ward / Room No."/>
                                 </div>
                               </div>
                             </div>
@@ -7824,7 +7830,7 @@ function NurseDashboard() {
                                         value={patientSearch}
                                         onChange={(e) => setPatientSearch(e.target.value)}
                                         style={{ width: '100%' }}
-                                    />
+                                     aria-label="Search by name, ID, or ward..."/>
                                 </div>
                                 {activeDept === 'ER' ? <label className="patient-route-filter">
                                   <span className="sr-only">Filter patient records by route</span>
@@ -8319,7 +8325,7 @@ function NurseDashboard() {
                                                     onChange={handleOrderInputChange}
                                                     required
                                                     className="box-input"
-                                                >
+                                                 aria-label="Select Patient">
                                                     <option value="">-- Choose Patient --</option>
                                                     {deptPatients.map(p => (
                                                         <option key={p._id} value={p._id}>
@@ -8335,7 +8341,7 @@ function NurseDashboard() {
                                                     value={orderFormData.priority}
                                                     onChange={handleOrderInputChange}
                                                     className="box-input"
-                                                >
+                                                 aria-label="Priority">
                                                     <option value="Routine">Routine</option>
                                                     <option value="Urgent">Urgent</option>
                                                     <option value="STAT">STAT (Emergency)</option>
@@ -8367,7 +8373,7 @@ function NurseDashboard() {
                                                             required
                                                             className="box-input"
                                                             disabled={pharmacyCatalogLoading}
-                                                        >
+                                                         aria-label="Medication (Inventory)">
                                                             <option value="">{pharmacyCatalogLoading ? 'Loading medicines…' : '-- Select Medicine --'}</option>
                                                             {(pharmacyCatalog || [])
                                                               .filter((p) => String(p.type || '').toLowerCase() === 'medicine')
@@ -8393,7 +8399,7 @@ function NurseDashboard() {
                                                             onChange={handleOrderInputChange}
                                                             placeholder="500mg"
                                                             className="box-input"
-                                                        />
+                                                         aria-label="Dosage"/>
                                                     </div>
                                                 </div>
                                                 <div className="form-row">
@@ -8405,7 +8411,7 @@ function NurseDashboard() {
                                                           onChange={(e) => setPharmacyCatalogSearch(e.target.value)}
                                                           placeholder="Search medicine name/category…"
                                                           className="box-input"
-                                                        />
+                                                         aria-label="Search"/>
                                                     </div>
                                                     <div className="input-wrapper">
                                                         <label>Unit Price</label>
@@ -8414,7 +8420,7 @@ function NurseDashboard() {
                                                           value={orderFormData.unitPrice !== '' ? `₱${Number(orderFormData.unitPrice || 0)}` : '—'}
                                                           readOnly
                                                           className="box-input"
-                                                        />
+                                                         aria-label="Unit Price"/>
                                                     </div>
                                                 </div>
                                                 <div className="form-row">
@@ -8427,7 +8433,7 @@ function NurseDashboard() {
                                                             onChange={handleOrderInputChange}
                                                             min="1"
                                                             className="box-input"
-                                                        />
+                                                         aria-label="Quantity"/>
                                                     </div>
                                                     <div className="input-wrapper" style={{flex: 2}}>
                                                         <label>Frequency / Instructions</label>
@@ -8438,7 +8444,7 @@ function NurseDashboard() {
                                                             onChange={handleOrderInputChange}
                                                             placeholder="e.g. TID after meals"
                                                             className="box-input"
-                                                        />
+                                                         aria-label="Frequency / Instructions"/>
                                                     </div>
                                                 </div>
                                                 <div className="form-row">
@@ -8449,7 +8455,7 @@ function NurseDashboard() {
                                                           value={`₱${(Math.round((Number(orderFormData.unitPrice || 0) * Math.max(1, Number(orderFormData.quantity || 1))) * 100) / 100).toFixed(2)}`}
                                                           readOnly
                                                           className="box-input"
-                                                        />
+                                                         aria-label="Total Amount"/>
                                                     </div>
                                                 </div>
                                             </>
@@ -8466,7 +8472,7 @@ function NurseDashboard() {
                                                             onChange={handleOrderInputChange}
                                                             required
                                                             className="box-input"
-                                                        >
+                                                         aria-label="Test Name">
                                                             <option value="">-- Select Test --</option>
                                                             <option value="CBC">Complete Blood Count (CBC)</option>
                                                             <option value="Urinalysis">Urinalysis</option>
@@ -8485,7 +8491,7 @@ function NurseDashboard() {
                                                             onChange={handleOrderInputChange}
                                                             placeholder="Reason for request..."
                                                             className="box-input box-textarea"
-                                                        />
+                                                         aria-label="Clinical Indication / Notes"/>
                                                     </div>
                                                 </div>
                                             </>
@@ -8512,7 +8518,7 @@ function NurseDashboard() {
                                                             required
                                                             className="box-input"
                                                             disabled={pharmacyCatalogLoading}
-                                                        >
+                                                         aria-label="Supply (Inventory)">
                                                             <option value="">{pharmacyCatalogLoading ? 'Loading supplies…' : '-- Select Supply --'}</option>
                                                             {(pharmacyCatalog || [])
                                                               .filter((p) => String(p.type || '').toLowerCase() === 'supply')
@@ -8538,7 +8544,7 @@ function NurseDashboard() {
                                                             onChange={handleOrderInputChange}
                                                             min="1"
                                                             className="box-input"
-                                                        />
+                                                         aria-label="Quantity"/>
                                                     </div>
                                                 </div>
                                                 <div className="form-row">
@@ -8550,7 +8556,7 @@ function NurseDashboard() {
                                                           onChange={(e) => setPharmacyCatalogSearch(e.target.value)}
                                                           placeholder="Search supply name…"
                                                           className="box-input"
-                                                        />
+                                                         aria-label="Search"/>
                                                     </div>
                                                     <div className="input-wrapper">
                                                         <label>Unit Price</label>
@@ -8559,7 +8565,7 @@ function NurseDashboard() {
                                                           value={orderFormData.unitPrice !== '' ? `₱${Number(orderFormData.unitPrice || 0)}` : '—'}
                                                           readOnly
                                                           className="box-input"
-                                                        />
+                                                         aria-label="Unit Price"/>
                                                     </div>
                                                 </div>
                                                 <div className="form-row">
@@ -8571,7 +8577,7 @@ function NurseDashboard() {
                                                             onChange={handleOrderInputChange}
                                                             placeholder="e.g. Ward Stock Replenishment"
                                                             className="box-input box-textarea"
-                                                        />
+                                                         aria-label="Reason for Request"/>
                                                     </div>
                                                 </div>
                                                 <div className="form-row">
@@ -8582,7 +8588,7 @@ function NurseDashboard() {
                                                           value={`₱${(Math.round((Number(orderFormData.unitPrice || 0) * Math.max(1, Number(orderFormData.quantity || 1))) * 100) / 100).toFixed(2)}`}
                                                           readOnly
                                                           className="box-input"
-                                                        />
+                                                         aria-label="Total Amount"/>
                                                     </div>
                                                 </div>
                                             </>
@@ -8772,17 +8778,17 @@ function NurseDashboard() {
                                 value={newTaskText}
                                 onChange={(e) => setNewTaskText(e.target.value)}
                                 className="task-input"
-                            />
+                             aria-label="Add new task..."/>
                             <select 
                                 value={newTaskPriority} 
                                 onChange={(e) => setNewTaskPriority(e.target.value)}
                                 className="task-select"
-                            >
+                             aria-label="Task Priority">
                                 <option value="urgent">Urgent</option>
                                 <option value="routine">Routine</option>
                                 <option value="handover">Handover</option>
                             </select>
-                            <button type="submit" className="btn-add-task"><Plus size={18} /></button>
+                            <button type="submit" className="btn-add-task" aria-label="Add task"><Plus size={18} /></button>
                         </form>
                     </div>
 
@@ -8805,11 +8811,11 @@ function NurseDashboard() {
                                         <div key={task.id} className="kanban-card card-urgent">
                                             <div className="card-top">
                                                 <span className="card-time">{task.time}</span>
-                                                <button className="btn-icon-small" onClick={() => deleteTask(task.id)}><X size={14} /></button>
+                                                <button type="button" className="btn-icon-small" onClick={() => deleteTask(task.id)} aria-label={`Delete task: ${task.text}`}><X size={14} /></button>
                                             </div>
                                             <p className="card-text">{task.text}</p>
                                             <div className="card-actions">
-                                                <button className="btn-move" onClick={() => moveTask(task.id, 'routine')}>→</button>
+                                                <button type="button" className="btn-move" onClick={() => moveTask(task.id, 'routine')} aria-label={`Move task to Routine: ${task.text}`}>→</button>
                                             </div>
                                         </div>
                                     ))
@@ -8832,12 +8838,12 @@ function NurseDashboard() {
                                         <div key={task.id} className="kanban-card card-routine">
                                             <div className="card-top">
                                                 <span className="card-time">{task.time}</span>
-                                                <button className="btn-icon-small" onClick={() => deleteTask(task.id)}><X size={14} /></button>
+                                                <button type="button" className="btn-icon-small" onClick={() => deleteTask(task.id)} aria-label={`Delete task: ${task.text}`}><X size={14} /></button>
                                             </div>
                                             <p className="card-text">{task.text}</p>
                                             <div className="card-actions">
-                                                <button className="btn-move" onClick={() => moveTask(task.id, 'urgent')}>←</button>
-                                                <button className="btn-move" onClick={() => moveTask(task.id, 'handover')}>→</button>
+                                                <button type="button" className="btn-move" onClick={() => moveTask(task.id, 'urgent')} aria-label={`Move task to Urgent: ${task.text}`}>←</button>
+                                                <button type="button" className="btn-move" onClick={() => moveTask(task.id, 'handover')} aria-label={`Move task to Handover: ${task.text}`}>→</button>
                                             </div>
                                         </div>
                                     ))
@@ -8860,11 +8866,11 @@ function NurseDashboard() {
                                         <div key={task.id} className="kanban-card card-handover">
                                             <div className="card-top">
                                                 <span className="card-time">{task.time}</span>
-                                                <button className="btn-icon-small" onClick={() => deleteTask(task.id)}><X size={14} /></button>
+                                                <button type="button" className="btn-icon-small" onClick={() => deleteTask(task.id)} aria-label={`Delete task: ${task.text}`}><X size={14} /></button>
                                             </div>
                                             <p className="card-text">{task.text}</p>
                                             <div className="card-actions">
-                                                <button className="btn-move" onClick={() => moveTask(task.id, 'routine')}>←</button>
+                                                <button type="button" className="btn-move" onClick={() => moveTask(task.id, 'routine')} aria-label={`Move task to Routine: ${task.text}`}>←</button>
                                             </div>
                                         </div>
                                     ))
@@ -8968,8 +8974,8 @@ function NurseDashboard() {
                             </p>
                         </div>
                         <div className="calendar-nav">
-                            <button className="btn-cal-nav" onClick={() => changeMonth(-1)}><ChevronLeft size={20} /></button>
-                            <button className="btn-cal-nav" onClick={() => changeMonth(1)}><ChevronRight size={20} /></button>
+                            <button type="button" className="btn-cal-nav" onClick={() => changeMonth(-1)} aria-label="Previous month"><ChevronLeft size={20} /></button>
+                            <button type="button" className="btn-cal-nav" onClick={() => changeMonth(1)} aria-label="Next month"><ChevronRight size={20} /></button>
                         </div>
                     </div>
                     
@@ -8982,7 +8988,7 @@ function NurseDashboard() {
                             onChange={(e) => setNewEventTitle(e.target.value)}
                             className="task-input"
                             style={{width: '200px'}}
-                        />
+                         aria-label="Event title..."/>
                         <input 
                             type="number" 
                             placeholder="Day (1-31)" 
@@ -8991,19 +8997,19 @@ function NurseDashboard() {
                             className="task-input"
                             style={{width: '100px'}}
                             min="1" max="31"
-                        />
+                         aria-label="Day (1-31)"/>
                         <input 
                             type="time" 
                             value={newEventTime}
                             onChange={(e) => setNewEventTime(e.target.value)}
                             className="task-input"
                             style={{width: '110px'}}
-                        />
+                         aria-label="Event Time"/>
                         <select 
                             value={newEventType} 
                             onChange={(e) => setNewEventType(e.target.value)}
                             className="task-select"
-                        >
+                         aria-label="Event Type">
                             <option value="event">Event</option>
                             <option value="shift">Shift</option>
                             <option value="off">Off Duty</option>
@@ -9067,7 +9073,7 @@ function NurseDashboard() {
                         accept="image/jpeg,image/png,image/webp"
                         style={{ display: 'none' }}
                         onChange={handleNurseAvatarPick}
-                      />
+                       aria-label="Upload file"/>
                       <button type="button" className="btn-neutral-sm shadow-btn" onClick={() => nurseAvatarInputRef.current && nurseAvatarInputRef.current.click()}>
                         Update Avatar
                       </button>
@@ -9099,7 +9105,7 @@ function NurseDashboard() {
                                 className={`profile-input input-with-icon-padding ${profileErrors.firstName ? 'profile-input-error' : ''}`}
                                 aria-invalid={Boolean(profileErrors.firstName)}
                                 placeholder="e.g. Maria"
-                              />
+                               aria-label="First Name"/>
                             </div>
                           </div>
 
@@ -9115,7 +9121,7 @@ function NurseDashboard() {
                                 className={`profile-input input-with-icon-padding ${profileErrors.middleName ? 'profile-input-error' : ''}`}
                                 aria-invalid={Boolean(profileErrors.middleName)}
                                 placeholder="e.g. Santos"
-                              />
+                               aria-label="Middle Name"/>
                             </div>
                           </div>
 
@@ -9131,7 +9137,7 @@ function NurseDashboard() {
                                 className={`profile-input input-with-icon-padding ${profileErrors.lastName ? 'profile-input-error' : ''}`}
                                 aria-invalid={Boolean(profileErrors.lastName)}
                                 placeholder="e.g. Reyes"
-                              />
+                               aria-label="Last Name"/>
                             </div>
                           </div>
                           
@@ -9146,7 +9152,7 @@ function NurseDashboard() {
                                 readOnly
                                 className="profile-input input-with-icon-padding input-disabled-bg"
                                 placeholder="nurse@hospital.com"
-                              />
+                               aria-label="Email Address"/>
                             </div>
                           </div>
 
@@ -9161,7 +9167,7 @@ function NurseDashboard() {
                                 readOnly
                                 className="profile-input input-with-icon-padding input-disabled-bg"
                                 placeholder="e.g. ER Nurse, Ward, OPD"
-                              />
+                               aria-label="Department / Role"/>
                             </div>
                           </div>
 
@@ -9177,7 +9183,7 @@ function NurseDashboard() {
                                 className={`profile-input input-with-icon-padding ${profileErrors.phone ? 'profile-input-error' : ''}`}
                                 aria-invalid={Boolean(profileErrors.phone)}
                                 placeholder="+63 900 000 0000"
-                              />
+                               aria-label="Phone Number"/>
                             </div>
                           </div>
                         </div>
@@ -9202,10 +9208,11 @@ function NurseDashboard() {
                                 className={`profile-input input-with-icon-padding ${profileErrors.currentPassword ? 'profile-input-error' : ''}`}
                                 aria-invalid={Boolean(profileErrors.currentPassword)}
                                 placeholder="Enter current password to save changes"
-                              />
+                               aria-label="Current Password"/>
                               <button 
                                 type="button"
                                 className="toggle-password-btn"
+                                aria-label={showCurrentPassword ? "Hide current password" : "Show current password"}
                                 onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                               >
                                 {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -9225,10 +9232,11 @@ function NurseDashboard() {
                                 className={`profile-input input-with-icon-padding ${profileErrors.newPassword ? 'profile-input-error' : ''}`}
                                 aria-invalid={Boolean(profileErrors.newPassword)}
                                 placeholder="Leave blank to keep current"
-                              />
+                               aria-label="New Password"/>
                               <button 
                                 type="button"
                                 className="toggle-password-btn"
+                                aria-label={showNewPassword ? "Hide new password" : "Show new password"}
                                 onClick={() => setShowNewPassword(!showNewPassword)}
                               >
                                 {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -9263,10 +9271,11 @@ function NurseDashboard() {
                                 className={`profile-input input-with-icon-padding ${profileErrors.confirmPassword ? 'profile-input-error' : ''}`}
                                 aria-invalid={Boolean(profileErrors.confirmPassword)}
                                 placeholder="Confirm new password"
-                              />
+                               aria-label="Confirm New Password"/>
                               <button 
                                 type="button"
                                 className="toggle-password-btn"
+                                aria-label={showConfirmPassword ? "Hide password confirmation" : "Show password confirmation"}
                                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                               >
                                 {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -9303,7 +9312,7 @@ function NurseDashboard() {
               <div className="bed-modal-card" onClick={e => e.stopPropagation()}>
                   <div className="bed-modal-header">
                       <h3>Bed {selectedBed.label}</h3>
-                      <button className="btn-icon-small" onClick={() => setSelectedBed(null)}><X size={18}/></button>
+                      <button type="button" className="btn-icon-small" onClick={() => setSelectedBed(null)} aria-label="Close bed details"><X size={18}/></button>
                   </div>
                   <div className="bed-modal-body">
                       <div className="patient-quick-info">
@@ -9350,7 +9359,7 @@ function NurseDashboard() {
                   {`${ordersTargetPatient.firstName || ''} ${ordersTargetPatient.lastName || ''}`.trim()}
                 </p>
               </div>
-              <button onClick={closeEROrdersModal} className="btn-close-modal">
+              <button type="button" onClick={closeEROrdersModal} className="btn-close-modal" aria-label="Close doctor orders">
                 <ChevronDown size={24} style={{ transform: 'rotate(180deg)' }} />
               </button>
             </div>
@@ -9465,7 +9474,7 @@ function NurseDashboard() {
                                   value={String(orderRemarkDraft[oid] || '')}
                                   onChange={(e) => setOrderRemarkDraft((prev) => ({ ...prev, [oid]: e.target.value }))}
                                   style={{ minHeight: 70 }}
-                                />
+                                 aria-label="Execution Remarks"/>
                               </div>
 
                               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -9596,7 +9605,7 @@ function NurseDashboard() {
                               value={supplyRequestForm.supplyId}
                               onChange={(e) => setSupplyRequestForm((v) => ({ ...v, supplyId: e.target.value }))}
                               className="box-input"
-                            >
+                             aria-label="Supply Item">
                               <option value="">-- Select --</option>
                               {(Array.isArray(supplyCatalog) ? supplyCatalog : []).map((s) => (
                                 <option key={String(s.id)} value={String(s.id)}>
@@ -9614,7 +9623,7 @@ function NurseDashboard() {
                             className="box-input"
                             value={String(supplyRequestForm.qty)}
                             onChange={(e) => setSupplyRequestForm((v) => ({ ...v, qty: e.target.value }))}
-                          />
+                           aria-label="Qty"/>
                         </div>
                         <div className="input-wrapper">
                           <label>Priority</label>
@@ -9622,7 +9631,7 @@ function NurseDashboard() {
                             className="box-input"
                             value={supplyRequestForm.priority}
                             onChange={(e) => setSupplyRequestForm((v) => ({ ...v, priority: e.target.value }))}
-                          >
+                           aria-label="Priority">
                             <option value="Normal">Normal</option>
                             <option value="Urgent">Urgent</option>
                           </select>
@@ -9635,7 +9644,7 @@ function NurseDashboard() {
                           placeholder="e.g. ER stock replenishment"
                           value={supplyRequestForm.note}
                           onChange={(e) => setSupplyRequestForm((v) => ({ ...v, note: e.target.value }))}
-                        />
+                         aria-label="Reason / Note"/>
                       </div>
                       {restockMineError ? (
                         <div className="form-error-message">{restockMineError}</div>
@@ -9702,7 +9711,7 @@ function NurseDashboard() {
                           <h3 style={{margin: 0, fontSize: '1.25rem', fontWeight: 700}}>End-of-Shift Handoff</h3>
                           <p style={{margin: '4px 0 0 0', fontSize: '0.9rem', opacity: 0.9, fontWeight: 500}}>Generated report for incoming staff</p>
                       </div>
-                      <button className="btn-close-modal" onClick={() => setShowHandoffModal(false)}>
+                      <button type="button" className="btn-close-modal" onClick={() => setShowHandoffModal(false)} aria-label="Close handoff report">
                           <ChevronDown size={24} style={{transform: 'rotate(180deg)'}} />
                       </button>
                   </div>
@@ -9726,7 +9735,7 @@ function NurseDashboard() {
                               }}
                               value={handoffContent}
                               onChange={(e) => setHandoffContent(e.target.value)}
-                          />
+                           aria-label="Handoff Content"/>
                       </div>
                       <div className="modal-actions-right" style={{margin: 0, padding: '20px 24px', borderTop: '1px solid #e2e8f0', background: 'white'}}>
                           <button className="btn-modal-cancel" onClick={() => {
@@ -9764,7 +9773,7 @@ function NurseDashboard() {
                         <h3 style={{margin: 0, fontSize: '1.25rem', fontWeight: 700}}>Patient Profile</h3>
                         <p style={{margin: '4px 0 0 0', fontSize: '0.9rem', opacity: 0.9, fontWeight: 500}}>Full medical record details</p>
                     </div>
-                    <button onClick={closeViewProfileModal} className="btn-close-modal">
+                    <button type="button" onClick={closeViewProfileModal} className="btn-close-modal" aria-label="Close patient profile">
                         <ChevronDown size={24} style={{transform: 'rotate(180deg)'}} />
                     </button>
                 </div>
@@ -9965,7 +9974,7 @@ function NurseDashboard() {
                   {uploadTargetRecord?.patientName ? `Patient: ${uploadTargetRecord.patientName}` : 'Upload a file to medical records'}
                 </p>
               </div>
-              <button onClick={closeUploadResultModal} className="btn-close-modal">
+              <button type="button" onClick={closeUploadResultModal} className="btn-close-modal" aria-label="Close upload test result">
                 <ChevronDown size={24} style={{transform: 'rotate(180deg)'}} />
               </button>
             </div>
@@ -9981,7 +9990,7 @@ function NurseDashboard() {
                         onChange={(e) => setUploadResultType(e.target.value)}
                         className="box-input"
                         style={{background: 'white'}}
-                      >
+                       aria-label="Result Type">
                         <option value="Lab">Lab</option>
                         <option value="Imaging">Imaging</option>
                         <option value="ECG">ECG</option>
@@ -9996,7 +10005,7 @@ function NurseDashboard() {
                         value={uploadResultDate}
                         onChange={(e) => setUploadResultDate(e.target.value)}
                         className="white-input"
-                      />
+                       aria-label="Result Date (Optional)"/>
                     </div>
                   </div>
 
@@ -10008,7 +10017,7 @@ function NurseDashboard() {
                       onChange={(e) => setUploadResultTitle(e.target.value)}
                       placeholder="e.g. CBC Result"
                       className="white-input"
-                    />
+                     aria-label="Title (Optional)"/>
                   </div>
 
                   <div className="input-group" style={{marginTop: '14px'}}>
@@ -10018,7 +10027,7 @@ function NurseDashboard() {
                       onChange={(e) => setUploadResultFile(e.target.files?.[0] || null)}
                       className="white-input"
                       required
-                    />
+                     aria-label="File"/>
                   </div>
 
                   {uploadResultError ? (
@@ -10072,7 +10081,7 @@ function NurseDashboard() {
                           onChange={handleClinicalUpdateChange}
                           className="box-input"
                           style={{background: 'white'}}
-                        >
+                         aria-label="Update Type">
                           <option value="Vitals">Vitals Check</option>
                           <option value="Note">Nursing Note</option>
                           <option value="Medication">Medication Admin</option>
@@ -10091,7 +10100,7 @@ function NurseDashboard() {
                               placeholder="e.g. 120/80"
                               className="box-input"
                               style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '12px' }}
-                            />
+                             aria-label="Blood Pressure (mmHg)"/>
                           </div>
                           {nurseCapabilities.screeningMode !== 'dental' && <div className="input-group">
                             <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Heart Rate (bpm)</label>
@@ -10103,7 +10112,7 @@ function NurseDashboard() {
                               placeholder="e.g. 75"
                               className="box-input"
                               style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '12px' }}
-                            />
+                             aria-label="Heart Rate (bpm)"/>
                           </div>}
                           {nurseCapabilities.screeningMode !== 'dental' && <div className="input-group">
                             <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Temperature (°C)</label>
@@ -10115,7 +10124,7 @@ function NurseDashboard() {
                               placeholder="e.g. 36.5"
                               className="box-input"
                               style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '12px' }}
-                            />
+                             aria-label="Temperature (°C)"/>
                           </div>}
                           {nurseCapabilities.screeningMode !== 'dental' && <div className="input-group">
                             <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>Resp. Rate (cpm)</label>
@@ -10127,7 +10136,7 @@ function NurseDashboard() {
                               placeholder="e.g. 16"
                               className="box-input"
                               style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px 16px', borderRadius: '12px' }}
-                            />
+                             aria-label="Resp. Rate (cpm)"/>
                           </div>}
                         </div>
                       )}
@@ -10151,7 +10160,7 @@ function NurseDashboard() {
                           required
                           className="box-input box-textarea"
                           style={{minHeight: '120px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px'}}
-                        />
+                         aria-label="Notes"/>
                     </div>
                   </div>
 
@@ -10220,7 +10229,7 @@ function NurseDashboard() {
                                 required
                                 className="white-input"
                                 style={{minHeight: '150px', resize: 'vertical', width: '100%'}}
-                            />
+                             aria-label="E.g., Spelling error in First Name: 'Jon' should be 'John'"/>
                         </div>
                         
                         {requestStatus === 'error' && (
@@ -10280,7 +10289,7 @@ function NurseDashboard() {
             <div className="bed-modal-body">
               <div className="input-group" style={{ marginBottom: 12 }}>
                 <label>Priority Level</label>
-                <select className="doc-select" value={triageDraftLevel} onChange={(e) => setTriageDraftLevel(e.target.value)} style={{ padding: '8px 10px' }}>
+                <select className="doc-select" value={triageDraftLevel} onChange={(e) => setTriageDraftLevel(e.target.value)} style={{ padding: '8px 10px' }} aria-label="Priority Level">
                   <option value="">Unassessed</option>
                   <option value="1">Level 1 (Critical)</option>
                   <option value="2">Level 2 (Urgent)</option>
@@ -10296,7 +10305,7 @@ function NurseDashboard() {
                   onChange={(e) => setTriageDraftNote(e.target.value)}
                   placeholder="Short reason for the priority..."
                   style={{ width: '100%', minHeight: 90 }}
-                />
+                 aria-label="Reason (optional)"/>
               </div>
               {triageAiSuggestion ? (
                 <div style={{ marginTop: 12, border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', background: '#f8fafc' }}>
@@ -10934,7 +10943,7 @@ function NurseDashboard() {
                 <h3 style={{margin: 0, fontSize: '1.2rem', fontWeight: 900}}>Register Walk-In Patient</h3>
                 <p style={{margin: '3px 0 0 0', fontSize: '0.82rem', opacity: 0.85, fontWeight: 600}}>Nurse-led intake and routing for new or existing walk-ins</p>
               </div>
-              <button type="button" onClick={() => setShowAddPatientModal(false)} className="btn-close-modal">
+              <button type="button" onClick={() => setShowAddPatientModal(false)} className="btn-close-modal" aria-label="Close patient registration">
                 <ChevronDown size={22} style={{transform: 'rotate(180deg)'}} />
               </button>
             </div>
@@ -10998,7 +11007,7 @@ function NurseDashboard() {
                             onChange={handleAddPatientChange}
                             className="white-input"
                             disabled={walkInSpecializationsLoading}
-                          >
+                           aria-label="Clinic Specialization">
                             <option value="">
                               {walkInSpecializationsLoading ? 'Loading…' : '-- Select specialization --'}
                             </option>
@@ -11023,7 +11032,7 @@ function NurseDashboard() {
                             onChange={handleAddPatientChange}
                             className="white-input"
                             placeholder="e.g. patient@gmail.com"
-                          />
+                           aria-label="Patient Email (for summary)"/>
                           {!addPatientData.email || isValidEmail(addPatientData.email) ? null : (
                             <div style={{ marginTop: 8, color: '#b91c1c', fontWeight: 700 }}>Enter a valid email address.</div>
                           )}
@@ -11283,7 +11292,7 @@ function NurseDashboard() {
                       className="white-input"
                       value={['lab', 'imaging', 'pharmacy', 'admission_eval'].includes(addPatientData.routeType) ? addPatientData.routeType : ''}
                       onChange={(e) => handleAddPatientChange({ target: { name: 'routeType', value: e.target.value || 'er_consult' } })}
-                    >
+                     aria-label="Other services">
                       <option value="">— Select (optional) —</option>
                       <option value="lab">Laboratory</option>
                       <option value="imaging">Imaging / ECG</option>
@@ -11357,7 +11366,7 @@ function NurseDashboard() {
                                   className="white-input"
                                   value={addPatientData.hmoProvider || ''}
                                   onChange={(e) => handleAddPatientChange({ target: { name: 'hmoProvider', value: e.target.value } })}
-                                >
+                                 aria-label="HMO Provider">
                                   <option value="">— Select provider —</option>
                                   {WALKIN_HMO_PROVIDERS.map((p) => (
                                     <option key={p} value={p}>{p}</option>
@@ -11373,7 +11382,7 @@ function NurseDashboard() {
                                   onChange={handleAddPatientChange}
                                   className="white-input"
                                   placeholder="e.g., 1234-5678-9012 (from the patient's card)"
-                                />
+                                 aria-label="HMO Card Number"/>
                               </div>
                             </div>
                             <div className="input-group">
@@ -11385,7 +11394,7 @@ function NurseDashboard() {
                                 onChange={handleAddPatientChange}
                                 className="white-input"
                                 placeholder="Plan type, coverage limits, or special instructions…"
-                              />
+                               aria-label="HMO Notes (for Billing)"/>
                             </div>
                           </div>
                         )}
@@ -11420,7 +11429,7 @@ function NurseDashboard() {
                                       ? '0 0 0 3px rgba(34,197,94,0.1)'
                                       : undefined
                                   }}
-                                />
+                                 aria-label="PhilHealth Identification Number (PIN)"/>
                                 <div id="philhealth-pin-help" style={{ marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', color: normalizePhilhealthPin(addPatientData.philhealthNumber).length === 12 ? '#15803d' : '#64748b', fontSize: 12, fontWeight: 800 }}>
                                   <span>
                                     {normalizePhilhealthPin(addPatientData.philhealthNumber).length === 12
@@ -11587,7 +11596,7 @@ function NurseDashboard() {
                         onChange={handleAddPatientChange}
                         className="white-input"
                         disabled={walkInDoctorLoading}
-                      >
+                       aria-label="Doctor ID">
                         <option value="">{walkInDoctorLoading ? 'Loading doctors…' : '-- Select Doctor --'}</option>
                         {walkInDoctorOptions.map((doctor) => (
                           <option key={doctor.id} value={doctor.id}>
@@ -11602,35 +11611,35 @@ function NurseDashboard() {
                     <div className="form-grid-3-col">
                       <div className="input-group">
                         <label>Temp (°C)</label>
-                        <input type="number" step="0.1" name="temperature" value={addPatientData.temperature} onChange={handleAddPatientChange} className="white-input" placeholder="36.5" />
+                        <input type="number" step="0.1" name="temperature" value={addPatientData.temperature} onChange={handleAddPatientChange} className="white-input" placeholder="36.5"  aria-label="Temp (°C)"/>
                       </div>
                       <div className="input-group">
                         <label>Systolic (BP)</label>
-                        <input type="number" name="bp_systolic" value={addPatientData.bp_systolic} onChange={handleAddPatientChange} className="white-input" placeholder="120" />
+                        <input type="number" name="bp_systolic" value={addPatientData.bp_systolic} onChange={handleAddPatientChange} className="white-input" placeholder="120"  aria-label="Systolic (BP)"/>
                       </div>
                       <div className="input-group">
                         <label>Diastolic (BP)</label>
-                        <input type="number" name="bp_diastolic" value={addPatientData.bp_diastolic} onChange={handleAddPatientChange} className="white-input" placeholder="80" />
+                        <input type="number" name="bp_diastolic" value={addPatientData.bp_diastolic} onChange={handleAddPatientChange} className="white-input" placeholder="80"  aria-label="Diastolic (BP)"/>
                       </div>
                       <div className="input-group">
                         <label>Heart Rate</label>
-                        <input type="number" name="heartRate" value={addPatientData.heartRate} onChange={handleAddPatientChange} className="white-input" placeholder="bpm" />
+                        <input type="number" name="heartRate" value={addPatientData.heartRate} onChange={handleAddPatientChange} className="white-input" placeholder="bpm"  aria-label="Heart Rate"/>
                       </div>
                       <div className="input-group">
                         <label>Resp. Rate</label>
-                        <input type="number" name="respiratoryRate" value={addPatientData.respiratoryRate} onChange={handleAddPatientChange} className="white-input" placeholder="per min" />
+                        <input type="number" name="respiratoryRate" value={addPatientData.respiratoryRate} onChange={handleAddPatientChange} className="white-input" placeholder="per min"  aria-label="Resp. Rate"/>
                       </div>
                       <div className="input-group">
                         <label>SpO2 (%)</label>
-                        <input type="number" name="spo2" value={addPatientData.spo2} onChange={handleAddPatientChange} className="white-input" placeholder="98" />
+                        <input type="number" name="spo2" value={addPatientData.spo2} onChange={handleAddPatientChange} className="white-input" placeholder="98"  aria-label="SpO2 (%)"/>
                       </div>
                       <div className="input-group">
                         <label>Pain (0-10)</label>
-                        <input type="number" min="0" max="10" name="painLevel" value={addPatientData.painLevel} onChange={handleAddPatientChange} className="white-input" />
+                        <input type="number" min="0" max="10" name="painLevel" value={addPatientData.painLevel} onChange={handleAddPatientChange} className="white-input"  aria-label="Pain (0-10)"/>
                       </div>
                       <div className="input-group">
                         <label>Symptom Severity</label>
-                        <select name="severity" value={addPatientData.severity} onChange={handleAddPatientChange} className="white-input">
+                        <select name="severity" value={addPatientData.severity} onChange={handleAddPatientChange} className="white-input" aria-label="Symptom Severity">
                           <option value="Mild">Mild</option>
                           <option value="Moderate">Moderate</option>
                           <option value="Severe">Severe</option>
@@ -11690,13 +11699,13 @@ function NurseDashboard() {
                           fontSize: 13,
                           fontWeight: 700
                         }}
-                      />
+                       aria-label="Triage Note"/>
                     </div>
                   ) : null}
                   
                   <div className="input-group" style={{marginTop: '15px'}}>
                     <label>Main Concern / Symptoms <span style={{color: '#ef4444'}}>*</span></label>
-                    <textarea name="mainConcern" value={addPatientData.mainConcern} onChange={handleAddPatientChange} required className="white-input" style={{height: '80px'}} placeholder="What is the patient's current condition?" />
+                    <textarea name="mainConcern" value={addPatientData.mainConcern} onChange={handleAddPatientChange} required className="white-input" style={{height: '80px'}} placeholder="What is the patient's current condition?"  aria-label="Main Concern / Symptoms"/>
                   </div>
 
                   <div style={{ marginTop: 18, padding: 16, background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0' }}>
@@ -11794,11 +11803,11 @@ function NurseDashboard() {
                     <summary style={{cursor: 'pointer', fontWeight: 900, color: '#0f172a'}}>More details (optional)</summary>
                     <div className="input-group" style={{marginTop: '12px'}}>
                       <label>Existing Conditions / Relevant History</label>
-                      <textarea name="existingConditions" value={addPatientData.existingConditions} onChange={handleAddPatientChange} className="white-input" style={{height: '70px'}} placeholder="Optional clinical context for the next team" />
+                      <textarea name="existingConditions" value={addPatientData.existingConditions} onChange={handleAddPatientChange} className="white-input" style={{height: '70px'}} placeholder="Optional clinical context for the next team"  aria-label="Existing Conditions / Relevant History"/>
                     </div>
                     <div className="input-group" style={{marginTop: '12px'}}>
                       <label>Routing Note</label>
-                      <textarea name="routeNote" value={addPatientData.routeNote} onChange={handleAddPatientChange} className="white-input" style={{height: '70px'}} placeholder="Short note for the receiving doctor or service team" />
+                      <textarea name="routeNote" value={addPatientData.routeNote} onChange={handleAddPatientChange} className="white-input" style={{height: '70px'}} placeholder="Short note for the receiving doctor or service team"  aria-label="Routing Note"/>
                     </div>
                   </details>
                 </div>
@@ -11990,7 +11999,7 @@ function NurseDashboard() {
                                   value={addPatientData.hmoLoaNumber || ''}
                                   name="hmoLoaNumber"
                                   onChange={handleAddPatientChange}
-                                />
+                                 aria-label="LOA / Approval Number (given over the phone)"/>
                               </div>
                               <div className="input-group" style={{ marginBottom: 0 }}>
                                 <label style={{ fontSize: 12, fontWeight: 800, color: '#166534' }}>Approved Amount (₱)</label>
@@ -12003,7 +12012,7 @@ function NurseDashboard() {
                                   value={addPatientData.hmoLoaApprovedAmount || ''}
                                   name="hmoLoaApprovedAmount"
                                   onChange={handleAddPatientChange}
-                                />
+                                 aria-label="Approved Amount (₱)"/>
                               </div>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -12217,7 +12226,7 @@ function NurseDashboard() {
                               onChange={handleAddPatientChange}
                               className="white-input"
                               placeholder="Search by name, email, or contact"
-                            />
+                             aria-label="Find Existing Patient"/>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <div className="walkin-results-count" style={{ margin: 0, fontSize: '0.78rem' }}>
@@ -12302,7 +12311,7 @@ function NurseDashboard() {
                                 required
                                 className="white-input"
                                 placeholder="Juan"
-                              />
+                               aria-label="First Name"/>
                               {nameNoticeField === 'add-fn' && <span style={{color: '#ef4444', fontSize: '0.72rem', fontWeight: 600}}>{nameNotice}</span>}
                             </div>
                             <div className="input-group">
@@ -12316,16 +12325,16 @@ function NurseDashboard() {
                                 required
                                 className="white-input"
                                 placeholder="Dela Cruz"
-                              />
+                               aria-label="Last Name"/>
                               {nameNoticeField === 'add-ln' && <span style={{color: '#ef4444', fontSize: '0.72rem', fontWeight: 600}}>{nameNotice}</span>}
                             </div>
                             <div className="input-group">
                               <label style={{fontSize: '0.76rem'}}>DOB <span style={{color: '#ef4444'}}>*</span></label>
-                              <input type="date" name="dateOfBirth" value={addPatientData.dateOfBirth} onChange={handleAddPatientChange} required className="white-input" max={new Date().toISOString().split('T')[0]} />
+                              <input type="date" name="dateOfBirth" value={addPatientData.dateOfBirth} onChange={handleAddPatientChange} required className="white-input" max={new Date().toISOString().split('T')[0]}  aria-label="DOB"/>
                             </div>
                             <div className="input-group">
                               <label style={{fontSize: '0.76rem'}}>Gender</label>
-                              <select name="gender" value={addPatientData.gender} onChange={handleAddPatientChange} className="white-input">
+                              <select name="gender" value={addPatientData.gender} onChange={handleAddPatientChange} className="white-input" aria-label="Gender">
                                 <option value="Male">Male</option>
                                 <option value="Female">Female</option>
                               </select>
@@ -12356,12 +12365,12 @@ function NurseDashboard() {
                                   onKeyDown={(e) => handleNameInput(e, 'add-mn')}
                                   className="white-input"
                                   placeholder="Optional"
-                                />
+                                 aria-label="Middle Name"/>
                                 {nameNoticeField === 'add-mn' && <span style={{color: '#ef4444', fontSize: '0.72rem', fontWeight: 600}}>{nameNotice}</span>}
                               </div>
                               <div className="input-group">
                                 <label style={{fontSize: '0.76rem'}}>Blood Type</label>
-                                <select name="bloodType" value={addPatientData.bloodType} onChange={handleAddPatientChange} className="white-input">
+                                <select name="bloodType" value={addPatientData.bloodType} onChange={handleAddPatientChange} className="white-input" aria-label="Blood Type">
                                   <option value="A+">A+</option><option value="A-">A-</option>
                                   <option value="B+">B+</option><option value="B-">B-</option>
                                   <option value="AB+">AB+</option><option value="AB-">AB-</option>
@@ -12381,7 +12390,7 @@ function NurseDashboard() {
                                   onKeyDown={(e) => handlePhoneInput(e, 'add-phone')}
                                   className="white-input"
                                   placeholder="09XX XXX XXXX"
-                                />
+                                 aria-label="Contact Number"/>
                                 {phoneNoticeField === 'add-phone' && <span style={{color: '#ef4444', fontSize: '0.72rem', fontWeight: 600}}>{phoneNotice}</span>}
                               </div>
                             </div>
@@ -12394,7 +12403,7 @@ function NurseDashboard() {
                                 onChange={handleAddPatientChange}
                                 className="white-input"
                                 placeholder="Street, barangay, city"
-                              />
+                               aria-label="Address"/>
                             </div>
                           </details>
                         </div>

@@ -10,8 +10,8 @@
   --nurse-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --nurse-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
   --nurse-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-  --nurse-danger: #ef4444;
-  --nurse-success: #22c55e;
+  --nurse-danger: #b91c1c;
+  --nurse-success: #166534;
   --nurse-warning: #f59e0b;
 }
 
@@ -80,7 +80,7 @@
 
 .nurse-brand-text {
   font-weight: 1000;
-  color: white;
+  color: #3b160a;
   font-size: 1.02rem;
   letter-spacing: -0.02em;
   white-space: nowrap;
@@ -102,9 +102,9 @@
   width: 34px;
   height: 34px;
   border-radius: var(--radius-md, 12px);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(59, 22, 10, 0.35);
+  background: rgba(255, 255, 255, 0.78);
+  color: #3b160a;
   cursor: pointer;
   padding: 0;
   display: inline-flex;
@@ -115,7 +115,7 @@
 }
 
 .nurse-sidebar-toggle-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: white;
   transform: translateY(-1px);
 }
 
@@ -135,7 +135,7 @@
   padding: 12px 16px;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.8);
+  color: #3b160a;
   font-weight: 600;
   font-size: 0.95rem;
   border-radius: 12px;
@@ -146,14 +146,14 @@
 }
 
 .nurse-nav-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: white;
+  background-color: rgba(255, 255, 255, 0.75);
+  color: #3b160a;
 }
 
 .nurse-nav-item.active {
   position: relative;
   background-color: white;
-  color: var(--brand-primary);
+  color: #9a3412;
   box-shadow: var(--shadow-md, 0 4px 12px -4px rgba(2,6,23,0.15));
   font-weight: 700;
 }
@@ -743,7 +743,7 @@
 
 .btn-orange-sm {
   background: var(--nurse-primary);
-  color: white;
+  color: #3b160a;
   border: none;
   padding: 6px 10px;
   border-radius: 6px;
@@ -1294,7 +1294,7 @@
 .sidebar-section-label {
   font-size: 0.7rem;
   font-weight: 800;
-  color: rgba(255, 255, 255, 0.5);
+  color: #5b210a;
   padding: 16px 16px 8px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1305,15 +1305,15 @@
 }
 
 /* Stat Card Tones */
-.tone-blue { background: #eff6ff; color: #3b82f6; }
-.tone-red { background: #fef2f2; color: #ef4444; }
-.tone-green { background: #f0fdf4; color: #22c55e; }
-.tone-orange { background: #fff7ed; color: #f97316; }
+.tone-blue { background: #eff6ff; color: #1d4ed8; }
+.tone-red { background: #fef2f2; color: #b91c1c; }
+.tone-green { background: #f0fdf4; color: #166534; }
+.tone-orange { background: #fff7ed; color: #9a3412; }
 
 /* Quick Actions */
 .btn-orange {
   background: var(--nurse-primary);
-  color: white;
+  color: #3b160a;
   border: none;
   padding: 10px 20px;
   border-radius: 10px;
@@ -2920,7 +2920,7 @@
 
 .btn-primary-action {
   background: linear-gradient(135deg, var(--nurse-primary) 0%, #fb923c 100%);
-  color: white;
+  color: #3b160a;
   border: none;
   padding: 12px 24px;
   border-radius: 12px;
@@ -3861,7 +3861,7 @@ body.compact-mode .workspace-queue-item {
 
 .btn-submit-order {
   background: linear-gradient(135deg, var(--nurse-primary) 0%, #fb923c 100%);
-  color: white;
+  color: #3b160a;
   border: none;
   padding: 12px 32px;
   border-radius: 12px;
@@ -5746,4 +5746,10 @@ body.compact-mode .workspace-queue-item {
     padding: 13px 11px !important;
     font-size: 10.5px !important;
   }
+}
+
+/* Keep keyboard focus visible, including controls with older outline resets. */
+.nurse-dashboard-container :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid #3b160a !important;
+  outline-offset: 2px;
 }
