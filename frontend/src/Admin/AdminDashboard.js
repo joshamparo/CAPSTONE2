@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Settings, UserPlus, Users, ChevronLeft, ChevronRight, LogOut, ArrowLeft, QrCode, AlertCircle, User, Eye, EyeOff, Check, X, ClipboardList, Activity, FileText, MessageSquare, Calendar, ChevronDown, History, LayoutDashboard, Phone, MapPin, Trash2, Key, Save, Mail, Briefcase, Shield, Edit, Search, Megaphone, Clock, ListTodo, Plus, Pill, SlidersHorizontal, Eye as EyeIcon, Download, Upload, ShieldCheck, UserCog, Layers, Bell, ArrowRight, RefreshCw, IdCard, Stethoscope, Award, Menu } from "lucide-react";
-import { BarChart, Bar, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import "./AdminDashboard.css";
-import { supabase } from "../lib/supabaseClient";
 import AccountHeaderActions from "../components/AccountHeaderActions";
 import ConfirmModal from "../components/ConfirmModal";
 import { checkBackendHealth, fetchJson } from "../utils/api";
@@ -15,6 +13,40 @@ const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const WEB_ORIGIN = String(process.env.REACT_APP_WEB_ORIGIN || '').trim() || 'https://pascualinga.com';
 const ADMIN_MANUAL_ROOM_STATUSES = ['Available', 'Reserved', 'Cleaning', 'Maintenance', 'Inactive'];
 const ACTIVITY_LOGS_PER_PAGE = 12;
+const AdminPatientTrendChart = lazy(() => import('./AdminPatientTrendChart'));
+
+function DeferredAdminPatientTrendChart({ data }) {
+  const chartContainerRef = useRef(null);
+  const [shouldLoadChart, setShouldLoadChart] = useState(false);
+
+  useEffect(() => {
+    const target = chartContainerRef.current;
+    if (!target || typeof IntersectionObserver === 'undefined') {
+      setShouldLoadChart(true);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setShouldLoadChart(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '200px' });
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={chartContainerRef} style={{ width: '100%', height: 240, minHeight: 240 }}>
+      {shouldLoadChart ? (
+        <Suspense fallback={<div aria-hidden="true" style={{ height: 240 }} />}>
+          <AdminPatientTrendChart data={data} />
+        </Suspense>
+      ) : null}
+    </div>
+  );
+}
 
 function manilaDateKey(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
@@ -111,6 +143,8 @@ function AdminDashboard() {
   const [symptomInsights, setSymptomInsights] = useState(null);
   const [symptomInsightsLoading, setSymptomInsightsLoading] = useState(false);
   const [symptomInsightsError, setSymptomInsightsError] = useState('');
+  const symptomInsightsSectionRef = useRef(null);
+  const [symptomInsightsVisible, setSymptomInsightsVisible] = useState(false);
 
   const specializationOptionsByRole = {
     Doctor: [
@@ -925,10 +959,28 @@ function AdminDashboard() {
   };
 
   useEffect(() => {
-    if (view !== 'dashboard') return;
+    if (view !== 'dashboard') return undefined;
+    const target = symptomInsightsSectionRef.current;
+    if (!target || typeof IntersectionObserver === 'undefined') {
+      setSymptomInsightsVisible(true);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setSymptomInsightsVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '300px' });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== 'dashboard' || !symptomInsightsVisible) return;
     if (!symptomMonth) return;
     fetchSymptomInsights({ refresh: false });
-  }, [symptomMonth, view]);
+  }, [symptomMonth, symptomInsightsVisible, view]);
 
   // Role Management State
   const [showRoleMgmt, setShowRoleMgmt] = useState(false);
@@ -1945,38 +1997,54 @@ function AdminDashboard() {
   }, [view, logPage, logFilter, logDateFrom, logDateTo]);
 
   useEffect(() => {
-    if (!supabase) {
-      const t = setInterval(() => {
-        if (document.visibilityState === 'visible' && view === 'staff-management') fetchStaff();
-      }, 60000);
-      return () => clearInterval(t);
-    }
+    if (view !== 'staff-management') return undefined;
 
+    let cancelled = false;
     let refreshTimer = null;
+    let fallbackInterval = null;
+    let channel = null;
+
+    const startFallbackPolling = () => {
+      if (cancelled || fallbackInterval) return;
+      fallbackInterval = setInterval(() => {
+        if (document.visibilityState === 'visible') fetchStaff();
+      }, 60000);
+    };
+
     const scheduleStaffRefresh = () => {
-      if (view !== 'staff-management' || document.visibilityState !== 'visible' || refreshTimer) return;
+      if (cancelled || document.visibilityState !== 'visible' || refreshTimer) return;
       refreshTimer = setTimeout(() => {
         refreshTimer = null;
         fetchStaff();
       }, 3000);
     };
 
-    const channel = supabase
-      .channel('presence-online')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff' }, () => {
-        scheduleStaffRefresh();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'nurses' }, () => {
-        scheduleStaffRefresh();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'doctors' }, () => {
-        scheduleStaffRefresh();
-      })
-      .subscribe();
+    import('../lib/supabaseClient').then(({ supabase }) => {
+      if (cancelled) return;
+      if (!supabase) {
+        startFallbackPolling();
+        return;
+      }
+
+      channel = supabase
+        .channel('presence-online')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'staff' }, scheduleStaffRefresh)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'nurses' }, scheduleStaffRefresh)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'doctors' }, scheduleStaffRefresh)
+        .subscribe();
+    }).catch(() => {
+      startFallbackPolling();
+    });
 
     return () => {
+      cancelled = true;
       if (refreshTimer) clearTimeout(refreshTimer);
-      supabase.removeChannel(channel);
+      if (fallbackInterval) clearInterval(fallbackInterval);
+      if (channel) {
+        import('../lib/supabaseClient').then(({ supabase }) => {
+          if (supabase) supabase.removeChannel(channel);
+        }).catch(() => {});
+      }
     };
   }, [view]);
 
@@ -2245,7 +2313,7 @@ function AdminDashboard() {
 
   useEffect(() => {
     const email = String(adminProfile.email || '').trim();
-    if (!email) return;
+    if (!email || view !== 'admin-settings') return;
     let cancelled = false;
     const run = async () => {
       try {
@@ -2276,7 +2344,7 @@ function AdminDashboard() {
     };
     run();
     return () => { cancelled = true; };
-  }, [adminProfile.email]);
+  }, [adminProfile.email, view]);
 
   const handleAdminProfileChange = (e) => {
     const { name, value } = e.target;
@@ -4563,28 +4631,7 @@ function AdminDashboard() {
             </div>
           </div>
           <div style={{ width: '100%', minHeight: 240, marginTop: '1rem' }}>
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={patientTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: 'var(--chart-tick)', fontSize: 12 }} dy={10} />
-                <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: 'var(--chart-tick)', fontSize: 12 }} />
-                <Tooltip
-                  cursor={{ fill: 'var(--chart-cursor)' }}
-                  contentStyle={{
-                    borderRadius: '10px',
-                    border: '1px solid var(--chart-tooltip-border)',
-                    background: 'var(--chart-tooltip-bg)',
-                    color: 'var(--chart-tooltip-text)',
-                    boxShadow: '0 14px 28px rgba(2,6,23,.18)'
-                  }}
-                />
-                <Bar dataKey="count" name="Patients" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                  {patientTrendData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.count > 0 ? '#ea580c' : '#fdba74'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <DeferredAdminPatientTrendChart data={patientTrendData} />
           </div>
         </div>
       );
@@ -5113,7 +5160,7 @@ function AdminDashboard() {
           {/* Analytics Row */}
           <div className="admin-analytics-row admin-analytics-row-single">
               <div className="admin-analytics-left">
-                <div className="dashboard-section-card analytics-card admin-ai-card" style={{ height: 'auto' }}>
+                <div ref={symptomInsightsSectionRef} className="dashboard-section-card analytics-card admin-ai-card" style={{ height: 'auto' }}>
                   <div className="dashboard-section-header">
                     <h3 className="dashboard-section-title">
                       <Stethoscope size={20} className="text-orange-600" /> AI-Assisted Symptom Insights

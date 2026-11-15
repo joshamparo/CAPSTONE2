@@ -4,7 +4,7 @@ import { AlertTriangle, ServerCrash, X, Clock, RefreshCw, Home as HomeIcon } fro
 // Auth Wrapper
 import ProtectedRoute from './login/ProtectedRoute';
 // Import your components
-import HomePage from './homepage/HomePage';
+const HomePage = lazy(() => import('./homepage/HomePage'));
 const Login = lazy(() => import('./login/Login'));
 const OtpPage = lazy(() => import('./login/OtpPage'));
 const AdminDashboard = lazy(() => import('./Admin/AdminDashboard'));
