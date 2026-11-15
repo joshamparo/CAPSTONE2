@@ -5178,6 +5178,7 @@ function AdminDashboard() {
                       <input
                         type="month"
                         className="settings-select"
+                        aria-label="Symptom insights month"
                         value={symptomMonth}
                         max={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`}
                         onChange={(e) => setSymptomMonth(e.target.value)}

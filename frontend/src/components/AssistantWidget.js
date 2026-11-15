@@ -464,6 +464,7 @@ export default function AssistantWidget({ pathname = '/', initialOpen = false })
                 <textarea
                   className="assistant-widget-textarea"
                   placeholder={role === 'public' ? 'Ask about the hospital or the system...' : 'Ask about your dashboard or tasks...'}
+                  aria-label="Message to Pascualinga Assistant"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={handleKeyDown}
