@@ -5050,6 +5050,7 @@ function AdminDashboard() {
                       id="admin-todo-input"
                       type="text"
                       placeholder="Add a new task..."
+                      aria-label="Add a new task"
                       className="todo-input"
                       style={{
                         flex: 1,
@@ -5089,8 +5090,10 @@ function AdminDashboard() {
                           {todo.text}
                         </span>
                         <button
+                          type="button"
                           onClick={() => handleDeleteTodo(todo.id)}
                           className="todo-delete-btn"
+                          aria-label={`Delete task: ${todo.text}`}
                         >
                           <X size={14} />
                         </button>

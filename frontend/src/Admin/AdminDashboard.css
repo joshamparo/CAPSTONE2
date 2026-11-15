@@ -1,5 +1,5 @@
 :root {
-  --primary: #c2410c; /* Dark orange with WCAG AA contrast on white */
+  --primary: #ea580c;
   --primary-hover: #c2410c; /* Orange-700 */
   --primary-light: #fff7ed; /* Orange-50 */
   --secondary: #0f172a; /* Slate-900 */
@@ -33,7 +33,7 @@ body {
 
 .sidebar {
   width: 248px;
-  background: linear-gradient(180deg, #c2410c 0%, #9a3412 100%);
+  background: var(--brand-primary-gradient, linear-gradient(180deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%));
   color: white;
   display: flex;
   flex-direction: column;
@@ -90,10 +90,11 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1;
+  color: #3b160a;
 }
 
 .sidebar-toggle {
-  color: white;
+  color: #3b160a;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -101,14 +102,14 @@ body {
   width: 34px;
   height: 34px;
   border-radius: var(--radius-md, 12px);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(59, 22, 10, 0.35);
+  background: rgba(255, 255, 255, 0.72);
   transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
   box-shadow: 0 2px 6px -2px rgba(2,6,23,0.18);
 }
 
 .sidebar-toggle:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: white;
   transform: translateY(-1px);
 }
 
@@ -133,7 +134,7 @@ body {
   gap: 12px;
   padding: 14px 16px;
   border-radius: 12px;
-  color: #fff;
+  color: #3b160a;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -151,8 +152,8 @@ body {
 }
 
 .nav-item:hover {
-  background: rgba(255,255,255,0.1);
-  color: white;
+  background: rgba(255,255,255,0.72);
+  color: #3b160a;
   transform: translateX(4px);
 }
 
@@ -212,11 +213,11 @@ body {
   align-items: center;
   padding: 10px 12px;
   border-radius: 10px;
-  color: #fff;
+  color: #3b160a;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.2s, color 0.2s;
-  background: rgba(0,0,0,0.12);
+  background: rgba(255,255,255,0.72);
   border: none;
   width: 100%;
   text-align: left;
@@ -225,13 +226,13 @@ body {
 }
 
 .nav-subitem:hover {
-  background: rgba(0,0,0,0.2);
-  color: white;
+  background: white;
+  color: #3b160a;
 }
 
 .nav-subitem.active {
-  background: #7c2d12;
-  color: white;
+  background: white;
+  color: #9a3412;
 }
 
 .sidebar-item-badge {
@@ -5904,7 +5905,7 @@ input:checked + .slider:before {
 .mm-tag.role { background: #fff7ed; color: #9a3412; }
 
 .admin-dashboard-container :is(button, a, input, select, textarea, [tabindex]):focus-visible {
-  outline: 3px solid #1d4ed8;
+  outline: 3px solid #3b160a;
   outline-offset: 2px;
 }
 
