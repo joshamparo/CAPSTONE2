@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Settings, UserPlus, Users, ChevronLeft, ChevronRight, LogOut, ArrowLeft, QrCode, AlertCircle, User, Eye, EyeOff, Check, X, ClipboardList, Activity, FileText, MessageSquare, Calendar, ChevronDown, History, LayoutDashboard, Phone, MapPin, Trash2, Key, Save, Mail, Briefcase, Shield, Edit, Search, Megaphone, Clock, ListTodo, Plus, Pill, SlidersHorizontal, Eye as EyeIcon, Download, Upload, ShieldCheck, UserCog, Layers, Bell, ArrowRight, RefreshCw, IdCard, Stethoscope, Award, Menu } from "lucide-react";
+import { Settings, UserPlus, Users, ChevronLeft, ChevronRight, LogOut, ArrowLeft, QrCode, AlertCircle, User, Eye, EyeOff, Check, X, ClipboardList, Activity, FileText, MessageSquare, Calendar, ChevronDown, History, LayoutDashboard, Phone, MapPin, Trash2, Key, Save, Mail, Briefcase, Shield, Edit, Search, Megaphone, Clock, ListTodo, Plus, Pill, SlidersHorizontal, Eye as EyeIcon, Download, Upload, ShieldCheck, UserCog, Layers, Bell, ArrowRight, RefreshCw, IdCard, Stethoscope, Award, Menu, BarChart3 } from "lucide-react";
 import "./AdminDashboard.css";
 import AccountHeaderActions from "../components/AccountHeaderActions";
 import ConfirmModal from "../components/ConfirmModal";
@@ -7856,7 +7856,7 @@ function AdminDashboard() {
                     <div className="dashboard-section-card col-span-2" style={{ display: 'flex', flexDirection: 'column' }}>
                         <div className="dashboard-section-header">
                             <h3 className="dashboard-section-title">
-                                <BarChart size={20} className="text-emerald-600" /> Sales Monitoring
+                                <BarChart3 size={20} className="text-emerald-600" /> Sales Monitoring
                             </h3>
                         </div>
                         <div className="patient-controls-row" style={{ flexWrap: 'wrap', justifyContent: 'space-between', gap: '10px' }}>
