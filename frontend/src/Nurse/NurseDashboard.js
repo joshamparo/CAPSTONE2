@@ -1,5 +1,5 @@
 import MedicalFileLink from '../components/MedicalFileLink';
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LogOut, User, Users, MessageSquare, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Bell, Settings, AlertCircle, AlertOctagon, Printer, Search, Eye, BedDouble, Bed, LayoutDashboard, Activity, FileText, Calendar, ClipboardList, ArrowLeft, Stethoscope, UserCheck, Clipboard, Check, FilePenLine, LogIn, Pill, FlaskConical, ScanLine, Package, Clock, CheckCircle, XCircle, X, Plus, Phone, AlertTriangle, Info, MapPin, Copy, Save, Megaphone, RotateCw, Send, Upload, Download, Menu, ShieldAlert, Mail, Briefcase, Key, Shield, EyeOff } from 'lucide-react';
 import './NurseDashboard.css';
@@ -8,7 +8,6 @@ import { ncrCalabarzonCities, SPECIALIZATION_OPTIONS } from '../utils/constants'
 import { supabase } from '../lib/supabaseClient';
 import { API_BASE, checkBackendHealth, fetchJson } from '../utils/api';
 import AccountHeaderActions from '../components/AccountHeaderActions';
-import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import { getNurseModuleConfig, normalizeNurseModuleKey, NURSE_SIDEBAR_LABELS } from './nurseModuleConfig';
 import { hasActiveHmoCoverage, normalizeHmoDisplayStatus } from './hmoWorkflow';
 
@@ -64,6 +63,7 @@ const formatClinicAppointmentSchedule = (dateValue, timeValue) => {
 
 const LAB_SERVICES = ["Urinalysis", "Blood Chemistry", "Complete Blood Count (CBC)", "Fecalysis", "Hepa Screening", "Dengue Duo + NS1 Antigen (Package)"];
 const IMAGING_SERVICES = ["Standard 12-Lead ECG", "Stress Test", "Holter Monitoring", "Chest X-Ray"];
+const PatientFullRecordModal = lazy(() => import('../components/PatientFullRecordModal'));
 
 function NurseDashboard() {
   const navigate = useNavigate();
@@ -3908,6 +3908,7 @@ function NurseDashboard() {
   };
 
   useEffect(() => {
+      if (view !== 'calendar') return undefined;
       if (!user.email) return undefined;
       let cancelled = false;
       const loadCalendar = async () => {
@@ -3934,7 +3935,7 @@ function NurseDashboard() {
       };
       loadCalendar();
       return () => { cancelled = true; };
-  }, [currentDate.getFullYear(), currentDate.getMonth(), user.email, API_BASE]);
+  }, [view, currentDate.getFullYear(), currentDate.getMonth(), user.email, API_BASE]);
 
   const handleAddEvent = async (e) => {
       e.preventDefault();
@@ -4824,8 +4825,9 @@ function NurseDashboard() {
   };
 
   React.useEffect(() => {
+    if (view !== 'orders') return;
     refreshPharmacyCatalog().catch(() => {});
-  }, []);
+  }, [view]);
 
   // Request Correction State
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -4861,6 +4863,8 @@ function NurseDashboard() {
 
   // Fetch incidents on load
   React.useEffect(() => {
+    if (view !== 'incidents') return undefined;
+    let cancelled = false;
     setIncidentLoading(true);
     setIncidentError('');
     fetch(`${API_BASE}/api/incidents`, { headers: { ...getAuthHeaders() } })
@@ -4870,6 +4874,7 @@ function NurseDashboard() {
         return data;
       })
       .then(data => {
+        if (cancelled) return;
         // Map database fields to frontend fields
         const formatted = (Array.isArray(data) ? data : []).map(inc => ({
             id: inc.id,
@@ -4889,11 +4894,13 @@ function NurseDashboard() {
         setIncidentReports(formatted);
       })
       .catch(err => {
+        if (cancelled) return;
         console.error("Failed to fetch incidents:", err);
         setIncidentError(String(err?.message || 'Unable to load incident reports.'));
       })
-      .finally(() => setIncidentLoading(false));
-  }, []);
+      .finally(() => { if (!cancelled) setIncidentLoading(false); });
+    return () => { cancelled = true; };
+  }, [view]);
 
   const handleIncidentSubmit = async (e) => {
       e.preventDefault();
@@ -9771,13 +9778,17 @@ function NurseDashboard() {
           </div>
       )}
 
-      <PatientFullRecordModal
-        open={centralRecordOpen}
-        onClose={() => setCentralRecordOpen(false)}
-        patientId={centralRecordPatientId}
-        patientLabel={centralRecordPatientLabel}
-        role="nurse"
-      />
+      {centralRecordOpen ? (
+        <Suspense fallback={null}>
+          <PatientFullRecordModal
+            open
+            onClose={() => setCentralRecordOpen(false)}
+            patientId={centralRecordPatientId}
+            patientLabel={centralRecordPatientLabel}
+            role="nurse"
+          />
+        </Suspense>
+      ) : null}
 
 
       {showViewProfileModal && viewingPatient && (
