@@ -6,6 +6,8 @@ const requireRole = require('../middleware/requireRole');
 const { sendError } = require('../utils/httpErrors');
 
 let adminOverviewCache = { fetchedAt: 0, payload: null, promise: null };
+let overviewCache = { fetchedAt: 0, payload: null, promise: null };
+const OVERVIEW_CACHE_MS = Math.max(3000, Math.min(30000, Number(process.env.OVERVIEW_CACHE_MS || 10000)));
 // Dashboard counts need to feel current, but recomputing every count for users
 // opening the same screen within one second creates avoidable database I/O.
 const ADMIN_OVERVIEW_CACHE_MS = Math.max(5000, Math.min(60000, Number(process.env.ADMIN_OVERVIEW_CACHE_MS || 15000)));
@@ -268,17 +270,26 @@ function buildAiText({ monthKey, topSymptoms, completenessPct, totalAppointments
 // Get Dashboard Overview Stats
 router.get('/overview', requireRole(['admin', 'nurse', 'doctor', 'pharmacist', 'staff', 'cashier', 'doctor_secretary', 'medtech', 'radiographer', 'ecg_operator', 'physical_therapist']), async (_req, res) => {
     try {
-        const totalPatients = await prisma.patients.count();
-        const inpatients = await prisma.patients.count({ where: { admission_status: 'Inpatient' } });
-        const nurseAccounts = await prisma.nurses.count();
-
-        console.log('Stats Overview:', { totalPatients, inpatients, nurseAccounts });
-
-        res.json({
-            patients: totalPatients,
-            inpatients: inpatients,
-            accounts: nurseAccounts
-        });
+        const now = Date.now();
+        if (overviewCache.payload && now - overviewCache.fetchedAt < OVERVIEW_CACHE_MS) {
+            return res.json(overviewCache.payload);
+        }
+        if (!overviewCache.promise) {
+            overviewCache.promise = Promise.all([
+                prisma.patients.count(),
+                prisma.patients.count({ where: { admission_status: 'Inpatient' } }),
+                prisma.nurses.count()
+            ]).then(([patients, inpatients, accounts]) => {
+                const payload = { patients, inpatients, accounts };
+                overviewCache = { fetchedAt: Date.now(), payload, promise: null };
+                return payload;
+            }).catch((error) => {
+                overviewCache.promise = null;
+                throw error;
+            });
+        }
+        const payload = await overviewCache.promise;
+        return res.json(payload);
     } catch (err) {
         console.error(err);
         sendError(res, err, 'Unable to load dashboard statistics.');

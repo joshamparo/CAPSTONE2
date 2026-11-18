@@ -97,6 +97,7 @@ function NurseDashboard() {
     };
   }, []);
   const [statsError, setStatsError] = useState('');
+  const [statsRetryKey, setStatsRetryKey] = useState(0);
   const [patientsError, setPatientsError] = useState('');
   const [centralRecordOpen, setCentralRecordOpen] = useState(false);
   const [centralRecordPatientId, setCentralRecordPatientId] = useState(null);
@@ -5130,17 +5131,20 @@ function NurseDashboard() {
   React.useEffect(() => {
     if (view !== 'overview') return undefined;
     let statsInFlight = false;
+    let cancelled = false;
     const fetchStats = async () => {
         if (document.visibilityState !== 'visible' || statsInFlight) return;
         statsInFlight = true;
         try {
-            setStatsError('');
             const data = await fetchJson('/api/stats/overview', { apiBase: API_BASE, headers: { ...getAuthHeaders() }, timeoutMs: 15000 });
+            if (cancelled) return;
             setStats(data || {});
+            setStatsError('');
         } catch (error) {
-            console.error('Error fetching stats:', error);
-            setStats({ patients: 0, inpatients: 0, accounts: 0 });
-            setStatsError(String(error?.message || 'Unable to load dashboard stats.'));
+            if (!cancelled) {
+              console.error('Error fetching stats:', error);
+              setStatsError(String(error?.message || 'Unable to load dashboard statistics.'));
+            }
         } finally {
             statsInFlight = false;
         }
@@ -5148,8 +5152,8 @@ function NurseDashboard() {
 
     fetchStats();
     const interval = setInterval(fetchStats, 30000);
-    return () => clearInterval(interval);
-  }, [API_BASE, view]);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [API_BASE, view, statsRetryKey]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -6993,6 +6997,12 @@ function NurseDashboard() {
                               </div>
                             ))}
                         </div>
+                        {statsError ? (
+                          <div className="nurse-stats-error" role="status" aria-live="polite">
+                            <span>Dashboard totals could not refresh. Showing the last available values.</span>
+                            <button type="button" onClick={() => setStatsRetryKey((key) => key + 1)}>Retry</button>
+                          </div>
+                        ) : null}
 
                         <div className="quick-actions-section" style={{ marginTop: '24px' }}>
                             <h3>Quick Actions</h3>

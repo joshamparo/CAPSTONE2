@@ -5747,3 +5747,39 @@ body.compact-mode .workspace-queue-item {
     font-size: 10.5px !important;
   }
 }
+/* Keep keyboard focus visible, including controls with older outline resets. */
+.nurse-dashboard-container :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid #3b160a !important;
+  outline-offset: 2px;
+}
+
+.nurse-stats-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #9a3412;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #7c2d12;
+  font-size: 0.875rem;
+}
+
+.nurse-stats-error button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid #9a3412;
+  border-radius: 7px;
+  background: #fff;
+  color: #7c2d12;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 520px) {
+  .nurse-stats-error { align-items: flex-start; }
+}

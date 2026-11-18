@@ -2,10 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, ChevronDown, KeyRound, LayoutGrid, LogOut, RefreshCw, Settings, User } from 'lucide-react';
 import ChangePasswordModal from './ChangePasswordModal';
 import SignOutConfirmModal from './SignOutConfirmModal';
-import { buildAuthHeaders, getCurrentUser } from '../utils/api';
+import { API_BASE, buildAuthHeaders, getCurrentUser } from '../utils/api';
 import './AccountHeaderActions.css';
-
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
 const isWithinQuietHoursWindow = (d = new Date()) => {
   const h = d.getHours();
@@ -87,6 +85,7 @@ export default function AccountHeaderActions({
   const [notifItems, setNotifItems] = useState([]);
   const [notifUnreadCount, setNotifUnreadCount] = useState(0);
   const [notifError, setNotifError] = useState('');
+  const notifRequestRef = useRef(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -322,20 +321,29 @@ export default function AccountHeaderActions({
 
   const fetchNotifications = async ({ silent = false } = {}) => {
     if (!rawRole || !userEmail) return;
+    if (notifRequestRef.current) return notifRequestRef.current;
     if (!silent) setNotifLoading(true);
     setNotifError('');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    const request = (async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/staff/notifications`, { headers: authHeaders });
+      const res = await fetch(`${API_BASE}/api/staff/notifications`, { headers: authHeaders, signal: controller.signal });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.message || 'Failed to load notifications');
       const items = Array.isArray(json?.items) ? json.items : [];
       setNotifItems(items);
       setNotifUnreadCount(Number(json?.unreadCount || 0) || 0);
     } catch (e) {
-      setNotifError(e.message || 'Failed to load notifications');
+      setNotifError(e.name === 'AbortError' ? 'Notifications took too long to load. Please try again.' : (e.message || 'Failed to load notifications'));
     } finally {
+      clearTimeout(timeout);
+      notifRequestRef.current = null;
       if (!silent) setNotifLoading(false);
     }
+    })();
+    notifRequestRef.current = request;
+    return request;
   };
 
   const markAllNotificationsAsRead = async () => {
@@ -656,7 +664,7 @@ export default function AccountHeaderActions({
                         ) : null}
                       </div>
                     </div>
-                    <div className="aha-dropdown-body">
+                    <div className="aha-dropdown-body" aria-live="polite">
                       {notifLoading ? (
                         <div className="aha-muted">Loading…</div>
                       ) : notifError ? (
