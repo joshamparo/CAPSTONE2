@@ -175,7 +175,7 @@
 .office-nav-btn.active {
   background: var(--brand-primary-wash, #fff7ed);
   border-color: var(--brand-primary-ring, #fed7aa);
-  color: var(--brand-primary, #ea580c);
+  color: #9a3412;
   box-shadow: var(--shadow-sm);
   font-weight: 700;
 }

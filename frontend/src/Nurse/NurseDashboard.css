@@ -1294,7 +1294,7 @@
 .sidebar-section-label {
   font-size: 0.7rem;
   font-weight: 800;
-  color: rgba(255, 255, 255, 0.5);
+  color: #431407;
   padding: 16px 16px 8px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -5915,4 +5915,21 @@ html:not([data-theme='dark']) .nurse-content-body .btn-gray.active {
 
 .nurse-skip-link:focus {
   transform: translateY(0);
+}
+
+.nurse-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.nurse-dashboard-container .nurse-nav-item.active,
+.nurse-dashboard-container .nurse-nav-item.active span {
+  color: #7c2d12 !important;
 }

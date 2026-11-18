@@ -1730,10 +1730,10 @@ export default function OfficeStaffDashboard({ mode }) {
       <aside className={`office-sidebar ${collapsed ? 'collapsed' : ''}`} onClick={(event) => { if (window.innerWidth <= 1024 && event.target.closest('.office-nav-btn')) setCollapsed(true); }}>
         <div className="office-sidebar-top">
           <div className="office-brand">
-            <img className="office-brand-logo" src="/images/pgh%20logo.png" alt="PASCUALINGA" />
+            <img className="office-brand-logo" src="/images/pgh-logo-36.png" alt="PASCUALINGA" width="36" height="36" decoding="async" />
             {!collapsed ? <span className="office-brand-text">PASCUALINGA</span> : null}
           </div>
-          <button type="button" className="office-collapse-btn" onClick={() => setCollapsed((v) => !v)} aria-label="Toggle sidebar">
+          <button type="button" className="office-collapse-btn" onClick={() => setCollapsed((v) => !v)} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}>
             {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
         </div>
@@ -1745,6 +1745,7 @@ export default function OfficeStaffDashboard({ mode }) {
               type="button"
               className={`office-nav-btn ${view === it.key ? 'active' : ''}`}
               onClick={() => setView(it.key)}
+              aria-label={it.label}
               title={it.label}
             >
               {it.icon}
