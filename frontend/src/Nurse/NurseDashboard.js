@@ -6285,7 +6285,7 @@ function NurseDashboard() {
       <aside className={`nurse-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`} onClick={(event) => { if (window.innerWidth <= 1024 && event.target.closest('.nurse-nav-item')) setIsSidebarCollapsed(true); }}>
         <div className="nurse-sidebar-header">
            <div className="nurse-brand">
-             <img src="/images/pgh%20logo.png" alt="PASCUALINGA" className="nurse-brand-logo" />
+             <img src="/images/pgh-logo-96.webp" alt="PASCUALINGA" className="nurse-brand-logo" width="36" height="36" decoding="async" />
              {!isSidebarCollapsed ? <span className="nurse-brand-text">PASCUALINGA</span> : null}
            </div>
            <button className="nurse-sidebar-toggle-btn" onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}>
