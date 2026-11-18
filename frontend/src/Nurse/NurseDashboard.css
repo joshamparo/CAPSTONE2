@@ -5852,6 +5852,42 @@ html:not([data-theme='dark']) .nurse-content-body .btn-gray.active {
   color: #ffffff !important;
 }
 
+/* Primary actions use a dark orange surface so white labels remain readable. */
+.nurse-dashboard-container :is(
+  .btn-orange,
+  .btn-orange-sm,
+  .btn-orange-large,
+  .btn-orange-full,
+  .btn-primary-action,
+  .btn-modal-submit,
+  .btn-submit-order,
+  .btn-add-task
+) {
+  background: #9a3412 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+}
+
+.nurse-dashboard-container :is(
+  .btn-orange,
+  .btn-orange-sm,
+  .btn-orange-large,
+  .btn-orange-full,
+  .btn-primary-action,
+  .btn-modal-submit,
+  .btn-submit-order,
+  .btn-add-task
+):hover:not(:disabled) {
+  background: #7c2d12 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+}
+
+.nurse-dashboard-container button[style*="#f97316"] {
+  background: #9a3412 !important;
+  color: #ffffff !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .nurse-dashboard-container *,
   .nurse-dashboard-container *::before,
