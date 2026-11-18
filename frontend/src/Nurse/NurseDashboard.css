@@ -29,7 +29,7 @@
   height: 100vh;
   width: 100%; /* Changed from 100vw to avoid scrollbar overflow */
   background-color: var(--app-bg);
-  font-family: 'Inter', sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   overflow: hidden; /* Ensure dashboard itself is contained */
 }
 
