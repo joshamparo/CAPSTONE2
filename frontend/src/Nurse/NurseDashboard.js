@@ -116,6 +116,12 @@ function NurseDashboard() {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [settingsSyncState, setSettingsSyncState] = useState('loading');
+  const settingsEditVersionRef = useRef(0);
+
+  const updateNurseSetting = (key, value) => {
+    settingsEditVersionRef.current += 1;
+    setSettings((previous) => ({ ...previous, [key]: value }));
+  };
 
   // Settings State
   const [settings, setSettings] = useState(() => {
@@ -355,6 +361,8 @@ function NurseDashboard() {
     if (!settingsHydrated || !user.email) return undefined;
     const localKey = `nurseSettings:${String(user.email).toLowerCase()}`;
     localStorage.setItem(localKey, JSON.stringify(settings));
+    if (settingsEditVersionRef.current === 0) return undefined;
+    const editVersion = settingsEditVersionRef.current;
     const timer = setTimeout(async () => {
       setSettingsSyncState('saving');
       try {
@@ -364,7 +372,7 @@ function NurseDashboard() {
           body: JSON.stringify({ prefs: { nurseDashboard: settings } })
         });
         if (!response.ok) throw new Error('Unable to save settings');
-        setSettingsSyncState('synced');
+        if (settingsEditVersionRef.current === editVersion) setSettingsSyncState('synced');
       } catch (_) {
         setSettingsSyncState('offline');
       }
@@ -2907,7 +2915,8 @@ function NurseDashboard() {
   const [patientPage, setPatientPage] = useState(1);
   const itemsPerPage = 8;
   const [inpatientPage, setInpatientPage] = useState(1);
-  const inpatientRecords = patientsList.filter(p => ['Inpatient', 'Admitted'].includes(p.admissionStatus));
+  const inpatientRecords = useMemo(() => patientsList.filter(p => ['Inpatient', 'Admitted'].includes(p.admissionStatus)), [patientsList]);
+  const criticalErPatientCount = useMemo(() => patientsList.filter((patient) => patient.triage_level === 1 && patient.admission_status === 'Emergency').length, [patientsList]);
   const inpatientPageCount = Math.max(1, Math.ceil(inpatientRecords.length / itemsPerPage));
   const currentInpatientPage = Math.min(inpatientPage, inpatientPageCount);
   const [loadingPatients, setLoadingPatients] = useState(false);
@@ -6254,6 +6263,7 @@ function NurseDashboard() {
 
   return (
     <div className="nurse-dashboard-container" style={{ paddingTop: backendHealth.checked && !backendHealth.ok ? 44 : 0 }}>
+      <a className="nurse-skip-link" href="#nurse-page-content">Skip to main content</a>
       {backendHealth.checked && !backendHealth.ok ? (
         <div
           style={{
@@ -6345,9 +6355,9 @@ function NurseDashboard() {
 
       </aside>
 
-      <main className={`nurse-main-content ${isSidebarCollapsed ? 'collapsed' : ''}`}>
+      <main id="nurse-page-content" className={`nurse-main-content ${isSidebarCollapsed ? 'collapsed' : ''}`} tabIndex="-1">
         {/* Critical ER Alert Banner */}
-        {nurseWorkspace.type === 'emergency' && patientsList.filter(p => p.triage_level === 1 && p.admission_status === 'Emergency').length > 0 && (
+        {nurseWorkspace.type === 'emergency' && criticalErPatientCount > 0 && (
           <div style={{
             background: '#fee2e2',
             borderBottom: '2px solid #ef4444',
@@ -6361,7 +6371,7 @@ function NurseDashboard() {
             <div style={{ flex: 1 }}>
               <strong style={{ color: '#991b1b', fontSize: '15px' }}>CRITICAL PATIENT ALERT:</strong>
               <span style={{ color: '#b91c1c', marginLeft: '8px', fontWeight: 700 }}>
-                {patientsList.filter(p => p.triage_level === 1 && p.admission_status === 'Emergency').length} Level 1 (Resuscitation) patient(s) need immediate attention.
+                {criticalErPatientCount} Level 1 (Resuscitation) patient(s) need immediate attention.
               </span>
             </div>
             <button className="btn-red-sm" onClick={openErPatientRecords}>View ER Patients</button>
@@ -6375,7 +6385,7 @@ function NurseDashboard() {
                   </button>
                 ) : null}
                 <div>
-                  <h2 className="header-title">Nurse Dashboard</h2>
+                  <h1 className="header-title">Nurse Dashboard</h1>
                   <p className="header-subtitle">{nurseWorkspace.label} • {user.departmentLabel || formatDepartmentLabel(activeDept)}</p>
                 </div>
             </div>
@@ -6437,7 +6447,8 @@ function NurseDashboard() {
 	                                            <input 
                                                 type="checkbox" 
                                                 checked={settings.audibleAlerts} 
-                                                onChange={(e) => setSettings({...settings, audibleAlerts: e.target.checked})}
+                                                onChange={(e) => updateNurseSetting('audibleAlerts', e.target.checked)}
+                                                aria-label="Audible alerts for critical patients"
                                               />
 	                                            <span className="slider round"></span>
 	                                        </label>
@@ -6455,7 +6466,8 @@ function NurseDashboard() {
 	                                            <input 
                                                 type="checkbox" 
                                                 checked={settings.autoRefresh} 
-                                                onChange={(e) => setSettings({...settings, autoRefresh: e.target.checked})}
+                                                onChange={(e) => updateNurseSetting('autoRefresh', e.target.checked)}
+                                                aria-label="Automatically refresh dashboard data"
                                               />
 	                                            <span className="slider round"></span>
 	                                        </label>
@@ -6473,7 +6485,8 @@ function NurseDashboard() {
 	                                            <input 
                                                 type="checkbox" 
                                                 checked={settings.compactView} 
-                                                onChange={(e) => setSettings({...settings, compactView: e.target.checked})}
+                                                onChange={(e) => updateNurseSetting('compactView', e.target.checked)}
+                                                aria-label="Use compact dashboard view"
                                               />
 	                                            <span className="slider round"></span>
 	                                        </label>
@@ -6521,24 +6534,25 @@ function NurseDashboard() {
             {view === 'appointments' && (
                 <div className="doc-section" style={{ padding: '24px', background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                     <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', flexWrap: 'wrap' }}>
-                        <button className={`btn-gray ${activeAppointmentTab === 'requests' ? 'active' : ''}`} onClick={() => setActiveAppointmentTab('requests')} style={{ padding: '8px 16px', background: activeAppointmentTab === 'requests' ? '#ea580c' : 'transparent', color: activeAppointmentTab === 'requests' ? 'white' : '#64748b' }}>
+                        <button className={`btn-gray ${activeAppointmentTab === 'requests' ? 'active' : ''}`} onClick={() => setActiveAppointmentTab('requests')} style={{ padding: '8px 16px', background: activeAppointmentTab === 'requests' ? '#9a3412' : 'transparent', color: activeAppointmentTab === 'requests' ? 'white' : '#64748b' }}>
                             Approval Inbox
                         </button>
-                        <button className={`btn-gray ${activeAppointmentTab === 'confirmed' ? 'active' : ''}`} onClick={() => { setActiveAppointmentTab('confirmed'); fetchAppointments(); }} style={{ padding: '8px 16px', background: activeAppointmentTab === 'confirmed' ? '#ea580c' : 'transparent', color: activeAppointmentTab === 'confirmed' ? 'white' : '#64748b' }}>
+                        <button className={`btn-gray ${activeAppointmentTab === 'confirmed' ? 'active' : ''}`} onClick={() => { setActiveAppointmentTab('confirmed'); fetchAppointments(); }} style={{ padding: '8px 16px', background: activeAppointmentTab === 'confirmed' ? '#9a3412' : 'transparent', color: activeAppointmentTab === 'confirmed' ? 'white' : '#64748b' }}>
                             Direct Appointments
                         </button>
                         {activeDept === 'ER' ? (
-                            <button className={`btn-gray ${activeAppointmentTab === 'priority' ? 'active' : ''}`} onClick={() => setActiveAppointmentTab('priority')} style={{ padding: '8px 16px', background: activeAppointmentTab === 'priority' ? '#ea580c' : 'transparent', color: activeAppointmentTab === 'priority' ? 'white' : '#64748b' }}>
+                            <button className={`btn-gray ${activeAppointmentTab === 'priority' ? 'active' : ''}`} onClick={() => setActiveAppointmentTab('priority')} style={{ padding: '8px 16px', background: activeAppointmentTab === 'priority' ? '#9a3412' : 'transparent', color: activeAppointmentTab === 'priority' ? 'white' : '#64748b' }}>
                                 Consult Priority Queue
                             </button>
                         ) : null}
                     </div>
 
+                    <h2 className="page-title">Appointments</h2>
                     {activeAppointmentTab === 'requests' ? (
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '20px' }}>
                             <div className="overview-card" style={{ padding: '16px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                                    <h3 style={{ margin: 0, fontSize: '1.05rem' }}>Approval Requests</h3>
+                                    <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Approval Requests</h2>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                       {filteredApprovalInbox.length > approvalPageSize ? (
                                         <div className="patient-pagination" style={{ margin: 0 }}>
@@ -6609,8 +6623,8 @@ function NurseDashboard() {
                     ) : activeAppointmentTab === 'priority' ? (
                         <div className="overview-card" style={{ padding: '16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                                <h3 style={{ margin: 0 }}>Consult Priority Queue</h3>
-                                <button onClick={fetchConsultPriorityQueue} className="btn-gray" disabled={consultPriorityLoading}><RotateCw size={14} /></button>
+                                <h2 style={{ margin: 0 }}>Consult Priority Queue</h2>
+                                <button type="button" onClick={fetchConsultPriorityQueue} className="btn-gray" disabled={consultPriorityLoading} aria-label="Refresh consult priority queue"><RotateCw size={14} /></button>
                             </div>
                             {consultPriorityLoading ? (
                                 <div style={{ color: '#64748b' }}>Loading priority queue...</div>
@@ -6636,8 +6650,8 @@ function NurseDashboard() {
                     ) : (
                         <div className="overview-card" style={{ padding: '16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                                <h3 style={{ margin: 0 }}>All Appointments</h3>
-                                <button onClick={fetchAppointments} className="btn-gray"><RotateCw size={14} /></button>
+                                <h2 style={{ margin: 0 }}>All Appointments</h2>
+                                <button type="button" onClick={fetchAppointments} className="btn-gray" aria-label="Refresh appointments"><RotateCw size={14} /></button>
                             </div>
                             {loadingAppointments ? (
                                 <div style={{ color: '#64748b' }}>Loading appointments...</div>
@@ -6669,7 +6683,7 @@ function NurseDashboard() {
                         <div className="welcome-banner full-width">
                             <div className="welcome-text">
                                 <div className="workspace-badge workspace-bedside">Inpatient Care</div>
-                                <h1>{canManageHospitalBeds ? 'Ward Management & Bed Assignment' : `${nurseWorkspace.shortLabel} Ward Overview`}</h1>
+                                <h2>{canManageHospitalBeds ? 'Ward Management & Bed Assignment' : `${nurseWorkspace.shortLabel} Ward Overview`}</h2>
                                 <p>{canManageHospitalBeds ? 'Monitor bed occupancy and manage patient admissions/transfers across wards.' : 'View hospital ward and room occupancy. ER and Medicine nurses manage patient assignments.'}</p>
                             </div>
                             <div className="header-actions">
@@ -6977,7 +6991,7 @@ function NurseDashboard() {
                         <div className="welcome-banner full-width">
                             <div className="welcome-text">
                                 <div className={`workspace-badge ${nurseWorkspace.heroTone}`}>{nurseWorkspace.eyebrow}</div>
-                                <h1>{nurseWorkspace.label} Workspace Overview</h1>
+                                <h2>{nurseWorkspace.label} Workspace Overview</h2>
                                 <p>Welcome back, {user.name}. Here's what's happening in your department today.</p>
                             </div>
                             <div className="welcome-date">
@@ -7384,7 +7398,7 @@ function NurseDashboard() {
                             <button className="back-link" onClick={handleCancelEdit}>
                               <ArrowLeft size={24} /> Back
                             </button>
-                            <h1 className="form-main-title">Edit Patient Information</h1>
+                            <h2 className="form-main-title">Edit Patient Information</h2>
                           </header>
 
                           <form className="compact-form" onSubmit={handleSaveEdit} noValidate>
@@ -7748,7 +7762,7 @@ function NurseDashboard() {
                         <>
                         <div className="patient-view-header">
                             <div>
-                                <h1 className="page-title-large" style={{marginBottom: '4px'}}>{NURSE_SIDEBAR_LABELS.patients}</h1>
+                                <h2 className="page-title-large" style={{marginBottom: '4px'}}>{NURSE_SIDEBAR_LABELS.patients}</h2>
                                 <p className="page-subtitle">Patients and clinical records assigned to {nurseWorkspace.label}.</p>
                             </div>
                             <div style={{display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
@@ -8117,7 +8131,7 @@ function NurseDashboard() {
                           <div className="welcome-banner full-width">
                               <div className="welcome-text">
                                   <div className="workspace-badge workspace-er">Monitoring</div>
-                                  <h1>{NURSE_SIDEBAR_LABELS.vitals}</h1>
+                                  <h2>{NURSE_SIDEBAR_LABELS.vitals}</h2>
                                   <p>{nurseCapabilities.screeningMode === 'dental' ? 'Review medical history, allergies, consent, and blood pressure before dental treatment.' : activeDept === 'PEDIA' ? 'Monitor Pedia patients under 12 months with a verified date of birth.' : 'Monitor patient observations and record new measurements.'}</p>
                               </div>
                               <div className="header-actions">
@@ -9083,7 +9097,7 @@ function NurseDashboard() {
                       </button>
                     </div>
                     <div className="profile-info-section">
-                      <h1>{`${String(profileData.firstName || '').trim()} ${String(profileData.lastName || '').trim()}`.trim() || 'Nurse Profile'}</h1>
+                      <h2>{`${String(profileData.firstName || '').trim()} ${String(profileData.lastName || '').trim()}`.trim() || 'Nurse Profile'}</h2>
                       <p className="admin-role-badge">{profileData.department || user?.departmentLabel || 'Nurse'}</p>
                     </div>
                   </div>
@@ -10060,7 +10074,7 @@ function NurseDashboard() {
                  <h3 style={{margin: 0, fontSize: '1.25rem', fontWeight: 700}}>{nurseCapabilities.screeningMode === 'dental' ? 'Dental Pre-Procedure Screening' : 'Clinical Update'}</h3>
                  <p style={{margin: '4px 0 0 0', fontSize: '0.9rem', opacity: 0.9, fontWeight: 500}}>{nurseCapabilities.screeningMode === 'dental' ? 'Confirm safety checks and record blood pressure before treatment.' : 'Record new patient vitals and notes'}</p>
               </div>
-              <button onClick={() => setShowClinicalUpdateModal(false)} className="btn-close-modal">
+              <button type="button" onClick={() => setShowClinicalUpdateModal(false)} className="btn-close-modal" aria-label="Close clinical update">
                  <ChevronDown size={24} style={{transform: 'rotate(180deg)'}} />
               </button>
             </div>
@@ -10202,7 +10216,7 @@ function NurseDashboard() {
                         <h3 style={{margin: 0, fontSize: '1.25rem', fontWeight: 700}}>Request Data Correction</h3>
                         <p style={{margin: '4px 0 0 0', fontSize: '0.9rem', opacity: 0.9, fontWeight: 500}}>Submit a request to admin for data updates</p>
                     </div>
-                    <button onClick={() => {setShowRequestModal(false); setRequestMessage(""); setRequestStatus(null);}} className="btn-close-modal">
+                    <button type="button" onClick={() => {setShowRequestModal(false); setRequestMessage(""); setRequestStatus(null);}} className="btn-close-modal" aria-label="Close data correction request">
                         <ChevronDown size={24} style={{transform: 'rotate(180deg)'}} />
                     </button>
                 </div>
@@ -10262,7 +10276,7 @@ function NurseDashboard() {
       )}
       {activeAnnouncement && (
         <div className="announcement-popup">
-            <button className="close-btn" onClick={() => setActiveAnnouncement(null)}>
+            <button type="button" className="close-btn" onClick={() => setActiveAnnouncement(null)} aria-label="Dismiss announcement">
                 <X size={16} />
             </button>
             <h4>
@@ -10282,7 +10296,7 @@ function NurseDashboard() {
                   {triageTargetAppointment ? `${triageTargetAppointment.firstName || ''} ${triageTargetAppointment.lastName || ''}`.trim() : ''}
                 </p>
               </div>
-              <button onClick={() => setTriageModalOpen(false)} className="btn-close-modal">
+              <button type="button" onClick={() => setTriageModalOpen(false)} className="btn-close-modal" aria-label="Close triage priority dialog">
                 <ChevronDown size={24} style={{ transform: 'rotate(180deg)' }} />
               </button>
             </div>
@@ -10373,7 +10387,7 @@ function NurseDashboard() {
                   {auditTargetAppointment ? `${auditTargetAppointment.firstName || ''} ${auditTargetAppointment.lastName || ''}`.trim() : ''}
                 </p>
               </div>
-              <button onClick={() => setAuditModalOpen(false)} className="btn-close-modal">
+              <button type="button" onClick={() => setAuditModalOpen(false)} className="btn-close-modal" aria-label="Close patient history">
                 <ChevronDown size={24} style={{ transform: 'rotate(180deg)' }} />
               </button>
             </div>

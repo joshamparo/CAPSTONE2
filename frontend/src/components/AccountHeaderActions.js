@@ -761,6 +761,7 @@ export default function AccountHeaderActions({
                                 className={`aha-toggle ${settingsPrefs.quietHours ? 'on' : ''}`}
                                 onClick={() => togglePreference('quietHours')}
                                 disabled={settingsSaving}
+                                aria-label="Mute alerts at night"
                                 aria-pressed={Boolean(settingsPrefs.quietHours)}
                               >
                                 <div className="aha-toggle-thumb" />
@@ -777,6 +778,7 @@ export default function AccountHeaderActions({
                                 className={`aha-toggle ${settingsPrefs.privacyMode ? 'on' : ''}`}
                                 onClick={() => togglePreference('privacyMode')}
                                 disabled={settingsSaving}
+                                aria-label="Blur sensitive amounts"
                                 aria-pressed={Boolean(settingsPrefs.privacyMode)}
                               >
                                 <div className="aha-toggle-thumb" />
@@ -793,6 +795,7 @@ export default function AccountHeaderActions({
                                 className={`aha-toggle ${settingsPrefs.autoPrint ? 'on' : ''}`}
                                 onClick={() => togglePreference('autoPrint')}
                                 disabled={settingsSaving}
+                                aria-label="Print receipt after payment"
                                 aria-pressed={Boolean(settingsPrefs.autoPrint)}
                               >
                                 <div className="aha-toggle-thumb" />

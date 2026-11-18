@@ -392,7 +392,7 @@
 }
 
 .welcome-banner {
-  background: linear-gradient(135deg, var(--nurse-primary) 0%, #fb923c 100%);
+  background: linear-gradient(135deg, #9a3412 0%, #c2410c 100%);
   border-radius: 16px;
   padding: 24px 32px;
   color: white;
@@ -402,7 +402,7 @@
   box-shadow: 0 4px 20px -5px rgba(249, 115, 22, 0.3);
 }
 
-.welcome-text h1 {
+.welcome-text :is(h1, h2) {
   font-size: 1.5rem;
   font-weight: 800;
   margin: 0 0 4px 0;
@@ -415,7 +415,7 @@
 }
 
 .welcome-date {
-  background: rgba(255,255,255,0.15);
+  background: rgba(67, 20, 7, 0.24);
   padding: 6px 14px;
   border-radius: 10px;
   backdrop-filter: blur(8px);
@@ -434,7 +434,7 @@
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(67, 20, 7, 0.24);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -489,10 +489,10 @@
 .bg-purple-soft { background: #f3e8ff; }
 .bg-green-soft { background: #f0fdf4; }
 
-.text-orange { color: #f97316; }
-.text-blue { color: #3b82f6; }
-.text-purple { color: #a855f7; }
-.text-green { color: #22c55e; }
+.text-orange { color: #9a3412; }
+.text-blue { color: #1d4ed8; }
+.text-purple { color: #7e22ce; }
+.text-green { color: #15803d; }
 
 .stat-content-large {
   display: flex;
@@ -761,7 +761,7 @@
 .empty-pending {
   padding: 32px 16px;
   text-align: center;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .empty-pending svg {
@@ -1361,7 +1361,7 @@
 .text-btn {
   background: transparent;
   border: none;
-  color: var(--nurse-primary);
+  color: #9a3412;
   font-weight: 600;
   cursor: pointer;
   padding: 4px 8px;
@@ -2294,7 +2294,7 @@
   height: 28px;
   border-radius: 50%;
   background: #ffffff;
-  color: #94a3b8;
+  color: #64748b;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2306,7 +2306,7 @@
 }
 
 .walkin-vertical-step-item.active .walkin-step-dot {
-  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  background: linear-gradient(135deg, #9a3412 0%, #c2410c 100%);
   color: #ffffff;
   border-color: #ea580c;
   box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.14);
@@ -2350,7 +2350,7 @@
 .walkin-step-sub {
   font-size: 0.72rem;
   font-weight: 600;
-  color: #94a3b8;
+  color: #64748b;
   line-height: 1.35;
   transition: color 0.25s ease;
 }
@@ -2400,7 +2400,7 @@
 }
 .department-focus-item strong { color: #0f172a; font-size: .84rem; }
 .department-focus-item p { margin: 3px 0 0; color: #64748b; font-size: .72rem; line-height: 1.3; }
-.department-focus-item > span { color: #ea580c; font-size: 1.15rem; font-weight: 900; }
+.department-focus-item > span { color: #9a3412; font-size: 1.15rem; font-weight: 900; }
 
 .admin-profile-form .profile-input.profile-input-error {
   border-color: #ef4444;
@@ -2723,7 +2723,7 @@
 }
 
 .btn-close-modal {
-  background: rgba(255,255,255,0.2);
+  background: #7c2d12;
   border: none;
   width: 32px;
   height: 32px;
@@ -2737,7 +2737,7 @@
 }
 
 .btn-close-modal:hover { 
-  background: rgba(255,255,255,0.3); 
+  background: #431407;
   transform: rotate(90deg);
 }
 
@@ -3120,14 +3120,14 @@
 
 .btn-ip-update {
   background: #fff7ed;
-  color: #f97316;
+  color: #9a3412;
   border: 1px solid #ffedd5;
 }
 
 .btn-ip-update:hover {
-  background: #f97316;
+  background: #9a3412;
   color: white;
-  border-color: #f97316;
+  border-color: #9a3412;
 }
 
 .btn-ip-critical {
@@ -3561,7 +3561,7 @@ body.compact-mode .workspace-queue-item {
   text-transform: uppercase;
 }
 
-.incident-type-badge.fall { background: #fff7ed; color: #ea580c; }
+.incident-type-badge.fall { background: #fff7ed; color: #9a3412; }
 .incident-type-badge.medication { background: #fef2f2; color: #ef4444; }
 .incident-type-badge.equipment { background: #f1f5f9; color: #64748b; }
 .incident-type-badge.harassment { background: #f3e8ff; color: #9333ea; }
@@ -5325,7 +5325,7 @@ body.compact-mode .workspace-queue-item {
 }
 
 .recent-order-detail-kicker {
-  color: #ea580c;
+  color: #9a3412;
   font-size: 0.7rem;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -5782,4 +5782,101 @@ body.compact-mode .workspace-queue-item {
 
 @media (max-width: 520px) {
   .nurse-stats-error { align-items: flex-start; }
+}
+
+/* Keep small accent and secondary copy readable across every nurse view. */
+html:not([data-theme='dark']) .nurse-dashboard-container .text-orange,
+html:not([data-theme='dark']) .nurse-dashboard-container .text-btn,
+html:not([data-theme='dark']) .nurse-dashboard-container .department-focus-item > span,
+html:not([data-theme='dark']) .nurse-dashboard-container .incident-type-badge.fall,
+html:not([data-theme='dark']) .nurse-dashboard-container .recent-order-detail-kicker,
+html:not([data-theme='dark']) .nurse-dashboard-container [style*="color: rgb(249, 115, 22)"],
+html:not([data-theme='dark']) .nurse-dashboard-container [style*="color: rgb(234, 88, 12)"] {
+  color: #9a3412 !important;
+}
+
+html:not([data-theme='dark']) .nurse-dashboard-container .text-blue,
+html:not([data-theme='dark']) .nurse-dashboard-container [style*="color: rgb(59, 130, 246)"] {
+  color: #1d4ed8 !important;
+}
+
+html:not([data-theme='dark']) .nurse-dashboard-container .text-purple,
+html:not([data-theme='dark']) .nurse-dashboard-container [style*="color: rgb(168, 85, 247)"] {
+  color: #7e22ce !important;
+}
+
+html:not([data-theme='dark']) .nurse-dashboard-container .text-green,
+html:not([data-theme='dark']) .nurse-dashboard-container [style*="color: rgb(34, 197, 94)"] {
+  color: #15803d !important;
+}
+
+html:not([data-theme='dark']) .nurse-dashboard-container .task-text-mini.completed,
+html:not([data-theme='dark']) .nurse-dashboard-container .notif-time,
+html:not([data-theme='dark']) .nurse-dashboard-container .incident-date,
+html:not([data-theme='dark']) .nurse-dashboard-container .order-time,
+html:not([data-theme='dark']) .nurse-dashboard-container .med-admin-log-meta time,
+html:not([data-theme='dark']) .nurse-dashboard-container .recent-order-detail-grid span,
+html:not([data-theme='dark']) .nurse-dashboard-container .recent-order-detail-notes span,
+html:not([data-theme='dark']) .nurse-dashboard-container .nurse-activity-time,
+html:not([data-theme='dark']) .nurse-dashboard-container .nurse-activity-empty,
+html:not([data-theme='dark']) .nurse-dashboard-container [style*="color: rgb(148, 163, 184)"] {
+  color: #64748b !important;
+}
+
+html[data-theme='dark'] .nurse-dashboard-container .text-orange,
+html[data-theme='dark'] .nurse-dashboard-container .text-btn,
+html[data-theme='dark'] .nurse-dashboard-container .department-focus-item > span,
+html[data-theme='dark'] .nurse-dashboard-container .recent-order-detail-kicker {
+  color: #fb923c;
+}
+
+html[data-theme='dark'] .nurse-dashboard-container .text-blue { color: #93c5fd; }
+html[data-theme='dark'] .nurse-dashboard-container .text-purple { color: #d8b4fe; }
+html[data-theme='dark'] .nurse-dashboard-container .text-green { color: #86efac; }
+
+html[data-theme='dark'] .nurse-dashboard-container .task-text-mini.completed,
+html[data-theme='dark'] .nurse-dashboard-container .notif-time,
+html[data-theme='dark'] .nurse-dashboard-container .incident-date,
+html[data-theme='dark'] .nurse-dashboard-container .order-time,
+html[data-theme='dark'] .nurse-dashboard-container .med-admin-log-meta time,
+html[data-theme='dark'] .nurse-dashboard-container .recent-order-detail-grid span,
+html[data-theme='dark'] .nurse-dashboard-container .recent-order-detail-notes span,
+html[data-theme='dark'] .nurse-dashboard-container .nurse-activity-time,
+html[data-theme='dark'] .nurse-dashboard-container .nurse-activity-empty,
+html[data-theme='dark'] .nurse-dashboard-container [style*="color: rgb(100, 116, 139)"] {
+  color: #94a3b8 !important;
+}
+
+html:not([data-theme='dark']) .nurse-content-body .btn-gray.active {
+  background-color: #9a3412 !important;
+  color: #ffffff !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nurse-dashboard-container *,
+  .nurse-dashboard-container *::before,
+  .nurse-dashboard-container *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.nurse-skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 11000;
+  transform: translateY(-150%);
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #431407;
+  color: #ffffff;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.nurse-skip-link:focus {
+  transform: translateY(0);
 }
