@@ -27,8 +27,8 @@
   "scripts": {
     "start": "cross-env NODE_OPTIONS=--openssl-legacy-provider CI=false react-scripts start",
     "build": "cross-env NODE_OPTIONS=--openssl-legacy-provider CI=false GENERATE_SOURCEMAP=false DISABLE_ESLINT_PLUGIN=true react-scripts build",
-    "build:frontend:only": "cross-env NODE_OPTIONS=--openssl-legacy-provider CI=false GENERATE_SOURCEMAP=false DISABLE_ESLINT_PLUGIN=true react-scripts build",
-    "build:react-scripts": "cross-env NODE_OPTIONS=--openssl-legacy-provider CI=false GENERATE_SOURCEMAP=false DISABLE_ESLINT_PLUGIN=true react-scripts build",
+    "build:frontend:only": "cross-env NODE_OPTIONS=--openssl-legacy-provider CI=false GENERATE_SOURCEMAP=false DISABLE_ESLINT_PLUGIN=true react-scripts build && node scripts/inline-entry-css.cjs",
+    "build:react-scripts": "cross-env NODE_OPTIONS=--openssl-legacy-provider CI=false GENERATE_SOURCEMAP=false DISABLE_ESLINT_PLUGIN=true react-scripts build && node scripts/inline-entry-css.cjs",
     "test": "cross-env CI=false react-scripts test",
     "eject": "react-scripts eject"
   },

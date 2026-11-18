@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, CreditCard, FileText, LogOut, Plus, RefreshCw, Search, User, Upload, Save, KeyRound, Eye, EyeOff, ShieldAlert, Menu, Mail, Briefcase, Phone, Key, Shield, Check, X, Edit2, IdCard } from 'lucide-react';
 import '../Admin/AdminDashboard.css';
@@ -6,10 +6,10 @@ import './OfficeStaffDashboard.css';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import { getClinicalPaymentStatus } from './clinicalPaymentStatus';
 import { getLabPaymentFinancials } from './labPaymentFinancials';
-import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import { checkBackendHealth, fetchJson } from '../utils/api';
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+const PatientFullRecordModal = lazy(() => import('../components/PatientFullRecordModal'));
 
 const getUser = () => {
   try {
@@ -2024,6 +2024,7 @@ export default function OfficeStaffDashboard({ mode }) {
                               type="button"
                               className="toggle-password-btn"
                               onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                              aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
                             >
                               {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                             </button>
@@ -2046,6 +2047,7 @@ export default function OfficeStaffDashboard({ mode }) {
                               type="button"
                               className="toggle-password-btn"
                               onClick={() => setShowNewPassword(!showNewPassword)}
+                              aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
                             >
                               {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                             </button>
@@ -2082,6 +2084,7 @@ export default function OfficeStaffDashboard({ mode }) {
                               type="button"
                               className="toggle-password-btn"
                               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              aria-label={showConfirmPassword ? 'Hide password confirmation' : 'Show password confirmation'}
                             >
                               {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                             </button>
@@ -4985,14 +4988,18 @@ export default function OfficeStaffDashboard({ mode }) {
         </div>
       ) : null}
 
-      <PatientFullRecordModal
-        open={centralRecordOpen}
-        onClose={() => setCentralRecordOpen(false)}
-        patientId={centralRecordPatientId}
-        patientLabel={centralRecordPatientLabel}
-        role={String(role || '').toLowerCase() || 'staff'}
-        user={user}
-      />
+      {centralRecordOpen ? (
+        <Suspense fallback={null}>
+          <PatientFullRecordModal
+            open
+            onClose={() => setCentralRecordOpen(false)}
+            patientId={centralRecordPatientId}
+            patientLabel={centralRecordPatientLabel}
+            role={String(role || '').toLowerCase() || 'staff'}
+            user={user}
+          />
+        </Suspense>
+      ) : null}
 
     </div>
   );

@@ -1,14 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Download, Inbox, LayoutDashboard, Printer, RefreshCw, ShieldAlert, XCircle, User, Upload, Save, Eye, EyeOff, Search, CreditCard, WalletCards, Menu, X, HelpCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AccountHeaderActions from '../components/AccountHeaderActions';
 import SignOutConfirmModal from '../components/SignOutConfirmModal';
-import PatientFullRecordModal from '../components/PatientFullRecordModal';
 import ModalShell from '../components/ModalShell';
 import './DoctorSecretaryDashboard.css';
 import { checkBackendHealth, fetchJson } from '../utils/api';
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+const PatientFullRecordModal = lazy(() => import('../components/PatientFullRecordModal'));
 
 const safeJson = (v) => {
   try {
@@ -1618,7 +1618,7 @@ export default function DoctorSecretaryDashboard() {
             <div className="sec-brand-badge">DS</div>
             <div className="sec-brand-text">Doctor Secretary</div>
           </div>
-          <button className="sec-sidebar-toggle" onClick={() => setSidebarCollapsed((v) => !v)} type="button">
+          <button className="sec-sidebar-toggle" onClick={() => setSidebarCollapsed((v) => !v)} type="button" aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
             {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
         </div>
@@ -2463,7 +2463,7 @@ export default function DoctorSecretaryDashboard() {
                               value={profileForm.newPassword} 
                               onChange={(e) => setProfileForm(v => ({ ...v, newPassword: e.target.value }))} 
                             />
-                            <button type="button" onClick={() => setShowPasswords(!showPasswords)} className="sec-eye-btn">
+                            <button type="button" onClick={() => setShowPasswords(!showPasswords)} className="sec-eye-btn" aria-label={showPasswords ? 'Hide passwords' : 'Show passwords'}>
                               {showPasswords ? <EyeOff size={18} /> : <Eye size={18} />}
                             </button>
                           </div>
@@ -2645,7 +2645,7 @@ export default function DoctorSecretaryDashboard() {
                     {`${norm(chargeTarget.firstName || chargeTarget.first_name)} ${norm(chargeTarget.lastName || chargeTarget.last_name)}`.trim() || 'Patient'} • {fmtDate(chargeTarget.appointmentDate || chargeTarget.appointment_date)} {fmtTime(chargeTarget.appointmentTime || chargeTarget.appointment_time)}
                   </div>
                 </div>
-                <button className="sec-icon-btn" type="button" onClick={closeCharge}>
+                <button className="sec-icon-btn" type="button" onClick={closeCharge} aria-label="Close charge dialog">
                   <XCircle size={18} />
                 </button>
               </div>
@@ -2729,7 +2729,7 @@ export default function DoctorSecretaryDashboard() {
                     {`${norm(confirmTarget.firstName || confirmTarget.first_name)} ${norm(confirmTarget.lastName || confirmTarget.last_name)}`.trim() || 'Patient'} • {fmtDate(confirmTarget.appointmentDate || confirmTarget.appointment_date)}
                   </div>
                 </div>
-                <button className="sec-icon-btn" type="button" onClick={closeConfirm}>
+                <button className="sec-icon-btn" type="button" onClick={closeConfirm} aria-label="Close confirmation dialog">
                   <XCircle size={18} />
                 </button>
               </div>
@@ -2870,14 +2870,18 @@ export default function DoctorSecretaryDashboard() {
           </ModalShell>
         )}
 
-        <PatientFullRecordModal
-          open={centralRecordOpen}
-          onClose={() => setCentralRecordOpen(false)}
-          patientId={centralRecordPatientId}
-          patientLabel={centralRecordPatientLabel}
-          role="doctor_secretary"
-          user={{ ...user, role: 'doctor_secretary' }}
-        />
+        {centralRecordOpen ? (
+          <Suspense fallback={null}>
+            <PatientFullRecordModal
+              open
+              onClose={() => setCentralRecordOpen(false)}
+              patientId={centralRecordPatientId}
+              patientLabel={centralRecordPatientLabel}
+              role="doctor_secretary"
+              user={{ ...user, role: 'doctor_secretary' }}
+            />
+          </Suspense>
+        ) : null}
 
         <SignOutConfirmModal
           open={showLogoutConfirm}
