@@ -5802,7 +5802,7 @@ function DoctorDashboard() {
                         <div style={{ fontWeight: 800, color: '#9a3412' }}>DOH / Data Privacy Act Reminder</div>
                         <div>Avoid posting patient full names, lab values, addresses, or confidential PHI in shared chat rooms. Use patient IDs only. Violations may breach RA 10173.</div>
                       </div>
-                      <button
+                      <button aria-label="Close dialog"
                         type="button"
                         className="doc-btn"
                         style={{ padding: '4px 8px', minHeight: 0, height: 26, fontWeight: 700, color: '#94a3b8' }}

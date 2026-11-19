@@ -1180,7 +1180,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
           <div className="cs-card">
             <div className="cs-card-title">Medical Orders</div>
             <div className="cs-toolbar" style={{ marginBottom: 12, alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-              <select className="cs-select" value={orderStatusFilter} onChange={(e) => setOrderStatusFilter(e.target.value)}>
+              <select aria-label="Order Status Filter" className="cs-select" value={orderStatusFilter} onChange={(e) => setOrderStatusFilter(e.target.value)}>
                 <option value="All">All Status</option>
                 <option value="Pending">Pending</option>
                 <option value="For Payment">For Payment</option>
@@ -1192,7 +1192,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                 <option value="Completed">Completed</option>
                 <option value="Cancelled">Cancelled</option>
               </select>
-              <select className="cs-select" value={orderRangeFilter} onChange={(e) => setOrderRangeFilter(e.target.value)} style={{ minWidth: 160 }}>
+              <select aria-label="Order Range Filter" className="cs-select" value={orderRangeFilter} onChange={(e) => setOrderRangeFilter(e.target.value)} style={{ minWidth: 160 }}>
                 <option value="All">All Dates</option>
                 <option value="Today">Today</option>
                 <option value="Week">This Week</option>
@@ -1296,13 +1296,13 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                 <RefreshCw size={16} />
                 Refresh
               </button>
-              <select className="cs-select" value={approvalStatusFilter} onChange={(e) => setApprovalStatusFilter(e.target.value)} style={{ minWidth: 160 }}>
+              <select aria-label="Approval Status Filter" className="cs-select" value={approvalStatusFilter} onChange={(e) => setApprovalStatusFilter(e.target.value)} style={{ minWidth: 160 }}>
                 <option value="All">All Status</option>
                 <option value="Pending">Pending</option>
                 <option value="Approved">Approved</option>
                 <option value="Rejected">Rejected</option>
               </select>
-              <select className="cs-select" value={approvalRangeFilter} onChange={(e) => setApprovalRangeFilter(e.target.value)} style={{ minWidth: 160 }}>
+              <select aria-label="Approval Range Filter" className="cs-select" value={approvalRangeFilter} onChange={(e) => setApprovalRangeFilter(e.target.value)} style={{ minWidth: 160 }}>
                 <option value="All">All Dates</option>
                 <option value="Today">Today</option>
                 <option value="Week">This Week</option>
@@ -1406,7 +1406,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
 
                     <div className="cs-field">
                       <div className="cs-field-label">Note (optional)</div>
-                      <textarea className="cs-input" rows={3} maxLength={1000} value={approvalNote} onChange={(e) => setApprovalNote(e.target.value)} placeholder="Add an optional review note" />
+                      <textarea aria-label="Note (optional)" className="cs-input" rows={3} maxLength={1000} value={approvalNote} onChange={(e) => setApprovalNote(e.target.value)} placeholder="Add an optional review note" />
                     </div>
 
                     {approvalActionError ? (
@@ -1632,11 +1632,11 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
               <div className="cs-card" style={{ boxShadow: 'none' }}>
                 <div className="cs-card-title">Create Schedule Event</div>
                 <div className="cs-toolbar" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                  <input className="cs-input" value={eventForm.title} onChange={(e) => setEventForm((p) => ({ ...p, title: e.target.value }))} placeholder="Title" />
-                  <input className="cs-input" type="datetime-local" value={eventForm.startAt} onChange={(e) => setEventForm((p) => ({ ...p, startAt: e.target.value }))} />
-                  <input className="cs-input" type="datetime-local" value={eventForm.endAt} onChange={(e) => setEventForm((p) => ({ ...p, endAt: e.target.value }))} placeholder="End time (optional)" />
-                  <input className="cs-input" value={eventForm.location} onChange={(e) => setEventForm((p) => ({ ...p, location: e.target.value }))} placeholder="Location (optional)" />
-                  <input className="cs-input" value={eventForm.notes} onChange={(e) => setEventForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Notes (optional)" />
+                  <input aria-label="Title" className="cs-input" value={eventForm.title} onChange={(e) => setEventForm((p) => ({ ...p, title: e.target.value }))} placeholder="Title" />
+                  <input aria-label="Start At" className="cs-input" type="datetime-local" value={eventForm.startAt} onChange={(e) => setEventForm((p) => ({ ...p, startAt: e.target.value }))} />
+                  <input aria-label="End time (optional)" className="cs-input" type="datetime-local" value={eventForm.endAt} onChange={(e) => setEventForm((p) => ({ ...p, endAt: e.target.value }))} placeholder="End time (optional)" />
+                  <input aria-label="Location (optional)" className="cs-input" value={eventForm.location} onChange={(e) => setEventForm((p) => ({ ...p, location: e.target.value }))} placeholder="Location (optional)" />
+                  <input aria-label="Notes (optional)" className="cs-input" value={eventForm.notes} onChange={(e) => setEventForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Notes (optional)" />
                   <button type="button" className="cs-btn" onClick={handleCreateEvent} disabled={creatingEvent || !eventForm.startAt}>
                     Create
                   </button>
@@ -1707,7 +1707,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <label>First Name <span aria-hidden>*</span></label>
                     <div className="input-wrapper-relative">
                       <User size={18} className="absolute-icon-left text-slate-400" />
-                      <input 
+                      <input aria-label="First Name"
                         type="text" value={profileForm.firstName} maxLength={80} autoComplete="given-name" required
                         onChange={(e) => updateProfileField('firstName', e.target.value)}
                         className={`profile-input input-with-icon-padding ${profileErrors.firstName ? 'field-error' : ''}`}
@@ -1720,7 +1720,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <label>Last Name <span aria-hidden>*</span></label>
                     <div className="input-wrapper-relative">
                       <User size={18} className="absolute-icon-left text-slate-400" />
-                      <input type="text" value={profileForm.lastName} maxLength={80} autoComplete="family-name" required onChange={(e) => updateProfileField('lastName', e.target.value)} className={`profile-input input-with-icon-padding ${profileErrors.lastName ? 'field-error' : ''}`} />
+                      <input aria-label="Last Name" type="text" value={profileForm.lastName} maxLength={80} autoComplete="family-name" required onChange={(e) => updateProfileField('lastName', e.target.value)} className={`profile-input input-with-icon-padding ${profileErrors.lastName ? 'field-error' : ''}`} />
                     </div>
                     {profileErrors.lastName ? <div className="profile-field-error">{profileErrors.lastName}</div> : null}
                   </div>
@@ -1729,7 +1729,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <label>Email Address <span aria-hidden>*</span></label>
                     <div className="input-wrapper-relative">
                       <Mail size={18} className="absolute-icon-left text-slate-400" />
-                      <input type="email" value={profileForm.email} maxLength={254} autoComplete="email" required onChange={(e) => updateProfileField('email', e.target.value)} className={`profile-input input-with-icon-padding ${profileErrors.email ? 'field-error' : ''}`} />
+                      <input aria-label="Email" type="email" value={profileForm.email} maxLength={254} autoComplete="email" required onChange={(e) => updateProfileField('email', e.target.value)} className={`profile-input input-with-icon-padding ${profileErrors.email ? 'field-error' : ''}`} />
                     </div>
                     {profileErrors.email ? <div className="profile-field-error">{profileErrors.email}</div> : null}
                   </div>
@@ -1738,7 +1738,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <label>Department / Role</label>
                     <div className="input-wrapper-relative">
                       <Briefcase size={18} className="absolute-icon-left text-slate-400" />
-                      <input type="text" value={cfg.label} readOnly className="profile-input input-with-icon-padding input-disabled-bg" />
+                      <input aria-label="Department or role" type="text" value={cfg.label} readOnly className="profile-input input-with-icon-padding input-disabled-bg" />
                     </div>
                   </div>
                 </div>
@@ -1755,7 +1755,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <label>Current Password</label>
                     <div className="input-wrapper-relative">
                       <Key size={18} className="absolute-icon-left text-slate-400" />
-                      <input 
+                      <input aria-label="Enter current password"
                         type={showPasswords.current ? 'text' : 'password'} value={profileForm.currentPassword}
                         onChange={(e) => updateProfileField('currentPassword', e.target.value)}
                         className={`profile-input input-with-icon-padding ${profileErrors.currentPassword ? 'field-error' : ''}`}
@@ -1773,7 +1773,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <label>New Password</label>
                     <div className="input-wrapper-relative">
                       <Key size={18} className="absolute-icon-left text-slate-400" />
-                      <input 
+                      <input aria-label="Enter new password"
                         type={showPasswords.next ? 'text' : 'password'} value={profileForm.newPassword}
                         onChange={(e) => updateProfileField('newPassword', e.target.value)}
                         className={`profile-input input-with-icon-padding ${profileErrors.newPassword ? 'field-error' : ''}`}
@@ -1814,7 +1814,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     <label>Confirm New Password</label>
                     <div className="input-wrapper-relative">
                       <Key size={18} className="absolute-icon-left text-slate-400" />
-                      <input 
+                      <input aria-label="Confirm new password"
                         type={showPasswords.confirm ? 'text' : 'password'} value={profileForm.confirmPassword}
                         onChange={(e) => updateProfileField('confirmPassword', e.target.value)}
                         className={`profile-input input-with-icon-padding ${profileErrors.confirmPassword ? 'field-error' : ''}`}
@@ -1850,7 +1850,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
           <div className="cs-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cs-modal-head">
               <div className="cs-modal-title">Order Details</div>
-              <button type="button" className="cs-btn secondary" onClick={() => setViewingOrder(null)}>
+              <button aria-label="Close dialog" type="button" className="cs-btn secondary" onClick={() => setViewingOrder(null)}>
                 <X size={16} />
               </button>
             </div>
@@ -1886,9 +1886,9 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                     </div>
                     <div className="cs-two-col" style={{ marginTop: 10 }}>
                       <div className="cs-toolbar" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                        <input className="cs-input" value={resultTitle} onChange={(e) => setResultTitle(e.target.value)} placeholder="Result title" />
-                        <input className="cs-input" type="date" value={resultDate} onChange={(e) => setResultDate(e.target.value)} />
-                        <input
+                        <input aria-label="Result title" className="cs-input" value={resultTitle} onChange={(e) => setResultTitle(e.target.value)} placeholder="Result title" />
+                        <input aria-label="Result Date" className="cs-input" type="date" value={resultDate} onChange={(e) => setResultDate(e.target.value)} />
+                        <input aria-label="Upload result file"
                           className="cs-input"
                           type="file"
                           accept="application/pdf,image/jpeg,image/png,image/webp"
@@ -2000,7 +2000,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                   >
                     Download
                   </a>
-                  <button type="button" className="cs-btn secondary" onClick={() => setViewingFileUrl(null)}>
+                  <button aria-label="Close dialog" type="button" className="cs-btn secondary" onClick={() => setViewingFileUrl(null)}>
                     <X size={16} />
                   </button>
                 </div>
@@ -2030,7 +2030,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
           <div className="cs-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cs-modal-head">
               <div className="cs-modal-title">Create Medical Order</div>
-              <button type="button" className="cs-btn secondary" onClick={() => setOrderFormOpen(false)}>
+              <button aria-label="Close dialog" type="button" className="cs-btn secondary" onClick={() => setOrderFormOpen(false)}>
                 <X size={16} />
               </button>
             </div>
@@ -2039,7 +2039,7 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                 <div className="cs-card" style={{ boxShadow: 'none' }}>
                   <div className="cs-card-title">Order Info</div>
                   <div className="cs-toolbar" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                    <select
+                    <select aria-label="Patient Id"
                       className="cs-select"
                       value={orderForm.patientId}
                       onChange={(e) => setOrderForm((p) => ({ ...p, patientId: e.target.value }))}
@@ -2056,13 +2056,13 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                         );
                       })}
                     </select>
-                    <input
+                    <input aria-label="Service"
                       className="cs-input"
                       value={orderForm.service}
                       onChange={(e) => setOrderForm((p) => ({ ...p, service: e.target.value }))}
                       placeholder={`Service (e.g. ${cfg.kind})`}
                     />
-                    <select
+                    <select aria-label="Priority"
                       className="cs-select"
                       value={orderForm.priority}
                       onChange={(e) => setOrderForm((p) => ({ ...p, priority: e.target.value }))}
@@ -2071,13 +2071,13 @@ export default function ClinicalStaffDashboard({ forcedRole }) {
                       <option value="Urgent">Urgent</option>
                       <option value="STAT">STAT (Emergency)</option>
                     </select>
-                    <input
+                    <input aria-label="Scheduled At"
                       className="cs-input"
                       type="datetime-local"
                       value={orderForm.scheduledAt}
                       onChange={(e) => setOrderForm((p) => ({ ...p, scheduledAt: e.target.value }))}
                     />
-                    <input
+                    <input aria-label="Notes (optional)"
                       className="cs-input"
                       value={orderForm.notes}
                       onChange={(e) => setOrderForm((p) => ({ ...p, notes: e.target.value }))}

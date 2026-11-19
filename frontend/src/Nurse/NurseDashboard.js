@@ -6345,7 +6345,7 @@ function NurseDashboard() {
           </button> : null}
 
           {/* Schedules Dropdown */}
-          {nurseCapabilities.schedules ? <button className={`nurse-nav-item ${['schedules', 'tasks', 'calendar', 'shifts'].includes(view) ? 'active' : ''}`} onClick={() => setIsSchedulesOpen(!isSchedulesOpen)}>
+          {nurseCapabilities.schedules ? <button className={`nurse-nav-item ${['schedules', 'tasks', 'calendar', 'shifts'].includes(view) ? 'active' : ''}`} onClick={() => setIsSchedulesOpen(!isSchedulesOpen)} aria-expanded={isSchedulesOpen}>
             <div style={{display: 'flex', alignItems: 'center', gap: '12px', flex: 1}}>
                 <Clock size={20} />
                 <span>Schedules</span>
@@ -9033,8 +9033,8 @@ function NurseDashboard() {
                             </p>
                         </div>
                         <div className="calendar-nav">
-                            <button className="btn-cal-nav" onClick={() => changeMonth(-1)}><ChevronLeft size={20} /></button>
-                            <button className="btn-cal-nav" onClick={() => changeMonth(1)}><ChevronRight size={20} /></button>
+                            <button type="button" className="btn-cal-nav" aria-label="Previous month" onClick={() => changeMonth(-1)}><ChevronLeft size={20} /></button>
+                            <button type="button" className="btn-cal-nav" aria-label="Next month" onClick={() => changeMonth(1)}><ChevronRight size={20} /></button>
                         </div>
                     </div>
                     

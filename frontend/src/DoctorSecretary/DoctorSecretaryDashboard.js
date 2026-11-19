@@ -1907,15 +1907,15 @@ export default function DoctorSecretaryDashboard() {
                               <td className="sec-muted">{key || '—'}</td>
                               <td>
                                 <label className="sec-visually-hidden" htmlFor={`${feeControlId}-name`}>{name || key} service name</label>
-                                <input id={`${feeControlId}-name`} className="sec-input" value={String(name)} onChange={(e) => setFeesEdit((v) => ({ ...v, [key]: { ...(v[key] || {}), serviceName: e.target.value } }))} />
+                                <input aria-label="Service name" id={`${feeControlId}-name`} className="sec-input" value={String(name)} onChange={(e) => setFeesEdit((v) => ({ ...v, [key]: { ...(v[key] || {}), serviceName: e.target.value } }))} />
                               </td>
                               <td>
                                 <label className="sec-visually-hidden" htmlFor={`${feeControlId}-amount`}>{name || key} default fee</label>
-                                <input id={`${feeControlId}-amount`} className="sec-input" type="number" min="0" step="0.01" value={String(fee)} onChange={(e) => setFeesEdit((v) => ({ ...v, [key]: { ...(v[key] || {}), defaultFee: e.target.value } }))} />
+                                <input aria-label="Default fee" id={`${feeControlId}-amount`} className="sec-input" type="number" min="0" step="0.01" value={String(fee)} onChange={(e) => setFeesEdit((v) => ({ ...v, [key]: { ...(v[key] || {}), defaultFee: e.target.value } }))} />
                               </td>
                               <td>
                                 <label className="sec-visually-hidden" htmlFor={`${feeControlId}-active`}>{name || key} active status</label>
-                                <select id={`${feeControlId}-active`} className="sec-input" value={active ? '1' : '0'} onChange={(e) => setFeesEdit((v) => ({ ...v, [key]: { ...(v[key] || {}), active: e.target.value === '1' } }))}>
+                                <select aria-label="Active status" id={`${feeControlId}-active`} className="sec-input" value={active ? '1' : '0'} onChange={(e) => setFeesEdit((v) => ({ ...v, [key]: { ...(v[key] || {}), active: e.target.value === '1' } }))}>
                                   <option value="1">Yes</option>
                                   <option value="0">No</option>
                                 </select>
@@ -2222,10 +2222,10 @@ export default function DoctorSecretaryDashboard() {
                   <tbody>{availabilityLoading ? <tr><td colSpan="6" className="sec-empty">Loading schedule…</td></tr> : availabilityRules.length === 0 ? <tr><td colSpan="6" className="sec-empty">No weekly clinic hours yet.</td></tr> : availabilityRules.map((rule) => (
                     <tr key={String(rule.id)}>
                       <td>{['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][Number(rule.dayOfWeek)] || '—'}</td>
-                      <td><input className="sec-input" type="time" value={String(rule.startTime || '').slice(0, 5)} onChange={(e) => setAvailabilityRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, startTime: e.target.value } : row))} /></td>
-                      <td><input className="sec-input" type="time" value={String(rule.endTime || '').slice(0, 5)} onChange={(e) => setAvailabilityRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, endTime: e.target.value } : row))} /></td>
-                      <td><input className="sec-input" type="number" min="5" max="180" value={rule.slotMinutes} onChange={(e) => setAvailabilityRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, slotMinutes: e.target.value } : row))} /></td>
-                      <td><input className="sec-input" type="number" min="1" max="20" value={rule.maxPerSlot} onChange={(e) => setAvailabilityRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, maxPerSlot: e.target.value } : row))} /></td>
+                      <td><input aria-label={`Start time for ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][Number(rule.dayOfWeek)] || 'clinic day'}`} className="sec-input" type="time" value={String(rule.startTime || '').slice(0, 5)} onChange={(e) => setAvailabilityRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, startTime: e.target.value } : row))} /></td>
+                      <td><input aria-label={`End time for ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][Number(rule.dayOfWeek)] || 'clinic day'}`} className="sec-input" type="time" value={String(rule.endTime || '').slice(0, 5)} onChange={(e) => setAvailabilityRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, endTime: e.target.value } : row))} /></td>
+                      <td><input aria-label="Slot Minutes" className="sec-input" type="number" min="5" max="180" value={rule.slotMinutes} onChange={(e) => setAvailabilityRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, slotMinutes: e.target.value } : row))} /></td>
+                      <td><input aria-label="Max Per Slot" className="sec-input" type="number" min="1" max="20" value={rule.maxPerSlot} onChange={(e) => setAvailabilityRules((rows) => rows.map((row) => String(row.id) === String(rule.id) ? { ...row, maxPerSlot: e.target.value } : row))} /></td>
                       <td><button type="button" className="sec-btn ghost" onClick={() => removeAvailabilityRule(rule.id)} disabled={availabilitySaving}>Remove</button></td>
                     </tr>
                   ))}</tbody>
@@ -2806,7 +2806,7 @@ export default function DoctorSecretaryDashboard() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <label style={{ color: '#475569', fontSize: '14px', fontWeight: '700' }}>Assign to doctor</label>
-                    <select
+                    <select aria-label="Assign to doctor"
                       style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', fontWeight: '600', color: '#1e293b', background: '#ffffff' }}
                       value={assignForm.doctorId}
                       onChange={(e) => setAssignForm((v) => ({ ...v, doctorId: e.target.value }))}
@@ -2828,7 +2828,7 @@ export default function DoctorSecretaryDashboard() {
                       {assignSlotsLoading ? (
                         <div style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', color: '#64748b', background: '#f8fafc' }}>Loading available times…</div>
                       ) : assignSlots && assignSlots.length > 0 ? (
-                        <select
+                        <select aria-label="Time"
                           style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', fontWeight: '600', color: '#1e293b', background: '#ffffff' }}
                           value={assignForm.time}
                           onChange={(e) => setAssignForm((v) => ({ ...v, time: e.target.value }))}
@@ -2846,7 +2846,7 @@ export default function DoctorSecretaryDashboard() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <label style={{ color: '#475569', fontSize: '14px', fontWeight: '700' }}>Status</label>
-                      <select 
+                      <select aria-label="Status"
                         style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '15px', fontWeight: '600', color: '#1e293b', background: '#ffffff' }}
                         value={assignForm.status} 
                         onChange={(e) => setAssignForm((v) => ({ ...v, status: e.target.value }))}

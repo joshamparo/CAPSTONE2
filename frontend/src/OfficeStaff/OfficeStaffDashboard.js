@@ -1964,7 +1964,7 @@ export default function OfficeStaffDashboard({ mode }) {
                           <label>First Name</label>
                           <div className="input-wrapper-relative">
                             <User size={18} className="absolute-icon-left text-slate-400" />
-                            <input
+                            <input aria-label="First name"
                               type="text"
                               className="profile-input input-with-icon-padding"
                               value={profileForm.firstName}
@@ -1978,7 +1978,7 @@ export default function OfficeStaffDashboard({ mode }) {
                           <label>Last Name</label>
                           <div className="input-wrapper-relative">
                             <User size={18} className="absolute-icon-left text-slate-400" />
-                            <input
+                            <input aria-label="Last name"
                               type="text"
                               className="profile-input input-with-icon-padding"
                               value={profileForm.lastName}
@@ -1992,7 +1992,7 @@ export default function OfficeStaffDashboard({ mode }) {
                           <label>Email Address (Not changeable)</label>
                           <div className="input-wrapper-relative">
                             <Mail size={18} className="absolute-icon-left text-slate-400" />
-                            <input
+                            <input aria-label="Email"
                               type="email"
                               className="profile-input input-with-icon-padding input-disabled-bg"
                               value={profileForm.email}
@@ -2014,7 +2014,7 @@ export default function OfficeStaffDashboard({ mode }) {
                           <label>Current Password</label>
                           <div className="input-wrapper-relative">
                             <Key size={18} className="absolute-icon-left text-slate-400" />
-                            <input
+                            <input aria-label="Enter current password"
                               type={showCurrentPassword ? "text" : "password"}
                               className="profile-input input-with-icon-padding"
                               value={profileForm.currentPassword}
@@ -2037,7 +2037,7 @@ export default function OfficeStaffDashboard({ mode }) {
                           <label>New Password</label>
                           <div className="input-wrapper-relative">
                             <Key size={18} className="absolute-icon-left text-slate-400" />
-                            <input
+                            <input aria-label="Enter new password (leave blank to keep)"
                               type={showNewPassword ? "text" : "password"}
                               className="profile-input input-with-icon-padding"
                               value={profileForm.newPassword}
@@ -2074,7 +2074,7 @@ export default function OfficeStaffDashboard({ mode }) {
                           <label>Confirm New Password</label>
                           <div className="input-wrapper-relative">
                             <Key size={18} className="absolute-icon-left text-slate-400" />
-                            <input
+                            <input aria-label="Confirm new password"
                               type={showConfirmPassword ? "text" : "password"}
                               className="profile-input input-with-icon-padding"
                               value={profileForm.confirmPassword}
@@ -2125,7 +2125,7 @@ export default function OfficeStaffDashboard({ mode }) {
               <div className="office-row">
                 <div className="input-wrapper-relative">
                   <Search size={18} className="absolute-icon-left text-slate-400" />
-                  <input
+                  <input aria-label="Search patient name/email..."
                     className="search-input-with-icon"
                     value={patientQuery}
                     onChange={(e) => setPatientQuery(e.target.value)}
@@ -2305,7 +2305,7 @@ export default function OfficeStaffDashboard({ mode }) {
               <div className="office-row">
                 <div className="input-wrapper-relative office-search-wide">
                   <Search size={18} className="absolute-icon-left text-slate-400" />
-                  <input
+                  <input aria-label="Search patient, invoice ID, appointment ID, doctor, or service"
                     className="search-input-with-icon"
                     value={invoiceQuery}
                     onChange={(e) => setInvoiceQuery(e.target.value)}
@@ -2331,7 +2331,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div className="office-row" style={{ marginTop: 12 }}>
                   <div className="input-wrapper-relative" style={{ flex: 1 }}>
                     <Search size={18} className="absolute-icon-left text-slate-400" />
-                    <input
+                    <input aria-label="Search patient for invoice..."
                       className="search-input-with-icon"
                       value={patientQuery}
                       onChange={(e) => setPatientQuery(e.target.value)}
@@ -2380,14 +2380,14 @@ export default function OfficeStaffDashboard({ mode }) {
                   <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {invoiceItems.map((it, idx) => (
                       <div key={idx} className="office-row">
-                        <input
+                        <input aria-label="Description"
                           className="office-input"
                           style={{ minWidth: 0, flex: 1 }}
                           placeholder="Description"
                           value={it.description}
                           onChange={(e) => updateInvoiceItem(idx, { description: e.target.value })}
                         />
-                        <input
+                        <input aria-label="Quantity"
                           className="office-input"
                           style={{ width: 90, minWidth: 90 }}
                           type="number"
@@ -2395,7 +2395,7 @@ export default function OfficeStaffDashboard({ mode }) {
                           value={it.quantity}
                           onChange={(e) => updateInvoiceItem(idx, { quantity: e.target.value })}
                         />
-                        <input
+                        <input aria-label="Unit price"
                           className="office-input"
                           style={{ width: 120, minWidth: 120 }}
                           placeholder="Unit price"
@@ -2414,7 +2414,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </div>
 
                   <div style={{ marginTop: 12 }}>
-                    <textarea
+                    <textarea aria-label="Notes (optional)"
                       className="office-input"
                       style={{ width: '100%', minHeight: 90 }}
                       placeholder="Notes (optional)"
@@ -2442,7 +2442,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div className="office-row" style={{ marginTop: 12 }}>
                   <div className="input-wrapper-relative" style={{ flex: 1 }}>
                     <Search size={18} className="absolute-icon-left text-slate-400" />
-                    <input
+                    <input aria-label="Search patient, invoice ID, appointment ID, doctor, or service"
                       className="search-input-with-icon"
                       value={invoiceQuery}
                       onChange={(e) => setInvoiceQuery(e.target.value)}
@@ -2504,7 +2504,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   <div className="office-subtitle">Select to view details</div>
                 </div>
                 <div className="office-row">
-                  <select className="office-select" value={invoiceStatus} onChange={(e) => { const value = e.target.value; setInvoiceStatus(value); refreshInvoices({ page: 1, status: value }); }}>
+                  <select aria-label="Invoice Status" className="office-select" value={invoiceStatus} onChange={(e) => { const value = e.target.value; setInvoiceStatus(value); refreshInvoices({ page: 1, status: value }); }}>
                     <option value="All">All</option>
                     <option value="Draft">Draft</option>
                     <option value="Ready">Ready</option>
@@ -2530,7 +2530,7 @@ export default function OfficeStaffDashboard({ mode }) {
                       </button>
                     </div>
                   ) : null}
-                  <select className="office-select" value={invoiceRange} onChange={(e) => { const value = e.target.value; setInvoiceRange(value); refreshInvoices({ page: 1, range: value }); }}>
+                  <select aria-label="Invoice Range" className="office-select" value={invoiceRange} onChange={(e) => { const value = e.target.value; setInvoiceRange(value); refreshInvoices({ page: 1, range: value }); }}>
                     <option value="All">All Dates</option>
                     <option value="Today">Today</option>
                     <option value="Week">This Week</option>
@@ -2677,8 +2677,8 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div className="office-subtitle">Orders for pay-before-exam (laboratory / ECG / radiology / imaging). HMO-approved rows show green PAID(HMO) badge with no further payment needed.</div>
               </div>
               <div className="office-row">
-                <input className="office-input" value={labOrdersQuery} onChange={(e) => setLabOrdersQuery(e.target.value)} placeholder="Search patient/service" />
-                <select className="office-select" value={labOrdersRange} onChange={(e) => setLabOrdersRange(e.target.value)}>
+                <input aria-label="Search patient/service" className="office-input" value={labOrdersQuery} onChange={(e) => setLabOrdersQuery(e.target.value)} placeholder="Search patient/service" />
+                <select aria-label="Lab Orders Range" className="office-select" value={labOrdersRange} onChange={(e) => setLabOrdersRange(e.target.value)}>
                   <option value="All">All Dates</option>
                   <option value="Today">Today</option>
                   <option value="Week">This Week</option>
@@ -2938,7 +2938,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div className="office-row" style={{ marginLeft: 'auto' }}>
                   <div className="office-input-wrap office-search-wide">
                     <Search size={16} />
-                    <input
+                    <input aria-label="Search patient, receipt, reference, cashier, or source"
                       className="office-input"
                       placeholder="Search patient, receipt, reference, cashier, or source"
                       value={paymentsQuery}
@@ -2946,7 +2946,7 @@ export default function OfficeStaffDashboard({ mode }) {
                       onKeyDown={(e) => { if (e.key === 'Enter') refreshPaymentHistory({ page: 1 }); }}
                     />
                   </div>
-                  <select className="office-select" value={paymentsSource} onChange={(e) => { const value = e.target.value; setPaymentsSource(value); refreshPaymentHistory({ page: 1, source: value }); }}>
+                  <select aria-label="Payments Source" className="office-select" value={paymentsSource} onChange={(e) => { const value = e.target.value; setPaymentsSource(value); refreshPaymentHistory({ page: 1, source: value }); }}>
                     <option value="All">All Sources</option>
                     <option value="Onsite Consultation">Onsite Consultation</option>
                     <option value="Video Consultation">Video Consultation</option>
@@ -3060,7 +3060,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 <div className="office-subtitle">Summary for a selected date</div>
               </div>
               <div className="office-row">
-                <input className="office-input" type="date" value={closeoutDate} onChange={(e) => setCloseoutDate(e.target.value)} />
+                <input aria-label="Closeout Date" className="office-input" type="date" value={closeoutDate} onChange={(e) => setCloseoutDate(e.target.value)} />
                 <button type="button" className="office-btn" onClick={() => fetchCloseout({ date: closeoutDate })} disabled={closeoutLoading || !user}>
                   <RefreshCw size={16} />
                   Generate
@@ -3290,13 +3290,13 @@ export default function OfficeStaffDashboard({ mode }) {
                     </div>
                   ) : null}
                   <div className="office-row">
-                    <select className="office-select" value={labPaymentMethod} onChange={(e) => setLabPaymentMethod(e.target.value)} disabled={selectedLabOrderIsPaid || selectedLabOrderDue <= 0.0099}>
+                    <select aria-label="Lab Payment Method" className="office-select" value={labPaymentMethod} onChange={(e) => setLabPaymentMethod(e.target.value)} disabled={selectedLabOrderIsPaid || selectedLabOrderDue <= 0.0099}>
                       <option value="Cash">Cash</option>
                       <option value="GCash">GCash</option>
                       <option value="Card">Card</option>
                       <option value="HMO">HMO / LOA</option>
                     </select>
-                    <input
+                    <input aria-label="Amount received"
                       className="office-input"
                       style={{ width: 180, minWidth: 0, opacity: selectedLabOrderDue <= 0.0099 ? 0.5 : 1 }}
                       type="number"
@@ -3307,7 +3307,7 @@ export default function OfficeStaffDashboard({ mode }) {
                       disabled={selectedLabOrderIsPaid || selectedLabOrderDue <= 0.0099}
                       placeholder="Amount received"
                     />
-                    <input
+                    <input aria-label="Lab Payment Reference"
                       className="office-input"
                       style={{ flex: '1 1 220px', minWidth: 0 }}
                       value={labPaymentReference}
@@ -3358,7 +3358,7 @@ export default function OfficeStaffDashboard({ mode }) {
                 background: '#ffffff', flexShrink: 0
               }}>
                 <span style={{color:'#475569',fontWeight:700,fontSize:'0.85rem'}}>🔎 Search:</span>
-                <input
+                <input aria-label="PGH260817 00042, or patient name, provider, LOA #, contact"
                   type="text"
                   value={hmoRefSearch}
                   onChange={(e) => {
@@ -3845,7 +3845,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </label>
                   <div className="office-hmo-input-wrap-pro">
                     <Shield size={15} className="office-hmo-input-icon-pro" />
-                    <select
+                    <select aria-label="HMO provider"
                       className="office-hmo-select-pro"
                       value={hmoQuickEdit._provider ?? String(hmoQuickEdit?.hmo_claim?.provider || '')}
                       onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _provider: e.target.value })}
@@ -3869,7 +3869,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </label>
                   <div className="office-hmo-input-wrap-pro">
                     <ClipboardList size={15} className="office-hmo-input-icon-pro" />
-                    <select
+                    <select aria-label="PhilHealth claim status"
                       className="office-hmo-select-pro"
                       value={hmoQuickEdit._phStatus ?? String(hmoQuickEdit?.hmo_claim?.philhealth_claim?.status || 'Pending Verification')}
                       onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _phStatus: e.target.value })}
@@ -3886,7 +3886,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </label>
                   <div className="office-hmo-input-wrap-pro">
                     <FileText size={15} className="office-hmo-input-icon-pro" />
-                    <input
+                    <input aria-label="Required before applying benefit"
                       className="office-hmo-input-pro"
                       value={hmoQuickEdit._phReference ?? String(hmoQuickEdit?.hmo_claim?.philhealth_claim?.reference_number || '')}
                       onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _phReference: e.target.value })}
@@ -3900,7 +3900,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </label>
                   <div className="office-hmo-input-wrap-pro">
                     <ClipboardList size={15} className="office-hmo-input-icon-pro" />
-                    <select
+                    <select aria-label="HMO claim status"
                       className="office-hmo-select-pro"
                       value={hmoQuickEdit._status ?? String(hmoQuickEdit?.hmo_claim?.status || 'Pending')}
                       onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _status: e.target.value })}
@@ -3919,7 +3919,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </label>
                   <div className="office-hmo-input-wrap-pro">
                     <FileText size={15} className="office-hmo-input-icon-pro" />
-                    <input
+                    <input aria-label="E.g. LOA 2026 00123"
                       className="office-hmo-input-pro"
                       value={hmoQuickEdit._loa ?? String(hmoQuickEdit?.hmo_claim?.loa_number || '')}
                       onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _loa: e.target.value })}
@@ -3933,7 +3933,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </label>
                   <div className="office-hmo-input-wrap-pro">
                     <IdCard size={15} className="office-hmo-input-icon-pro" />
-                    <input
+                    <input aria-label="E.g. 1234 5678 9012"
                       className="office-hmo-input-pro"
                       value={hmoQuickEdit._hmoCardNumber ?? String(hmoQuickEdit?.hmo_claim?.hmo_card_number || '')}
                       onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _hmoCardNumber: e.target.value })}
@@ -3947,7 +3947,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </label>
                   <div className="office-hmo-input-wrap-pro">
                     <CreditCard size={15} className="office-hmo-input-icon-pro" />
-                    <input
+                    <input aria-label="PhilHealth approved amount"
                       className="office-hmo-input-pro"
                       type="number"
                       value={hmoQuickEdit._ph ?? (hmoQuickEdit?._ph === 0 ? 0 : String(hmoQuickEdit?.hmo_claim?.philhealth_claim?.approved_amount ?? hmoQuickEdit?.hmo_claim?.philhealth_deduction ?? ''))}
@@ -3962,7 +3962,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </label>
                   <div className="office-hmo-input-wrap-pro">
                     <Check size={15} className="office-hmo-input-icon-pro" />
-                    <input
+                    <input aria-label="HMO approved amount"
                       className="office-hmo-input-pro"
                       type="number"
                       value={hmoQuickEdit._hmoAmt ?? (hmoQuickEdit?._hmoAmt === 0 ? 0 : String(hmoQuickEdit?.hmo_claim?.loa_approved_amount ?? ''))}
@@ -3977,7 +3977,7 @@ export default function OfficeStaffDashboard({ mode }) {
                   </label>
                   <div className="office-hmo-input-wrap-pro">
                     <FileText size={15} className="office-hmo-input-icon-pro" />
-                    <input
+                    <input aria-label="Optional — HMO approval notes, contact name, budget remarks"
                       className="office-hmo-input-pro"
                       value={hmoQuickEdit._notes ?? String(hmoQuickEdit?.hmo_claim?.notes || '')}
                       onChange={(e) => setHmoQuickEdit({ ...hmoQuickEdit, _notes: e.target.value })}
@@ -4126,15 +4126,15 @@ export default function OfficeStaffDashboard({ mode }) {
               </div>
               {philhealthQuickEdit.error ? <div className="admin-alert error" style={{ margin: 0 }}>{philhealthQuickEdit.error}</div> : null}
               <label className="office-hmo-field-label-pro">Verification status</label>
-              <select className="office-select" style={{ width: '100%' }} value={philhealthQuickEdit.status} onChange={(e) => setPhilhealthQuickEdit({ ...philhealthQuickEdit, status: e.target.value })}>
+              <select aria-label="Verification status" className="office-select" style={{ width: '100%' }} value={philhealthQuickEdit.status} onChange={(e) => setPhilhealthQuickEdit({ ...philhealthQuickEdit, status: e.target.value })}>
                 <option value="Pending Verification">Pending Verification</option>
                 <option value="Approved">Verified &amp; Approved</option>
                 <option value="Rejected">Rejected</option>
               </select>
               <label className="office-hmo-field-label-pro">PhilHealth reference number</label>
-              <input className="office-input" style={{ width: '100%' }} value={philhealthQuickEdit.reference} onChange={(e) => setPhilhealthQuickEdit({ ...philhealthQuickEdit, reference: e.target.value })} placeholder="Required when approved" />
+              <input aria-label="Phil Health reference number" className="office-input" style={{ width: '100%' }} value={philhealthQuickEdit.reference} onChange={(e) => setPhilhealthQuickEdit({ ...philhealthQuickEdit, reference: e.target.value })} placeholder="Required when approved" />
               <label className="office-hmo-field-label-pro">Approved benefit</label>
-              <input className="office-input" style={{ width: '100%' }} type="number" min="0" step="0.01" value={philhealthQuickEdit.amount} onChange={(e) => setPhilhealthQuickEdit({ ...philhealthQuickEdit, amount: e.target.value })} placeholder="0.00" />
+              <input aria-label="Approved benefit" className="office-input" style={{ width: '100%' }} type="number" min="0" step="0.01" value={philhealthQuickEdit.amount} onChange={(e) => setPhilhealthQuickEdit({ ...philhealthQuickEdit, amount: e.target.value })} placeholder="0.00" />
             </div>
             <div className="office-modal-actions">
               <button type="button" className="office-btn ghost" disabled={philhealthQuickSaving} onClick={() => setPhilhealthQuickEdit(null)}>Cancel</button>
@@ -4432,9 +4432,9 @@ export default function OfficeStaffDashboard({ mode }) {
                                 <div style={{ border: '1px solid #f1f5f9', borderRadius: 12, padding: 10 }}>
                                   <div style={{ fontWeight: 900, marginBottom: 8, fontSize: '0.86rem' }}>Issue Refund</div>
                                   <div className="office-billing-refund-grid">
-                                    <input className="office-input" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} placeholder="Amount" />
-                                    <input className="office-input" value={refundReference} onChange={(e) => setRefundReference(e.target.value)} placeholder="Refund reference (required)" />
-                                    <input className="office-input full" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="Reason (optional)" />
+                                    <input aria-label="Amount" className="office-input" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} placeholder="Amount" />
+                                    <input aria-label="Refund reference (required)" className="office-input" value={refundReference} onChange={(e) => setRefundReference(e.target.value)} placeholder="Refund reference (required)" />
+                                    <input aria-label="Reason (optional)" className="office-input full" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="Reason (optional)" />
                                   </div>
                                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
                                     <button
@@ -4454,8 +4454,8 @@ export default function OfficeStaffDashboard({ mode }) {
 
                                 <div style={{ border: '1px solid #f1f5f9', borderRadius: 12, padding: 10 }}>
                                   <div style={{ fontWeight: 900, marginBottom: 8, fontSize: '0.86rem' }}>Void Invoice</div>
-                                  <input className="office-input" style={{ width: '100%' }} value={voidReference} onChange={(e) => setVoidReference(e.target.value)} placeholder="Void reference (optional)" />
-                                  <input className="office-input" style={{ marginTop: 8, width: '100%' }} value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Reason (required)" />
+                                  <input aria-label="Void reference (optional)" className="office-input" style={{ width: '100%' }} value={voidReference} onChange={(e) => setVoidReference(e.target.value)} placeholder="Void reference (optional)" />
+                                  <input aria-label="Reason (required)" className="office-input" style={{ marginTop: 8, width: '100%' }} value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Reason (required)" />
                                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
                                     <button
                                       type="button"
@@ -4634,7 +4634,7 @@ export default function OfficeStaffDashboard({ mode }) {
                                 </label>
                                 <div className="office-hmo-input-wrap-pro">
                                   <CreditCard size={15} className="office-hmo-input-icon-pro" />
-                                  <input
+                                  <input aria-label="PhilHealth deduction amount"
                                     className="office-hmo-input-pro"
                                     type="number"
                                     value={philhealthDeduction}
@@ -4649,7 +4649,7 @@ export default function OfficeStaffDashboard({ mode }) {
                                 </label>
                                 <div className="office-hmo-input-wrap-pro">
                                   <Shield size={15} className="office-hmo-input-icon-pro" />
-                                  <select className="office-hmo-select-pro" value={hmoProvider} onChange={(e) => setHmoProvider(e.target.value)}>
+                                  <select aria-label="Hmo Provider" className="office-hmo-select-pro" value={hmoProvider} onChange={(e) => setHmoProvider(e.target.value)}>
                                     <option value="">None</option>
                                     <option value="Cocolife">Cocolife</option>
                                     <option value="Philcare">Philcare</option>
@@ -4669,7 +4669,7 @@ export default function OfficeStaffDashboard({ mode }) {
                                 </label>
                                 <div className="office-hmo-input-wrap-pro">
                                   <Check size={15} className="office-hmo-input-icon-pro" />
-                                  <input
+                                  <input aria-label="HMO coverage amount"
                                     className="office-hmo-input-pro"
                                     type="number"
                                     value={hmoCoverage}
@@ -4684,7 +4684,7 @@ export default function OfficeStaffDashboard({ mode }) {
                                 </label>
                                 <div className="office-hmo-input-wrap-pro">
                                   <FileText size={15} className="office-hmo-input-icon-pro" />
-                                  <input
+                                  <input aria-label="E.g. LOA 2026 00123"
                                     className="office-hmo-input-pro"
                                     type="text"
                                     value={loaNumber}
@@ -4699,7 +4699,7 @@ export default function OfficeStaffDashboard({ mode }) {
                                 </label>
                                 <div className="office-hmo-input-wrap-pro">
                                   <IdCard size={15} className="office-hmo-input-icon-pro" />
-                                  <input
+                                  <input aria-label="E.g. 1234 5678 9012"
                                     className="office-hmo-input-pro"
                                     type="text"
                                     value={hmoCardNumber}
@@ -4714,7 +4714,7 @@ export default function OfficeStaffDashboard({ mode }) {
                                 </label>
                                 <div className="office-hmo-input-wrap-pro">
                                   <ClipboardList size={15} className="office-hmo-input-icon-pro" />
-                                  <select className="office-hmo-select-pro" value={hmoStatus} onChange={(e) => setHmoStatus(e.target.value)}>
+                                  <select aria-label="Hmo Status" className="office-hmo-select-pro" value={hmoStatus} onChange={(e) => setHmoStatus(e.target.value)}>
                                     <option value="Pending">Pending</option>
                                     <option value="Awaiting LOA">Awaiting LOA</option>
                                     <option value="Approved">Approved</option>
@@ -4729,7 +4729,7 @@ export default function OfficeStaffDashboard({ mode }) {
                                 </label>
                                 <div className="office-hmo-input-wrap-pro">
                                   <FileText size={15} className="office-hmo-input-icon-pro" />
-                                  <input
+                                  <input aria-label="Optional — HMO approval notes"
                                     className="office-hmo-input-pro"
                                     type="text"
                                     value={hmoNotes}
@@ -4867,7 +4867,7 @@ export default function OfficeStaffDashboard({ mode }) {
                               <div className="office-payment-field">
                                 <label>Payment method</label>
                                 <div style={{ position: 'relative' }}>
-                                  <select className="office-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} style={{ paddingLeft: '40px', width: '100%' }}>
+                                  <select aria-label="Pay Method" className="office-select" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} style={{ paddingLeft: '40px', width: '100%' }}>
                                     <option value="Cash">Cash</option>
                                     <option value="Card">Card</option>
                                   </select>
@@ -4879,7 +4879,7 @@ export default function OfficeStaffDashboard({ mode }) {
 
                               <div className="office-payment-field">
                                 <label>{payMethod === 'Cash' ? 'Cash received' : 'Amount to post'}</label>
-                                <input
+                                <input aria-label={payMethod === 'Cash' ? 'Cash received' : 'Amount to post'}
                                   className="office-input"
                                   style={{ width: '100%' }}
                                   value={payMethod === 'Cash' ? (cashReceived || payAmount) : payAmount}
@@ -4897,7 +4897,7 @@ export default function OfficeStaffDashboard({ mode }) {
 
                               <div className="office-payment-field full">
                                 <label>{payMethod === 'Cash' ? 'Receipt / Reference No. (optional)' : 'Receipt / Reference No.'}</label>
-                                <input
+                                <input aria-label="Pay Reference"
                                   className="office-input"
                                   style={{ width: '100%' }}
                                   value={payReference}

@@ -2902,7 +2902,7 @@ function PharmacistDashboard() {
                             <span style={{ fontSize: 34 }}>{String(pharmacistName || 'P').trim()[0]?.toUpperCase() || 'P'}</span>
                           )}
                         </div>
-                        <input
+                        <input aria-label="Upload profile photo"
                           ref={avatarInputRef}
                           type="file"
                           accept="image/*"
@@ -2933,7 +2933,7 @@ function PharmacistDashboard() {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                         <div>
                           <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>First Name</div>
-                          <input
+                          <input aria-label="First name"
                             className={`pharm-input ${profileErrors.firstName ? 'pharm-input-error' : ''}`}
                             value={profileForm.firstName}
                             onChange={(e) => { setProfileForm((p) => ({ ...p, firstName: e.target.value })); setProfileErrors((p) => ({ ...p, firstName: undefined })); }}
@@ -2943,7 +2943,7 @@ function PharmacistDashboard() {
                         </div>
                         <div>
                           <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>Last Name</div>
-                          <input
+                          <input aria-label="Last name"
                             className={`pharm-input ${profileErrors.lastName ? 'pharm-input-error' : ''}`}
                             value={profileForm.lastName}
                             onChange={(e) => { setProfileForm((p) => ({ ...p, lastName: e.target.value })); setProfileErrors((p) => ({ ...p, lastName: undefined })); }}
@@ -2953,7 +2953,7 @@ function PharmacistDashboard() {
                         </div>
                         <div style={{ gridColumn: '1 / -1' }}>
                           <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 800 }}>Email</div>
-                          <input
+                          <input aria-label="Email"
                             className={`pharm-input ${profileErrors.email ? 'pharm-input-error' : ''}`}
                             value={profileForm.email}
                             onChange={(e) => { setProfileForm((p) => ({ ...p, email: e.target.value })); setProfileErrors((p) => ({ ...p, email: undefined })); }}
@@ -2977,7 +2977,7 @@ function PharmacistDashboard() {
                       <label>Current Password</label>
                       <div className="input-wrapper-relative">
                         <Key size={18} className="absolute-icon-left text-slate-400" />
-                        <input
+                        <input aria-label="Enter current password"
                           type={showCurrentPassword ? 'text' : 'password'}
                           value={profileForm.currentPassword}
                           onChange={(e) => { setProfileForm((p) => ({ ...p, currentPassword: e.target.value })); setProfileErrors((p) => ({ ...p, currentPassword: undefined })); }}
@@ -3000,7 +3000,7 @@ function PharmacistDashboard() {
                       <label>New Password</label>
                       <div className="input-wrapper-relative">
                         <Key size={18} className="absolute-icon-left text-slate-400" />
-                        <input
+                        <input aria-label="Enter new password"
                           type={showNewPassword ? 'text' : 'password'}
                           value={profileForm.newPassword}
                           onChange={(e) => { setProfileForm((p) => ({ ...p, newPassword: e.target.value })); setProfileErrors((p) => ({ ...p, newPassword: undefined })); }}
@@ -3038,7 +3038,7 @@ function PharmacistDashboard() {
                       <label>Confirm New Password</label>
                       <div className="input-wrapper-relative">
                         <Key size={18} className="absolute-icon-left text-slate-400" />
-                        <input
+                        <input aria-label="Confirm new password"
                           type={showConfirmPassword ? 'text' : 'password'}
                           value={profileForm.confirmPassword}
                           onChange={(e) => { setProfileForm((p) => ({ ...p, confirmPassword: e.target.value })); setProfileErrors((p) => ({ ...p, confirmPassword: undefined })); }}
@@ -3390,7 +3390,7 @@ function PharmacistDashboard() {
                           <button type="button" onClick={() => updateCartQty(item.id, item.type, item.quantity - 1)} className="pharm-qty-btn" aria-label={`Decrease ${item.name} quantity`}>
                             <Minus size={14} />
                           </button>
-                          <input 
+                          <input aria-label="Quantity"
                             type="number" 
                             className="pharm-qty-input" 
                             value={item.quantity} 
@@ -3467,7 +3467,7 @@ function PharmacistDashboard() {
                     {posFromPrescription ? (
                       <div className="pharm-field">
                         <div className="pharm-label">Patient Billing Link</div>
-                        <input
+                        <input aria-label="Patient Billing Link"
                           className="pharm-input"
                           placeholder="Search patient by name or email"
                           value={patientSearch}
@@ -3523,7 +3523,7 @@ function PharmacistDashboard() {
                         <>
                           <div style={{ marginTop: 10, padding: 10, border: '1px solid #e2e8f0', borderRadius: 12, background: '#f8fafc' }}>
                             <div style={{ fontSize: 12, fontWeight: 900, color: '#0f172a', marginBottom: 8 }}>Quick Add (Bulk)</div>
-                            <input
+                            <input aria-label="Search medicine/supply name…"
                               className="pharm-input"
                               placeholder="Search medicine/supply name…"
                               value={bulkQuickQuery}
@@ -3543,7 +3543,7 @@ function PharmacistDashboard() {
                                   </button>
                                 ))}
                               </div>
-                              <input
+                              <input aria-label="Bulk Quick Qty"
                                 className="pharm-input"
                                 type="number"
                                 min="1"
@@ -3581,14 +3581,14 @@ function PharmacistDashboard() {
                               );
                             })()}
                           </div>
-                          <input
+                          <input aria-label="Bulk reference (order no., optional)"
                             className="pharm-input"
                             placeholder="Bulk reference (order no., optional)"
                             value={bulkReference}
                             onChange={(e) => setBulkReference(e.target.value)}
                             style={{ marginTop: 8 }}
                           />
-                          <input
+                          <input aria-label="Bulk discount % (optional)"
                             className="pharm-input"
                             type="number"
                             placeholder="Bulk discount % (optional)"
@@ -3603,7 +3603,7 @@ function PharmacistDashboard() {
                     <div className="pharm-field">
                       <div className="pharm-label">Discount</div>
                       <div className="pharm-discount-row">
-                        <select
+                        <select aria-label="Discount Type"
                           className="pharm-select"
                           value={discountType}
                           onChange={(e) => {
@@ -3620,7 +3620,7 @@ function PharmacistDashboard() {
                           <option value="custom_amount">Custom Amount</option>
                         </select>
                         {(discountType === 'custom_percent' || discountType === 'custom_amount') && (
-                          <input
+                          <input aria-label="Discount Value"
                             className="pharm-input"
                             type="number"
                             placeholder={discountType === 'custom_percent' ? 'Percent' : 'Amount'}
@@ -3630,7 +3630,7 @@ function PharmacistDashboard() {
                         )}
                       </div>
                       {discountType !== 'none' && (
-                        <input
+                        <input aria-label="Discount ID / Ref (optional)"
                           className="pharm-input"
                           placeholder="Discount ID / Ref (optional)"
                           value={discountRef}
@@ -3641,7 +3641,7 @@ function PharmacistDashboard() {
 
                     <div className="pharm-field">
                       <div className="pharm-label">Payment Method</div>
-                      <select className="pharm-select" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                      <select aria-label="Payment Method" className="pharm-select" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
                         <option value="Cash">Cash</option>
                         <option value="GCash">GCash</option>
                         <option value="Card">Card</option>
@@ -3652,7 +3652,7 @@ function PharmacistDashboard() {
                       <div className="pharm-label">Payment Received</div>
                       <div className="pharm-pos-payment-box">
                         <span className="pharm-currency">₱</span>
-                        <input 
+                        <input aria-label="Payment received amount"
                           type="number" 
                           placeholder="0.00"
                           className="pharm-payment-input"
@@ -3729,7 +3729,7 @@ function PharmacistDashboard() {
             <div className="pharm-field" style={{ marginTop: 10 }}>
               <div className="pharm-label">Scan To Restock</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                <select
+                <select aria-label="Scan Mode"
                   className="pharm-select"
                   value={scanMode}
                   onChange={(e) => setScanMode(e.target.value)}
@@ -3755,7 +3755,7 @@ function PharmacistDashboard() {
                   </div>
                 ) : null}
               </div>
-              <input
+              <input aria-label="Scan To Restock"
                 ref={scanInputRef}
                 className="pharm-input"
                 placeholder="Scan medicine barcode…"
@@ -3799,7 +3799,7 @@ function PharmacistDashboard() {
                       <tr key={m.id}>
                         <td className="pharm-strong">{m.name}</td>
                         <td style={{ width: 190 }}>
-                          <input
+                          <input aria-label={`Barcode for ${m.name}`}
                             className="pharm-input"
                             placeholder="Scan / type"
                             value={m.barcode || ''}
@@ -3825,7 +3825,7 @@ function PharmacistDashboard() {
                           {!categoryIdsAreNumeric ? (
                             <span>{m.categoryName || m.category || '—'}</span>
                           ) : (
-                            <select
+                            <select aria-label={`Category for ${m.name}`}
                               className="pharm-select"
                               value={m.categoryId || ''}
                               onChange={async (e) => {
@@ -3936,7 +3936,7 @@ function PharmacistDashboard() {
             <div className="pharm-field" style={{ marginTop: 10 }}>
               <div className="pharm-label">Scan To Restock</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                <select
+                <select aria-label="Scan Mode"
                   className="pharm-select"
                   value={scanMode}
                   onChange={(e) => setScanMode(e.target.value)}
@@ -3962,7 +3962,7 @@ function PharmacistDashboard() {
                   </div>
                 ) : null}
               </div>
-              <input
+              <input aria-label="Scan To Restock"
                 ref={scanInputRef}
                 className="pharm-input"
                 placeholder="Scan supply barcode…"
@@ -4004,7 +4004,7 @@ function PharmacistDashboard() {
                       <tr key={s.id}>
                         <td className="pharm-strong">{s.item_name}</td>
                         <td style={{ width: 190 }}>
-                          <input
+                          <input aria-label={`Barcode for ${s.item_name}`}
                             className="pharm-input"
                             placeholder="Scan / type"
                             value={s.barcode || ''}
@@ -4030,7 +4030,7 @@ function PharmacistDashboard() {
                           {!categoryIdsAreNumeric ? (
                             <span>{s.categoryName || '—'}</span>
                           ) : (
-                            <select
+                            <select aria-label={`Category for ${s.item_name}`}
                               className="pharm-select"
                               value={s.categoryId || ''}
                               onChange={async (e) => {
@@ -4252,7 +4252,7 @@ function PharmacistDashboard() {
                         return (
                           <tr key={`${item.type}-${item.id}`}>
                             <td>
-                              <input
+                              <input aria-label={`Select ${item.name} for restock`}
                                 type="checkbox"
                                 checked={Boolean(lowStockSelected[lowStockKey(item)])}
                                 onChange={() => toggleLowStock(item)}
@@ -4545,7 +4545,7 @@ function PharmacistDashboard() {
               <div className="pharm-sales-filters">
                 <div className="pharm-field">
                   <div className="pharm-label">Date Range</div>
-                  <select
+                  <select aria-label="Date Range"
                     className="pharm-select"
                     value={salesPreset}
                     onChange={(e) => {
@@ -4568,11 +4568,11 @@ function PharmacistDashboard() {
                   <>
                     <div className="pharm-field">
                       <div className="pharm-label">From</div>
-                      <input className="pharm-input" type="date" value={salesFrom} onChange={(e) => setSalesFrom(e.target.value)} />
+                      <input aria-label="From" className="pharm-input" type="date" value={salesFrom} onChange={(e) => setSalesFrom(e.target.value)} />
                     </div>
                     <div className="pharm-field">
                       <div className="pharm-label">To</div>
-                      <input className="pharm-input" type="date" value={salesTo} onChange={(e) => setSalesTo(e.target.value)} />
+                      <input aria-label="To" className="pharm-input" type="date" value={salesTo} onChange={(e) => setSalesTo(e.target.value)} />
                     </div>
                   </>
                 )}
@@ -4827,7 +4827,7 @@ function PharmacistDashboard() {
               </div>
               <div className="pharm-field" style={{ marginTop: 12 }}>
                 <div className="pharm-label">Requested Quantity</div>
-                <input
+                <input aria-label="Requested Quantity"
                   type="number"
                   min={1}
                   className="pharm-input"
@@ -4870,7 +4870,7 @@ function PharmacistDashboard() {
                 </div>
                 <div className="pharm-field">
                   <div className="pharm-label">Delivered Qty</div>
-                  <input type="number" min={1} value={restockFulfillQty} onChange={(e) => setRestockFulfillQty(e.target.value)} className="pharm-input" />
+                  <input aria-label="Delivered Qty" type="number" min={1} value={restockFulfillQty} onChange={(e) => setRestockFulfillQty(e.target.value)} className="pharm-input" />
                 </div>
               </div>
             </div>
@@ -4911,18 +4911,18 @@ function PharmacistDashboard() {
               <div className="pharm-modal-grid">
                 <div className="pharm-field">
                   <div className="pharm-label">Mode</div>
-                  <select value={stockMode} onChange={(e) => setStockMode(e.target.value)} className="pharm-input">
+                  <select aria-label="Mode" value={stockMode} onChange={(e) => setStockMode(e.target.value)} className="pharm-input">
                     <option value="add">Add</option>
                     <option value="remove">Remove</option>
                   </select>
                 </div>
                 <div className="pharm-field">
                   <div className="pharm-label">Quantity ({String(stockModal.item.unit || '').trim() || 'pcs'})</div>
-                  <input type="number" min={1} value={stockQty} onChange={(e) => setStockQty(e.target.value)} className="pharm-input" />
+                  <input aria-label={`Quantity in ${String(stockModal.item.unit || '').trim() || 'pieces'}`} type="number" min={1} value={stockQty} onChange={(e) => setStockQty(e.target.value)} className="pharm-input" />
                 </div>
                 <div className="pharm-field">
                   <div className="pharm-label">Reason</div>
-                  <select value={movementReason} onChange={(e) => setMovementReason(e.target.value)} className="pharm-input">
+                  <select aria-label="Reason" value={movementReason} onChange={(e) => setMovementReason(e.target.value)} className="pharm-input">
                     <option value="restock">Restock</option>
                     <option value="dispense">Dispense</option>
                     <option value="manual">Manual</option>
@@ -4930,11 +4930,11 @@ function PharmacistDashboard() {
                 </div>
                 <div className="pharm-field">
                   <div className="pharm-label">Lot (Optional)</div>
-                  <input value={movementLot} onChange={(e) => setMovementLot(e.target.value)} className="pharm-input" placeholder="Lot / batch" />
+                  <input aria-label="Lot (Optional)" value={movementLot} onChange={(e) => setMovementLot(e.target.value)} className="pharm-input" placeholder="Lot / batch" />
                 </div>
                 <div className="pharm-field" style={{ gridColumn: '1 / -1' }}>
                   <div className="pharm-label">Expiry (Optional)</div>
-                  <input type="date" value={movementExpiry} onChange={(e) => setMovementExpiry(e.target.value)} className="pharm-input" />
+                  <input aria-label="Expiry (Optional)" type="date" value={movementExpiry} onChange={(e) => setMovementExpiry(e.target.value)} className="pharm-input" />
                 </div>
               </div>
 
@@ -4994,7 +4994,7 @@ function PharmacistDashboard() {
                     </div>
                     <div className="pharm-rx-qty">
                       <div className="pharm-label">Qty</div>
-                      <input
+                      <input aria-label="Qty"
                         type="number"
                         min={1}
                         className="pharm-input"
@@ -5016,7 +5016,7 @@ function PharmacistDashboard() {
         </div>
       )}
 
-      <input
+      <input aria-label="Upload category image"
         ref={categoryImageInputRef}
         type="file"
         accept="image/*"
@@ -5039,7 +5039,7 @@ function PharmacistDashboard() {
           }
         }}
       />
-      <input
+      <input aria-label="Upload product image"
         ref={productImageInputRef}
         type="file"
         accept="image/*"
@@ -5078,7 +5078,7 @@ function PharmacistDashboard() {
               <div className="pharm-modal-grid">
                 <div className="pharm-field">
                   <div className="pharm-label">New Category</div>
-                  <input
+                  <input aria-label="New Category"
                     className="pharm-input"
                     value={newCategoryName}
                     onChange={(e) => setNewCategoryName(e.target.value)}
@@ -5165,7 +5165,7 @@ function PharmacistDashboard() {
               <div className="pharm-modal-grid">
                 <div className="pharm-field">
                   <div className="pharm-label">Type</div>
-                  <select
+                  <select aria-label="Type"
                     className="pharm-select"
                     value={newProductForm.type}
                     onChange={(e) => setNewProductForm((p) => ({ ...p, type: e.target.value }))}
@@ -5176,7 +5176,7 @@ function PharmacistDashboard() {
                 </div>
                 <div className="pharm-field">
                   <div className="pharm-label">Barcode</div>
-                  <input
+                  <input aria-label="Barcode"
                     ref={barcodeInputRef}
                     className="pharm-input"
                     value={newProductForm.barcode}
@@ -5186,7 +5186,7 @@ function PharmacistDashboard() {
                 </div>
                 <div className="pharm-field">
                   <div className="pharm-label">Category</div>
-                  <select
+                  <select aria-label="Category"
                     className="pharm-select"
                     value={newProductForm.categoryId}
                     onChange={(e) => setNewProductForm((p) => ({ ...p, categoryId: e.target.value }))}
@@ -5199,7 +5199,7 @@ function PharmacistDashboard() {
                 </div>
                 <div className="pharm-field" style={{ gridColumn: '1 / -1' }}>
                   <div className="pharm-label">Product Name</div>
-                  <input
+                  <input aria-label="Product Name"
                     className="pharm-input"
                     value={newProductForm.name}
                     onChange={(e) => setNewProductForm((p) => ({ ...p, name: e.target.value }))}
@@ -5208,7 +5208,7 @@ function PharmacistDashboard() {
                 </div>
                 <div className="pharm-field">
                   <div className="pharm-label">Stock</div>
-                  <input
+                  <input aria-label="Stock"
                     className="pharm-input"
                     type="number"
                     min="0"
@@ -5218,7 +5218,7 @@ function PharmacistDashboard() {
                 </div>
                 <div className="pharm-field">
                   <div className="pharm-label">Min Level</div>
-                  <input
+                  <input aria-label="Min Level"
                     className="pharm-input"
                     type="number"
                     min="0"
@@ -5228,7 +5228,7 @@ function PharmacistDashboard() {
                 </div>
                 <div className="pharm-field">
                   <div className="pharm-label">Unit</div>
-                  <input
+                  <input aria-label="Unit"
                     className="pharm-input"
                     value={newProductForm.unit}
                     onChange={(e) => setNewProductForm((p) => ({ ...p, unit: e.target.value }))}
@@ -5237,7 +5237,7 @@ function PharmacistDashboard() {
                 </div>
                 <div className="pharm-field">
                   <div className="pharm-label">Price</div>
-                  <input
+                  <input aria-label="Price"
                     className="pharm-input"
                     type="number"
                     min="0"
@@ -5284,7 +5284,7 @@ function PharmacistDashboard() {
               {scanAssignModal.kind === 'auto' ? (
                 <div className="pharm-field" style={{ marginTop: 12 }}>
                   <div className="pharm-label">Type</div>
-                  <select
+                  <select aria-label="Type"
                     className="pharm-select"
                     value={scanAssignKindChoice}
                     onChange={(e) => {
@@ -5299,7 +5299,7 @@ function PharmacistDashboard() {
               ) : null}
               <div className="pharm-field" style={{ marginTop: 12 }}>
                 <div className="pharm-label">Assign To Existing Item</div>
-                <select
+                <select aria-label="Assign To Existing Item"
                   className="pharm-select"
                   value={scanAssignTarget?.id || ''}
                   onChange={(e) => {
@@ -5388,7 +5388,7 @@ function PharmacistDashboard() {
               <div className="pharm-modal-grid">
                 <div className="pharm-field">
                   <div className="pharm-label">Mode</div>
-                  <select value={scanMode} onChange={(e) => setScanMode(e.target.value)} className="pharm-input">
+                  <select aria-label="Mode" value={scanMode} onChange={(e) => setScanMode(e.target.value)} className="pharm-input">
                     <option value="restock">Restock (Add)</option>
                     <option value="dispense">Dispense (Subtract)</option>
                     <option value="find">Find Only</option>
@@ -5396,7 +5396,7 @@ function PharmacistDashboard() {
                 </div>
                 <div className="pharm-field">
                   <div className="pharm-label">Type</div>
-                  <select value={scanCenterKind} onChange={(e) => setScanCenterKind(e.target.value)} className="pharm-input">
+                  <select aria-label="Type" value={scanCenterKind} onChange={(e) => setScanCenterKind(e.target.value)} className="pharm-input">
                     <option value="auto">Auto (Try both)</option>
                     <option value="medicine">Medicines</option>
                     <option value="supply">Supplies</option>
@@ -5441,7 +5441,7 @@ function PharmacistDashboard() {
               <div className="pharm-field" style={{ marginTop: 10 }}>
                 <div className="pharm-label">Scan Barcode</div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <input
+                  <input aria-label="Scan barcode…"
                     ref={scanInputRef}
                     className="pharm-input"
                     placeholder="Scan barcode…"
@@ -5485,7 +5485,7 @@ function PharmacistDashboard() {
                           <div className="pharm-cart-item-note" style={{ fontWeight: 900, color: '#0f172a' }}>
                             {q.name} <span style={{ color: '#64748b', fontWeight: 800 }}>({q.kind})</span>
                           </div>
-                          <input
+                          <input aria-label="Qty"
                             className="pharm-input"
                             type="number"
                             min="1"
@@ -5495,13 +5495,13 @@ function PharmacistDashboard() {
                               setScanQueue((prev) => prev.map((x) => (x.key === q.key ? { ...x, qty: v } : x)));
                             }}
                           />
-                          <input
+                          <input aria-label="Lot"
                             className="pharm-input"
                             placeholder="Lot"
                             value={q.lot}
                             onChange={(e) => setScanQueue((prev) => prev.map((x) => (x.key === q.key ? { ...x, lot: e.target.value } : x)))}
                           />
-                          <input
+                          <input aria-label="Expiry"
                             className="pharm-input"
                             type="date"
                             value={q.expiry}
