@@ -4120,7 +4120,7 @@ body.compact-mode .workspace-queue-item {
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 700;
-  color: var(--nurse-text-light);
+  color: var(--nurse-text-dark);
 }
 
 .kanban-list {

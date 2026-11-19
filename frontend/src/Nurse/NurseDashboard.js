@@ -7172,7 +7172,9 @@ function NurseDashboard() {
                                     </button>
                                 </div>
                             </div>
+                            <label className="nurse-visually-hidden" htmlFor="nurse-shift-handover-notes">Shift handover notes</label>
                             <textarea 
+                                id="nurse-shift-handover-notes"
                                 className="box-input box-textarea" 
                                 style={{height: '120px', border: '1px solid #cbd5e1', background: '#f8fafc', resize: 'none', borderRadius: '12px', padding: '16px', fontSize: '0.95rem'}}
                                 value={shiftNotes}
@@ -7180,12 +7182,12 @@ function NurseDashboard() {
                                 placeholder="Write the live shift handover for the next nurse..."
                             />
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginTop: '16px', alignItems: 'center' }}>
-                                <div style={{ fontSize: '0.86rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <div style={{ fontSize: '0.86rem', color: 'var(--nurse-text-dark)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <Clock size={14} />
                                     {handoverHistory[0]?.created_by_name
                                       ? `Latest by ${handoverHistory[0].created_by_name} • ${new Date(handoverHistory[0].updated_at || handoverHistory[0].created_at).toLocaleString()}`
                                       : 'No saved handover yet.'}
-                                    {handoverDirty ? <span className="handover-unsaved-badge">Unsaved draft</span> : null}
+                                    {handoverDirty ? <span className="handover-unsaved-badge" role="status" aria-live="polite">Unsaved draft</span> : null}
                                 </div>
                                 <div className="handover-footer-actions">
                                     {handoverDirty ? <button className="btn-gray" type="button" onClick={reloadLatestHandover} disabled={handoverLoading}><RotateCw size={14} /> Reload latest</button> : null}
@@ -8824,15 +8826,19 @@ function NurseDashboard() {
                               <h2 className="page-title">{NURSE_SIDEBAR_LABELS.tasks}</h2>
                               <p className="page-subtitle">Shared board for {user.departmentLabel || formatDepartmentLabel(activeDept)} • {currentShiftLabel}</p>
                         </div>
-                        <form onSubmit={addTask} className="quick-task-form">
+                        <form onSubmit={addTask} className="quick-task-form" aria-label="Add a shared task">
+                            <label className="nurse-visually-hidden" htmlFor="nurse-new-task">New task</label>
                             <input 
+                                id="nurse-new-task"
                                 type="text" 
                                 placeholder="Add new task..." 
                                 value={newTaskText}
                                 onChange={(e) => setNewTaskText(e.target.value)}
                                 className="task-input"
                             />
+                            <label className="nurse-visually-hidden" htmlFor="nurse-task-priority">Task priority</label>
                             <select 
+                                id="nurse-task-priority"
                                 value={newTaskPriority} 
                                 onChange={(e) => setNewTaskPriority(e.target.value)}
                                 className="task-select"
@@ -8841,12 +8847,12 @@ function NurseDashboard() {
                                 <option value="routine">Routine</option>
                                 <option value="handover">Handover</option>
                             </select>
-                            <button type="submit" className="btn-add-task"><Plus size={18} /></button>
+                            <button type="submit" className="btn-add-task" aria-label="Add task"><Plus size={18} /></button>
                         </form>
                     </div>
 
-                    {tasksError ? <div className="admin-alert error" style={{ marginBottom: 16 }}>{tasksError}</div> : null}
-                    {tasksLoading ? <div style={{ marginBottom: 16, color: '#64748b', fontWeight: 600 }}>Loading shared tasks...</div> : null}
+                    {tasksError ? <div className="admin-alert error" role="alert" style={{ marginBottom: 16 }}>{tasksError}</div> : null}
+                    {tasksLoading ? <div role="status" aria-live="polite" style={{ marginBottom: 16, color: '#64748b', fontWeight: 600 }}>Loading shared tasks...</div> : null}
 
                     <div className="kanban-board">
                         {/* Urgent Column */}
@@ -8858,17 +8864,17 @@ function NurseDashboard() {
                             </div>
                             <div className="kanban-list">
                                 {tasks.filter(t => t.priority === 'urgent').length === 0 ? (
-                                    <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', border: '1px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc', fontSize: '0.85rem' }}>No urgent tasks.</div>
+                                    <div style={{ padding: '24px', textAlign: 'center', color: 'var(--nurse-text-dark)', border: '1px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc', fontSize: '0.85rem' }}>No urgent tasks.</div>
                                 ) : (
                                     tasks.filter(t => t.priority === 'urgent').map(task => (
                                         <div key={task.id} className="kanban-card card-urgent">
                                             <div className="card-top">
                                                 <span className="card-time">{task.time}</span>
-                                                <button className="btn-icon-small" onClick={() => deleteTask(task.id)}><X size={14} /></button>
+                                                <button type="button" className="btn-icon-small" onClick={() => deleteTask(task.id)} aria-label={`Delete task: ${task.text}`}><X size={14} /></button>
                                             </div>
                                             <p className="card-text">{task.text}</p>
                                             <div className="card-actions">
-                                                <button className="btn-move" onClick={() => moveTask(task.id, 'routine')}>→</button>
+                                                <button type="button" className="btn-move" onClick={() => moveTask(task.id, 'routine')} aria-label={`Move task to Routine: ${task.text}`}>→</button>
                                             </div>
                                         </div>
                                     ))
@@ -8885,18 +8891,18 @@ function NurseDashboard() {
                             </div>
                             <div className="kanban-list">
                                 {tasks.filter(t => t.priority === 'routine').length === 0 ? (
-                                    <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', border: '1px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc', fontSize: '0.85rem' }}>No routine tasks.</div>
+                                    <div style={{ padding: '24px', textAlign: 'center', color: 'var(--nurse-text-dark)', border: '1px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc', fontSize: '0.85rem' }}>No routine tasks.</div>
                                 ) : (
                                     tasks.filter(t => t.priority === 'routine').map(task => (
                                         <div key={task.id} className="kanban-card card-routine">
                                             <div className="card-top">
                                                 <span className="card-time">{task.time}</span>
-                                                <button className="btn-icon-small" onClick={() => deleteTask(task.id)}><X size={14} /></button>
+                                                <button type="button" className="btn-icon-small" onClick={() => deleteTask(task.id)} aria-label={`Delete task: ${task.text}`}><X size={14} /></button>
                                             </div>
                                             <p className="card-text">{task.text}</p>
                                             <div className="card-actions">
-                                                <button className="btn-move" onClick={() => moveTask(task.id, 'urgent')}>←</button>
-                                                <button className="btn-move" onClick={() => moveTask(task.id, 'handover')}>→</button>
+                                                <button type="button" className="btn-move" onClick={() => moveTask(task.id, 'urgent')} aria-label={`Move task to Urgent: ${task.text}`}>←</button>
+                                                <button type="button" className="btn-move" onClick={() => moveTask(task.id, 'handover')} aria-label={`Move task to Handover: ${task.text}`}>→</button>
                                             </div>
                                         </div>
                                     ))
@@ -8913,17 +8919,17 @@ function NurseDashboard() {
                             </div>
                             <div className="kanban-list">
                                 {tasks.filter(t => t.priority === 'handover').length === 0 ? (
-                                    <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', border: '1px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc', fontSize: '0.85rem' }}>No handover tasks.</div>
+                                    <div style={{ padding: '24px', textAlign: 'center', color: 'var(--nurse-text-dark)', border: '1px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc', fontSize: '0.85rem' }}>No handover tasks.</div>
                                 ) : (
                                     tasks.filter(t => t.priority === 'handover').map(task => (
                                         <div key={task.id} className="kanban-card card-handover">
                                             <div className="card-top">
                                                 <span className="card-time">{task.time}</span>
-                                                <button className="btn-icon-small" onClick={() => deleteTask(task.id)}><X size={14} /></button>
+                                                <button type="button" className="btn-icon-small" onClick={() => deleteTask(task.id)} aria-label={`Delete task: ${task.text}`}><X size={14} /></button>
                                             </div>
                                             <p className="card-text">{task.text}</p>
                                             <div className="card-actions">
-                                                <button className="btn-move" onClick={() => moveTask(task.id, 'routine')}>←</button>
+                                                <button type="button" className="btn-move" onClick={() => moveTask(task.id, 'routine')} aria-label={`Move task to Routine: ${task.text}`}>←</button>
                                             </div>
                                         </div>
                                     ))
@@ -9033,8 +9039,10 @@ function NurseDashboard() {
                     </div>
                     
                     {/* Add Event Form */}
-                    <form onSubmit={handleAddEvent} className="quick-task-form" style={{marginBottom: '20px'}}>
+                    <form onSubmit={handleAddEvent} className="quick-task-form" style={{marginBottom: '20px'}} aria-label="Add calendar event">
+                        <label className="nurse-visually-hidden" htmlFor="nurse-calendar-event-title">Event title</label>
                         <input 
+                            id="nurse-calendar-event-title"
                             type="text" 
                             placeholder="Event title..." 
                             value={newEventTitle}
@@ -9042,7 +9050,9 @@ function NurseDashboard() {
                             className="task-input"
                             style={{width: '200px'}}
                         />
+                        <label className="nurse-visually-hidden" htmlFor="nurse-calendar-event-day">Day of month</label>
                         <input 
+                            id="nurse-calendar-event-day"
                             type="number" 
                             placeholder="Day (1-31)" 
                             value={newEventDay}
@@ -9051,14 +9061,18 @@ function NurseDashboard() {
                             style={{width: '100px'}}
                             min="1" max="31"
                         />
+                        <label className="nurse-visually-hidden" htmlFor="nurse-calendar-event-time">Event time</label>
                         <input 
+                            id="nurse-calendar-event-time"
                             type="time" 
                             value={newEventTime}
                             onChange={(e) => setNewEventTime(e.target.value)}
                             className="task-input"
                             style={{width: '110px'}}
                         />
+                        <label className="nurse-visually-hidden" htmlFor="nurse-calendar-event-type">Event type</label>
                         <select 
+                            id="nurse-calendar-event-type"
                             value={newEventType} 
                             onChange={(e) => setNewEventType(e.target.value)}
                             className="task-select"
@@ -9067,19 +9081,19 @@ function NurseDashboard() {
                             <option value="shift">Shift</option>
                             <option value="off">Off Duty</option>
                         </select>
-                        <button type="submit" className="btn-add-task" disabled={calendarSaving || calendarLoading} title="Add calendar event"><Plus size={18} /></button>
+                        <button type="submit" className="btn-add-task" disabled={calendarSaving || calendarLoading} title="Add calendar event" aria-label="Add calendar event"><Plus size={18} /></button>
                     </form>
 
-                    {calendarEventError ? <div style={{ marginBottom: '12px', color: '#b45309', fontSize: '0.82rem' }}>{calendarEventError}</div> : null}
-                    {calendarLoading ? <div style={{ marginBottom: '12px', color: '#64748b', fontSize: '0.82rem' }}>Loading your calendar…</div> : null}
+                    {calendarEventError ? <div role="alert" style={{ marginBottom: '12px', color: '#92400e', fontSize: '0.82rem' }}>{calendarEventError}</div> : null}
+                    {calendarLoading ? <div role="status" aria-live="polite" style={{ marginBottom: '12px', color: 'var(--nurse-text-dark)', fontSize: '0.82rem' }}>Loading your calendar…</div> : null}
 
-                    <div className="calendar-grid-wrapper">
+                    <div className="calendar-grid-wrapper" role="group" aria-label={`${currentDate.toLocaleDateString('default', { month: 'long', year: 'numeric' })} calendar`}>
                         <div className="calendar-weekdays">
-                            <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+                            <div aria-label="Sunday">Sun</div><div aria-label="Monday">Mon</div><div aria-label="Tuesday">Tue</div><div aria-label="Wednesday">Wed</div><div aria-label="Thursday">Thu</div><div aria-label="Friday">Fri</div><div aria-label="Saturday">Sat</div>
                         </div>
                         <div className="calendar-days">
                             {Array.from({ length: getFirstDayOfMonth(currentDate) }).map((_, i) => (
-                                <div key={`empty-${i}`} className="calendar-day empty"></div>
+                                <div key={`empty-${i}`} className="calendar-day empty" aria-hidden="true"></div>
                             ))}
                             {Array.from({ length: getDaysInMonth(currentDate) }).map((_, i) => {
                                 const day = i + 1;
@@ -9087,7 +9101,7 @@ function NurseDashboard() {
                                 const isToday = day === new Date().getDate() && currentDate.getMonth() === new Date().getMonth();
                                 
                                 return (
-                                    <div key={day} className={`calendar-day ${isToday ? 'today' : ''}`}>
+                                    <div key={day} className={`calendar-day ${isToday ? 'today' : ''}`} role="group" aria-label={`${new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toLocaleDateString('default', { dateStyle: 'full' })}${isToday ? ', today' : ''}, ${events.length} ${events.length === 1 ? 'event' : 'events'}`}>
                                         <span className="day-number">{day}</span>
                                         <div className="day-events">
                                             {events.map(ev => (
