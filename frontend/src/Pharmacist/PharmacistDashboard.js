@@ -18,7 +18,7 @@ const SafeProductImage = ({ src, alt, className, fallback }) => {
   }, [src]);
 
   if (!src || failed) return fallback;
-  return <img className={className} src={src} alt={alt} onError={() => setFailed(true)} />;
+  return <img className={className} src={src} alt={alt} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
 };
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -505,20 +505,19 @@ function PharmacistDashboard() {
         </head>
         <body>
           <div class="print-actions">
-            <button type="button" onclick="window.close()">Close</button>
-            <button type="button" class="primary" onclick="window.print()">Print Report</button>
+            <button type="button" id="close-report">Close</button>
+            <button type="button" id="print-report" class="primary">Print Report</button>
           </div>
           ${htmlBody || ''}
-          <script>
-            window.addEventListener('load', function () {
-              window.setTimeout(function () { window.focus(); window.print(); }, 150);
-            });
-          </script>
         </body>
       </html>
     `);
     w.document.close();
+    w.document.title = String(title || 'Sales Report');
+    w.document.getElementById('close-report')?.addEventListener('click', () => w.close());
+    w.document.getElementById('print-report')?.addEventListener('click', () => w.print());
     w.focus();
+    w.setTimeout(() => w.print(), 150);
   };
 
   const notifyApiDown = (fallbackText) => {
@@ -2729,37 +2728,37 @@ function PharmacistDashboard() {
       <aside className={`pharm-sidebar ${isCollapsed ? 'collapsed' : ''}`} onClick={(event) => { if (window.innerWidth <= 1024 && event.target.closest('.pharm-nav-item')) setIsCollapsed(true); }}>
         <div className="pharm-sidebar-head">
           <div className="pharm-brand">
-            <img className="pharm-brand-logo" src="/images/pgh%20logo.png" alt="PASCUALINGA" />
+            <img className="pharm-brand-logo" src="/images/pgh-logo-96.webp" width="36" height="36" decoding="async" fetchPriority="high" alt="PASCUALINGA" />
             {!isCollapsed ? <span className="pharm-brand-text">PASCUALINGA</span> : null}
           </div>
-          <button type="button" className="pharm-sidebar-toggle" onClick={() => setIsCollapsed((v) => !v)}>
+          <button type="button" className="pharm-sidebar-toggle" onClick={() => setIsCollapsed((v) => !v)} aria-label={isCollapsed ? 'Expand pharmacist navigation' : 'Collapse pharmacist navigation'} aria-expanded={!isCollapsed}>
             <Menu size={18} />
           </button>
         </div>
 
         <nav className="pharm-nav">
-          <button type="button" className={`pharm-nav-item ${activeTab === 'pos' ? 'active' : ''}`} onClick={() => setActiveTab('pos')}>
+          <button type="button" className={`pharm-nav-item ${activeTab === 'pos' ? 'active' : ''}`} onClick={() => setActiveTab('pos')} aria-label="Dashboard" aria-current={activeTab === 'pos' ? 'page' : undefined}>
             <ShoppingCart size={20} />
             {!isCollapsed && <span>Dashboard</span>}
           </button>
           {!isCollapsed && <div className="pharm-nav-group-title">Inventory</div>}
-          <button type="button" className="pharm-nav-item" onClick={() => setScanCenterOpen(true)}>
+          <button type="button" className="pharm-nav-item" onClick={() => setScanCenterOpen(true)} aria-label="Scan Center">
             <QrCode size={20} />
             {!isCollapsed && <span>Scan Center</span>}
           </button>
-          <button type="button" className={`pharm-nav-item ${activeTab === 'medicines' ? 'active' : ''}`} onClick={() => setActiveTab('medicines')}>
+          <button type="button" className={`pharm-nav-item ${activeTab === 'medicines' ? 'active' : ''}`} onClick={() => setActiveTab('medicines')} aria-label="Medicines" aria-current={activeTab === 'medicines' ? 'page' : undefined}>
             <Pill size={20} />
             {!isCollapsed && <span>Medicines</span>}
           </button>
-          <button type="button" className={`pharm-nav-item ${activeTab === 'supplies' ? 'active' : ''}`} onClick={() => setActiveTab('supplies')}>
+          <button type="button" className={`pharm-nav-item ${activeTab === 'supplies' ? 'active' : ''}`} onClick={() => setActiveTab('supplies')} aria-label="Supplies" aria-current={activeTab === 'supplies' ? 'page' : undefined}>
             <Package size={20} />
             {!isCollapsed && <span>Supplies</span>}
           </button>
-          <button type="button" className={`pharm-nav-item ${activeTab === 'requests' ? 'active' : ''}`} onClick={() => setActiveTab('requests')}>
+          <button type="button" className={`pharm-nav-item ${activeTab === 'requests' ? 'active' : ''}`} onClick={() => setActiveTab('requests')} aria-label="Requests" aria-current={activeTab === 'requests' ? 'page' : undefined}>
             <ClipboardList size={20} />
             {!isCollapsed && <span>Requests</span>}
           </button>
-          <button type="button" className={`pharm-nav-item ${activeTab === 'restocks' ? 'active' : ''}`} onClick={() => setActiveTab('restocks')}>
+          <button type="button" className={`pharm-nav-item ${activeTab === 'restocks' ? 'active' : ''}`} onClick={() => setActiveTab('restocks')} aria-label="Stock Alerts" aria-current={activeTab === 'restocks' ? 'page' : undefined}>
             <Bell size={20} />
             {!isCollapsed && (
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2786,7 +2785,7 @@ function PharmacistDashboard() {
               </span>
             )}
           </button>
-          <button type="button" className={`pharm-nav-item ${activeTab === 'sales' ? 'active' : ''}`} onClick={() => setActiveTab('sales')}>
+          <button type="button" className={`pharm-nav-item ${activeTab === 'sales' ? 'active' : ''}`} onClick={() => setActiveTab('sales')} aria-label="Sales Reports" aria-current={activeTab === 'sales' ? 'page' : undefined}>
             <BarChart3 size={20} />
             {!isCollapsed && <span>Sales Reports</span>}
           </button>
@@ -2973,6 +2972,7 @@ function PharmacistDashboard() {
                         <button
                           type="button"
                           className="toggle-password-btn"
+                            aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
                           onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                         >
                           {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -2995,6 +2995,7 @@ function PharmacistDashboard() {
                         <button
                           type="button"
                           className="toggle-password-btn"
+                            aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
                           onClick={() => setShowNewPassword(!showNewPassword)}
                         >
                           {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -3032,6 +3033,7 @@ function PharmacistDashboard() {
                         <button
                           type="button"
                           className="toggle-password-btn"
+                            aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                         >
                           {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -3211,6 +3213,7 @@ function PharmacistDashboard() {
                   <input 
                     type="text" 
                     placeholder="Search products by name or category..." 
+                    aria-label="Search products by name or category"
                     className="pharm-pos-input"
                     value={posSearch}
                     onChange={(e) => setPosSearch(e.target.value)}
@@ -3318,6 +3321,7 @@ function PharmacistDashboard() {
                             <button
                               type="button"
                               className="pharm-pos-add-btn"
+                              aria-label={`Add ${item.name} to cart`}
                               onClick={() => addToCart(item, item.type)}
                               disabled={item.stock <= 0 || item.expiryMeta?.isExpired}
                             >
@@ -3368,7 +3372,7 @@ function PharmacistDashboard() {
                           ))}
                         </div>
                         <div className="pharm-cart-qty-ctrl">
-                          <button onClick={() => updateCartQty(item.id, item.type, item.quantity - 1)} className="pharm-qty-btn">
+                          <button type="button" onClick={() => updateCartQty(item.id, item.type, item.quantity - 1)} className="pharm-qty-btn" aria-label={`Decrease ${item.name} quantity`}>
                             <Minus size={14} />
                           </button>
                           <input 
@@ -3377,14 +3381,14 @@ function PharmacistDashboard() {
                             value={item.quantity} 
                             onChange={(e) => updateCartQty(item.id, item.type, e.target.value)}
                           />
-                          <button onClick={() => updateCartQty(item.id, item.type, item.quantity + 1)} className="pharm-qty-btn">
+                          <button type="button" onClick={() => updateCartQty(item.id, item.type, item.quantity + 1)} className="pharm-qty-btn" aria-label={`Increase ${item.name} quantity`}>
                             <Plus size={14} />
                           </button>
                         </div>
                         <div className="pharm-cart-item-total">
                           ₱{(item.price * item.quantity).toLocaleString()}
                         </div>
-                        <button onClick={() => removeFromCart(item.id, item.type)} className="pharm-cart-remove">
+                        <button type="button" onClick={() => removeFromCart(item.id, item.type)} className="pharm-cart-remove" aria-label={`Remove ${item.name} from cart`}>
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -4779,7 +4783,7 @@ function PharmacistDashboard() {
           <div className="pharm-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="pharm-modal-head">
               <div className="pharm-modal-title">Request Restock</div>
-              <button className="pharm-icon-btn" type="button" onClick={() => (restockRequestSaving ? null : setRestockRequestModal(null))}>
+              <button className="pharm-icon-btn" type="button" aria-label="Close restock request" onClick={() => (restockRequestSaving ? null : setRestockRequestModal(null))}>
                 <X size={18} />
               </button>
             </div>
@@ -4835,7 +4839,7 @@ function PharmacistDashboard() {
           <div className="pharm-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="pharm-modal-head">
               <div className="pharm-modal-title">Fulfill Restock</div>
-              <button className="pharm-icon-btn" type="button" onClick={() => (restockSaving ? null : setRestockFulfillModal(null))}>
+              <button className="pharm-icon-btn" type="button" aria-label="Close fulfill restock" onClick={() => (restockSaving ? null : setRestockFulfillModal(null))}>
                 <X size={18} />
               </button>
             </div>
@@ -4870,7 +4874,7 @@ function PharmacistDashboard() {
           <div className="pharm-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="pharm-modal-head">
               <div className="pharm-modal-title">Adjust Stock</div>
-              <button className="pharm-icon-btn" type="button" onClick={() => (stockSaving ? null : setStockModal(null))}>
+              <button className="pharm-icon-btn" type="button" aria-label="Close stock adjustment" onClick={() => (stockSaving ? null : setStockModal(null))}>
                 <X size={18} />
               </button>
             </div>
@@ -4952,7 +4956,7 @@ function PharmacistDashboard() {
           <div className="pharm-modal-card wide" onClick={(e) => e.stopPropagation()}>
             <div className="pharm-modal-head">
               <div className="pharm-modal-title">Dispense Prescription</div>
-              <button className="pharm-icon-btn" type="button" onClick={() => (rxSaving ? null : setRxModal(null))}>
+              <button className="pharm-icon-btn" type="button" aria-label="Close prescription" onClick={() => (rxSaving ? null : setRxModal(null))}>
                 <X size={18} />
               </button>
             </div>
@@ -5051,7 +5055,7 @@ function PharmacistDashboard() {
                 <FileText size={20} />
                 Manage Categories
               </div>
-              <button className="pharm-icon-btn" type="button" onClick={() => setShowCategoryManager(false)}>
+              <button className="pharm-icon-btn" type="button" aria-label="Close category manager" onClick={() => setShowCategoryManager(false)}>
                 <X size={18} />
               </button>
             </div>
@@ -5136,7 +5140,7 @@ function PharmacistDashboard() {
                 <Plus size={20} />
                 Add New Product
               </div>
-              <button className="pharm-icon-btn" type="button" onClick={() => setShowAddProductModal(false)} disabled={productSaving}>
+              <button className="pharm-icon-btn" type="button" aria-label="Close add product" onClick={() => setShowAddProductModal(false)} disabled={productSaving}>
                 <X size={18} />
               </button>
             </div>
@@ -5253,7 +5257,7 @@ function PharmacistDashboard() {
           <div className="pharm-modal-card wide" onClick={(e) => e.stopPropagation()}>
             <div className="pharm-modal-head">
               <div className="pharm-modal-title">Barcode Not Registered</div>
-              <button className="pharm-icon-btn" type="button" onClick={() => { setScanAssignModal(null); setScanAssignTarget(null); setScanAssignKindChoice('medicine'); }}>
+              <button className="pharm-icon-btn" type="button" aria-label="Close scan assignment" onClick={() => { setScanAssignModal(null); setScanAssignTarget(null); setScanAssignKindChoice('medicine'); }}>
                 <X size={18} />
               </button>
             </div>
@@ -5361,7 +5365,7 @@ function PharmacistDashboard() {
           <div className="pharm-modal-card wide" onClick={(e) => e.stopPropagation()}>
             <div className="pharm-modal-head">
               <div className="pharm-modal-title">Scan Center</div>
-              <button className="pharm-icon-btn" type="button" onClick={() => setScanCenterOpen(false)}>
+              <button className="pharm-icon-btn" type="button" aria-label="Close scan center" onClick={() => setScanCenterOpen(false)}>
                 <X size={18} />
               </button>
             </div>
@@ -5488,7 +5492,7 @@ function PharmacistDashboard() {
                             value={q.expiry}
                             onChange={(e) => setScanQueue((prev) => prev.map((x) => (x.key === q.key ? { ...x, expiry: e.target.value } : x)))}
                           />
-                          <button type="button" className="pharm-icon-btn" onClick={() => setScanQueue((prev) => prev.filter((x) => x.key !== q.key))}>
+                          <button type="button" className="pharm-icon-btn" aria-label={`Remove ${q.code} from scan queue`} onClick={() => setScanQueue((prev) => prev.filter((x) => x.key !== q.key))}>
                             <X size={16} />
                           </button>
                         </div>
@@ -5533,7 +5537,7 @@ function PharmacistDashboard() {
           <div className="pharm-modal-card lg" onClick={(e) => e.stopPropagation()}>
             <div className="pharm-modal-head">
               <div className="pharm-modal-title">Transaction Details</div>
-              <button className="pharm-icon-btn" type="button" onClick={() => (saleDetailsLoading ? null : setSaleDetails(null))}>
+              <button className="pharm-icon-btn" type="button" aria-label="Close sale details" onClick={() => (saleDetailsLoading ? null : setSaleDetails(null))}>
                 <X size={18} />
               </button>
             </div>
@@ -5643,7 +5647,7 @@ function PharmacistDashboard() {
                 <ReceiptText size={20} />
                 Transaction Receipt
               </div>
-              <button className="pharm-icon-btn" type="button" onClick={() => setShowReceipt(null)}>
+              <button className="pharm-icon-btn" type="button" aria-label="Close receipt" onClick={() => setShowReceipt(null)}>
                 <X size={18} />
               </button>
             </div>
