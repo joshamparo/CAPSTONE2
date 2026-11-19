@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { User, Lock, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, XCircle } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { User, Lock, ArrowLeft, Eye, EyeOff, Pause, Play } from 'lucide-react';
 import './Login.css';
 import PrivacyConsentModal, { hasPrivacyConsent } from '../components/PrivacyConsentModal';
 
@@ -8,17 +8,17 @@ const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
 const slides = [
   {
-    image: "/images/IMG_20260126_104733_949.jpg",
+    image: "/images/login-hospital-1.jpg",
     title: "PASCUALINGA",
     subtitle: "Trusted care, guided by compassion and innovation."
   },
   {
-    image: "/images/IMG_20260126_112706_079.jpg",
+    image: "/images/login-hospital-2.jpg",
     title: "Inside the Hospital",
     subtitle: "Dedicated professionals, your health partners."
   },
   {
-    image: "/images/IMG_20260126_112858_791.jpg",
+    image: "/images/login-hospital-3.jpg",
     title: "Modern Facilities",
     subtitle: "Equipped with the latest medical technology for your safety."
   }
@@ -32,6 +32,9 @@ const Login = () => {
   const [success, setSuccess] = useState('');
   const [firstCharNotice, setFirstCharNotice] = useState('');
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [isSlidePaused, setIsSlidePaused] = useState(() => (
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  ));
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [isLockedOut, setIsLockedOut] = useState(false);
   const [lockoutTimer, setLockoutTimer] = useState(0);
@@ -70,11 +73,17 @@ const Login = () => {
       setLoginAttempts(attempts);
     }
 
-    const slideInterval = setInterval(() => {
-      setCurrentSlide((prev) => (prev === slides.length - 1 ? 0 : prev + 1));
-    }, 5000);
-    return () => clearInterval(slideInterval);
   }, []);
+
+  useEffect(() => {
+    if (isSlidePaused) return undefined;
+    const slideInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setCurrentSlide((prev) => (prev === slides.length - 1 ? 0 : prev + 1));
+      }
+    }, 6000);
+    return () => clearInterval(slideInterval);
+  }, [isSlidePaused]);
 
   useEffect(() => {
     let timer;
@@ -209,23 +218,25 @@ const Login = () => {
         {/* Left Side: Form */}
         <div className="login-form-section">
           <div className="login-header">
-            <img 
-              src={process.env.PUBLIC_URL + "/images/pgh logo.png"} 
+            <img
+              src={process.env.PUBLIC_URL + "/images/login-pgh-logo.png"}
               alt="PGH Logo" 
+              width="60"
+              height="60"
               className="brand-logo" 
             />
-            <h2>Welcome Back</h2>
+            <h1>Welcome Back</h1>
             <p className="subtitle">Please sign in to continue</p>
           </div>
 
           <div className="alerts-slot">
             {error && (
-              <div className="alert error">
+              <div className="alert error" role="alert" aria-live="assertive">
                 <p>{error}</p>
               </div>
             )}
             {success && (
-              <div className="alert success">
+              <div className="alert success" role="status" aria-live="polite">
                 <p>{success}</p>
               </div>
             )}
@@ -234,15 +245,20 @@ const Login = () => {
           <form onSubmit={handleLogin} className="login-form">
             <div className="form-group">
               <div className="label-row">
-                <label>Email Address</label>
+                <label htmlFor="login-email">Email Address</label>
                 {firstCharNotice && (
-                  <span className="login-field-notice">{firstCharNotice}</span>
+                  <span className="login-field-notice" id="login-email-notice">{firstCharNotice}</span>
                 )}
               </div>
               <div className="input-wrapper">
                 <User className="field-icon" size={20} />
                 <input 
-                  type="text" 
+                  id="login-email"
+                  name="email"
+                  type="email"
+                  autoComplete="username"
+                  aria-describedby={firstCharNotice ? 'login-email-notice' : undefined}
+                  required
                   placeholder="Enter your email" 
                   value={email}
                   onChange={handleEmailChange}
@@ -252,11 +268,15 @@ const Login = () => {
             </div>
 
             <div className="form-group">
-              <label>Password</label>
+              <label htmlFor="login-password">Password</label>
               <div className="input-wrapper">
                 <Lock className="field-icon" size={20} />
                 <input 
+                  id="login-password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  required
                   placeholder="Enter your password" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -265,6 +285,8 @@ const Login = () => {
                 <button 
                   type="button"
                   className="toggle-password"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -273,9 +295,9 @@ const Login = () => {
             </div>
 
             <div className="form-actions">
-              <span className="forgot-link" onClick={() => navigate('/recovery')}>
+              <Link className="forgot-link" to="/recovery">
                 Forgot password?
-              </span>
+              </Link>
             </div>
 
             <button type="submit" className="submit-btn" disabled={isLockedOut || isSubmitting}>
@@ -292,32 +314,48 @@ const Login = () => {
         </div>
 
         {/* Right Side: Slideshow */}
-        <div className="login-slideshow-section">
+        <div className="login-slideshow-section" role="region" aria-label="Hospital highlights">
           {slides.map((slide, index) => (
             <div 
               key={index} 
               className={`login-slide ${index === currentSlide ? "active" : ""}`}
             >
               <img 
-                src={process.env.PUBLIC_URL + slide.image} 
-                alt={slide.title} 
+                src={index === 0 || index === currentSlide ? process.env.PUBLIC_URL + slide.image : undefined}
+                alt=""
+                aria-hidden="true"
+                loading={index === 0 ? 'eager' : 'lazy'}
+                fetchPriority={index === 0 ? 'high' : 'auto'}
+                decoding="async"
                 className="login-slide-img" 
               />
               <div className="login-slide-overlay">
                 <div className="login-slide-content">
-                  <h3>{slide.title}</h3>
+                  <h2>{slide.title}</h2>
                   <p>{slide.subtitle}</p>
                 </div>
               </div>
             </div>
           ))}
-          <div className="login-slide-indicators">
-            {slides.map((_, index) => (
-              <span 
+          <div className="login-slide-indicators" role="group" aria-label="Choose a hospital highlight">
+            <button
+              type="button"
+              className="slideshow-toggle"
+              aria-label={isSlidePaused ? 'Play hospital highlights' : 'Pause hospital highlights'}
+              aria-pressed={isSlidePaused}
+              onClick={() => setIsSlidePaused((paused) => !paused)}
+            >
+              {isSlidePaused ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />}
+            </button>
+            {slides.map((slide, index) => (
+              <button
                 key={index} 
                 className={`indicator ${index === currentSlide ? "active" : ""}`}
+                type="button"
+                aria-label={`Show slide ${index + 1}: ${slide.title}`}
+                aria-pressed={index === currentSlide}
                 onClick={() => setCurrentSlide(index)}
-              ></span>
+              />
             ))}
           </div>
         </div>
