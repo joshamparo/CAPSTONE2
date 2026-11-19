@@ -3718,10 +3718,10 @@ body.compact-mode .workspace-queue-item {
   color: var(--nurse-text-dark);
 }
 
-.orders-tab-btn.active {
-  background: var(--nurse-primary);
+.orders-container .orders-tab-btn.active {
+  background: #9a3412;
   color: white;
-  box-shadow: 0 2px 4px rgba(249, 115, 22, 0.3);
+  box-shadow: 0 2px 4px rgba(124, 45, 18, 0.24);
 }
 
 .orders-content-grid {
@@ -3776,9 +3776,11 @@ body.compact-mode .workspace-queue-item {
   padding: 24px;
   margin-bottom: 24px;
   position: relative;
+  min-inline-size: 0;
+  margin-inline: 0;
 }
 
-.box-label {
+.orders-container .box-label {
   position: absolute;
   top: -10px;
   left: 20px;
@@ -3786,7 +3788,7 @@ body.compact-mode .workspace-queue-item {
   padding: 0 8px;
   font-size: 0.75rem;
   font-weight: 700;
-  color: var(--nurse-primary);
+  color: #9a3412;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   border: 1px solid #e2e8f0;
@@ -3830,6 +3832,12 @@ body.compact-mode .workspace-queue-item {
   border-color: var(--nurse-primary);
   outline: none;
   box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+}
+
+.orders-container .box-input:disabled {
+  color: #475569;
+  opacity: 1;
+  cursor: not-allowed;
 }
 
 .box-textarea {

@@ -8350,13 +8350,14 @@ function NurseDashboard() {
                                     </h3>
                                 </div>
                                 <form onSubmit={handleOrderSubmit} className="order-form">
-                                    <div className="form-group-box">
-                                        <label className="box-label">Patient Details</label>
+                                    <fieldset className="form-group-box">
+                                        <legend className="box-label">Patient Details</legend>
                                         <div className="form-row">
                                             <div className="input-wrapper">
-                                                <label>Select Patient</label>
+                                                <label htmlFor="order-patient">Select Patient</label>
                                                 <select 
                                                     name="patientId"
+                                                    id="order-patient"
                                                     value={orderFormData.patientId}
                                                     onChange={handleOrderInputChange}
                                                     required
@@ -8371,9 +8372,10 @@ function NurseDashboard() {
                                                 </select>
                                             </div>
                                             <div className="input-wrapper">
-                                                <label>Priority</label>
+                                                <label htmlFor="order-priority">Priority</label>
                                                 <select 
                                                     name="priority"
+                                                    id="order-priority"
                                                     value={orderFormData.priority}
                                                     onChange={handleOrderInputChange}
                                                     className="box-input"
@@ -8384,17 +8386,18 @@ function NurseDashboard() {
                                                 </select>
                                             </div>
                                         </div>
-                                    </div>
+                                    </fieldset>
 
-                                    <div className="form-group-box">
-                                        <label className="box-label">Order Details</label>
+                                    <fieldset className="form-group-box">
+                                        <legend className="box-label">Order Details</legend>
                                         {activeOrderTab === 'medications' && (
                                             <>
                                                 <div className="form-row">
                                                     <div className="input-wrapper" style={{flex: 2}}>
-                                                        <label>Medication (Inventory)</label>
+                                                        <label htmlFor="order-medication">Medication (Inventory)</label>
                                                         <select
                                                             value={orderFormData.productId || ''}
+                                                            id="order-medication"
                                                             onChange={(e) => {
                                                               const nextId = e.target.value;
                                                               const match = (pharmacyCatalog || []).find((p) => String(p.id) === String(nextId) && String(p.type || '').toLowerCase() === 'medicine');
@@ -8427,10 +8430,11 @@ function NurseDashboard() {
                                                         {pharmacyCatalogError ? <div style={{ marginTop: 8, color: '#b91c1c', fontWeight: 800 }}>{pharmacyCatalogError}</div> : null}
                                                     </div>
                                                     <div className="input-wrapper" style={{flex: 1}}>
-                                                        <label>Dosage</label>
+                                                        <label htmlFor="order-dosage">Dosage</label>
                                                         <input 
                                                             type="text" 
                                                             name="dosage"
+                                                            id="order-dosage"
                                                             value={orderFormData.dosage}
                                                             onChange={handleOrderInputChange}
                                                             placeholder="500mg"
@@ -8440,9 +8444,10 @@ function NurseDashboard() {
                                                 </div>
                                                 <div className="form-row">
                                                     <div className="input-wrapper" style={{flex: 2}}>
-                                                        <label>Search</label>
+                                                        <label htmlFor="order-medicine-search">Search medicines</label>
                                                         <input
                                                           type="text"
+                                                          id="order-medicine-search"
                                                           value={pharmacyCatalogSearch}
                                                           onChange={(e) => setPharmacyCatalogSearch(e.target.value)}
                                                           placeholder="Search medicine name/category…"
@@ -8450,9 +8455,10 @@ function NurseDashboard() {
                                                         />
                                                     </div>
                                                     <div className="input-wrapper">
-                                                        <label>Unit Price</label>
+                                                        <label htmlFor="order-medication-unit-price">Unit Price</label>
                                                         <input
                                                           type="text"
+                                                          id="order-medication-unit-price"
                                                           value={orderFormData.unitPrice !== '' ? `₱${Number(orderFormData.unitPrice || 0)}` : '—'}
                                                           readOnly
                                                           className="box-input"
@@ -8461,10 +8467,11 @@ function NurseDashboard() {
                                                 </div>
                                                 <div className="form-row">
                                                     <div className="input-wrapper">
-                                                        <label>Quantity</label>
+                                                        <label htmlFor="order-medication-quantity">Quantity</label>
                                                         <input 
                                                             type="number" 
                                                             name="quantity"
+                                                            id="order-medication-quantity"
                                                             value={orderFormData.quantity}
                                                             onChange={handleOrderInputChange}
                                                             min="1"
@@ -8472,10 +8479,11 @@ function NurseDashboard() {
                                                         />
                                                     </div>
                                                     <div className="input-wrapper" style={{flex: 2}}>
-                                                        <label>Frequency / Instructions</label>
+                                                        <label htmlFor="order-medication-notes">Frequency / Instructions</label>
                                                         <input 
                                                             type="text" 
                                                             name="notes"
+                                                            id="order-medication-notes"
                                                             value={orderFormData.notes}
                                                             onChange={handleOrderInputChange}
                                                             placeholder="e.g. TID after meals"
@@ -8485,9 +8493,10 @@ function NurseDashboard() {
                                                 </div>
                                                 <div className="form-row">
                                                     <div className="input-wrapper" style={{ width: '100%' }}>
-                                                        <label>Total Amount</label>
+                                                        <label htmlFor="order-medication-total">Total Amount</label>
                                                         <input
                                                           type="text"
+                                                          id="order-medication-total"
                                                           value={`₱${(Math.round((Number(orderFormData.unitPrice || 0) * Math.max(1, Number(orderFormData.quantity || 1))) * 100) / 100).toFixed(2)}`}
                                                           readOnly
                                                           className="box-input"
@@ -8501,9 +8510,10 @@ function NurseDashboard() {
                                             <>
                                                 <div className="form-row">
                                                     <div className="input-wrapper" style={{flex: 2}}>
-                                                        <label>Test Name</label>
+                                                        <label htmlFor="order-lab-test">Test Name</label>
                                                         <select 
                                                             name="item"
+                                                            id="order-lab-test"
                                                             value={orderFormData.item}
                                                             onChange={handleOrderInputChange}
                                                             required
@@ -8520,9 +8530,10 @@ function NurseDashboard() {
                                                 </div>
                                                 <div className="form-row">
                                                     <div className="input-wrapper" style={{width: '100%'}}>
-                                                        <label>Clinical Indication / Notes</label>
+                                                        <label htmlFor="order-lab-notes">Clinical Indication / Notes</label>
                                                         <textarea 
                                                             name="notes"
+                                                            id="order-lab-notes"
                                                             value={orderFormData.notes}
                                                             onChange={handleOrderInputChange}
                                                             placeholder="Reason for request..."
@@ -8537,9 +8548,10 @@ function NurseDashboard() {
                                             <>
                                                 <div className="form-row">
                                                     <div className="input-wrapper" style={{flex: 2}}>
-                                                        <label>Supply (Inventory)</label>
+                                                        <label htmlFor="order-supply">Supply (Inventory)</label>
                                                         <select
                                                             value={orderFormData.productId || ''}
+                                                            id="order-supply"
                                                             onChange={(e) => {
                                                               const nextId = e.target.value;
                                                               const match = (pharmacyCatalog || []).find((p) => String(p.id) === String(nextId) && String(p.type || '').toLowerCase() === 'supply');
@@ -8572,10 +8584,11 @@ function NurseDashboard() {
                                                         {pharmacyCatalogError ? <div style={{ marginTop: 8, color: '#b91c1c', fontWeight: 800 }}>{pharmacyCatalogError}</div> : null}
                                                     </div>
                                                     <div className="input-wrapper">
-                                                        <label>Quantity</label>
+                                                        <label htmlFor="order-supply-quantity">Quantity</label>
                                                         <input 
                                                             type="number" 
                                                             name="quantity"
+                                                            id="order-supply-quantity"
                                                             value={orderFormData.quantity}
                                                             onChange={handleOrderInputChange}
                                                             min="1"
@@ -8585,9 +8598,10 @@ function NurseDashboard() {
                                                 </div>
                                                 <div className="form-row">
                                                     <div className="input-wrapper" style={{flex: 2}}>
-                                                        <label>Search</label>
+                                                        <label htmlFor="order-supply-search">Search supplies</label>
                                                         <input
                                                           type="text"
+                                                          id="order-supply-search"
                                                           value={pharmacyCatalogSearch}
                                                           onChange={(e) => setPharmacyCatalogSearch(e.target.value)}
                                                           placeholder="Search supply name…"
@@ -8595,9 +8609,10 @@ function NurseDashboard() {
                                                         />
                                                     </div>
                                                     <div className="input-wrapper">
-                                                        <label>Unit Price</label>
+                                                        <label htmlFor="order-supply-unit-price">Unit Price</label>
                                                         <input
                                                           type="text"
+                                                          id="order-supply-unit-price"
                                                           value={orderFormData.unitPrice !== '' ? `₱${Number(orderFormData.unitPrice || 0)}` : '—'}
                                                           readOnly
                                                           className="box-input"
@@ -8606,9 +8621,10 @@ function NurseDashboard() {
                                                 </div>
                                                 <div className="form-row">
                                                     <div className="input-wrapper" style={{width: '100%'}}>
-                                                        <label>Reason for Request</label>
+                                                        <label htmlFor="order-supply-reason">Reason for Request</label>
                                                         <textarea 
                                                             name="notes"
+                                                            id="order-supply-reason"
                                                             value={orderFormData.notes}
                                                             onChange={handleOrderInputChange}
                                                             placeholder="e.g. Ward Stock Replenishment"
@@ -8618,9 +8634,10 @@ function NurseDashboard() {
                                                 </div>
                                                 <div className="form-row">
                                                     <div className="input-wrapper" style={{ width: '100%' }}>
-                                                        <label>Total Amount</label>
+                                                        <label htmlFor="order-supply-total">Total Amount</label>
                                                         <input
                                                           type="text"
+                                                          id="order-supply-total"
                                                           value={`₱${(Math.round((Number(orderFormData.unitPrice || 0) * Math.max(1, Number(orderFormData.quantity || 1))) * 100) / 100).toFixed(2)}`}
                                                           readOnly
                                                           className="box-input"
@@ -8629,7 +8646,7 @@ function NurseDashboard() {
                                                 </div>
                                             </>
                                         )}
-                                    </div>
+                                    </fieldset>
 
                                     <div className="form-actions-right">
                                         <button type="button" className="btn-ghost" onClick={() => setOrderFormData({patientId: '', patientName: '', item: '', dosage: '', productId: '', productType: '', unitPrice: '', quantity: 1, priority: 'Routine', notes: ''})}>
