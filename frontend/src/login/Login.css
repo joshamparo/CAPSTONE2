@@ -524,19 +524,6 @@ body {
   border-radius: 4px;
 }
 
-.slideshow-toggle {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  border-radius: 50%;
-  cursor: pointer;
-}
-
 .toggle-password:focus-visible,
 .forgot-link:focus-visible,
 .submit-btn:focus-visible,
@@ -548,11 +535,6 @@ body {
 
 .indicator:focus-visible {
   outline-color: white;
-}
-
-.slideshow-toggle:focus-visible {
-  outline: 3px solid white;
-  outline-offset: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {

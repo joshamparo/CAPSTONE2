@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Lock, ArrowLeft, Eye, EyeOff, Pause, Play } from 'lucide-react';
+import { User, Lock, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import './Login.css';
 import PrivacyConsentModal, { hasPrivacyConsent } from '../components/PrivacyConsentModal';
 
@@ -314,7 +314,23 @@ const Login = () => {
         </div>
 
         {/* Right Side: Slideshow */}
-        <div className="login-slideshow-section" role="region" aria-label="Hospital highlights">
+        <div
+          className="login-slideshow-section"
+          role="region"
+          aria-label="Hospital highlights"
+          onMouseEnter={() => setIsSlidePaused(true)}
+          onMouseLeave={(event) => {
+            const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (!reducedMotion && !event.currentTarget.contains(document.activeElement)) setIsSlidePaused(false);
+          }}
+          onFocusCapture={() => setIsSlidePaused(true)}
+          onBlurCapture={(event) => {
+            const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (!reducedMotion && !event.currentTarget.matches(':hover') && !event.currentTarget.contains(event.relatedTarget)) {
+              setIsSlidePaused(false);
+            }
+          }}
+        >
           {slides.map((slide, index) => (
             <div 
               key={index} 
@@ -338,15 +354,6 @@ const Login = () => {
             </div>
           ))}
           <div className="login-slide-indicators" role="group" aria-label="Choose a hospital highlight">
-            <button
-              type="button"
-              className="slideshow-toggle"
-              aria-label={isSlidePaused ? 'Play hospital highlights' : 'Pause hospital highlights'}
-              aria-pressed={isSlidePaused}
-              onClick={() => setIsSlidePaused((paused) => !paused)}
-            >
-              {isSlidePaused ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />}
-            </button>
             {slides.map((slide, index) => (
               <button
                 key={index} 
