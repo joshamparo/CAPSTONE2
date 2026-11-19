@@ -10,6 +10,21 @@ const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 const EXPIRY_SOON_DAYS = 30;
 const EXPIRY_CRITICAL_DAYS = 7;
 
+const normalizePharmacistAssetUrl = (value) => {
+  const normalized = normalizeApiAssetUrl(value, API_BASE);
+  if (!normalized || typeof window === 'undefined') return normalized;
+  try {
+    const url = new URL(normalized, window.location.origin);
+    if (url.protocol === 'http:' && url.hostname.toLowerCase() === 'api.pascualinga.com') {
+      url.protocol = 'https:';
+      return url.href;
+    }
+  } catch (_) {
+    return normalized;
+  }
+  return normalized;
+};
+
 const SafeProductImage = ({ src, alt, className, fallback }) => {
   const [failed, setFailed] = useState(false);
 
@@ -682,7 +697,7 @@ function PharmacistDashboard() {
       const data = await fetchJson(`/api/inventory`, { apiBase: API_BASE, headers: buildAuthHeaders() });
       const normalized = (Array.isArray(data) ? data : []).map((item) => ({
         ...item,
-        image_url: normalizeApiAssetUrl(item?.image_url, API_BASE)
+        image_url: normalizePharmacistAssetUrl(item?.image_url)
       }));
       setMedicines(normalized);
     } catch (e) {
@@ -699,7 +714,7 @@ function PharmacistDashboard() {
       const data = await fetchJson(`/api/supplies`, { apiBase: API_BASE, headers: buildAuthHeaders() });
       const normalized = (Array.isArray(data) ? data : []).map((item) => ({
         ...item,
-        image_url: normalizeApiAssetUrl(item?.image_url, API_BASE)
+        image_url: normalizePharmacistAssetUrl(item?.image_url)
       }));
       setSupplies(normalized);
     } catch (e) {
@@ -717,7 +732,7 @@ function PharmacistDashboard() {
       const data = await fetchJson(`/api/product-categories`, { apiBase: API_BASE, headers: buildAuthHeaders(), timeoutMs: 90000 });
       const normalized = (Array.isArray(data) ? data : []).map((item) => ({
         ...item,
-        image_url: normalizeApiAssetUrl(item?.image_url, API_BASE)
+        image_url: normalizePharmacistAssetUrl(item?.image_url)
       }));
       setPosCategories(normalized);
     } catch (e) {
@@ -734,8 +749,8 @@ function PharmacistDashboard() {
       const data = await fetchJson(`/api/pharmacy/products?includeOutOfStock=0`, { apiBase: API_BASE, headers: buildAuthHeaders(), timeoutMs: 90000 });
       const normalized = (Array.isArray(data) ? data : []).map((item) => ({
         ...item,
-        imageUrl: normalizeApiAssetUrl(item?.imageUrl, API_BASE),
-        categoryImageUrl: normalizeApiAssetUrl(item?.categoryImageUrl, API_BASE)
+        imageUrl: normalizePharmacistAssetUrl(item?.imageUrl),
+        categoryImageUrl: normalizePharmacistAssetUrl(item?.categoryImageUrl)
       }));
       setPosProducts(normalized);
     } catch (e) {
