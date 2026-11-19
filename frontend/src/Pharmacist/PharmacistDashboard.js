@@ -33,7 +33,7 @@ const SafeProductImage = ({ src, alt, className, fallback }) => {
   }, [src]);
 
   if (!src || failed) return fallback;
-  return <img className={className} src={src} alt={alt} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
+  return <img className={className} src={normalizePharmacistAssetUrl(src)} alt={alt} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
 };
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
