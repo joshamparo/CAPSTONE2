@@ -1802,7 +1802,8 @@ export default function DoctorSecretaryDashboard() {
                     <div className="sec-sales-sub">Linked doctor: {linkedDoctor?.name || '—'}</div>
                   </div>
                   <div className="sec-sales-actions">
-                    <input className="sec-date" type="date" value={recordsDate} onChange={(e) => setRecordsDate(e.target.value)} />
+                    <label className="sec-visually-hidden" htmlFor="sec-dashboard-sales-date">Sales date</label>
+                    <input id="sec-dashboard-sales-date" className="sec-date" type="date" value={recordsDate} onChange={(e) => setRecordsDate(e.target.value)} />
                     <button className="sec-btn ghost" type="button" onClick={() => refreshSales({ silent: false })} disabled={salesLoading}>
                       <RefreshCw size={16} className={salesLoading ? 'animate-spin' : ''} /> Refresh
                     </button>
@@ -1837,20 +1838,20 @@ export default function DoctorSecretaryDashboard() {
 
                 <div className="sec-form-grid" style={{ marginTop: 12 }}>
                   <div className="sec-field">
-                    <label>Service Key</label>
-                    <input className="sec-input" value={newFee.serviceKey} onChange={(e) => setNewFee((v) => ({ ...v, serviceKey: e.target.value }))} placeholder="e.g. general_consultation" />
+                    <label htmlFor="sec-new-fee-key">Service Key</label>
+                    <input id="sec-new-fee-key" className="sec-input" value={newFee.serviceKey} onChange={(e) => setNewFee((v) => ({ ...v, serviceKey: e.target.value }))} placeholder="e.g. general_consultation" />
                   </div>
                   <div className="sec-field">
-                    <label>Service Name</label>
-                    <input className="sec-input" value={newFee.serviceName} onChange={(e) => setNewFee((v) => ({ ...v, serviceName: e.target.value }))} placeholder="e.g. General Consultation" />
+                    <label htmlFor="sec-new-fee-name">Service Name</label>
+                    <input id="sec-new-fee-name" className="sec-input" value={newFee.serviceName} onChange={(e) => setNewFee((v) => ({ ...v, serviceName: e.target.value }))} placeholder="e.g. General Consultation" />
                   </div>
                   <div className="sec-field">
-                    <label>Default Fee (₱)</label>
-                    <input className="sec-input" type="number" min="0" step="0.01" value={newFee.defaultFee} onChange={(e) => setNewFee((v) => ({ ...v, defaultFee: e.target.value }))} placeholder="0.00" />
+                    <label htmlFor="sec-new-fee-amount">Default Fee (₱)</label>
+                    <input id="sec-new-fee-amount" className="sec-input" type="number" min="0" step="0.01" value={newFee.defaultFee} onChange={(e) => setNewFee((v) => ({ ...v, defaultFee: e.target.value }))} placeholder="0.00" />
                   </div>
                   <div className="sec-field">
-                    <label>Active</label>
-                    <select className="sec-input" value={newFee.active ? '1' : '0'} onChange={(e) => setNewFee((v) => ({ ...v, active: e.target.value === '1' }))}>
+                    <label htmlFor="sec-new-fee-active">Active</label>
+                    <select id="sec-new-fee-active" className="sec-input" value={newFee.active ? '1' : '0'} onChange={(e) => setNewFee((v) => ({ ...v, active: e.target.value === '1' }))}>
                       <option value="1">Yes</option>
                       <option value="0">No</option>
                     </select>
@@ -1900,17 +1901,21 @@ export default function DoctorSecretaryDashboard() {
                           const name = edit.serviceName ?? (r.service_name || r.serviceName || '');
                           const fee = edit.defaultFee ?? (r.default_fee ?? r.defaultFee ?? 0);
                           const active = edit.active ?? Boolean(r.active);
+                          const feeControlId = `sec-fee-${String(key).replace(/[^a-z0-9_-]/gi, '-')}`;
                           return (
                             <tr key={String(r.id || key)}>
                               <td className="sec-muted">{key || '—'}</td>
                               <td>
-                                <input className="sec-input" value={String(name)} onChange={(e) => setFeesEdit((v) => ({ ...v, [key]: { ...(v[key] || {}), serviceName: e.target.value } }))} />
+                                <label className="sec-visually-hidden" htmlFor={`${feeControlId}-name`}>{name || key} service name</label>
+                                <input id={`${feeControlId}-name`} className="sec-input" value={String(name)} onChange={(e) => setFeesEdit((v) => ({ ...v, [key]: { ...(v[key] || {}), serviceName: e.target.value } }))} />
                               </td>
                               <td>
-                                <input className="sec-input" type="number" min="0" step="0.01" value={String(fee)} onChange={(e) => setFeesEdit((v) => ({ ...v, [key]: { ...(v[key] || {}), defaultFee: e.target.value } }))} />
+                                <label className="sec-visually-hidden" htmlFor={`${feeControlId}-amount`}>{name || key} default fee</label>
+                                <input id={`${feeControlId}-amount`} className="sec-input" type="number" min="0" step="0.01" value={String(fee)} onChange={(e) => setFeesEdit((v) => ({ ...v, [key]: { ...(v[key] || {}), defaultFee: e.target.value } }))} />
                               </td>
                               <td>
-                                <select className="sec-input" value={active ? '1' : '0'} onChange={(e) => setFeesEdit((v) => ({ ...v, [key]: { ...(v[key] || {}), active: e.target.value === '1' } }))}>
+                                <label className="sec-visually-hidden" htmlFor={`${feeControlId}-active`}>{name || key} active status</label>
+                                <select id={`${feeControlId}-active`} className="sec-input" value={active ? '1' : '0'} onChange={(e) => setFeesEdit((v) => ({ ...v, [key]: { ...(v[key] || {}), active: e.target.value === '1' } }))}>
                                   <option value="1">Yes</option>
                                   <option value="0">No</option>
                                 </select>
@@ -2014,12 +2019,15 @@ export default function DoctorSecretaryDashboard() {
                   <div className="sec-toolbar-sub">Records for the linked doctor. Payments are recorded here.</div>
                 </div>
                 <div className="sec-records-right">
-                  <input className="sec-date" type="date" value={recordsDate} onChange={(e) => setRecordsDate(e.target.value)} />
+                  <label className="sec-visually-hidden" htmlFor="sec-records-date">Appointment date</label>
+                  <input id="sec-records-date" className="sec-date" type="date" value={recordsDate} onChange={(e) => setRecordsDate(e.target.value)} />
                   <div className="sec-search">
                     <Search size={16} />
-                    <input value={recordsQuery} onChange={(e) => setRecordsQuery(e.target.value)} placeholder="Search patient name / email / phone" />
+                    <label className="sec-visually-hidden" htmlFor="sec-records-search">Search patient records</label>
+                    <input id="sec-records-search" value={recordsQuery} onChange={(e) => setRecordsQuery(e.target.value)} placeholder="Search patient name / email / phone" />
                   </div>
-                  <select className="sec-select" value={recordsStatus} onChange={(e) => setRecordsStatus(e.target.value)}>
+                  <label className="sec-visually-hidden" htmlFor="sec-records-status">Filter records by status</label>
+                  <select id="sec-records-status" className="sec-select" value={recordsStatus} onChange={(e) => setRecordsStatus(e.target.value)}>
                     <option value="All">All Status</option>
                     <option value="Confirmed">Confirmed</option>
                     <option value="Checked-in">Checked-in</option>
@@ -2202,11 +2210,11 @@ export default function DoctorSecretaryDashboard() {
                   <button type="button" className="sec-btn primary" onClick={saveAvailabilityRules} disabled={availabilitySaving || !linkedDoctorId}><Save size={16} /> {availabilitySaving ? 'Saving Schedule…' : 'Save Schedule'}</button>
                 </div>
                 <div className="sec-form-grid" style={{ marginTop: 12 }}>
-                  <div className="sec-field"><label>Day</label><select className="sec-input" value={availabilityAddRule.dayOfWeek} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, dayOfWeek: Number(e.target.value) }))}>{['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, index) => <option key={day} value={index}>{day}</option>)}</select></div>
-                  <div className="sec-field"><label>Start</label><input className="sec-input" type="time" value={availabilityAddRule.startTime} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, startTime: e.target.value }))} /></div>
-                  <div className="sec-field"><label>End</label><input className="sec-input" type="time" value={availabilityAddRule.endTime} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, endTime: e.target.value }))} /></div>
-                  <div className="sec-field"><label>Slot Minutes</label><input className="sec-input" type="number" min="5" max="180" value={availabilityAddRule.slotMinutes} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, slotMinutes: e.target.value }))} /></div>
-                  <div className="sec-field"><label>Max Patients / Slot</label><input className="sec-input" type="number" min="1" max="20" value={availabilityAddRule.maxPerSlot} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, maxPerSlot: e.target.value }))} /></div>
+                  <div className="sec-field"><label htmlFor="sec-availability-day">Day</label><select id="sec-availability-day" className="sec-input" value={availabilityAddRule.dayOfWeek} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, dayOfWeek: Number(e.target.value) }))}>{['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, index) => <option key={day} value={index}>{day}</option>)}</select></div>
+                  <div className="sec-field"><label htmlFor="sec-availability-start">Start</label><input id="sec-availability-start" className="sec-input" type="time" value={availabilityAddRule.startTime} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, startTime: e.target.value }))} /></div>
+                  <div className="sec-field"><label htmlFor="sec-availability-end">End</label><input id="sec-availability-end" className="sec-input" type="time" value={availabilityAddRule.endTime} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, endTime: e.target.value }))} /></div>
+                  <div className="sec-field"><label htmlFor="sec-availability-slot-minutes">Slot Minutes</label><input id="sec-availability-slot-minutes" className="sec-input" type="number" min="5" max="180" value={availabilityAddRule.slotMinutes} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, slotMinutes: e.target.value }))} /></div>
+                  <div className="sec-field"><label htmlFor="sec-availability-capacity">Max Patients / Slot</label><input id="sec-availability-capacity" className="sec-input" type="number" min="1" max="20" value={availabilityAddRule.maxPerSlot} onChange={(e) => setAvailabilityAddRule((v) => ({ ...v, maxPerSlot: e.target.value }))} /></div>
                   <div className="sec-field" style={{ justifyContent: 'flex-end' }}><button type="button" className="sec-btn ghost" onClick={addAvailabilityRule} disabled={availabilitySaving || !linkedDoctorId}>Add Weekly Rule</button></div>
                 </div>
                 <div className="sec-table-wrap" style={{ marginTop: 12 }}><table className="sec-table">
@@ -2315,20 +2323,20 @@ export default function DoctorSecretaryDashboard() {
 
                       <div className="sec-form-grid" style={{ marginTop: 12 }}>
                         <div className="sec-field">
-                          <label>Date</label>
-                          <input className="sec-input" type="date" value={availabilityAddException.date} onChange={(e) => setAvailabilityAddException((v) => ({ ...v, date: e.target.value }))} />
+                          <label htmlFor="sec-blocked-date">Date</label>
+                          <input id="sec-blocked-date" className="sec-input" type="date" value={availabilityAddException.date} onChange={(e) => setAvailabilityAddException((v) => ({ ...v, date: e.target.value }))} />
                         </div>
                         <div className="sec-field">
-                          <label>Start (optional)</label>
-                          <input className="sec-input" type="time" value={availabilityAddException.startTime} onChange={(e) => setAvailabilityAddException((v) => ({ ...v, startTime: e.target.value }))} />
+                          <label htmlFor="sec-blocked-start">Start (optional)</label>
+                          <input id="sec-blocked-start" className="sec-input" type="time" value={availabilityAddException.startTime} onChange={(e) => setAvailabilityAddException((v) => ({ ...v, startTime: e.target.value }))} />
                         </div>
                         <div className="sec-field">
-                          <label>End (optional)</label>
-                          <input className="sec-input" type="time" value={availabilityAddException.endTime} onChange={(e) => setAvailabilityAddException((v) => ({ ...v, endTime: e.target.value }))} />
+                          <label htmlFor="sec-blocked-end">End (optional)</label>
+                          <input id="sec-blocked-end" className="sec-input" type="time" value={availabilityAddException.endTime} onChange={(e) => setAvailabilityAddException((v) => ({ ...v, endTime: e.target.value }))} />
                         </div>
                         <div className="sec-field sec-field-full">
-                          <label>Note</label>
-                          <input className="sec-input" value={availabilityAddException.note} onChange={(e) => setAvailabilityAddException((v) => ({ ...v, note: e.target.value }))} placeholder="e.g. Leave / Holiday / Half-day clinic" />
+                          <label htmlFor="sec-blocked-note">Note</label>
+                          <input id="sec-blocked-note" className="sec-input" value={availabilityAddException.note} onChange={(e) => setAvailabilityAddException((v) => ({ ...v, note: e.target.value }))} placeholder="e.g. Leave / Holiday / Half-day clinic" />
                         </div>
                         <div className="sec-field sec-field-full" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                           <button type="button" className="sec-btn primary" onClick={addAvailabilityException} disabled={availabilitySaving || !linkedDoctorId}>
@@ -2409,18 +2417,20 @@ export default function DoctorSecretaryDashboard() {
                     <div className="sec-form-section">
                       <h4>Personal Information</h4>
                       <div className="sec-form-row-2">
-                        <div className="sec-field">
-                          <label>First Name</label>
+                    <div className="sec-field">
+                      <label htmlFor="sec-profile-first-name">First Name</label>
                           <input 
+                            id="sec-profile-first-name"
                             type="text" 
                             className="sec-input" 
                             value={profileForm.firstName} 
                             onChange={(e) => setProfileForm(v => ({ ...v, firstName: e.target.value }))} 
                           />
                         </div>
-                        <div className="sec-field">
-                          <label>Last Name</label>
+                    <div className="sec-field">
+                      <label htmlFor="sec-profile-last-name">Last Name</label>
                           <input 
+                            id="sec-profile-last-name"
                             type="text" 
                             className="sec-input" 
                             value={profileForm.lastName} 
@@ -2429,8 +2439,9 @@ export default function DoctorSecretaryDashboard() {
                         </div>
                       </div>
                       <div className="sec-field">
-                        <label>Email Address (Not changeable)</label>
+                      <label htmlFor="sec-profile-email">Email Address (Not changeable)</label>
                         <input 
+                            id="sec-profile-email"
                           type="email" 
                           className="sec-input readonly" 
                           value={profileForm.email} 
@@ -2442,8 +2453,9 @@ export default function DoctorSecretaryDashboard() {
                     <div className="sec-form-section">
                       <h4>Security</h4>
                       <div className="sec-field">
-                        <label>Current Password</label>
+                        <label htmlFor="sec-profile-current-password">Current Password</label>
                         <input
+                          id="sec-profile-current-password"
                           type={showPasswords ? 'text' : 'password'}
                           className="sec-input"
                           placeholder="Required to save any profile change"
@@ -2454,9 +2466,10 @@ export default function DoctorSecretaryDashboard() {
                       </div>
                       <div className="sec-form-row-2">
                         <div className="sec-field">
-                          <label>New Password</label>
+                          <label htmlFor="sec-profile-new-password">New Password</label>
                           <div className="sec-password-wrap">
                             <input 
+                              id="sec-profile-new-password"
                               type={showPasswords ? 'text' : 'password'} 
                               className="sec-input" 
                               placeholder="Leave blank to keep current"
@@ -2469,8 +2482,9 @@ export default function DoctorSecretaryDashboard() {
                           </div>
                         </div>
                         <div className="sec-field">
-                          <label>Confirm Password</label>
+                          <label htmlFor="sec-profile-confirm-password">Confirm Password</label>
                           <input 
+                            id="sec-profile-confirm-password"
                             type={showPasswords ? 'text' : 'password'} 
                             className="sec-input" 
                             placeholder="Re-type new password"
@@ -2606,8 +2620,8 @@ export default function DoctorSecretaryDashboard() {
                       </div>
 
                       <div className="sec-field">
-                        <div className="sec-field-label">Note (optional)</div>
-                        <textarea className="sec-input" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Add a note for the record…" />
+                        <label className="sec-field-label" htmlFor="sec-approval-note">Note (optional)</label>
+                        <textarea id="sec-approval-note" className="sec-input" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Add a note for the record…" />
                       </div>
 
                       {actionError ? (
@@ -2664,8 +2678,9 @@ export default function DoctorSecretaryDashboard() {
                 </div>
                 <div className="sec-form-grid">
                   <div className="sec-field sec-field-full">
-                    <label>Service</label>
+                    <label htmlFor="sec-charge-service">Service</label>
                     <select
+                      id="sec-charge-service"
                       className="sec-input"
                       value={chargeForm.serviceKey}
                       onChange={(e) => {
@@ -2686,8 +2701,9 @@ export default function DoctorSecretaryDashboard() {
                     {serviceFeesError ? <div className="sec-field-hint error">{serviceFeesError}</div> : null}
                   </div>
                   <div className="sec-field">
-                    <label>Amount (₱)</label>
+                    <label htmlFor="sec-charge-amount">Amount (₱)</label>
                     <input
+                      id="sec-charge-amount"
                       className="sec-input"
                       value={chargeForm.amount}
                       onChange={(e) => setChargeForm((v) => ({ ...v, amount: e.target.value }))}
@@ -2738,12 +2754,12 @@ export default function DoctorSecretaryDashboard() {
                 {confirmError ? <div className="sec-error" style={{ marginBottom: 10 }}>{confirmError}</div> : null}
                 <div className="sec-form-grid">
                   <div className="sec-field">
-                    <label>Time</label>
-                    <input className="sec-input" type="time" value={confirmForm.time} onChange={(e) => setConfirmForm((v) => ({ ...v, time: e.target.value }))} />
+                    <label htmlFor="sec-confirm-time">Time</label>
+                    <input id="sec-confirm-time" className="sec-input" type="time" value={confirmForm.time} onChange={(e) => setConfirmForm((v) => ({ ...v, time: e.target.value }))} />
                   </div>
                   <div className="sec-field">
-                    <label>Status</label>
-                    <select className="sec-input" value={confirmForm.status} onChange={(e) => setConfirmForm((v) => ({ ...v, status: e.target.value }))}>
+                    <label htmlFor="sec-confirm-status">Status</label>
+                    <select id="sec-confirm-status" className="sec-input" value={confirmForm.status} onChange={(e) => setConfirmForm((v) => ({ ...v, status: e.target.value }))}>
                       <option value="Confirmed">Confirmed</option>
                       <option value="Checked-in">Checked-in</option>
                       <option value="Completed">Completed</option>
