@@ -872,6 +872,7 @@ export default function AccountHeaderActions({
                     <LayoutGrid size={18} />
                     <span className="aha-menu-label">Department</span>
                     {onDepartmentChange ? <select
+                      aria-label="Department"
                       className="aha-select"
                       value={departmentValue ?? ''}
                       disabled={!onDepartmentChange}

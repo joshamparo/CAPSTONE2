@@ -3058,7 +3058,7 @@ function DoctorDashboard() {
       <div className="doc-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
         <div className="doc-modal-header">
           <div className="doc-modal-title">{orderForm.kind === 'Admission Request' ? 'Request Admission' : 'Clinical Order'}</div>
-          <button type="button" className="doc-icon-btn" onClick={() => setOrderModalOpen(false)}>
+          <button type="button" className="doc-icon-btn" aria-label="Close clinical order" onClick={() => setOrderModalOpen(false)}>
             <X size={18} />
           </button>
         </div>
@@ -3066,6 +3066,7 @@ function DoctorDashboard() {
           <div className="doc-form-group">
             <label>Order Type</label>
             <select 
+              aria-label="Order type"
               className="doc-select" 
               value={orderForm.kind} 
               onChange={(e) => {
@@ -3092,6 +3093,7 @@ function DoctorDashboard() {
             <label>{orderForm.kind === 'Admission Request' ? 'Request' : 'Service / Test Name'}</label>
             {CLINICAL_SERVICE_OPTIONS[orderForm.kind] ? (
               <select
+                aria-label={orderForm.kind === 'Admission Request' ? 'Admission request type' : 'Service or test name'}
                 className="doc-select"
                 value={orderForm.service}
                 onChange={(e) => setOrderForm(v => ({ ...v, service: e.target.value }))}
@@ -3104,6 +3106,7 @@ function DoctorDashboard() {
               </select>
             ) : (
               <input
+                aria-label="Describe the requested clinical service"
                 className="doc-input"
                 placeholder="Describe the requested service"
                 value={orderForm.service}
@@ -3115,6 +3118,7 @@ function DoctorDashboard() {
           <div className="doc-form-group">
             <label>Priority</label>
             <select 
+              aria-label="Order priority"
               className="doc-select" 
               value={orderForm.priority} 
               onChange={(e) => setOrderForm(v => ({ ...v, priority: e.target.value }))}
@@ -3127,6 +3131,7 @@ function DoctorDashboard() {
           <div className="doc-form-group">
             <label>Notes / Indications</label>
             <textarea 
+              aria-label="Order notes and indications"
               className="doc-textarea" 
               placeholder="Reason for order..." 
               value={orderForm.notes} 
@@ -3149,7 +3154,7 @@ function DoctorDashboard() {
       <div className="doc-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '780px' }}>
         <div className="doc-modal-header">
           <div className="doc-modal-title">Bill Out to Cashier</div>
-          <button type="button" className="doc-icon-btn" onClick={() => setBillOutOpen(false)}>
+          <button type="button" className="doc-icon-btn" aria-label="Close bill out form" onClick={() => setBillOutOpen(false)}>
             <X size={18} />
           </button>
         </div>
@@ -3175,18 +3180,21 @@ function DoctorDashboard() {
               {(Array.isArray(billOutItems) ? billOutItems : []).map((it) => (
                 <div key={it.key} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 90px 120px 90px', gap: 0, padding: '10px 12px', borderBottom: '1px solid #f1f5f9', alignItems: 'center' }}>
                   <input
+                    aria-label={`Include ${it.description || 'billable item'}`}
                     type="checkbox"
                     checked={Boolean(it.include)}
                     onChange={(e) => updateBillOutItem(it.key, { include: e.target.checked })}
                   />
                   <input
                     className="doc-input"
+                    aria-label={`Description for ${it.description || 'billable item'}`}
                     value={String(it.description || '')}
                     placeholder="e.g. Laboratory: CBC"
                     onChange={(e) => updateBillOutItem(it.key, { description: e.target.value })}
                   />
                   <input
                     className="doc-input"
+                    aria-label={`Quantity for ${it.description || 'billable item'}`}
                     style={{ textAlign: 'right' }}
                     type="number"
                     min="1"
@@ -3195,6 +3203,7 @@ function DoctorDashboard() {
                   />
                   <input
                     className="doc-input"
+                    aria-label={`Unit price for ${it.description || 'billable item'}`}
                     style={{ textAlign: 'right' }}
                     type="number"
                     min="0"
@@ -3220,6 +3229,7 @@ function DoctorDashboard() {
           <div className="doc-form-group">
             <label>Notes</label>
             <textarea
+              aria-label="Notes for cashier"
               className="doc-textarea"
               placeholder="Optional notes for cashier..."
               value={billOutNotes}
@@ -3251,6 +3261,7 @@ function DoctorDashboard() {
           <button 
             type="button" 
             className="doc-icon-btn" 
+            aria-label="Refresh patient vitals and triage"
             onClick={() => fetchPatientVitalsAndTriage(selectedPatient._id)}
             title="Refresh Vitals/Triage"
           >
@@ -3365,7 +3376,8 @@ function DoctorDashboard() {
                 type="button"
                 className="doc-icon-btn"
                 onClick={() => fetchEROrders(selectedPatient._id)}
-                title="Refresh Orders"
+              aria-label="Refresh emergency orders"
+              title="Refresh Orders"
               >
                 <RotateCw size={14} />
               </button>
@@ -3489,6 +3501,7 @@ function DoctorDashboard() {
             <button
               type="button"
               className={`doc-chip ${queueDateMode === 'upcoming' ? 'active' : ''}`}
+              aria-pressed={queueDateMode === 'upcoming'}
               onClick={() => setQueueDateMode('upcoming')}
               style={{ padding: '6px 10px', fontSize: '0.8rem' }}
             >
@@ -3497,6 +3510,7 @@ function DoctorDashboard() {
             <button
               type="button"
               className={`doc-chip ${queueDateMode === 'date' ? 'active' : ''}`}
+              aria-pressed={queueDateMode === 'date'}
               onClick={() => setQueueDateMode('date')}
               style={{ padding: '6px 10px', fontSize: '0.8rem' }}
             >
@@ -3504,6 +3518,7 @@ function DoctorDashboard() {
             </button>
             <input
               className="doc-date"
+              aria-label="Filter bookings by date"
               type="date"
               value={formatDateParam(selectedDate)}
               onChange={(e) => setSelectedDate(new Date(`${e.target.value}T00:00:00`))}
@@ -3514,6 +3529,7 @@ function DoctorDashboard() {
               type="button"
               className="doc-icon-btn"
               onClick={fetchAppointments}
+              aria-label="Refresh waiting room"
               title="Refresh Queue"
             >
               <RotateCw size={16} />
@@ -3524,6 +3540,7 @@ function DoctorDashboard() {
           <button
             type="button"
             className={`doc-chip ${queueFilter === 'all' ? 'active' : ''}`}
+            aria-pressed={queueFilter === 'all'}
             onClick={() => {
               setQueueFilter('all');
             }}
@@ -3533,6 +3550,7 @@ function DoctorDashboard() {
           <button
             type="button"
             className={`doc-chip ${queueFilter === 'video' ? 'active' : ''}`}
+            aria-pressed={queueFilter === 'video'}
             onClick={() => {
               setQueueFilter('video');
             }}
@@ -3544,6 +3562,7 @@ function DoctorDashboard() {
           <div className="doc-queue-toggles" style={{display: 'flex', gap: '10px', marginTop: '12px'}}>
             <button
               className={`doc-toggle-btn ${queueScope === 'mine' ? 'active' : ''}`}
+              aria-pressed={queueScope === 'mine'}
               type="button"
               style={{flex: 1, fontSize: '0.75rem', padding: '6px', cursor: 'default'}}
               onClick={() => setQueueScope('mine')}
@@ -3552,6 +3571,7 @@ function DoctorDashboard() {
             </button>
             <button
               className={`doc-toggle-btn ${queueScope === 'specialization' ? 'active' : ''}`}
+              aria-pressed={queueScope === 'specialization'}
               type="button"
               style={{flex: 1, fontSize: '0.75rem', padding: '6px'}}
               onClick={() => setQueueScope('specialization')}
@@ -3827,6 +3847,7 @@ function DoctorDashboard() {
           <Search size={16} className="doc-search-icon" />
           <input
             className="doc-search"
+            aria-label="Search patients"
             placeholder="Search patient..."
             value={patientQuery}
             onChange={(e) => setPatientQuery(e.target.value)}
@@ -3838,6 +3859,7 @@ function DoctorDashboard() {
               const ok = await fetchPatients();
               setToast(ok ? { type: 'success', message: 'Patients refreshed.' } : { type: 'error', message: 'Unable to load patients.' });
             }}
+            aria-label="Refresh patient list"
             title="Refresh patients"
           >
             <RotateCw size={16} />
@@ -4046,6 +4068,7 @@ function DoctorDashboard() {
                 <>
                   <textarea
                     className="doc-textarea"
+                    aria-label="Lab result interpretation notes"
                     placeholder="Add your interpretation notes here…"
                     value={labInterpretation.note}
                     onChange={(e) => setLabInterpretation((v) => ({ ...v, note: e.target.value }))}
@@ -4139,7 +4162,8 @@ function DoctorDashboard() {
               <User size={64} color="#cbd5e1" />
             )}
           </div>
-          <input
+            <input
+              aria-label="Choose profile photo"
             type="file"
             accept="image/*"
             style={{ display: 'none' }}
@@ -4174,6 +4198,7 @@ function DoctorDashboard() {
                 <div className="input-wrapper-relative">
                   <User size={18} className="absolute-icon-left text-slate-400" />
                   <input
+                    aria-label="First name"
                     type="text"
                     value={profileForm.firstName}
                     onChange={(e) => setProfileForm((v) => ({ ...v, firstName: e.target.value }))}
@@ -4190,6 +4215,7 @@ function DoctorDashboard() {
                 <div className="input-wrapper-relative">
                   <User size={18} className="absolute-icon-left text-slate-400" />
                   <input
+                    aria-label="Middle name"
                     type="text"
                     value={profileForm.middleName}
                     onChange={(e) => setProfileForm((v) => ({ ...v, middleName: e.target.value }))}
@@ -4206,6 +4232,7 @@ function DoctorDashboard() {
                 <div className="input-wrapper-relative">
                   <User size={18} className="absolute-icon-left text-slate-400" />
                   <input
+                    aria-label="Last name"
                     type="text"
                     value={profileForm.lastName}
                     onChange={(e) => setProfileForm((v) => ({ ...v, lastName: e.target.value }))}
@@ -4222,6 +4249,7 @@ function DoctorDashboard() {
                 <div className="input-wrapper-relative">
                   <Mail size={18} className="absolute-icon-left text-slate-400" />
                   <input 
+                    aria-label="Email address"
                     type="email" 
                     value={profileForm.email}
                     onChange={(e) => setProfileForm((v) => ({ ...v, email: e.target.value }))}
@@ -4238,6 +4266,7 @@ function DoctorDashboard() {
                 <div className="input-wrapper-relative">
                   <Briefcase size={18} className="absolute-icon-left text-slate-400" />
                   <input 
+                    aria-label="Department or specialization"
                     type="text" 
                     value={profileForm.department || profileForm.specialization || ''}
                     onChange={(e) => setProfileForm((v) => ({ ...v, department: e.target.value, specialization: e.target.value }))}
@@ -4254,6 +4283,7 @@ function DoctorDashboard() {
                 <div className="input-wrapper-relative">
                   <Phone size={18} className="absolute-icon-left text-slate-400" />
                   <input 
+                    aria-label="Phone number"
                     type="tel" 
                     value={profileForm.phone || profileForm.contactNumber || ''}
                     onChange={(e) => setProfileForm((v) => ({ ...v, phone: e.target.value, contactNumber: e.target.value }))}
@@ -4279,6 +4309,7 @@ function DoctorDashboard() {
                 <div className="input-wrapper-relative">
                   <Key size={18} className="absolute-icon-left text-slate-400" />
                   <input 
+                    aria-label="Current password"
                     type={showDoctorCurrentPassword ? "text" : "password"}
                     value={profileForm.currentPassword}
                     onChange={(e) => setProfileForm((v) => ({ ...v, currentPassword: e.target.value }))}
@@ -4289,6 +4320,7 @@ function DoctorDashboard() {
                   <button 
                     type="button"
                     className="toggle-password-btn"
+                    aria-label={showDoctorCurrentPassword ? 'Hide current password' : 'Show current password'}
                     onClick={() => setShowDoctorCurrentPassword(!showDoctorCurrentPassword)}
                   >
                     {showDoctorCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -4302,6 +4334,7 @@ function DoctorDashboard() {
                 <div className="input-wrapper-relative">
                   <Key size={18} className="absolute-icon-left text-slate-400" />
                   <input 
+                    aria-label="New password"
                     type={showDoctorNewPassword ? "text" : "password"}
                     value={profileForm.newPassword}
                     onChange={(e) => setProfileForm((v) => ({ ...v, newPassword: e.target.value }))}
@@ -4312,6 +4345,7 @@ function DoctorDashboard() {
                   <button 
                     type="button"
                     className="toggle-password-btn"
+                    aria-label={showDoctorNewPassword ? 'Hide new password' : 'Show new password'}
                     onClick={() => setShowDoctorNewPassword(!showDoctorNewPassword)}
                   >
                     {showDoctorNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -4340,6 +4374,7 @@ function DoctorDashboard() {
                 <div className="input-wrapper-relative">
                   <Key size={18} className="absolute-icon-left text-slate-400" />
                   <input 
+                    aria-label="Confirm new password"
                     type={showDoctorConfirmPassword ? "text" : "password"}
                     value={profileForm.confirmPassword}
                     onChange={(e) => setProfileForm((v) => ({ ...v, confirmPassword: e.target.value }))}
@@ -4350,6 +4385,7 @@ function DoctorDashboard() {
                   <button 
                     type="button"
                     className="toggle-password-btn"
+                    aria-label={showDoctorConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
                     onClick={() => setShowDoctorConfirmPassword(!showDoctorConfirmPassword)}
                   >
                     {showDoctorConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -4390,6 +4426,7 @@ function DoctorDashboard() {
           <div className="doc-search-wrap">
             <Search size={18} className="doc-search-icon" />
             <input 
+              aria-label="Search patient records by name or email"
               className="doc-search"
               placeholder="Search name or email..." 
               value={recordQuery}
@@ -4404,6 +4441,7 @@ function DoctorDashboard() {
               <button 
                 type="button"
                 className={`doc-chip ${recordScope === 'mine' ? 'active' : ''}`}
+                aria-pressed={recordScope === 'mine'}
                 onClick={() => { setRecordScope('mine'); setRecordSkip(0); }}
               >
                 My Patients
@@ -4411,6 +4449,7 @@ function DoctorDashboard() {
               <button
                 type="button"
                 className={`doc-chip ${recordScope === 'specialization' ? 'active' : ''}`}
+                aria-pressed={recordScope === 'specialization'}
                 onClick={() => { setRecordScope('specialization'); setRecordSkip(0); }}
               >
                 My Department
@@ -4419,6 +4458,7 @@ function DoctorDashboard() {
                 <button 
                   type="button"
                   className={`doc-chip ${recordScope === 'all' ? 'active' : ''}`}
+                aria-pressed={recordScope === 'all'}
                   onClick={() => { setRecordScope('all'); setRecordSkip(0); }}
                 >
                   All Patients
@@ -4544,7 +4584,7 @@ function DoctorDashboard() {
                   </div>
                 </div>
               </div>
-              <button type="button" className="doc-close-btn" onClick={() => setSelectedRecord(null)}>
+              <button type="button" className="doc-close-btn" aria-label="Close patient record" onClick={() => setSelectedRecord(null)}>
                 <X size={24} />
               </button>
             </div>
@@ -4703,7 +4743,7 @@ function DoctorDashboard() {
             <img className="doc-brand-logo" src="/images/pgh%20logo.png" alt="PASCUALINGA" />
             {!isCollapsed ? <span className="doc-brand-text">PASCUALINGA</span> : null}
           </div>
-          <button type="button" className="doc-sidebar-toggle" onClick={() => setIsCollapsed((v) => !v)}>
+          <button type="button" className="doc-sidebar-toggle" aria-label={isCollapsed ? 'Expand navigation menu' : 'Collapse navigation menu'} onClick={() => setIsCollapsed((v) => !v)}>
             <Menu size={18} />
           </button>
         </div>
@@ -4713,6 +4753,8 @@ function DoctorDashboard() {
             <button
               key={it.key}
               type="button"
+              aria-label={it.label}
+              aria-current={activeNav === it.key ? 'page' : undefined}
               className={`doc-nav-item ${activeNav === it.key ? 'active' : ''}`}
               onClick={() => setActiveNav(it.key)}
             >
@@ -4851,37 +4893,37 @@ function DoctorDashboard() {
             {/* MEDICAL PROFILE SECTION */}
               {selectedPatient && (
                 <div className="doc-card" style={{ marginBottom: '15px' }}>
-                  <div className="doc-card-header" style={{ cursor: 'pointer' }} onClick={() => setShowMedicalProfile(!showMedicalProfile)}>
+            <div className="doc-card-header" role="button" tabIndex={0} aria-expanded={showMedicalProfile} aria-label={showMedicalProfile ? 'Hide patient medical history and profile' : 'Show patient medical history and profile'} style={{ cursor: 'pointer' }} onClick={() => setShowMedicalProfile((value) => !value)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setShowMedicalProfile((value) => !value); } }}>
                     <div className="doc-card-title">
                       <User size={18} />
                       Patient Medical History & Profile
                     </div>
-                    <button className="doc-icon-btn" type="button">
+                    <span className="doc-icon-btn" aria-hidden="true">
                       {showMedicalProfile ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </button>
+                    </span>
                   </div>
                   {showMedicalProfile && (
                     <div className="doc-form" style={{ padding: '15px' }}>
                       <div className="doctor-grid doctor-grid-2">
                         <div>
                           <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px', display: 'block' }}>Allergies & Adverse Reactions <span style={{ color: '#ef4444' }}>*</span></label>
-                          <textarea className="doc-textarea" style={{ minHeight: '60px', borderColor: medicalProfile.allergies && medicalProfile.allergies.toLowerCase() !== 'none' && medicalProfile.allergies.toLowerCase() !== 'n/a' ? '#ef4444' : '#cbd5e1' }} placeholder="e.g. Penicillin, Peanuts, None" value={medicalProfile.allergies} onChange={(e) => setMedicalProfile(v => ({...v, allergies: e.target.value}))} />
+                          <textarea className="doc-textarea" aria-label="Allergies and adverse reactions" style={{ minHeight: '60px', borderColor: medicalProfile.allergies && medicalProfile.allergies.toLowerCase() !== 'none' && medicalProfile.allergies.toLowerCase() !== 'n/a' ? '#ef4444' : '#cbd5e1' }} placeholder="e.g. Penicillin, Peanuts, None" value={medicalProfile.allergies} onChange={(e) => setMedicalProfile(v => ({...v, allergies: e.target.value}))} />
                         </div>
                         <div>
                           <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px', display: 'block' }}>Past Medical & Surgical History</label>
-                          <textarea className="doc-textarea" style={{ minHeight: '60px' }} placeholder="e.g. Hypertension, Appendectomy (2015)" value={medicalProfile.pastMedicalHistory} onChange={(e) => setMedicalProfile(v => ({...v, pastMedicalHistory: e.target.value}))} />
+                          <textarea className="doc-textarea" aria-label="Past medical and surgical history" style={{ minHeight: '60px' }} placeholder="e.g. Hypertension, Appendectomy (2015)" value={medicalProfile.pastMedicalHistory} onChange={(e) => setMedicalProfile(v => ({...v, pastMedicalHistory: e.target.value}))} />
                         </div>
                         <div>
                           <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px', display: 'block' }}>Family & Social History</label>
-                          <textarea className="doc-textarea" style={{ minHeight: '60px' }} placeholder="e.g. Father: Diabetes. Smoker 10 years." value={medicalProfile.familyHistory} onChange={(e) => setMedicalProfile(v => ({...v, familyHistory: e.target.value}))} />
+                          <textarea className="doc-textarea" aria-label="Family and social history" style={{ minHeight: '60px' }} placeholder="e.g. Father: Diabetes. Smoker 10 years." value={medicalProfile.familyHistory} onChange={(e) => setMedicalProfile(v => ({...v, familyHistory: e.target.value}))} />
                         </div>
                         <div>
                           <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '4px', display: 'block' }}>Immunization Record</label>
-                          <textarea className="doc-textarea" style={{ minHeight: '60px' }} placeholder="e.g. Fully vaccinated, Last Flu Shot 2025" value={medicalProfile.immunizations} onChange={(e) => setMedicalProfile(v => ({...v, immunizations: e.target.value}))} />
+                          <textarea className="doc-textarea" aria-label="Immunization record" style={{ minHeight: '60px' }} placeholder="e.g. Fully vaccinated, Last Flu Shot 2025" value={medicalProfile.immunizations} onChange={(e) => setMedicalProfile(v => ({...v, immunizations: e.target.value}))} />
                         </div>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-                        <button type="button" className="doc-btn" style={{ background: 'var(--brand-primary-gradient)', color: 'white', border: 'none' }} onClick={saveMedicalProfile} disabled={savingMedicalProfile}>
+                        <button type="button" className="doc-btn" style={{ background: '#c2410c', color: 'white', border: 'none' }} onClick={saveMedicalProfile} disabled={savingMedicalProfile}>
                           <Save size={14} /> {savingMedicalProfile ? 'Saving...' : 'Save Medical Profile'}
                         </button>
                       </div>
@@ -4915,24 +4957,24 @@ function DoctorDashboard() {
 
                     {doctorSpecialization.toLowerCase().includes('pediatric') && (
                       <div className="doc-vitals" style={{ marginTop: '10px' }}>
-                        <input className="doc-input" placeholder="Vaccination History" value={noteForm.vaccinationHistory} onChange={(e) => setNoteForm(v => ({...v, vaccinationHistory: e.target.value}))} />
-                        <input className="doc-input" placeholder="Developmental Milestones" value={noteForm.milestones || ''} onChange={(e) => setNoteForm(v => ({...v, milestones: e.target.value}))} />
+                        <input className="doc-input" aria-label="Vaccination history" placeholder="Vaccination History" value={noteForm.vaccinationHistory} onChange={(e) => setNoteForm(v => ({...v, vaccinationHistory: e.target.value}))} />
+                        <input className="doc-input" aria-label="Developmental milestones" placeholder="Developmental Milestones" value={noteForm.milestones || ''} onChange={(e) => setNoteForm(v => ({...v, milestones: e.target.value}))} />
                       </div>
                     )}
                     
                     {doctorSpecialization.toLowerCase().includes('cardiolog') && (
                       <div className="doc-vitals" style={{ marginTop: '10px' }}>
-                        <input className="doc-input" placeholder="Heart Rate Rhythm" value={noteForm.heartRateRhythm} onChange={(e) => setNoteForm(v => ({...v, heartRateRhythm: e.target.value}))} />
-                        <input className="doc-input" placeholder="ECG Notes" value={noteForm.ecgNotes} onChange={(e) => setNoteForm(v => ({...v, ecgNotes: e.target.value}))} />
-                        <input className="doc-input" placeholder="Chest Pain Duration" value={noteForm.chestPainDuration || ''} onChange={(e) => setNoteForm(v => ({...v, chestPainDuration: e.target.value}))} />
+                        <input className="doc-input" aria-label="Heart rate rhythm" placeholder="Heart Rate Rhythm" value={noteForm.heartRateRhythm} onChange={(e) => setNoteForm(v => ({...v, heartRateRhythm: e.target.value}))} />
+                        <input className="doc-input" aria-label="ECG notes" placeholder="ECG Notes" value={noteForm.ecgNotes} onChange={(e) => setNoteForm(v => ({...v, ecgNotes: e.target.value}))} />
+                        <input className="doc-input" aria-label="Chest pain duration" placeholder="Chest Pain Duration" value={noteForm.chestPainDuration || ''} onChange={(e) => setNoteForm(v => ({...v, chestPainDuration: e.target.value}))} />
                       </div>
                     )}
 
                     {doctorSpecialization.toLowerCase().includes('dermatolog') && (
                       <div className="doc-vitals" style={{ marginTop: '10px' }}>
-                        <input className="doc-input" placeholder="Lesion Type" value={noteForm.lesionType} onChange={(e) => setNoteForm(v => ({...v, lesionType: e.target.value}))} />
-                        <input className="doc-input" placeholder="Affected Area" value={noteForm.affectedArea} onChange={(e) => setNoteForm(v => ({...v, affectedArea: e.target.value}))} />
-                        <input className="doc-input" placeholder="Skin Type" value={noteForm.skinType || ''} onChange={(e) => setNoteForm(v => ({...v, skinType: e.target.value}))} />
+                        <input className="doc-input" aria-label="Lesion type" placeholder="Lesion Type" value={noteForm.lesionType} onChange={(e) => setNoteForm(v => ({...v, lesionType: e.target.value}))} />
+                        <input className="doc-input" aria-label="Affected area" placeholder="Affected Area" value={noteForm.affectedArea} onChange={(e) => setNoteForm(v => ({...v, affectedArea: e.target.value}))} />
+                        <input className="doc-input" aria-label="Skin type" placeholder="Skin Type" value={noteForm.skinType || ''} onChange={(e) => setNoteForm(v => ({...v, skinType: e.target.value}))} />
                       </div>
                     )}
 
@@ -4961,11 +5003,11 @@ function DoctorDashboard() {
                           <div className="doc-vitals">
                             <div>
                               <label style={{fontSize:'0.7rem', color:'#881337', fontWeight:600}}>LMP (Last Menstrual Period)</label>
-                              <input type="date" className="doc-input" style={{ borderColor: '#fecdd3' }} value={noteForm.lmp || ''} onChange={(e) => setNoteForm(v => ({...v, lmp: e.target.value}))} />
+                              <input type="date" className="doc-input" aria-label="Last menstrual period" style={{ borderColor: '#fecdd3' }} value={noteForm.lmp || ''} onChange={(e) => setNoteForm(v => ({...v, lmp: e.target.value}))} />
                             </div>
                             <div>
                               <label style={{fontSize:'0.7rem', color:'#881337', fontWeight:600}}>Fetal Heart Rate (bpm)</label>
-                              <input className="doc-input" placeholder="e.g. 140" style={{ borderColor: '#fecdd3' }} value={noteForm.fetalHeartRate || ''} onChange={(e) => setNoteForm(v => ({...v, fetalHeartRate: e.target.value}))} />
+                              <input className="doc-input" aria-label="Fetal heart rate in beats per minute" placeholder="e.g. 140" style={{ borderColor: '#fecdd3' }} value={noteForm.fetalHeartRate || ''} onChange={(e) => setNoteForm(v => ({...v, fetalHeartRate: e.target.value}))} />
                             </div>
                           </div>
                           {noteForm.lmp && !isNaN(new Date(noteForm.lmp)) && (
@@ -4973,7 +5015,7 @@ function DoctorDashboard() {
                               <div><strong>EDD:</strong> {edd}</div>
                               <div><strong>AOG:</strong> {aog}</div>
                               <div><strong>Trimester:</strong> {trimester}</div>
-                              <button type="button" onClick={() => {
+                              <button type="button" aria-label="Copy pregnancy dates and age to consultation notes" onClick={() => {
                                 setNoteForm(prev => ({
                                   ...prev,
                                   objective: (prev.objective ? prev.objective + ' ' : '') + `AOG: ${aog}. EDD: ${edd} (${trimester}).`
@@ -4989,9 +5031,9 @@ function DoctorDashboard() {
 
                     {doctorSpecialization.toLowerCase().includes('surg') && (
                       <div className="doc-vitals" style={{ marginTop: '10px' }}>
-                        <input className="doc-input" placeholder="Operation Type" value={noteForm.operationType || ''} onChange={(e) => setNoteForm(v => ({...v, operationType: e.target.value}))} />
-                        <input className="doc-input" placeholder="Anesthesia Type" value={noteForm.anesthesiaType || ''} onChange={(e) => setNoteForm(v => ({...v, anesthesiaType: e.target.value}))} />
-                        <input className="doc-input" placeholder="Surgical Site" value={noteForm.surgicalSite || ''} onChange={(e) => setNoteForm(v => ({...v, surgicalSite: e.target.value}))} />
+                        <input className="doc-input" aria-label="Operation type" placeholder="Operation Type" value={noteForm.operationType || ''} onChange={(e) => setNoteForm(v => ({...v, operationType: e.target.value}))} />
+                        <input className="doc-input" aria-label="Anesthesia type" placeholder="Anesthesia Type" value={noteForm.anesthesiaType || ''} onChange={(e) => setNoteForm(v => ({...v, anesthesiaType: e.target.value}))} />
+                        <input className="doc-input" aria-label="Surgical site" placeholder="Surgical Site" value={noteForm.surgicalSite || ''} onChange={(e) => setNoteForm(v => ({...v, surgicalSite: e.target.value}))} />
                       </div>
                     )}
 
@@ -5177,7 +5219,7 @@ function DoctorDashboard() {
                       )}
                       <div className="doc-form-actions" style={{ justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                        <select className="doc-select" value={selectedRxTemplate} onChange={(e) => setSelectedRxTemplate(e.target.value)}>
+                        <select className="doc-select" aria-label="Select a prescription template" value={selectedRxTemplate} onChange={(e) => setSelectedRxTemplate(e.target.value)}>
                           <option value="">Templates (optional)</option>
                           {rxTemplates.map((t) => (
                             <option key={t.id} value={t.id}>{t.label}</option>
@@ -5303,7 +5345,7 @@ function DoctorDashboard() {
                           <input className="doc-input" required maxLength={500} aria-label={`Frequency ${idx + 1}`} placeholder="Frequency *" value={it.frequency} onChange={(e) => updatePrescriptionItem(idx, 'frequency', e.target.value)} />
                           <input className="doc-input" required maxLength={500} aria-label={`Duration ${idx + 1}`} placeholder="Duration *" value={it.duration} onChange={(e) => updatePrescriptionItem(idx, 'duration', e.target.value)} />
                           <input className="doc-input" maxLength={500} aria-label={`Medication notes ${idx + 1}`} placeholder="Notes (optional)" value={it.notes} onChange={(e) => updatePrescriptionItem(idx, 'notes', e.target.value)} />
-                          <button className="doc-icon-btn" type="button" onClick={() => removePrescriptionItem(idx)} disabled={prescriptionItems.length === 1}>
+                          <button className="doc-icon-btn" type="button" aria-label={`Remove medication ${idx + 1}`} onClick={() => removePrescriptionItem(idx)} disabled={prescriptionItems.length === 1}>
                             <Trash2 size={16} />
                           </button>
                         </div>
@@ -5574,6 +5616,7 @@ function DoctorDashboard() {
                     {(approvalThread?.status !== 'Approved' && approvalThread?.status !== 'Rejected') && (
                       <div className="doc-approval-inputs">
                         <input
+                          aria-label="Reason for rejecting this request (optional)"
                           className="doc-input"
                           placeholder="Rejection reason (optional)"
                           value={approvalRejectNote}
@@ -5581,6 +5624,7 @@ function DoctorDashboard() {
                         />
                         <div className="doc-approval-suggest-row">
                           <input
+                            aria-label="Suggested appointment date"
                             className="doc-input"
                             type="date"
                             min={new Date().toISOString().slice(0, 10)}
@@ -5588,12 +5632,14 @@ function DoctorDashboard() {
                             onChange={(e) => setApprovalSuggest((v) => ({ ...v, date: e.target.value }))}
                           />
                           <input
+                            aria-label="Suggested appointment time"
                             className="doc-input"
                             type="time"
                             value={approvalSuggest.time}
                             onChange={(e) => setApprovalSuggest((v) => ({ ...v, time: e.target.value }))}
                           />
                           <input
+                            aria-label="Note for suggested appointment (optional)"
                             className="doc-input"
                             placeholder="Suggestion note (optional)"
                             value={approvalSuggest.note}
@@ -5621,6 +5667,7 @@ function DoctorDashboard() {
 
                   <div className="doc-form" style={{ marginTop: '12px' }}>
                     <textarea
+                      aria-label="Reply to this appointment request"
                       className="doc-textarea"
                       placeholder="Reply…"
                       value={approvalReply}
@@ -5669,6 +5716,8 @@ function DoctorDashboard() {
                         <button
                           className={`doc-btn ${doctorChatPinOpen ? 'dc-btn-active' : ''}`}
                           type="button"
+                          aria-label={`${doctorChatPinOpen ? 'Hide' : 'Show'} pinned messages (${doctorChatPinnedMessages.length})`}
+                          aria-expanded={doctorChatPinOpen}
                           onClick={() => setDoctorChatPinOpen((v) => !v)}
                           title={`📌 Pinned (${doctorChatPinnedMessages.length})`}
                           style={{ position: 'relative' }}
@@ -5677,7 +5726,7 @@ function DoctorDashboard() {
                           <span style={{ fontSize: '0.76rem', fontWeight: 800, marginLeft: 4 }}>{doctorChatPinnedMessages.length}</span>
                         </button>
                       )}
-                      <button className={`doc-btn ${doctorChatShowSearch ? 'dc-btn-active' : ''}`} type="button" onClick={() => setDoctorChatShowSearch((v) => !v)} title="Search messages">
+                      <button className={`doc-btn ${doctorChatShowSearch ? 'dc-btn-active' : ''}`} type="button" aria-label={doctorChatShowSearch ? 'Close message search' : 'Search messages'} aria-expanded={doctorChatShowSearch} onClick={() => setDoctorChatShowSearch((v) => !v)} title="Search messages">
                         <Search size={14} />
                       </button>
                       <button className="doc-btn" type="button" onClick={() => { loadDoctorChatMessages(); }} disabled={doctorChatLoading}>
@@ -5692,6 +5741,7 @@ function DoctorDashboard() {
                       <div style={{ position: 'relative' }}>
                         <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', zIndex: 1 }} />
                         <input
+                          aria-label="Search care team messages"
                           className="doc-input"
                           placeholder="Search messages… (e.g., STAT, patient, xray)"
                           value={doctorChatSearch}
@@ -5700,7 +5750,7 @@ function DoctorDashboard() {
                         />
                       </div>
                       {doctorChatSearch && (
-                        <button className="doc-btn" type="button" onClick={() => { setDoctorChatSearch(''); }}>
+                        <button className="doc-btn" type="button" aria-label="Clear message search" onClick={() => { setDoctorChatSearch(''); }}>
                           <X size={14} />
                         </button>
                       )}
@@ -5719,6 +5769,7 @@ function DoctorDashboard() {
                           key={tab.id}
                           type="button"
                           className={`doc-btn ${active ? 'dc-btn-active' : ''}`}
+                          aria-pressed={active}
                           onClick={() => { setDoctorChatActiveTab(tab.id); setTimeout(() => loadDoctorChatMessages(), 20); }}
                           title={tab.desc}
                           style={{
@@ -6275,7 +6326,7 @@ function DoctorDashboard() {
                         {String(doctorChatReplying.body || '').slice(0, 140)}
                       </div>
                     </div>
-                    <button type="button" className="doc-btn" onClick={() => setDoctorChatReplying(null)} style={{ padding: '4px 8px', height: 26, minHeight: 0, fontWeight: 700, color: '#b45309' }}>
+                    <button type="button" className="doc-btn" aria-label="Cancel message reply" onClick={() => setDoctorChatReplying(null)} style={{ padding: '4px 8px', height: 26, minHeight: 0, fontWeight: 700, color: '#b45309' }}>
                       <X size={12} />
                     </button>
                   </div>
@@ -6314,6 +6365,7 @@ function DoctorDashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'flex-end' }}>
                   <div style={{ position: 'relative', minWidth: 0, width: '100%' }}>
                     <textarea
+                      aria-label="Write a message to the care team"
                       ref={(el) => { if (typeof doctorChatComposeRef === 'object' && doctorChatComposeRef) (doctorChatComposeRef._textarea = el); }}
                       className={`doc-textarea dc-compose-input ${doctorChatInputInvalid ? 'dc-input-shake' : ''}`}
                       rows={3}
@@ -6433,7 +6485,7 @@ function DoctorDashboard() {
                         <div style={{ fontWeight: 900, fontSize: '1rem', color: '#0f172a' }}>Delete this message?</div>
                         <div style={{ fontSize: '0.78rem', marginTop: 2, color: '#64748b' }}>This cannot be undone. Other doctors will no longer see it.</div>
                       </div>
-                      <button type="button" className="doc-icon-btn" onClick={() => setDoctorChatDeleteConfirm(null)}><X size={16} /></button>
+                      <button type="button" className="doc-icon-btn" aria-label="Close delete message dialog" onClick={() => setDoctorChatDeleteConfirm(null)}><X size={16} /></button>
                     </div>
                     <div style={{ padding: '14px 16px', borderRadius: 12, border: '1px solid #f1f5f9', background: '#f8fafc', margin: '0 16px', color: '#334155', fontSize: '0.86rem', lineHeight: 1.5, fontWeight: 500, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
                       {String(doctorChatDeleteConfirm?.body || doctorChatDeleteConfirm?.attachment_name || '').slice(0, 240) || 'Message preview unavailable'}
@@ -6449,7 +6501,7 @@ function DoctorDashboard() {
               {doctorChatAttPreview && (
                 <div className="doc-modal-overlay" style={{ zIndex: 90 }} onClick={() => setDoctorChatAttPreview(null)}>
                   <div style={{ position: 'relative', maxWidth: 960, width: '90vw', maxHeight: '88vh' }} onClick={(e) => e.stopPropagation()}>
-                    <button type="button" className="doc-icon-btn" style={{ position: 'absolute', top: -12, right: -12, zIndex: 3, background: '#0f172a', color: 'white' }} onClick={() => setDoctorChatAttPreview(null)}><X size={18} /></button>
+                    <button type="button" className="doc-icon-btn" aria-label="Close attachment preview" style={{ position: 'absolute', top: -12, right: -12, zIndex: 3, background: '#0f172a', color: 'white' }} onClick={() => setDoctorChatAttPreview(null)}><X size={18} /></button>
                     {doctorChatAttPreview.kind === 'image' && (
                       <img src={doctorChatAttPreview.src} alt={doctorChatAttPreview.name || ''} style={{ display: 'block', width: '100%', height: 'auto', maxHeight: '88vh', borderRadius: 14, objectFit: 'contain', background: '#0f172a', boxShadow: '0 20px 50px rgba(15,23,42,0.4)' }} />
                     )}
@@ -6578,7 +6630,7 @@ function DoctorDashboard() {
             <div className="doc-modal-card doc-modal-lg" onClick={(e) => e.stopPropagation()}>
               <div className="doc-modal-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '12px'}}>
                 <div className="doc-modal-title">Full Medical Record</div>
-                <button type="button" className="doc-icon-btn" onClick={() => setShowFullRecord(false)}>
+                <button type="button" className="doc-icon-btn" aria-label="Close full patient record" onClick={() => setShowFullRecord(false)}>
                   <X size={18} />
                 </button>
               </div>

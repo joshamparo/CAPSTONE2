@@ -24,7 +24,7 @@
 
 .doc-sidebar {
   width: 248px;
-  background: linear-gradient(180deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
+  background: linear-gradient(180deg, #c2410c 0%, #9a3412 100%);
   color: white;
   padding: 22px 12px;
   display: flex;
@@ -178,7 +178,7 @@
 .doc-nav-item.active {
   position: relative;
   background: white;
-  color: var(--brand-primary);
+  color: #9a3412;
   box-shadow: var(--shadow-md, 0 4px 12px -4px rgba(2,6,23,0.15));
   font-weight: 700;
 }
@@ -257,7 +257,7 @@
   gap: 10px;
   border: 1px solid rgba(234, 88, 12, 0.25);
   background: #fff7ed;
-  color: var(--primary);
+  color: #9a3412;
   padding: 10px 14px;
   border-radius: 12px;
   font-weight: 800;
@@ -266,9 +266,9 @@
 }
 
 .doctor-logout:hover {
-  background: var(--primary);
+  background: #c2410c;
   color: white;
-  border-color: var(--primary);
+  border-color: #c2410c;
 }
 
 .doctor-content {
@@ -506,14 +506,14 @@
 }
 
 .doc-modal-btn-primary {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: #c2410c;
+  border-color: #c2410c;
   color: white;
 }
 
 .doc-modal-btn-primary:hover {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+  background: #9a3412;
+  border-color: #9a3412;
   color: white;
 }
 
@@ -773,7 +773,7 @@
 .doc-approval-table tbody tr:hover, .doc-approval-table tbody tr.active { background: #fff7ed; }
 .doc-approval-table tbody tr:last-child td { border-bottom: 0; }
 .doc-approval-patient-btn { display: block; padding: 0; border: 0; background: transparent; color: #0f172a; font: inherit; font-weight: 900; text-align: left; cursor: pointer; white-space: normal; overflow-wrap: anywhere; }
-.doc-approval-patient-btn:hover { color: var(--primary); text-decoration: underline; }
+.doc-approval-patient-btn:hover { color: #9a3412; text-decoration: underline; }
 .doc-approval-unread { display: inline-flex; margin-top: 4px; padding: 2px 7px; border-radius: 999px; background: #ffedd5; color: #c2410c; font-size: 0.68rem; font-weight: 900; }
 .doc-approval-service-title { color: #0f172a; font-weight: 850; }
 .doc-approval-service-detail { display: -webkit-box; margin-top: 4px; overflow: hidden; color: #64748b; font-size: 0.76rem; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
@@ -842,8 +842,8 @@
 }
 
 .doc-toggle-btn.active {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: #c2410c;
+  border-color: #c2410c;
   color: white;
 }
 
@@ -957,7 +957,7 @@
 
 .doc-btn:hover {
   border-color: rgba(234, 88, 12, 0.25);
-  color: var(--primary);
+  color: #9a3412;
   background: #fff7ed;
 }
 
@@ -1027,8 +1027,8 @@
 }
 
 .doc-input:focus, .doc-select:focus, .doc-textarea:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
+  border-color: #9a3412;
+  box-shadow: 0 0 0 3px rgba(154, 52, 18, 0.14);
 }
 
 .doc-textarea {
@@ -1098,7 +1098,7 @@
 
 .doc-primary {
   border: none;
-  background: var(--primary);
+  background: #c2410c;
   color: white;
   border-radius: 10px;
   padding: 12px 18px;
@@ -1112,7 +1112,7 @@
 }
 
 .doc-primary:hover:enabled {
-  background: #ea580c;
+  background: #9a3412;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(234, 88, 12, 0.25);
 }
@@ -1246,8 +1246,8 @@
 
 .er-action-btn:hover {
   background: #ffffff;
-  border-color: #ea580c;
-  color: #ea580c;
+  border-color: #9a3412;
+  color: #9a3412;
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(234, 88, 12, 0.1);
 }
@@ -1358,7 +1358,7 @@
 
 .doc-upload-btn:hover {
   border-color: rgba(234, 88, 12, 0.25);
-  color: var(--primary);
+  color: #9a3412;
   background: #fff7ed;
 }
 
@@ -1474,7 +1474,7 @@
 }
 
 .specialization-text {
-  color: var(--primary);
+  color: #9a3412;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -1579,7 +1579,7 @@
   position: absolute;
   bottom: 5px;
   right: 5px;
-  background: var(--primary);
+  background: #c2410c;
   color: white;
   width: 40px;
   height: 40px;
@@ -1594,7 +1594,7 @@
 }
 
 .doc-avatar-edit-btn:hover {
-  background: #ea580c;
+  background: #9a3412;
   transform: scale(1.1);
 }
 
@@ -1710,13 +1710,13 @@
 }
 
 .doc-chip:hover {
-  border-color: var(--primary);
-  color: var(--primary);
+  border-color: #9a3412;
+  color: #9a3412;
 }
 
 .doc-chip.active {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: #c2410c;
+  border-color: #c2410c;
   color: white;
 }
 
@@ -1778,8 +1778,8 @@
 }
 
 .doc-pagination-btn:hover:not(:disabled) {
-  border-color: #ea580c;
-  color: #ea580c;
+  border-color: #9a3412;
+  color: #9a3412;
 }
 
 .doc-pagination-btn:disabled {
@@ -1823,7 +1823,7 @@
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  background: var(--primary);
+  background: #c2410c;
   color: white;
   display: flex;
   align-items: center;
@@ -1870,7 +1870,7 @@
 .stat-val {
   font-size: 1.25rem;
   font-weight: 1000;
-  color: var(--primary);
+  color: #9a3412;
 }
 
 .stat-lbl {
@@ -1899,7 +1899,7 @@
 }
 
 .doc-profile-tabs button.active {
-  color: var(--primary);
+  color: #9a3412;
 }
 
 .doc-profile-tabs button.active::after {
@@ -1909,7 +1909,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: var(--primary);
+  background: #9a3412;
   border-radius: 3px 3px 0 0;
 }
 
@@ -2025,7 +2025,7 @@
 .timeline-item.note .timeline-type { color: #2563eb; }
 .timeline-item.prescription .timeline-type { color: #16a34a; }
 .timeline-item.lab .timeline-type { color: #7e22ce; }
-.timeline-item.cert .timeline-type { color: #ea580c; }
+.timeline-item.cert .timeline-type { color: #9a3412; }
 .timeline-item.appointment .timeline-type { color: #64748b; }
 
 .doc-tab-list {
@@ -2094,7 +2094,7 @@
 }
 
 .lab-link {
-  color: var(--primary);
+  color: #9a3412;
   text-decoration: none;
   font-weight: 800;
 }
@@ -2370,7 +2370,7 @@
   height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  background: #ea580c;
+  background: #c2410c;
   color: white;
   font-weight: 1000;
   font-size: 0.75rem;
@@ -2712,7 +2712,7 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: var(--primary);
+  background: #c2410c;
   color: white;
   display: flex;
   align-items: center;
@@ -2753,8 +2753,8 @@
 }
 
 .doc-table-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary);
+  border-color: #9a3412;
+  color: #9a3412;
   background: #fff7ed;
 }
 
@@ -2802,7 +2802,7 @@
   width: 48px;
   height: 48px;
   border-radius: 14px;
-  background: var(--primary);
+  background: #c2410c;
   color: white;
   display: flex;
   align-items: center;
@@ -2865,7 +2865,7 @@
 }
 
 .doc-detail-tabs button.active {
-  color: var(--primary);
+  color: #9a3412;
 }
 
 .doc-detail-tabs button.active::after {
@@ -2875,7 +2875,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: var(--primary);
+  background: #9a3412;
   border-radius: 3px 3px 0 0;
 }
 
@@ -3002,4 +3002,13 @@
   font-size: 0.85rem;
   font-weight: 700;
   color: #334155;
+}
+
+.doctor-shell :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid #9a3412;
+  outline-offset: 2px;
+}
+
+.doc-sidebar :where(button, a, [tabindex]):focus-visible {
+  outline-color: #ffffff;
 }

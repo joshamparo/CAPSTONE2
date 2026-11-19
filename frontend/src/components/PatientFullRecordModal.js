@@ -474,10 +474,10 @@ export default function PatientFullRecordModal({
 
   return (
     <div className="patient-record-overlay" onClick={onClose}>
-      <div className="patient-record-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="patient-record-modal" role="dialog" aria-modal="true" aria-labelledby="patient-record-dialog-title" onClick={(e) => e.stopPropagation()}>
         <div className="patient-record-head">
           <div>
-            <div className="patient-record-title">Patient Record Center</div>
+            <div id="patient-record-dialog-title" className="patient-record-title">Patient Record Center</div>
             <div className="patient-record-sub">
               {displayName} • {patient.id || patientId}
             </div>
@@ -521,11 +521,13 @@ export default function PatientFullRecordModal({
           </div>
         </div> : null}
 
-        {activeRecord ? <div className="patient-record-tabs">
+        {activeRecord ? <div className="patient-record-tabs" role="tablist" aria-label="Patient record sections">
           {tabs.map((item) => (
             <button
               key={item.key}
               type="button"
+              role="tab"
+              aria-selected={tab === item.key}
               className={`patient-record-tab ${tab === item.key ? 'active' : ''}`}
               onClick={() => setTab(item.key)}
             >
@@ -776,6 +778,7 @@ export default function PatientFullRecordModal({
                             {isDoctor && ['matched', 'flagged'].includes(String(result.verificationStatus || '').toLowerCase()) ? (
                               <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
                                 <textarea
+                                  aria-label={`Official interpretation for ${result.title || result.type || 'lab result'}`}
                                   value={interpretations[String(result.id)] || ''}
                                   onChange={(event) => setInterpretations((current) => ({ ...current, [String(result.id)]: event.target.value }))}
                                   placeholder="Enter official interpretation"
